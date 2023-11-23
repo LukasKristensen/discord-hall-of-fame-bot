@@ -20,3 +20,4 @@ Define the amount of reactions necessary for posting: ```reaction_threshold```
 ## TODO
 - Create a command for updating variable names
 - Make a folder for each server with private value preferences
+- If server times out investigate usage of uptimerobot
