@@ -1,11 +1,25 @@
 import discord
 from discord.ext import commands
+import os
+from dotenv import load_dotenv
+
+# Load environment variables from the .env file
+load_dotenv()
+
+# Access the KEY variable, located in the .env file root
+TOKEN = os.getenv('KEY')
+
+# Check if the TOKEN variable is set
+if TOKEN is None:
+    raise ValueError("TOKEN environment variable is not set in the .env file")
+
+print("Bot is starting...")
 
 intents = discord.Intents.all()
 bot = commands.Bot(command_prefix="!", intents=intents)
 YOUR_DEDICATED_CHANNEL_ID = 1177040595395547197
 # Open as text file
-bot_token = open("bot_token.txt", "r").read().splitlines()[0]
+# bot_token = open("bot_token.txt", "r").read().splitlines()[0]
 
 # File to store sent message IDs
 file_path = 'sent_messages.txt'
@@ -67,7 +81,7 @@ async def on_raw_reaction_add(payload):
 
         # Create a custom embed
         embed = discord.Embed(
-            title=f"Message with ID {message.id} in {channel.name} has surpassed {reaction_threshold} reactions",
+            title=f"Message in #{channel.name} has surpassed {reaction_threshold} reactions",
             description=message.content,
             color=0x00ff00  # Green color, you can change this
         )
@@ -86,4 +100,4 @@ async def on_raw_reaction_add(payload):
             file.write(f"{message.id}\n")
 
 # Run the bot with your token
-bot.run(bot_token)
+bot.run(TOKEN)
