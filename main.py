@@ -106,12 +106,12 @@ async def apply_reaction_checker(ctx):
 
     # Fetch messages from the channel in chunks of 100
     async for message in channel.history(limit=None):
-        if message.author.bot:
-            continue  # Ignore messages from bots
+        # if message.author.bot:
+        #     continue  # Ignore messages from bots
 
         # Apply your reaction function checker here
         # For example, you can check if a specific emoji is present in reactions
-        if any(reaction.count >= reaction_threshold for reaction in message.reactions) and message.id not in sent_messages:
+        if any(reaction.count >= reaction_threshold for reaction in message.reactions) and message.id not in sent_messages and not message.author.bot:
             channel_id = message.channel.id
             message_id = message.id
             guild_id = message.guild.id
