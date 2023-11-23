@@ -17,7 +17,7 @@ print("Bot is starting...")
 
 intents = discord.Intents.all()
 bot = commands.Bot(command_prefix="!", intents=intents)
-YOUR_DEDICATED_CHANNEL_ID = 1177040595395547197
+YOUR_DEDICATED_CHANNEL_ID = 1176965358796681326
 
 
 # File to store sent message IDs
