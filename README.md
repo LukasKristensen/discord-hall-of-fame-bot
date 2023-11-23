@@ -20,8 +20,8 @@ Define the amount of reactions necessary for posting: ```reaction_threshold```
 <br>
 
 ## TODO
-- Improve the embed layout of messages
-- Improve media output
-- Create a command for updating variable names
-- Make a folder for each server with private value preferences
-- If server times out investigate usage of uptimerobot
+- [x] If server times out investigate usage of uptimerobot
+- [ ] Improve the embed layout of messages
+- [ ] Improve media output
+- [ ] Create a command for updating variable names
+- [ ] Make a folder for each server with private value preferences
