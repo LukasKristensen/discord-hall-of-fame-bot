@@ -1,6 +1,8 @@
 # Discord Hall Of Fame Bot
 The purpose of the bot is to monitor the maximum amount of message reactions and repost the message to a board if it surpasses a threshold value. Unlike star bots, this bot is not limited to one emoji but will prompt any emoji reactions.
 
+<br>
+
 ## Installing
 Create an .env file containing the bot key:
 ```KEY:SECRET```
