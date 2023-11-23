@@ -47,7 +47,7 @@ async def on_raw_reaction_add(payload):
 
     # Adjust these values according to your requirements
     target_channel_id = YOUR_DEDICATED_CHANNEL_ID
-    reaction_threshold = 1  # Update the reaction threshold to 1
+    reaction_threshold = 6  # Update the reaction threshold to 1
 
     if channel_id == target_channel_id:
         return  # Ignore reactions in the dedicated channel
