@@ -25,3 +25,4 @@ Define the amount of reactions necessary for posting: ```reaction_threshold```
 - [ ] Improve media output
 - [ ] Create a command for updating variable names
 - [ ] Make a folder for each server with private value preferences
+- [ ] Problem with using discord user profile pictures using Discord<=2.0.0
