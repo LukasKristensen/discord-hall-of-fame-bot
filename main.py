@@ -49,13 +49,27 @@ async def on_raw_reaction_add(payload):
         # Find the first attachment (assuming it's an image or video)
         attachment_url = message.attachments[0].url if message.attachments else None
 
-        # Send the message content, a link to the original message, and the media link
-        await target_channel.send(
-            f"Message with ID {message.id} in {channel.mention} has surpassed {reaction_threshold} reactions:\n"
-            f"{message.content}\n"
-            f"Media: {attachment_url}\n"
-            f"[Jump to Message]({message.jump_url})"
+        # Send a simple message with the media link
+        if attachment_url:
+            await target_channel.send(f"{attachment_url}")
+
+        # Fetch the member to access avatar_url
+        member = await bot.get_guild(guild_id).fetch_member(message.author.id)
+
+        # Create a custom embed
+        embed = discord.Embed(
+            title=f"Message with ID {message.id} in {channel.name} has surpassed {reaction_threshold} reactions",
+            description=message.content,
+            color=0x00ff00  # Green color, you can change this
         )
+
+        # Add sender's username and avatar to the embed
+        embed.set_author(name=member.name, icon_url=member.avatar.url)
+
+        embed.add_field(name="Jump to Message", value=message.jump_url, inline=False)
+
+        # Send the embed
+        await target_channel.send(embed=embed)
 
         # Add the sent message ID to the set and the file
         sent_messages.add(message.id)
