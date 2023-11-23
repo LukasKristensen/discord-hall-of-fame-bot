@@ -54,8 +54,9 @@ async def on_raw_reaction_add(payload):
     channel = bot.get_channel(channel_id)
     message = await channel.fetch_message(message_id)
 
+    print("Checking if: ", any(reaction.count > reaction_threshold for reaction in message.reactions))
     # Check if the message has surpassed the reaction threshold
-    if len(message.reactions) >= reaction_threshold and message.id not in sent_messages:
+    if any(reaction.count >= reaction_threshold for reaction in message.reactions) and message.id not in sent_messages:
         # Get the dedicated channel
         target_channel = bot.get_channel(target_channel_id)
 
