@@ -102,63 +102,68 @@ async def on_raw_reaction_add(payload):
 
 @bot.command(name='apply_reaction_checker')
 async def apply_reaction_checker(ctx):
-    channel = ctx.channel
+    guild = ctx.guild
 
-    # Fetch messages from the channel in chunks of 100
-    async for message in channel.history(limit=None):
-        print("Checking message: ", message.id)
-        print("Message author: ", message.author, message.author.bot)
-        if message.author.bot:
-            continue  # Ignore messages from bots
+    try:
+        for channel in guild.channels:
+            if not isinstance(channel, discord.TextChannel):
+                continue
+            async for message in channel.history(limit=None):
+                print("Checking message: ", message.id)
+                print("Message author: ", message.author, message.author.bot)
+                if message.author.bot:
+                    continue  # Ignore messages from bots
 
-        # Apply your reaction function checker here
-        # For example, you can check if a specific emoji is present in reactions
-        if any(reaction.count >= reaction_threshold for reaction in message.reactions) and message.id not in sent_messages:
-            channel_id = message.channel.id
-            message_id = message.id
-            guild_id = message.guild.id
+                # Apply your reaction function checker here
+                # For example, you can check if a specific emoji is present in reactions
+                if any(reaction.count >= reaction_threshold for reaction in message.reactions) and message.id not in sent_messages:
+                    channel_id = message.channel.id
+                    message_id = message.id
+                    guild_id = message.guild.id
 
-            # Get the dedicated channel
-            target_channel = bot.get_channel(target_channel_id)
+                    # Get the dedicated channel
+                    target_channel = bot.get_channel(target_channel_id)
 
-            # Find the first attachment (assuming it's an image or video)
-            attachment_url = message.attachments[0].url if message.attachments else None
+                    # Find the first attachment (assuming it's an image or video)
+                    attachment_url = message.attachments[0].url if message.attachments else None
 
-            # Check for links in the message content
-            link_in_content = None
-            for word in message.content.split():
-                if word.startswith(('http://', 'https://')):
-                    link_in_content = word
-                    break
+                    # Check for links in the message content
+                    link_in_content = None
+                    for word in message.content.split():
+                        if word.startswith(('http://', 'https://')):
+                            link_in_content = word
+                            break
 
-            # Send a simple message with the media link
-            if attachment_url:
-                await target_channel.send(f"{attachment_url}")
-            elif link_in_content:
-                await target_channel.send(f"{link_in_content}")
+                    # Send a simple message with the media link
+                    if attachment_url:
+                        await target_channel.send(f"{attachment_url}")
+                    elif link_in_content:
+                        await target_channel.send(f"{link_in_content}")
 
-            # Fetch the member to access avatar URL
-            member = await bot.get_guild(guild_id).fetch_member(message.author.id)
+                    # Fetch the member to access avatar URL
+                    member = await bot.get_guild(guild_id).fetch_member(message.author.id)
 
-            # Create a custom embed
-            embed = discord.Embed(
-                title=f"Message in #{channel.name} has surpassed {reaction_threshold} reactions",
-                description=message.content,
-                color=0x00ff00
-            )
+                    # Create a custom embed
+                    embed = discord.Embed(
+                        title=f"Message in #{channel.name} has surpassed {reaction_threshold} reactions",
+                        description=message.content,
+                        color=0x00ff00
+                    )
 
-            # Add sender's username and avatar to the embed
-            embed.set_author(name=member.name, icon_url=member.avatar.url)
+                    # Add sender's username and avatar to the embed
+                    embed.set_author(name=member.name, icon_url=member.avatar.url)
 
-            embed.add_field(name="Jump to Message", value=message.jump_url, inline=False)
+                    embed.add_field(name="Jump to Message", value=message.jump_url, inline=False)
 
-            # Send the embed
-            await target_channel.send(embed=embed)
+                    # Send the embed
+                    await target_channel.send(embed=embed)
 
-            # Add the sent message ID to the set and the file
-            sent_messages.add(message.id)
-            with open(file_path, 'a') as file:
-                file.write(f"{message.id}\n")
+                    # Add the sent message ID to the set and the file
+                    sent_messages.add(message.id)
+                    with open(file_path, 'a') as file:
+                        file.write(f"{message.id}\n")
+    except Exception as e:
+        print(f'An error occurred: {e}')
 
 # Run the bot with your token
 bot.run(TOKEN)
