@@ -51,6 +51,8 @@ async def on_raw_reaction_add(payload):
 
     channel = bot.get_channel(channel_id)
     message = await channel.fetch_message(message_id)
+    if message.author.bot:
+        return  # Ignore messages from bots
 
     print("Checking if: ", any(reaction.count > reaction_threshold for reaction in message.reactions))
     # Check if the message has surpassed the reaction threshold
@@ -104,6 +106,9 @@ async def apply_reaction_checker(ctx):
 
     # Fetch messages from the channel in chunks of 100
     async for message in channel.history(limit=None):
+        if message.author.bot:
+            continue  # Ignore messages from bots
+
         # Apply your reaction function checker here
         # For example, you can check if a specific emoji is present in reactions
         if any(reaction.count >= reaction_threshold for reaction in message.reactions) and message.id not in sent_messages:
