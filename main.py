@@ -18,8 +18,7 @@ print("Bot is starting...")
 intents = discord.Intents.all()
 bot = commands.Bot(command_prefix="!", intents=intents)
 YOUR_DEDICATED_CHANNEL_ID = 1177040595395547197
-# Open as text file
-# bot_token = open("bot_token.txt", "r").read().splitlines()[0]
+
 
 # File to store sent message IDs
 file_path = 'sent_messages.txt'
@@ -47,7 +46,7 @@ async def on_raw_reaction_add(payload):
 
     # Adjust these values according to your requirements
     target_channel_id = YOUR_DEDICATED_CHANNEL_ID
-    reaction_threshold = 6  # Update the reaction threshold to 1
+    reaction_threshold = 6
 
     if channel_id == target_channel_id:
         return  # Ignore reactions in the dedicated channel
@@ -83,7 +82,7 @@ async def on_raw_reaction_add(payload):
         embed = discord.Embed(
             title=f"Message in #{channel.name} has surpassed {reaction_threshold} reactions",
             description=message.content,
-            color=0x00ff00  # Green color, you can change this
+            color=0x00ff00
         )
 
         # Add sender's username and avatar to the embed
