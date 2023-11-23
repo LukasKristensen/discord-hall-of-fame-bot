@@ -38,6 +38,7 @@ except FileNotFoundError:
 @bot.event
 async def on_ready():
     print(f"We have logged in as {bot.user}")
+    await bot.change_presence(activity=discord.Streaming(name='infamous messages', url='https://github.com/LukasKristensen/discord-hall-of-fame-bot'))
 
 
 @bot.event
