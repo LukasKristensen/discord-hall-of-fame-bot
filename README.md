@@ -20,9 +20,10 @@ Define the amount of reactions necessary for posting: ```reaction_threshold```
 <br>
 
 ## TODO
-- [x] If server times out investigate usage of uptimerobot
+- [x] Problem with using discord user profile pictures using Discord<=2.0.0
+- [x] Deploy on a remote server
 - [ ] Improve the embed layout of messages
 - [ ] Improve media output
 - [ ] Create a command for updating variable names
 - [ ] Make a folder for each server with private value preferences
-- [ ] Problem with using discord user profile pictures using Discord<=2.0.0
+- [ ] Improve database structure to mongodb
