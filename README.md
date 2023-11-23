@@ -27,3 +27,4 @@ Define the amount of reactions necessary for posting: ```reaction_threshold```
 - [ ] Create a command for updating variable names
 - [ ] Make a folder for each server with private value preferences
 - [ ] Improve database structure to mongodb
+- [ ] Functionality for checking historical messages (it should run through all the messages and post the ones above the reaction value threshold
