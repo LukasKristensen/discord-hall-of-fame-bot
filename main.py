@@ -49,11 +49,20 @@ async def on_raw_reaction_add(payload):
         # Find the first attachment (assuming it's an image or video)
         attachment_url = message.attachments[0].url if message.attachments else None
 
+        # Check for links in the message content
+        link_in_content = None
+        for word in message.content.split():
+            if word.startswith(('http://', 'https://')):
+                link_in_content = word
+                break
+
         # Send a simple message with the media link
         if attachment_url:
             await target_channel.send(f"{attachment_url}")
+        elif link_in_content:
+            await target_channel.send(f"{link_in_content}")
 
-        # Fetch the member to access avatar_url
+        # Fetch the member to access avatar URL
         member = await bot.get_guild(guild_id).fetch_member(message.author.id)
 
         # Create a custom embed
