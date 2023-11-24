@@ -1,20 +1,35 @@
+import random
+
 import discord
 from discord.ext import commands
 import os
 from dotenv import load_dotenv
+import ast
+from pymongo.mongo_client import MongoClient
 
-# Load environment variables from the .env file
 load_dotenv()
-
-# Access the KEY variable, located in the .env file root
 TOKEN = os.getenv('KEY')
+
+# Connect to MongoDB
+mongo_uri = os.getenv('MONGO_URI')
+client = MongoClient(mongo_uri)
+
+# Get the database
+db = client['caroon']
+collection = db['messages_sent']
+
+all_documents = []
+print("Showing all documents in the collection: ")
+for document in collection.find():
+    print(document)
+    all_documents.append(document)
 
 # Check if the TOKEN variable is set
 if TOKEN is None:
     raise ValueError("TOKEN environment variable is not set in the .env file")
 
-print("Bot is starting...")
 
+print("Bot is starting...")
 intents = discord.Intents.all()
 bot = commands.Bot(command_prefix="!", intents=intents)
 
@@ -35,10 +50,11 @@ try:
 except FileNotFoundError:
     pass
 
+
 @bot.event
 async def on_ready():
     print(f"We have logged in as {bot.user}")
-    await bot.change_presence(activity=discord.Streaming(name='infamous messages', url='https://github.com/LukasKristensen/discord-hall-of-fame-bot'))
+    await bot.change_presence(activity=discord.Streaming(name='infamous messages _', url='https://github.com/LukasKristensen/discord-hall-of-fame-bot'))
 
 
 @bot.event
@@ -55,9 +71,11 @@ async def on_raw_reaction_add(payload):
     if message.author.bot:
         return  # Ignore messages from bots
 
-    print("Checking if: ", any(reaction.count > reaction_threshold for reaction in message.reactions))
     # Check if the message has surpassed the reaction threshold
-    if any(reaction.count >= reaction_threshold for reaction in message.reactions) and message.id not in sent_messages:
+    if any(reaction.count >= reaction_threshold for reaction in message.reactions):
+        if collection.find_one({"message_id": message.id}):
+            print("Found message in database: ", message.id)
+            return
         # Get the dedicated channel
         target_channel = bot.get_channel(target_channel_id)
 
@@ -77,50 +95,35 @@ async def on_raw_reaction_add(payload):
         elif link_in_content:
             await target_channel.send(f"{link_in_content}")
 
-        # Fetch the member to access avatar URL
-        member = await bot.get_guild(guild_id).fetch_member(message.author.id)
-
-        # Create a custom embed
-        embed = discord.Embed(
-            title=f"Message in #{channel.name} has surpassed {reaction_threshold} reactions",
-            description=message.content,
-            color=0x00ff00
-        )
-
-        # Add sender's username and avatar to the embed
-        embed.set_author(name=member.name, icon_url=member.avatar.url)
-
-        embed.add_field(name="Jump to Message", value=message.jump_url, inline=False)
-
-        # Send the embed
+        embed = send_message(message)
         await target_channel.send(embed=embed)
 
-        # Add the sent message ID to the set and the file
-        sent_messages.add(message.id)
-        with open(file_path, 'a') as file:
-            file.write(f"{message.id}\n")
+        # Save to database
+        collection.insert_one({"message_id": message.id,
+                               "channel_id": str(message.channel.id),
+                               "guild_id": str(message.guild.id)})
 
 
 @bot.command(name='apply_reaction_checker')
 async def apply_reaction_checker(ctx):
+    print("CTX: ", ctx)
+    print("CTX GUILD: ", ctx.guild)
     guild = ctx.guild
 
     try:
         for channel in guild.channels:
+            print("Checking channel: ", channel.name)
             if not isinstance(channel, discord.TextChannel):
                 continue
             async for message in channel.history(limit=None):
-                print("Checking message: ", message.id)
-                print("Message author: ", message.author, message.author.bot)
                 if message.author.bot:
                     continue  # Ignore messages from bots
 
-                # Apply your reaction function checker here
-                # For example, you can check if a specific emoji is present in reactions
-                if any(reaction.count >= reaction_threshold for reaction in message.reactions) and message.id not in sent_messages:
-                    channel_id = message.channel.id
-                    message_id = message.id
-                    guild_id = message.guild.id
+                if any(reaction.count >= reaction_threshold for reaction in message.reactions):
+                    # Check if the message_id is in the database
+                    if collection.find_one({"message_id": message.id}):
+                        print("Found message in database: ", message.id)
+                        continue
 
                     # Get the dedicated channel
                     target_channel = bot.get_channel(target_channel_id)
@@ -141,30 +144,67 @@ async def apply_reaction_checker(ctx):
                     elif link_in_content:
                         await target_channel.send(f"{link_in_content}")
 
-                    # Fetch the member to access avatar URL
-                    member = await bot.get_guild(guild_id).fetch_member(message.author.id)
-
-                    # Create a custom embed
-                    embed = discord.Embed(
-                        title=f"Message in #{channel.name} has surpassed {reaction_threshold} reactions",
-                        description=message.content,
-                        color=0x00ff00
-                    )
-
-                    # Add sender's username and avatar to the embed
-                    embed.set_author(name=member.name, icon_url=member.avatar.url)
-
-                    embed.add_field(name="Jump to Message", value=message.jump_url, inline=False)
-
-                    # Send the embed
+                    embed = send_message(message)
                     await target_channel.send(embed=embed)
 
-                    # Add the sent message ID to the set and the file
-                    sent_messages.add(message.id)
-                    with open(file_path, 'a') as file:
-                        file.write(f"{message.id}\n")
+                    collection.insert_one({"message_id": message.id,
+                                           "channel_id": str(message.channel.id),
+                                           "guild_id": str(message.guild.id)})
+
     except Exception as e:
         print(f'An error occurred: {e}')
 
+
+# TODO: Create a consistent function for posting message
+def send_message(message):
+    embed = discord.Embed(
+        title=f"Message in #{message.channel.name} has surpassed {reaction_threshold} reactions",
+        description=message.content,
+        color=0x00ff00
+    )
+    embed.set_author(name=message.author.name, icon_url=message.author.avatar.url)
+    # embed.add_field(name=f"{max_count} Reactions ", inline=False)
+    embed.add_field(name="Jump to Message", value=message.jump_url, inline=False)
+    return embed
+
+
+@bot.command(name='get_random_message')
+async def get_random_messsage(ctx):
+    print("[CMD] get_random_message from:", ctx.author.name)
+    sender_channel = ctx.channel.id
+    random_msg = get_random_message()
+
+    msg_channel = bot.get_channel(int(random_msg["channel_id"]))
+    message = await msg_channel.fetch_message(int(random_msg["message_id"]))
+    target_channel = bot.get_channel(sender_channel)
+
+    # Find the first attachment (assuming it's an image or video)
+    attachment_url = message.attachments[0].url if message.attachments else None
+
+    # Check for links in the message content
+    link_in_content = None
+    for word in message.content.split():
+        if word.startswith(('http://', 'https://')):
+            link_in_content = word
+            break
+
+    # Send a simple message with the media link
+    if attachment_url:
+        await target_channel.send(f"{attachment_url}")
+    elif link_in_content:
+        await target_channel.send(f"{link_in_content}")
+
+    embed = send_message(message)
+    await target_channel.send(embed=embed)
+
+
+def get_random_message():
+    all_messages = []
+    for message in collection.find():
+        all_messages.append(message)
+    random_num = random.randint(0, len(all_messages)-1)
+    return all_messages[random_num]
+
 # Run the bot with your token
 bot.run(TOKEN)
+
