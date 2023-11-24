@@ -75,24 +75,11 @@ async def on_raw_reaction_add(payload):
         if collection.find_one({"message_id": message.id}):
             print("Found message in database: ", message.id)
             return
-        # Get the dedicated channel
         target_channel = bot.get_channel(target_channel_id)
 
-        # Find the first attachment (assuming it's an image or video)
-        attachment_url = message.attachments[0].url if message.attachments else None
-
-        # Check for links in the message content
-        link_in_content = None
-        for word in message.content.split():
-            if word.startswith(('http://', 'https://')):
-                link_in_content = word
-                break
-
-        # Send a simple message with the media link
-        if attachment_url:
-            await target_channel.send(f"{attachment_url}")
-        elif link_in_content:
-            await target_channel.send(f"{link_in_content}")
+        video_link = check_video_extension(message)
+        if video_link:
+            await target_channel.send(video_link)
 
         embed = send_message(message)
         await target_channel.send(embed=embed)
@@ -106,7 +93,6 @@ async def on_raw_reaction_add(payload):
 @bot.command(name='apply_reaction_checker')
 async def apply_reaction_checker(ctx):
     print("CTX: ", ctx)
-    print("CTX GUILD: ", ctx.guild)
     guild = ctx.guild
 
     try:
@@ -127,21 +113,9 @@ async def apply_reaction_checker(ctx):
                     # Get the dedicated channel
                     target_channel = bot.get_channel(target_channel_id)
 
-                    # Find the first attachment (assuming it's an image or video)
-                    attachment_url = message.attachments[0].url if message.attachments else None
-
-                    # Check for links in the message content
-                    link_in_content = None
-                    for word in message.content.split():
-                        if word.startswith(('http://', 'https://')):
-                            link_in_content = word
-                            break
-
-                    # Send a simple message with the media link
-                    if attachment_url:
-                        await target_channel.send(f"{attachment_url}")
-                    elif link_in_content:
-                        await target_channel.send(f"{link_in_content}")
+                    video_link = check_video_extension(message)
+                    if video_link:
+                        await target_channel.send(video_link)
 
                     embed = send_message(message)
                     await target_channel.send(embed=embed)
@@ -165,7 +139,8 @@ def send_message(message):
     print("Most reactions: ", most_reactions)
 
     embed.set_author(name=message.author.name, icon_url=message.author.avatar.url)
-    # Field displaying most reacted emoji
+    if message.attachments:
+        embed.set_image(url=message.attachments[0].url)
     embed.add_field(name=f"{most_reactions[0].count} Reactions ", value=most_reactions[0].emoji, inline=True)
     embed.add_field(name="Jump to Message", value=message.jump_url, inline=False)
     return embed
@@ -181,24 +156,26 @@ async def get_random_messsage(ctx):
     message = await msg_channel.fetch_message(int(random_msg["message_id"]))
     target_channel = bot.get_channel(sender_channel)
 
-    # Find the first attachment (assuming it's an image or video)
-    attachment_url = message.attachments[0].url if message.attachments else None
-
-    # Check for links in the message content
-    link_in_content = None
-    for word in message.content.split():
-        if word.startswith(('http://', 'https://')):
-            link_in_content = word
-            break
-
-    # Send a simple message with the media link
-    if attachment_url:
-        await target_channel.send(f"{attachment_url}")
-    elif link_in_content:
-        await target_channel.send(f"{link_in_content}")
+    video_link = check_video_extension(message)
+    if video_link:
+        await target_channel.send(video_link)
 
     embed = send_message(message)
     await target_channel.send(embed=embed)
+
+
+video_extensions = ['.mp4', '.mov', '.avi', '.mkv', '.webm']
+
+
+def check_video_extension(message):
+    if not message.attachments:
+        return None
+    url = message.attachments[0].url
+    for extension in video_extensions:
+        if extension in url:
+            video_url = url.split(extension)[0] + extension
+            return video_url
+    return None
 
 
 def get_random_message():
