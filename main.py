@@ -28,7 +28,7 @@ sent_messages = set()
 @bot.event
 async def on_ready():
     print(f"We have logged in as {bot.user}")
-    await bot.change_presence(activity=discord.Streaming(name='infamous messages _', url='https://github.com/LukasKristensen/discord-hall-of-fame-bot'))
+    await bot.change_presence(activity=discord.Streaming(name='!commands', url='https://github.com/LukasKristensen/discord-hall-of-fame-bot'))
 
 
 @bot.event
@@ -137,6 +137,21 @@ async def cmd_random_message(ctx):
 
     embed = send_message(message)
     await target_channel.send(embed=embed)
+    return
+
+
+@bot.command(name='commands')
+async def cmd_help(ctx):
+    embed = discord.Embed(
+        title="Commands",
+        color=0x00ff00
+    )
+    embed.add_field(name="!commands", value="List of commands", inline=False)
+    embed.add_field(name="!apply_reaction_checker", value="Apply reaction checker to all messages in the server", inline=False)
+    embed.add_field(name="!get_random_message", value="Get a random message from the database", inline=False)
+    embed.add_field(name="", value="", inline=True)
+    embed.add_field(name="Contribute on Github", value="https://github.com/LukasKristensen/discord-hall-of-fame-bot", inline=False)
+    await ctx.send(embed=embed)
 
 
 video_extensions = ['.mp4', '.mov', '.avi', '.mkv', '.webm']
