@@ -1,11 +1,10 @@
 import random
-
 import discord
 from discord.ext import commands
 import os
 from dotenv import load_dotenv
-import ast
 from pymongo.mongo_client import MongoClient
+import message_reactions
 
 load_dotenv()
 TOKEN = os.getenv('KEY')
@@ -162,8 +161,12 @@ def send_message(message):
         description=message.content,
         color=0x00ff00
     )
+    most_reactions = message_reactions.most_reactions(message.reactions)
+    print("Most reactions: ", most_reactions)
+
     embed.set_author(name=message.author.name, icon_url=message.author.avatar.url)
-    # embed.add_field(name=f"{max_count} Reactions ", inline=False)
+    # Field displaying most reacted emoji
+    embed.add_field(name=f"{most_reactions[0].count} Reactions ", value=most_reactions[0].emoji, inline=True)
     embed.add_field(name="Jump to Message", value=message.jump_url, inline=False)
     return embed
 
