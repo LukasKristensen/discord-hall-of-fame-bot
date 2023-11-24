@@ -2,7 +2,7 @@ import discord as discord
 
 def most_reactions(reactions: [discord.Reaction]) -> [discord.Reaction]:
     if len(reactions) == 1:
-        return reactions[0]
+        return reactions
 
     largest_num = reactions[0].count    
     biggest = [reactions[0]]
