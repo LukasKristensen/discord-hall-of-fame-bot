@@ -26,8 +26,8 @@ Define the amount of reactions necessary for posting: ```reaction_threshold```
 - [ ] Improve media output
 - [ ] Create a command for updating variable names
 - [ ] Make a folder for each server with private value preferences
-- [ ] Improve database structure to mongodb
+- [x] Improve database structure to mongodb
 - [x] Functionality for checking historical messages (it should run through all the messages and post the ones above the reaction value threshold
 - [ ] When posting the message highlight the reaction emoji from the original message
-- [ ] Fix message IDs not being saved/loaded correctly when validating if it has already been sent
-- [ ] Create a getRandom() function for grabbing a random hall-of-fame post
+- [x] Fix message IDs not being saved/loaded correctly when validating if it has already been sent
+- [x] Create a getRandom() function for grabbing a random hall-of-fame post
