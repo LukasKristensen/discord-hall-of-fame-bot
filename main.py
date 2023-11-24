@@ -9,45 +9,20 @@ import message_reactions
 load_dotenv()
 TOKEN = os.getenv('KEY')
 
-# Connect to MongoDB
+# Set up the MongoDB client
 mongo_uri = os.getenv('MONGO_URI')
 client = MongoClient(mongo_uri)
-
-# Get the database
 db = client['caroon']
 collection = db['messages_sent']
 
-all_documents = []
-print("Showing all documents in the collection: ")
-for document in collection.find():
-    print(document)
-    all_documents.append(document)
-
-# Check if the TOKEN variable is set
-if TOKEN is None:
-    raise ValueError("TOKEN environment variable is not set in the .env file")
-
-
-print("Bot is starting...")
 intents = discord.Intents.all()
 bot = commands.Bot(command_prefix="!", intents=intents)
-
 YOUR_DEDICATED_CHANNEL_ID = 1176965358796681326
 reaction_threshold = 6
 target_channel_id = YOUR_DEDICATED_CHANNEL_ID
 
-# File to store sent message IDs
-file_path = 'sent_messages.txt'
-
 # Set to store sent message IDs
 sent_messages = set()
-
-# Load existing sent message IDs from the file
-try:
-    with open(file_path, 'r') as file:
-        sent_messages = {int(line.strip()) for line in file.readlines()}
-except FileNotFoundError:
-    pass
 
 
 @bot.event
@@ -91,7 +66,7 @@ async def on_raw_reaction_add(payload):
 
 
 @bot.command(name='apply_reaction_checker')
-async def apply_reaction_checker(ctx):
+async def cmd_check_emoji_reaction(ctx):
     print("CTX: ", ctx)
     guild = ctx.guild
 
@@ -147,7 +122,7 @@ def send_message(message):
 
 
 @bot.command(name='get_random_message')
-async def get_random_messsage(ctx):
+async def cmd_random_message(ctx):
     print("[CMD] get_random_message from:", ctx.author.name)
     sender_channel = ctx.channel.id
     random_msg = get_random_message()
@@ -185,6 +160,9 @@ def get_random_message():
     random_num = random.randint(0, len(all_messages)-1)
     return all_messages[random_num]
 
-# Run the bot with your token
+
+# Check if the TOKEN variable is set
+if TOKEN is None:
+    raise ValueError("TOKEN environment variable is not set in the .env file")
 bot.run(TOKEN)
 
