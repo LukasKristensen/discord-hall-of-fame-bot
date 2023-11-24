@@ -22,12 +22,12 @@ Define the amount of reactions necessary for posting: ```reaction_threshold```
 ## TODO
 - [x] Problem with using discord user profile pictures using Discord<=2.0.0
 - [x] Deploy on a remote server
-- [ ] Improve the embed layout of messages
-- [ ] Improve media output
+- [x] Improve the embed layout of messages
+- [x] Improve media output
 - [ ] Create a command for updating variable names
 - [ ] Make a folder for each server with private value preferences
 - [x] Improve database structure to mongodb
 - [x] Functionality for checking historical messages (it should run through all the messages and post the ones above the reaction value threshold
-- [ ] When posting the message highlight the reaction emoji from the original message
+- [x] When posting the message highlight the reaction emoji from the original message
 - [x] Fix message IDs not being saved/loaded correctly when validating if it has already been sent
 - [x] Create a getRandom() function for grabbing a random hall-of-fame post
