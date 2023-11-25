@@ -1,3 +1,4 @@
 bot_token.txt
 .env
 __pycache__/message_reactions.cpython-39.pyc
+.idea
