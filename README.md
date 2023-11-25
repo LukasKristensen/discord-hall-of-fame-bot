@@ -19,7 +19,20 @@ Define the amount of reactions necessary for posting: ```reaction_threshold```
 
 <br>
 
-## Features
+## Commands
+
+| Command | Action |
+| ------------- |:-------------|
+| !commands | List of commands |
+| !apply_reaction_checker | Check all the messages on the server and check if they surpass the threshold. They will get posted to the dedicated hall-of-fame channel |
+| !get_random_message | Get a random hall-of-fame message from the database |
+
+<br>
+
+
+## Development Log
+
+### Features
 - [ ] Gamebot: The user gets a hall-of-fame post and should guess if another post has more or less reactions
 - [ ] Discord Wrapped: Make a post with user's
 - [ ] - Top 5 reacted posts
@@ -28,13 +41,13 @@ Define the amount of reactions necessary for posting: ```reaction_threshold```
 - [ ] - Compare the statistics to the rest of the server (e.g. "you were top 3% of users using emoji" or channel)
 - [ ] - Come with more ideas here
 
-## If bot should be invited to other servers
+### If bot should be invited to other servers
 - [ ] Create a command for updating variable names
 - [ ] Make a folder for each server with private value preferences
 - [ ] Create and specify database configs for specific server
 
 
-## 1.01
+### 1.01
 - [x] Problem with using discord user profile pictures using Discord<=2.0.0
 - [x] Deploy on a remote server
 - [x] Improve the embed layout of messages
