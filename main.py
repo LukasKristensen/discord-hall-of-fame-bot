@@ -15,6 +15,9 @@ client = MongoClient(mongo_uri)
 db = client['caroon']
 collection = db['messages_sent']
 
+iteration = 23
+user_gifs = db['user_gifs'+str(iteration)]
+
 intents = discord.Intents.all()
 bot = commands.Bot(command_prefix="!", intents=intents)
 YOUR_DEDICATED_CHANNEL_ID = 1176965358796681326
@@ -67,8 +70,11 @@ async def on_raw_reaction_add(payload):
 
 @bot.command(name='apply_reaction_checker')
 async def cmd_check_emoji_reaction(ctx):
-    print("CTX: ", ctx)
     guild = ctx.guild
+
+    if not ctx.author.id == 230698327589650432:
+        ctx.message.reply("You are not allowed to use this command")
+        return
 
     try:
         for channel in guild.channels:
@@ -155,6 +161,87 @@ async def cmd_help(ctx):
 
 
 video_extensions = ['.mp4', '.mov', '.avi', '.mkv', '.webm']
+
+
+@bot.command(name='get_history_gifs')
+async def cmd_get_history_gifs(ctx):
+    print("[CMD] get_history_gifs from:", ctx.author.name)
+    await ctx.message.reply("Starting gif search")
+
+    if not ctx.author.id == 230698327589650432:
+        ctx.message.reply("You are not allowed to use this command")
+        return
+
+    for channel in ctx.guild.channels:
+        print("Checking channel: ", channel.name)
+        if not isinstance(channel, discord.TextChannel):
+            continue
+        async for message in channel.history(limit=None):
+            if message.author.bot:
+                continue
+            if message.attachments:
+                if '.gif' in message.attachments[0].url.lower():
+                    print("Found a attachment:", message.attachments[0].url, "from:", message.author.name, "Message ID:", message.id)
+            if '.gif' in message.content.lower() or '-gif' in message.content.lower():
+                print("Found a gif:", message.content, "from:", message.author.name, "Message ID:", message.id)
+                gif_url = str(message.content)
+                user_id = str(message.author.id)
+
+                user_gifs_get = user_gifs.find_one({"user_id": str(user_id)})
+                field_name = gif_url.replace(".", "_")
+
+                if user_gifs_get is None:
+                    print("User not in database, adding entry")
+                    user_gifs.insert_one({"user_id": str(user_id), field_name: {"url": gif_url, "count": 1}})
+                else:
+                    if field_name not in user_gifs_get:
+                        print("Gif not in user database, adding it")
+                        user_gifs.update_one({"user_id": str(user_id)},
+                                             {"$set": {field_name: {"url": gif_url, "count": 1}}})
+                    else:
+                        print("Gif in user database, incrementing count")
+                        user_gifs.update_one({"user_id": str(user_id)}, {"$inc": {f"{field_name}.count": 1}})
+
+    print("Completed .gif search!")
+    await ctx.message.reply("Completed .gif search")
+
+
+@bot.command(name='favorite_gifs')
+async def favorite_gifs(ctx):
+    print("[CMD] favorite_gifs from:", ctx.author.name)
+    user_id = str(ctx.author.id)  # Convert user_id to string
+    user_gifs_get = user_gifs.find_one({"user_id": user_id})
+    print("User gifs get:", user_gifs_get)
+
+    # Check if user data is present and contains gif entries
+    if user_gifs_get and 'user_id' in user_gifs_get:
+        gifs_data = {k: v for k, v in user_gifs_get.items() if k != '_id' and k != 'user_id'}
+
+        # Check if there are any gifs in the user's data
+        if gifs_data:
+            sorted_gifs = sorted(gifs_data.items(), key=lambda x: x[1].get('count', 0), reverse=True)
+            print("Sorted gifs:", sorted_gifs)
+
+            top_gifs = sorted_gifs[:3]
+            dict_gifs = {1: "first", 2: "second", 3: "third", 4: "fourth", 5: "fifth"}
+
+            for i in range(len(top_gifs)):
+                gif_name, data = top_gifs[i]
+                gifs_url = data.get('url', "")
+                count = data.get('count', 0)
+
+                # Create an embed for each gif
+                embed = discord.Embed(
+                    title=f"Your {dict_gifs[i + 1]} favorite gif",
+                    description=f"**Count:** {count}",
+                    color=0x00ff00
+                )
+                embed.set_image(url=gifs_url)
+                await ctx.send(embed=embed)
+        else:
+            await ctx.send("No favorite gifs found.")
+    else:
+        await ctx.send("No user data found.")
 
 
 def check_video_extension(message):
