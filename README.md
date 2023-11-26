@@ -21,11 +21,13 @@ Define the amount of reactions necessary for posting: ```reaction_threshold```
 
 ## Commands
 
-| Command | Action |
-| ------------- |:-------------|
-| !commands | List of commands |
-| !apply_reaction_checker | Check all the messages on the server and check if they surpass the threshold. They will get posted to the dedicated hall-of-fame channel |
-| !get_random_message | Get a random hall-of-fame message from the database |
+| Command | Parameters (optional) | Action | Example |
+| :------------- |:-------------|:-------------|:-------------|
+| !commands | | List of commands | !commands |
+| !favorite_gifs | <user_id> \<msg_limit:10> | Get a random hall-of-fame message from the database | !favorite_gifs 230698327589650432 5 |
+| !server_gifs | \<msg_limit:10> | Get a random hall-of-fame message from the database | !server_gifs 7 |
+| !get_random_message | | Get a random hall-of-fame message from the database |
+
 
 <br>
 
@@ -34,12 +36,13 @@ Define the amount of reactions necessary for posting: ```reaction_threshold```
 
 ### Features
 - [ ] Gamebot: The user gets a hall-of-fame post and should guess if another post has more or less reactions
-- [ ] Discord Wrapped: Make a post with user's
-- [ ] - Top 5 reacted posts
-- [ ] - Top 3 most used emojis
-- [ ] - Top 3 most used channel
-- [ ] - Compare the statistics to the rest of the server (e.g. "you were top 3% of users using emoji" or channel)
-- [ ] - Come with more ideas here
+- [ ] Top 5 reacted posts
+- [ ] Top 3 most used emojis
+- [ ] Top 3 most used channel
+- [x] Servers most used gifs
+- [x] Users most used gifs
+- [ ] Compare the statistics to the rest of the server (e.g. "you were top 3% of users using emoji" or channel)
+- [ ] Come with more ideas here
 
 ### If bot should be invited to other servers
 - [ ] Create a command for updating variable names
