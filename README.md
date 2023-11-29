@@ -24,8 +24,8 @@ Define the amount of reactions necessary for posting: ```reaction_threshold```
 | Command | Parameters (optional) | Action | Example |
 | :------------- |:-------------|:-------------|:-------------|
 | !commands | | List of commands | !commands |
-| !favorite_gifs | <user_id> \<msg_limit:10> | Get a random hall-of-fame message from the database | !favorite_gifs 230698327589650432 5 |
-| !server_gifs | \<msg_limit:10> | Get a random hall-of-fame message from the database | !server_gifs 7 |
+| !favorite_gifs | <user_id> \<msg_limit:10> | Get the most popular gifs from a user | !favorite_gifs 230698327589650432 5 |
+| !server_gifs | \<msg_limit:10> | Get the most popular gifs in the server | !server_gifs 7 |
 | !get_random_message | | Get a random hall-of-fame message from the database |
 
 
@@ -34,14 +34,14 @@ Define the amount of reactions necessary for posting: ```reaction_threshold```
 
 ## Development Log
 
-### Features
+### 1.02
 - [ ] Gamebot: The user gets a hall-of-fame post and should guess if another post has more or less reactions
 - [ ] Top 5 reacted posts
 - [ ] Top 3 most used emojis
 - [ ] Top 3 most used channel
+- [ ] New gifs should be added to the user/server database as they get posted, instead of having to use the fetch command
 - [x] Servers most used gifs
 - [x] Users most used gifs
-- [ ] Compare the statistics to the rest of the server (e.g. "you were top 3% of users using emoji" or channel)
 - [ ] Come with more ideas here
 
 ### If bot should be invited to other servers
