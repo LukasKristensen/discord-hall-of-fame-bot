@@ -39,7 +39,7 @@ Define the amount of reactions necessary for posting: ```reaction_threshold```
 - [ ] Top 5 reacted posts
 - [ ] Top 3 most used emojis
 - [ ] Top 3 most used channel
-- [ ] New gifs should be added to the user/server database as they get posted, instead of having to use the fetch command
+- [x] New gifs should be added to the user/server database as they get posted, instead of having to use the fetch command
 - [x] Servers most used gifs
 - [x] Users most used gifs
 - [ ] Come with more ideas here
