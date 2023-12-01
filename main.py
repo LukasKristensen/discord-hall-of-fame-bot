@@ -15,7 +15,7 @@ client = MongoClient(mongo_uri)
 db = client['caroon']
 collection = db['messages_sent']
 
-iteration = 26
+iteration = 27
 user_gifs = db['user_gifs'+str(iteration)]
 server_gifs = db['server_gifs'+str(iteration)]
 
@@ -213,6 +213,40 @@ async def cmd_get_history_gifs(ctx):
 
     print("Completed .gif search!")
     await ctx.message.reply("Completed .gif search")
+
+
+# Check if the user has posted a gif
+@bot.event
+async def on_message(message):
+    if message.author.bot:
+        return
+    if message.attachments:
+        if '.gif' in message.attachments[0].url.lower():
+            message.content = message.attachments[0].url
+    if '.gif' in message.content.lower() or '-gif' in message.content.lower():
+        print("Found a gif:", message.content, "from:", message.author.name, "Message ID:", message.id)
+        gif_url = str(message.content)
+        user_id = str(message.author.id)
+
+        user_gifs_get = user_gifs.find_one({"user_id": str(user_id)})
+        field_name = gif_url.replace(".", "_")
+
+        if user_gifs_get is None:
+            print("User not in database, adding entry")
+            user_gifs.insert_one({"user_id": str(user_id), field_name: {"url": gif_url, "count": 1}})
+        else:
+            if field_name not in user_gifs_get:
+                print("Gif not in user database, adding it")
+                user_gifs.update_one({"user_id": str(user_id)},
+                                     {"$set": {field_name: {"url": gif_url, "count": 1}}})
+            else:
+                print("Gif in user database, incrementing count")
+                user_gifs.update_one({"user_id": str(user_id)}, {"$inc": {f"{field_name}.count": 1}})
+        if server_gifs.find_one({"url": gif_url}) is None:
+            server_gifs.insert_one({"url": gif_url, "count": 1})
+        else:
+            server_gifs.update_one({"url": gif_url}, {"$inc": {"count": 1}})
+    await bot.process_commands(message)
 
 
 @bot.command(name='favorite_gifs')
