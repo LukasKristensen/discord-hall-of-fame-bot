@@ -34,20 +34,15 @@ Define the amount of reactions necessary for posting: ```reaction_threshold```
 
 ## Development Log
 
+
+### 1.03
+- [ ] When the reaction counter goes up on an existing hall-of-fame post, it should update the message with the total amount of reactions
+- [ ] Refactor code to use the discord "interactions" library (enables the slash commands feature)
+
 ### 1.02
-- [ ] Gamebot: The user gets a hall-of-fame post and should guess if another post has more or less reactions
-- [ ] Top 5 reacted posts
-- [ ] Top 3 most used emojis
-- [ ] Top 3 most used channel
 - [x] New gifs should be added to the user/server database as they get posted, instead of having to use the fetch command
 - [x] Servers most used gifs
 - [x] Users most used gifs
-- [ ] Come with more ideas here
-
-### If bot should be invited to other servers
-- [ ] Create a command for updating variable names
-- [ ] Make a folder for each server with private value preferences
-- [ ] Create and specify database configs for specific server
 
 
 ### 1.01
@@ -61,3 +56,14 @@ Define the amount of reactions necessary for posting: ```reaction_threshold```
 - [x] Fix message IDs not being saved/loaded correctly when validating if it has already been sent
 - [x] Create a getRandom() function for grabbing a random hall-of-fame post
 
+### Future
+- [ ] Gamebot: The user gets a hall-of-fame post and should guess if another post has more or less reactions
+- [ ] Top 5 reacted posts
+- [ ] Top 3 most used emojis
+- [ ] Top 3 most used channel
+- [ ] Come with more ideas here
+
+### If bot should be invited to other servers
+- [ ] Create a command for updating variable names (restricted to user permissions)
+- [ ] Make a folder for each server with private value preferences
+- [ ] Create and specify database configs for specific server
