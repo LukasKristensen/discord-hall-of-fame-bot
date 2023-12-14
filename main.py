@@ -21,7 +21,7 @@ server_gifs = db['server_gifs'+str(iteration)]
 
 bot = commands.Bot(command_prefix="!", intents=discord.Intents.all())
 target_channel_id = 1176965358796681326
-reaction_threshold = 6
+reaction_threshold = 8
 
 
 @bot.event
