@@ -5,6 +5,7 @@ import os
 from dotenv import load_dotenv
 from pymongo.mongo_client import MongoClient
 import message_reactions
+import asyncio
 
 load_dotenv()
 TOKEN = os.getenv('KEY')
@@ -246,6 +247,12 @@ async def on_message(message):
             server_gifs.insert_one({"url": gif_url, "count": 1})
         else:
             server_gifs.update_one({"url": gif_url}, {"$inc": {"count": 1}})
+    # check if the message is sent in target_channel and the author is not a bot, if it is delete it
+    if message.channel.id == target_channel_id and not message.author.bot:
+        await message.delete()
+        msg = await message.channel.send(f"Kun bot posts herinde {message.author.mention}") # mention user
+        await asyncio.sleep(5)
+        await msg.delete()
     await bot.process_commands(message)
 
 
