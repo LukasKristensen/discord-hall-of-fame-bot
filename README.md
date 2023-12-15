@@ -38,6 +38,8 @@ Define the amount of reactions necessary for posting: ```reaction_threshold```
 ### 1.03
 - [ ] When the reaction counter goes up on an existing hall-of-fame post, it should update the message with the total amount of reactions
 - [ ] Refactor code to use the discord "interactions" library (enables the slash commands feature)
+- [ ] Command for disabling/enabling user posts in hall-of-fame
+- [x] Remove incoming non-bot posts in the hall-of-fame channel
 
 ### 1.02
 - [x] New gifs should be added to the user/server database as they get posted, instead of having to use the fetch command
