@@ -39,6 +39,7 @@ Define the amount of reactions necessary for posting: ```reaction_threshold```
 - [ ] When the reaction counter goes up on an existing hall-of-fame post, it should update the message with the total amount of reactions
 - [ ] Refactor code to use the discord "interactions" library (enables the slash commands feature)
 - [ ] Command for disabling/enabling user posts in hall-of-fame
+- [ ] Make youtube videos available for preview in the hall-of-fame messages e.g. by posting the link separately (domains: https://youtu.be and https://www.youtube.com)
 - [x] Remove incoming non-bot posts in the hall-of-fame channel
 
 ### 1.02
