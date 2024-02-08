@@ -9,18 +9,13 @@ import asyncio
 
 load_dotenv()
 TOKEN = os.getenv('KEY')
-
-# Set up the MongoDB client
 mongo_uri = os.getenv('MONGO_URI')
 client = MongoClient(mongo_uri)
+bot = commands.Bot(command_prefix="!", intents=discord.Intents.all())
+
+# Make dynamic for multiple servers
 db = client['caroon']
 collection = db['messages_sent']
-
-iteration = 27
-user_gifs = db['user_gifs'+str(iteration)]
-server_gifs = db['server_gifs'+str(iteration)]
-
-bot = commands.Bot(command_prefix="!", intents=discord.Intents.all())
 target_channel_id = 1176965358796681326
 reaction_threshold = 6
 
@@ -169,17 +164,13 @@ async def cmd_help(ctx):
     await ctx.send(embed=embed)
 
 
-video_extensions = ['.mp4', '.mov', '.avi', '.mkv', '.webm']
-
-
-# Check if the user has posted a gif
 @bot.event
 async def on_message(message):
     if message.author.bot:
         return
     if message.channel.id == target_channel_id and not message.author.bot:
         await message.delete()
-        msg = await message.channel.send(f"Kun bot posts herinde {message.author.mention}") # mention user
+        msg = await message.channel.send(f"Kun bot posts herinde {message.author.mention}")
         await asyncio.sleep(5)
         await msg.delete()
     await bot.process_commands(message)
@@ -189,7 +180,8 @@ def check_video_extension(message):
     if not message.attachments:
         return None
     url = message.attachments[0].url
-    for extension in video_extensions:
+
+    for extension in ['.mp4', '.mov', '.avi', '.mkv', '.webm']:
         if extension in url:
             video_url = url.split(extension)[0] + extension
             return video_url
