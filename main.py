@@ -27,7 +27,7 @@ reaction_threshold = 6
 
 @bot.event
 async def on_ready():
-    print(f"We have logged in as {bot.user}")
+    print(f"Logged in as {bot.user}")
     await bot.change_presence(activity=discord.Streaming(name='!commands', url='https://github.com/LukasKristensen/discord-hall-of-fame-bot'))
 
 
@@ -85,7 +85,6 @@ async def update_reaction_counter(message_id, payload):
 
 @bot.command(name='apply_reaction_checker')
 async def cmd_check_emoji_reaction(ctx):
-    print("[apply_reaction_checker]:", ctx.author.name)
     guild = ctx.guild
 
     if not ctx.author.id == 230698327589650432:
@@ -94,7 +93,6 @@ async def cmd_check_emoji_reaction(ctx):
 
     try:
         for channel in guild.channels:
-            print("Checking channel: ", channel.name)
             if not isinstance(channel, discord.TextChannel):
                 continue
             async for message in channel.history(limit=None):
@@ -104,7 +102,6 @@ async def cmd_check_emoji_reaction(ctx):
                 if any(reaction.count >= reaction_threshold for reaction in message.reactions):
                     # Check if the message_id is in the database
                     if collection.find_one({"message_id": message.id}):
-                        print("Found message in database: ", message.id)
                         continue
 
                     # Get the dedicated channel
@@ -133,7 +130,6 @@ def send_message(message):
         color=0x00ff00
     )
     most_reactions = message_reactions.most_reactions(message.reactions)
-    print("Most reactions: ", most_reactions)
 
     embed.set_author(name=message.author.name, icon_url=message.author.avatar.url)
     if message.attachments:
@@ -145,7 +141,6 @@ def send_message(message):
 
 @bot.command(name='get_random_message')
 async def cmd_random_message(ctx):
-    print("[get_random_message]:", ctx.author.name)
     sender_channel = ctx.channel.id
     random_msg = get_random_message()
 
@@ -164,7 +159,6 @@ async def cmd_random_message(ctx):
 
 @bot.command(name='commands')
 async def cmd_help(ctx):
-    print("[commands]:", ctx.author.name)
     embed = discord.Embed(
         title="Commands",
         color=0x00ff00
@@ -184,7 +178,6 @@ video_extensions = ['.mp4', '.mov', '.avi', '.mkv', '.webm']
 
 @bot.command(name='get_history_gifs')
 async def cmd_get_history_gifs(ctx):
-    print("[!get_history_gifs]:", ctx.author.name)
     msg = await ctx.message.reply("Starting gif search")
     gif_counter = 0
 
@@ -193,7 +186,6 @@ async def cmd_get_history_gifs(ctx):
         return
 
     for channel in ctx.guild.channels:
-        print("Checking channel: ", channel.name)
         if not isinstance(channel, discord.TextChannel):
             continue
         async for message in channel.history(limit=None):
@@ -203,7 +195,6 @@ async def cmd_get_history_gifs(ctx):
                 if '.gif' in message.attachments[0].url.lower():
                     message.content = message.attachments[0].url
             if '.gif' in message.content.lower() or '-gif' in message.content.lower():
-                print("Found a gif:", message.content, "from:", message.author.name, "Message ID:", message.id)
                 gif_url = str(message.content)
                 user_id = str(message.author.id)
 
@@ -211,15 +202,12 @@ async def cmd_get_history_gifs(ctx):
                 field_name = gif_url.replace(".", "_")
 
                 if user_gifs_get is None:
-                    print("User not in database, adding entry")
                     user_gifs.insert_one({"user_id": str(user_id), field_name: {"url": gif_url, "count": 1}})
                 else:
                     if field_name not in user_gifs_get:
-                        print("Gif not in user database, adding it")
                         user_gifs.update_one({"user_id": str(user_id)},
                                              {"$set": {field_name: {"url": gif_url, "count": 1}}})
                     else:
-                        print("Gif in user database, incrementing count")
                         user_gifs.update_one({"user_id": str(user_id)}, {"$inc": {f"{field_name}.count": 1}})
                 if server_gifs.find_one({"url": gif_url}) is None:
                     server_gifs.insert_one({"url": gif_url, "count": 1})
@@ -230,8 +218,6 @@ async def cmd_get_history_gifs(ctx):
                 gif_counter += 1
                 if gif_counter % 20 == 0:
                     await msg.edit(content=f"Starting gif search\nFound {gif_counter} gifs. Currently checking channel: {channel.name}")
-
-    print("Completed .gif search!")
     await ctx.message.reply("Completed .gif search")
 
 
@@ -252,15 +238,12 @@ async def on_message(message):
         field_name = gif_url.replace(".", "_")
 
         if user_gifs_get is None:
-            print("User not in database, adding entry")
             user_gifs.insert_one({"user_id": str(user_id), field_name: {"url": gif_url, "count": 1}})
         else:
             if field_name not in user_gifs_get:
-                print("Gif not in user database, adding it")
                 user_gifs.update_one({"user_id": str(user_id)},
                                      {"$set": {field_name: {"url": gif_url, "count": 1}}})
             else:
-                print("Gif in user database, incrementing count")
                 user_gifs.update_one({"user_id": str(user_id)}, {"$inc": {f"{field_name}.count": 1}})
         if server_gifs.find_one({"url": gif_url}) is None:
             server_gifs.insert_one({"url": gif_url, "count": 1})
@@ -277,7 +260,6 @@ async def on_message(message):
 
 @bot.command(name='favorite_gifs')
 async def favorite_gifs(ctx):
-    print("[!favorite_gifs]:", ctx.author.name)
     # Take in parameters for the user
     user_parameters = ctx.message.content.split(" ")
 
@@ -324,7 +306,6 @@ async def favorite_gifs(ctx):
 
 @bot.command(name='server_gifs')
 async def most_used_messages(ctx):
-    print("[!server_gifs]:", ctx.author.name)
     user_parameters = ctx.message.content.split(" ")
     if len(user_parameters) > 1 and user_parameters[1].isdigit():
         msg_limit = int(user_parameters[1])
@@ -334,11 +315,9 @@ async def most_used_messages(ctx):
 
     # Get the server's most used messages as sorted
     most_used_messages = server_gifs.find().sort("count", -1).limit(msg_limit)
-    print("Most used messages:", most_used_messages)
 
     if most_used_messages:
         for i, message_data in enumerate(most_used_messages):
-            print("Message data:", message_data)
             url = message_data.get('url', "")
             count = message_data.get('count', 0)
 
@@ -350,8 +329,6 @@ async def most_used_messages(ctx):
                 description=f"**Count:** {count}",
                 color=0x00ff00
             )
-
-            print("Sending url:", url)
 
             await ctx.send(embed=embed)
             await ctx.send(url)
@@ -371,9 +348,7 @@ def check_video_extension(message):
 
 
 def get_random_message():
-    all_messages = []
-    for message in collection.find():
-        all_messages.append(message)
+    all_messages = [x for x in collection.find()]
     random_num = random.randint(0, len(all_messages)-1)
     return all_messages[random_num]
 
