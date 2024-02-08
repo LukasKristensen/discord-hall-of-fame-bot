@@ -32,6 +32,12 @@ async def on_ready():
 
 
 @bot.event
+async def on_raw_reaction_remove(payload):
+    if collection.find_one({"message_id": payload.message_id}):
+        await update_reaction_counter(payload.message_id, payload)
+
+
+@bot.event
 async def on_raw_reaction_add(payload):
     channel_id = payload.channel_id
     message_id = payload.message_id
@@ -47,7 +53,7 @@ async def on_raw_reaction_add(payload):
     # Check if the message has surpassed the reaction threshold
     if any(reaction.count >= reaction_threshold for reaction in message.reactions):
         if collection.find_one({"message_id": message.id}):
-            print("Found message in database: ", message.id)
+            await update_reaction_counter(message_id, payload)
             return
         target_channel = bot.get_channel(target_channel_id)
 
@@ -56,12 +62,25 @@ async def on_raw_reaction_add(payload):
             await target_channel.send(video_link)
 
         embed = send_message(message)
-        await target_channel.send(embed=embed)
+        hall_of_fame_message = await target_channel.send(embed=embed)
 
         # Save to database
         collection.insert_one({"message_id": message.id,
                                "channel_id": str(message.channel.id),
-                               "guild_id": str(message.guild.id)})
+                               "guild_id": str(message.guild.id),
+                               "hall_of_fame_message_id": hall_of_fame_message.id})
+
+
+async def update_reaction_counter(message_id, payload):
+    message_sent = collection.find_one({"message_id": message_id})
+    if "hall_of_fame_message_id" not in message_sent:
+        return
+    hall_of_fame_message_id = message_sent["hall_of_fame_message_id"]
+    target_channel = bot.get_channel(target_channel_id)
+    hall_of_fame_message = await target_channel.fetch_message(hall_of_fame_message_id)
+    original_message = await bot.get_channel(payload.channel_id).fetch_message(message_id)
+
+    await hall_of_fame_message.edit(embed=send_message(original_message))
 
 
 @bot.command(name='apply_reaction_checker')
