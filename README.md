@@ -36,10 +36,7 @@ Define the amount of reactions necessary for posting: ```reaction_threshold```
 
 
 ### 1.03
-- [ ] When the reaction counter goes up on an existing hall-of-fame post, it should update the message with the total amount of reactions
-- [ ] Refactor code to use the discord "interactions" library (enables the slash commands feature)
-- [ ] Command for disabling/enabling user posts in hall-of-fame
-- [ ] Make youtube videos available for preview in the hall-of-fame messages e.g. by posting the link separately (domains: https://youtu.be and https://www.youtube.com)
+- [x] When the reaction counter goes up on an existing hall-of-fame post, it should update the message with the total amount of reactions
 - [x] Remove incoming non-bot posts in the hall-of-fame channel
 
 ### 1.02
@@ -64,7 +61,9 @@ Define the amount of reactions necessary for posting: ```reaction_threshold```
 - [ ] Top 5 reacted posts
 - [ ] Top 3 most used emojis
 - [ ] Top 3 most used channel
-- [ ] Come with more ideas here
+- [ ] Refactor code to use the discord "interactions" library (enables the slash commands feature)
+- [ ] Command for disabling/enabling user posts in hall-of-fame
+- [ ] Make youtube videos available for preview in the hall-of-fame messages e.g. by posting the link separately (domains: https://youtu.be and https://www.youtube.com)
 
 ### If bot should be invited to other servers
 - [ ] Create a command for updating variable names (restricted to user permissions)
