@@ -15,7 +15,10 @@ bot = commands.Bot(command_prefix="!", intents=discord.Intents.all())
 
 # Make dynamic for multiple servers
 db = client['caroon']
-collection = db['messages_sent']
+# collection = db['messages_sent']
+# hof_collection = db['hall_of_fame_messages']
+collection = db['hall_of_fame_messages']
+server_config = db['server_config']
 target_channel_id = 1176965358796681326
 reaction_threshold = 6
 
@@ -28,7 +31,9 @@ async def on_ready():
 
 @bot.event
 async def on_raw_reaction_remove(payload):
-    if collection.find_one({"message_id": payload.message_id}):
+    if collection.find_one({"message_id": int(payload.message_id)}):
+        message = await bot.get_channel(payload.channel_id).fetch_message(payload.message_id)
+        collection.update_one({"message_id": int(message.id)}, {"$set": {"reaction_count": int(max(reaction.count for reaction in message.reactions))}})
         await update_reaction_counter(payload.message_id, payload)
 
 
@@ -47,7 +52,8 @@ async def on_raw_reaction_add(payload):
 
     # Check if the message has surpassed the reaction threshold
     if any(reaction.count >= reaction_threshold for reaction in message.reactions):
-        if collection.find_one({"message_id": message.id}):
+        if collection.find_one({"message_id": int(message.id)}):
+            collection.update_one({"message_id": (message.id)}, {"$set": {"reaction_count": int(max(reaction.count for reaction in message.reactions))}})
             await update_reaction_counter(message_id, payload)
             return
         target_channel = bot.get_channel(target_channel_id)
@@ -60,14 +66,14 @@ async def on_raw_reaction_add(payload):
         hall_of_fame_message = await target_channel.send(embed=embed)
 
         # Save to database
-        collection.insert_one({"message_id": message.id,
-                               "channel_id": str(message.channel.id),
-                               "guild_id": str(message.guild.id),
-                               "hall_of_fame_message_id": hall_of_fame_message.id})
+        collection.insert_one({"message_id": int(message.id),
+                               "channel_id": int(message.channel.id),
+                               "guild_id": int(message.guild.id),
+                               "hall_of_fame_message_id": int(hall_of_fame_message.id)})
 
 
 async def update_reaction_counter(message_id, payload):
-    message_sent = collection.find_one({"message_id": message_id})
+    message_sent = collection.find_one({"message_id": int(message_id)})
     if "hall_of_fame_message_id" not in message_sent:
         return
     hall_of_fame_message_id = message_sent["hall_of_fame_message_id"]
@@ -76,6 +82,25 @@ async def update_reaction_counter(message_id, payload):
     original_message = await bot.get_channel(payload.channel_id).fetch_message(message_id)
 
     await hall_of_fame_message.edit(embed=create_embed(original_message))
+
+
+async def get_most_reacted_message():
+    # Get the 5 most reacted messages
+    most_reacted_messages = collection.find().sort("reaction_count", -1).limit(10)
+    most_reacted_messages = list(most_reacted_messages)
+    msg_id_array = server_config.find_one({"leaderboard_message_ids": {"$exists": True}})
+
+    if msg_id_array:
+        for i in range(10):
+            hall_of_fame_channel = bot.get_channel(target_channel_id)
+            hall_of_fame_message = await hall_of_fame_channel.fetch_message(msg_id_array["leaderboard_message_ids"][i])
+            original_channel = bot.get_channel(most_reacted_messages[i]["channel_id"])
+            original_message = await original_channel.fetch_message(most_reacted_messages[i]["message_id"])
+
+            await hall_of_fame_message.edit(embed=create_embed(original_message))
+            await hall_of_fame_message.edit(content=f"**HallOfFame#{i+1}**")
+            if original_message.attachments:
+                await hall_of_fame_message.edit(content=f"**HallOfFame#{i+1}**\n{original_message.attachments[0].url}")
 
 
 @bot.command(name='apply_reaction_checker')
@@ -96,7 +121,7 @@ async def cmd_check_emoji_reaction(ctx):
 
                 if any(reaction.count >= reaction_threshold for reaction in message.reactions):
                     # Check if the message_id is in the database
-                    if collection.find_one({"message_id": message.id}):
+                    if collection.find_one({"message_id": int(message.id)}):
                         continue
 
                     # Get the dedicated channel
@@ -109,9 +134,9 @@ async def cmd_check_emoji_reaction(ctx):
                     embed = create_embed(message)
                     await target_channel.send(embed=embed)
 
-                    collection.insert_one({"message_id": message.id,
-                                           "channel_id": str(message.channel.id),
-                                           "guild_id": str(message.guild.id)})
+                    collection.insert_one({"message_id": int(message.id),
+                                           "channel_id": int(message.channel.id),
+                                           "guild_id": int(message.guild.id)})
 
     except Exception as e:
         print(f'An error occurred: {e}')
@@ -162,6 +187,8 @@ async def cmd_help(ctx):
     embed.add_field(name="", value="", inline=True)
     embed.add_field(name="Contribute on Github", value="https://github.com/LukasKristensen/discord-hall-of-fame-bot", inline=False)
     await ctx.send(embed=embed)
+    # await search_channel(323488126859345931, 1176965358796681326)
+    # await get_most_reacted_message()
 
 
 @bot.event
@@ -192,6 +219,7 @@ def get_random_message():
     all_messages = [x for x in collection.find()]
     random_num = random.randint(0, len(all_messages)-1)
     return all_messages[random_num]
+
 
 
 # Check if the TOKEN variable is set
