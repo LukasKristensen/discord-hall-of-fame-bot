@@ -15,8 +15,7 @@ bot = commands.Bot(command_prefix="!", intents=discord.Intents.all())
 
 # Make dynamic for multiple servers
 db = client['caroon']
-# collection = db['messages_sent']
-# hof_collection = db['hall_of_fame_messages']
+# collection = db['messages_sent'] # Old database
 collection = db['hall_of_fame_messages']
 server_config = db['server_config']
 target_channel_id = 1176965358796681326
@@ -27,6 +26,7 @@ reaction_threshold = 6
 async def on_ready():
     print(f"Logged in as {bot.user}")
     await bot.change_presence(activity=discord.Streaming(name='!commands', url='https://github.com/LukasKristensen/discord-hall-of-fame-bot'))
+    await update_leaderboard()
 
 
 @bot.event
@@ -53,7 +53,7 @@ async def on_raw_reaction_add(payload):
     # Check if the message has surpassed the reaction threshold
     if any(reaction.count >= reaction_threshold for reaction in message.reactions):
         if collection.find_one({"message_id": int(message.id)}):
-            collection.update_one({"message_id": (message.id)}, {"$set": {"reaction_count": int(max(reaction.count for reaction in message.reactions))}})
+            collection.update_one({"message_id": int(message.id)}, {"$set": {"reaction_count": int(max(reaction.count for reaction in message.reactions))}})
             await update_reaction_counter(message_id, payload)
             return
         target_channel = bot.get_channel(target_channel_id)
@@ -84,10 +84,8 @@ async def update_reaction_counter(message_id, payload):
     await hall_of_fame_message.edit(embed=create_embed(original_message))
 
 
-async def get_most_reacted_message():
-    # Get the 5 most reacted messages
-    most_reacted_messages = collection.find().sort("reaction_count", -1).limit(10)
-    most_reacted_messages = list(most_reacted_messages)
+async def update_leaderboard():
+    most_reacted_messages = list(collection.find().sort("reaction_count", -1).limit(10))
     msg_id_array = server_config.find_one({"leaderboard_message_ids": {"$exists": True}})
 
     if msg_id_array:
@@ -104,7 +102,7 @@ async def get_most_reacted_message():
 
 
 @bot.command(name='apply_reaction_checker')
-async def cmd_check_emoji_reaction(ctx):
+async def check_all_server_messages(ctx):
     guild = ctx.guild
 
     if not ctx.author.id == 230698327589650432:
@@ -187,8 +185,6 @@ async def cmd_help(ctx):
     embed.add_field(name="", value="", inline=True)
     embed.add_field(name="Contribute on Github", value="https://github.com/LukasKristensen/discord-hall-of-fame-bot", inline=False)
     await ctx.send(embed=embed)
-    # await search_channel(323488126859345931, 1176965358796681326)
-    # await get_most_reacted_message()
 
 
 @bot.event
@@ -219,7 +215,6 @@ def get_random_message():
     all_messages = [x for x in collection.find()]
     random_num = random.randint(0, len(all_messages)-1)
     return all_messages[random_num]
-
 
 
 # Check if the TOKEN variable is set
