@@ -26,6 +26,7 @@ reaction_threshold = 6
 async def on_ready():
     print(f"Logged in as {bot.user}")
     await bot.change_presence(activity=discord.Streaming(name='!commands', url='https://github.com/LukasKristensen/discord-hall-of-fame-bot'))
+    await bot.get_channel(1177040595395547197).send("BOT RESTARTED")
     await update_leaderboard()
 
 
@@ -70,6 +71,7 @@ async def on_raw_reaction_add(payload):
                                "channel_id": int(message.channel.id),
                                "guild_id": int(message.guild.id),
                                "hall_of_fame_message_id": int(hall_of_fame_message.id)})
+        await update_leaderboard()
 
 
 async def update_reaction_counter(message_id, payload):
