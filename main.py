@@ -25,9 +25,8 @@ reaction_threshold = 6
 @bot.event
 async def on_ready():
     print(f"Logged in as {bot.user}")
-    await bot.change_presence(activity=discord.Streaming(name='!commands', url='https://github.com/LukasKristensen/discord-hall-of-fame-bot'))
-    await bot.get_channel(1177040595395547197).send("BOT RESTARTED")
-    await update_leaderboard()
+    await bot.change_presence(activity=discord.CustomActivity(name=f'{len([x for x in collection.find()])} Hall of Fame messages', type=5))
+    await check_all_server_messages(None)
 
 
 @bot.event
@@ -104,39 +103,45 @@ async def update_leaderboard():
 
 
 @bot.command(name='apply_reaction_checker')
-async def check_all_server_messages(ctx):
-    guild = ctx.guild
-
-    if not ctx.author.id == 230698327589650432:
-        ctx.message.reply("You are not allowed to use this command")
-        return
+async def check_all_server_messages(ctx=None):
+    if ctx is None:
+        guild_id = 323488126859345931
+        guild = bot.get_guild(guild_id)
+    else:
+        guild = ctx.guild
+        if not ctx.author.id == 230698327589650432:
+            ctx.message.reply("You are not allowed to use this command")
+            return
 
     try:
         for channel in guild.channels:
+            print("checking channel:", channel.name)
             if not isinstance(channel, discord.TextChannel):
                 continue
-            async for message in channel.history(limit=None):
+            async for message in channel.history(limit=2000):
                 if message.author.bot:
                     continue  # Ignore messages from bots
 
                 if any(reaction.count >= reaction_threshold for reaction in message.reactions):
-                    # Check if the message_id is in the database
                     if collection.find_one({"message_id": int(message.id)}):
-                        continue
+                        # continue # if a total channel sweep is needed
+                        break  # if message is already in the database, no need to check further
 
-                    # Get the dedicated channel
                     target_channel = bot.get_channel(target_channel_id)
-
                     video_link = check_video_extension(message)
+
                     if video_link:
                         await target_channel.send(video_link)
 
                     embed = create_embed(message)
-                    await target_channel.send(embed=embed)
+                    hall_of_fame_message = await target_channel.send(embed=embed)
 
+                    # Save to database
                     collection.insert_one({"message_id": int(message.id),
                                            "channel_id": int(message.channel.id),
-                                           "guild_id": int(message.guild.id)})
+                                           "guild_id": int(message.guild.id),
+                                           "hall_of_fame_message_id": int(hall_of_fame_message.id)})
+        print("Finished checking all messages")
 
     except Exception as e:
         print(f'An error occurred: {e}')
