@@ -34,7 +34,7 @@ async def on_raw_reaction_remove(payload):
     if collection.find_one({"message_id": int(payload.message_id)}):
         message = await bot.get_channel(payload.channel_id).fetch_message(payload.message_id)
         collection.update_one({"message_id": int(message.id)}, {"$set": {"reaction_count": int(max(reaction.count for reaction in message.reactions))}})
-        await update_reaction_counter(payload.message_id, payload)
+        await update_reaction_counter(payload.message_id, payload.channel_id)
 
 
 @bot.event
@@ -54,33 +54,19 @@ async def on_raw_reaction_add(payload):
     if any(reaction.count >= reaction_threshold for reaction in message.reactions):
         if collection.find_one({"message_id": int(message.id)}):
             collection.update_one({"message_id": int(message.id)}, {"$set": {"reaction_count": int(max(reaction.count for reaction in message.reactions))}})
-            await update_reaction_counter(message_id, payload)
+            await update_reaction_counter(message_id, payload.channel_id)
             return
-        target_channel = bot.get_channel(target_channel_id)
-
-        video_link = check_video_extension(message)
-        if video_link:
-            await target_channel.send(video_link)
-
-        embed = create_embed(message)
-        hall_of_fame_message = await target_channel.send(embed=embed)
-
-        # Save to database
-        collection.insert_one({"message_id": int(message.id),
-                               "channel_id": int(message.channel.id),
-                               "guild_id": int(message.guild.id),
-                               "hall_of_fame_message_id": int(hall_of_fame_message.id)})
-        await update_leaderboard()
+        await post_hall_of_fame_message(message)
 
 
-async def update_reaction_counter(message_id, payload):
+async def update_reaction_counter(message_id, channel_id):
     message_sent = collection.find_one({"message_id": int(message_id)})
     if "hall_of_fame_message_id" not in message_sent:
         return
     hall_of_fame_message_id = message_sent["hall_of_fame_message_id"]
     target_channel = bot.get_channel(target_channel_id)
     hall_of_fame_message = await target_channel.fetch_message(hall_of_fame_message_id)
-    original_message = await bot.get_channel(payload.channel_id).fetch_message(message_id)
+    original_message = await bot.get_channel(channel_id).fetch_message(message_id)
 
     await hall_of_fame_message.edit(embed=create_embed(original_message))
 
@@ -124,27 +110,32 @@ async def check_all_server_messages(ctx=None):
 
                 if any(reaction.count >= reaction_threshold for reaction in message.reactions):
                     if collection.find_one({"message_id": int(message.id)}):
+                        await update_reaction_counter(message.id, message.channel.id)
                         # continue # if a total channel sweep is needed
                         break  # if message is already in the database, no need to check further
 
-                    target_channel = bot.get_channel(target_channel_id)
-                    video_link = check_video_extension(message)
-
-                    if video_link:
-                        await target_channel.send(video_link)
-
-                    embed = create_embed(message)
-                    hall_of_fame_message = await target_channel.send(embed=embed)
-
-                    # Save to database
-                    collection.insert_one({"message_id": int(message.id),
-                                           "channel_id": int(message.channel.id),
-                                           "guild_id": int(message.guild.id),
-                                           "hall_of_fame_message_id": int(hall_of_fame_message.id)})
+                    await post_hall_of_fame_message(message)
         print("Finished checking all messages")
 
     except Exception as e:
         print(f'An error occurred: {e}')
+
+
+async def post_hall_of_fame_message(message):
+    target_channel = bot.get_channel(target_channel_id)
+    video_link = check_video_extension(message)
+
+    if video_link:
+        await target_channel.send(video_link)
+
+    embed = create_embed(message)
+    hall_of_fame_message = await target_channel.send(embed=embed)
+
+    collection.insert_one({"message_id": int(message.id),
+                           "channel_id": int(message.channel.id),
+                           "guild_id": int(message.guild.id),
+                           "hall_of_fame_message_id": int(hall_of_fame_message.id)})
+    await update_leaderboard()
 
 
 def create_embed(message):
