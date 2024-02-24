@@ -13,7 +13,11 @@ mongo_uri = os.getenv('MONGO_URI')
 client = MongoClient(mongo_uri)
 bot = commands.Bot(command_prefix="!", intents=discord.Intents.all())
 
-# Make dynamic for multiple servers
+# todo: Make dynamic for multiple servers
+#       -   If opening up for multiple servers: create security measures to
+#           validate that the origin of the message correlates to the server
+#       -   Research topic: How reliable is the `guild_id` attribute of a message? Can it be spoofed?
+
 db = client['caroon']
 collection = db['hall_of_fame_messages']
 server_config = db['server_config']
@@ -152,7 +156,10 @@ def create_embed(message):
 @bot.command(name='get_random_message')
 async def cmd_random_message(payload):
     sender_channel = payload.channel.id
-    random_msg = get_random_message()
+
+    all_messages = [x for x in collection.find()]
+    random_num = random.randint(0, len(all_messages)-1)
+    random_msg = all_messages[random_num]
 
     msg_channel = bot.get_channel(int(random_msg["channel_id"]))
     message = await msg_channel.fetch_message(int(random_msg["message_id"]))
@@ -201,12 +208,6 @@ def check_video_extension(message):
             video_url = url.split(extension)[0] + extension
             return video_url
     return None
-
-
-def get_random_message():
-    all_messages = [x for x in collection.find()]
-    random_num = random.randint(0, len(all_messages)-1)
-    return all_messages[random_num]
 
 
 # Check if the TOKEN variable is set
