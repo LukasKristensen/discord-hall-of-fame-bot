@@ -15,7 +15,6 @@ bot = commands.Bot(command_prefix="!", intents=discord.Intents.all())
 
 # Make dynamic for multiple servers
 db = client['caroon']
-# collection = db['messages_sent'] # Old database
 collection = db['hall_of_fame_messages']
 server_config = db['server_config']
 target_channel_id = 1176965358796681326
@@ -42,13 +41,11 @@ async def on_raw_reaction_add(payload):
     channel_id = payload.channel_id
     message_id = payload.message_id
 
-    if channel_id == target_channel_id:
-        return  # Ignore reactions in the dedicated channel
-
     channel = bot.get_channel(channel_id)
     message = await channel.fetch_message(message_id)
-    if message.author.bot:
-        return  # Ignore messages from bots
+
+    if message.author.bot or channel_id == target_channel_id:
+        return
 
     # Check if the message has surpassed the reaction threshold
     if any(reaction.count >= reaction_threshold for reaction in message.reactions):
@@ -89,19 +86,18 @@ async def update_leaderboard():
 
 
 @bot.command(name='apply_reaction_checker')
-async def check_all_server_messages(ctx=None):
-    if ctx is None:
+async def check_all_server_messages(payload=None):
+    if payload is None:
         guild_id = 323488126859345931
         guild = bot.get_guild(guild_id)
     else:
-        guild = ctx.guild
-        if not ctx.author.id == 230698327589650432:
-            ctx.message.reply("You are not allowed to use this command")
+        guild = payload.guild
+        if not payload.author.id == 230698327589650432:
+            payload.message.reply("You are not allowed to use this command")
             return
 
     try:
         for channel in guild.channels:
-            print("checking channel:", channel.name)
             if not isinstance(channel, discord.TextChannel):
                 continue
             async for message in channel.history(limit=2000):
@@ -115,8 +111,6 @@ async def check_all_server_messages(ctx=None):
                         break  # if message is already in the database, no need to check further
 
                     await post_hall_of_fame_message(message)
-        print("Finished checking all messages")
-
     except Exception as e:
         print(f'An error occurred: {e}')
 
@@ -134,7 +128,8 @@ async def post_hall_of_fame_message(message):
     collection.insert_one({"message_id": int(message.id),
                            "channel_id": int(message.channel.id),
                            "guild_id": int(message.guild.id),
-                           "hall_of_fame_message_id": int(hall_of_fame_message.id)})
+                           "hall_of_fame_message_id": int(hall_of_fame_message.id),
+                           "reaction_count": int(max(reaction.count for reaction in message.reactions))})
     await update_leaderboard()
 
 
@@ -155,8 +150,8 @@ def create_embed(message):
 
 
 @bot.command(name='get_random_message')
-async def cmd_random_message(ctx):
-    sender_channel = ctx.channel.id
+async def cmd_random_message(payload):
+    sender_channel = payload.channel.id
     random_msg = get_random_message()
 
     msg_channel = bot.get_channel(int(random_msg["channel_id"]))
@@ -169,11 +164,10 @@ async def cmd_random_message(ctx):
 
     embed = create_embed(message)
     await target_channel.send(embed=embed)
-    return
 
 
 @bot.command(name='commands')
-async def cmd_help(ctx):
+async def cmd_help(payload):
     embed = discord.Embed(
         title="Commands",
         color=0x00ff00
@@ -182,7 +176,7 @@ async def cmd_help(ctx):
     embed.add_field(name="!get_random_message", value="Get a random message from the database", inline=False)
     embed.add_field(name="", value="", inline=True)
     embed.add_field(name="Contribute on Github", value="https://github.com/LukasKristensen/discord-hall-of-fame-bot", inline=False)
-    await ctx.send(embed=embed)
+    await payload.send(embed=embed)
 
 
 @bot.event
@@ -216,7 +210,7 @@ def get_random_message():
 
 
 # Check if the TOKEN variable is set
-if TOKEN is None:
+if TOKEN is None or mongo_uri is None:
     raise ValueError("TOKEN environment variable is not set in the .env file")
 bot.run(TOKEN)
 
