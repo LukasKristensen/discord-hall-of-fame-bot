@@ -64,6 +64,7 @@ Define the amount of reactions necessary for posting: ```reaction_threshold```
 - [ ] Refactor code to use the discord "interactions" library (enables the slash commands feature)
 - [ ] Command for disabling/enabling user posts in hall-of-fame
 - [ ] Make youtube videos available for preview in the hall-of-fame messages e.g. by posting the link separately (domains: https://youtu.be and https://www.youtube.com)
+- [ ] Remove author's self-reaction to message on reaction count
 
 ### If bot should be invited to other servers
 - [ ] Create a command for updating variable names (restricted to user permissions)
