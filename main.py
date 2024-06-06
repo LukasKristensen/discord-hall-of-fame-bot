@@ -34,10 +34,16 @@ async def on_ready():
 
 @bot.event
 async def on_raw_reaction_remove(payload):
-    if collection.find_one({"message_id": int(payload.message_id)}):
-        message = await bot.get_channel(payload.channel_id).fetch_message(payload.message_id)
-        collection.update_one({"message_id": int(message.id)}, {"$set": {"reaction_count": int(max(reaction.count for reaction in message.reactions))}})
-        await update_reaction_counter(payload.message_id, payload.channel_id)
+    channel_id = payload.channel_id
+    channel = bot.get_channel(channel_id)
+    message = await channel.fetch_message(payload.message_id)
+
+    if await reaction_count_without_author(message) >= reaction_threshold:
+        if collection.find_one({"message_id": int(payload.message_id)}):
+            collection.update_one({"message_id": int(message.id)}, {"$set": {"reaction_count": int(max(reaction.count for reaction in message.reactions))}})
+            await update_reaction_counter(payload.message_id, payload.channel_id)
+    else:
+        await remove_embed(payload.message_id)
 
 
 @bot.event
@@ -51,18 +57,23 @@ async def on_raw_reaction_add(payload):
     if message.author.bot or channel_id == target_channel_id:
         return
 
+    corrected_reactions = await reaction_count_without_author(message)
+
     # Check if the message has surpassed the reaction threshold
-    if any(reaction.count >= reaction_threshold for reaction in message.reactions):
+    if corrected_reactions >= reaction_threshold:
         if collection.find_one({"message_id": int(message.id)}):
             collection.update_one({"message_id": int(message.id)}, {"$set": {"reaction_count": int(max(reaction.count for reaction in message.reactions))}})
             await update_reaction_counter(message_id, payload.channel_id)
             return
         await post_hall_of_fame_message(message)
+    else:
+        if collection.find_one({"message_id": int(message.id)}):
+            await remove_embed(message_id)
 
 
 async def update_reaction_counter(message_id, channel_id):
     message_sent = collection.find_one({"message_id": int(message_id)})
-    if "hall_of_fame_message_id" not in message_sent:
+    if not message_sent["hall_of_fame_message_id"]:
         return
     hall_of_fame_message_id = message_sent["hall_of_fame_message_id"]
     target_channel = bot.get_channel(target_channel_id)
@@ -70,6 +81,29 @@ async def update_reaction_counter(message_id, channel_id):
     original_message = await bot.get_channel(channel_id).fetch_message(message_id)
 
     await hall_of_fame_message.edit(embed=create_embed(original_message))
+
+
+async def reaction_count_without_author(message):
+    max_reaction_count = 0
+
+    for reaction in message.reactions:
+        react_count = reaction.count
+
+        users_ids = [user.id async for user in reaction.users()]
+        corrected_count = react_count-1 if message.author.id in users_ids else react_count
+        max_reaction_count = corrected_count if corrected_count > max_reaction_count else max_reaction_count
+
+    return max_reaction_count
+
+
+async def remove_embed(message_id):
+    message = collection.find_one({"message_id": int(message_id)})
+    if "hall_of_fame_message_id" not in message:
+        return
+    hall_of_fame_message_id = message["hall_of_fame_message_id"]
+    target_channel = bot.get_channel(target_channel_id)
+    hall_of_fame_message = await target_channel.fetch_message(hall_of_fame_message_id)
+    await hall_of_fame_message.edit(content="** **", embed=None)
 
 
 async def update_leaderboard():
@@ -133,7 +167,7 @@ async def post_hall_of_fame_message(message):
                            "channel_id": int(message.channel.id),
                            "guild_id": int(message.guild.id),
                            "hall_of_fame_message_id": int(hall_of_fame_message.id),
-                           "reaction_count": int(max(reaction.count for reaction in message.reactions))})
+                           "reaction_count": int(await reaction_count_without_author(message))})
     await update_leaderboard()
 
 
