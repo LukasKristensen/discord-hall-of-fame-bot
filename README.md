@@ -35,7 +35,7 @@ Define the amount of reactions necessary for posting: ```reaction_threshold```
 ## Development Log
 
 
-### 1.03
+### 1.04
 - [x] Only count non-author reactions towards the total amount for threshold
 - [x] When a post goes below the threshold remove the embed, but keep the message so that it would be able to be reposted again
 
