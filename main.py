@@ -142,12 +142,11 @@ async def check_all_server_messages(payload=None):
                 if message.author.bot:
                     continue  # Ignore messages from bots
 
-                if any(reaction.count >= reaction_threshold for reaction in message.reactions):
+                if await reaction_count_without_author(message) >= reaction_threshold:
                     if collection.find_one({"message_id": int(message.id)}):
                         await update_reaction_counter(message.id, message.channel.id)
                         # continue # if a total channel sweep is needed
                         break  # if message is already in the database, no need to check further
-
                     await post_hall_of_fame_message(message)
     except Exception as e:
         print(f'An error occurred: {e}')
