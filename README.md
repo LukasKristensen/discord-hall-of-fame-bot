@@ -36,8 +36,8 @@ Define the amount of reactions necessary for posting: ```reaction_threshold```
 
 
 ### 1.03
-- [ ] Only count non-author reactions towards the total amount for threshold
-- [ ] When a post goes below the threshold remove the embed, but keep the message so that it would be able to be reposted again
+- [x] Only count non-author reactions towards the total amount for threshold
+- [x] When a post goes below the threshold remove the embed, but keep the message so that it would be able to be reposted again
 
 ### 1.03
 - [x] When the reaction counter goes up on an existing hall-of-fame post, it should update the message with the total amount of reactions
