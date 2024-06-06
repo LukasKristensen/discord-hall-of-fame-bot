@@ -40,7 +40,7 @@ async def on_raw_reaction_remove(payload):
 
     if await reaction_count_without_author(message) >= reaction_threshold:
         if collection.find_one({"message_id": int(payload.message_id)}):
-            collection.update_one({"message_id": int(message.id)}, {"$set": {"reaction_count": int(max(reaction.count for reaction in message.reactions))}})
+            collection.update_one({"message_id": int(message.id)}, {"$set": {"reaction_count": await reaction_count_without_author(message)}})
             await update_reaction_counter(payload.message_id, payload.channel_id)
     else:
         await remove_embed(payload.message_id)
@@ -62,7 +62,7 @@ async def on_raw_reaction_add(payload):
     # Check if the message has surpassed the reaction threshold
     if corrected_reactions >= reaction_threshold:
         if collection.find_one({"message_id": int(message.id)}):
-            collection.update_one({"message_id": int(message.id)}, {"$set": {"reaction_count": int(max(reaction.count for reaction in message.reactions))}})
+            collection.update_one({"message_id": int(message.id)}, {"$set": {"reaction_count": await reaction_count_without_author(message)}})
             await update_reaction_counter(message_id, payload.channel_id)
             return
         await post_hall_of_fame_message(message)
@@ -80,7 +80,7 @@ async def update_reaction_counter(message_id, channel_id):
     hall_of_fame_message = await target_channel.fetch_message(hall_of_fame_message_id)
     original_message = await bot.get_channel(channel_id).fetch_message(message_id)
 
-    await hall_of_fame_message.edit(embed=create_embed(original_message))
+    await hall_of_fame_message.edit(embed=await create_embed(original_message))
 
 
 async def reaction_count_without_author(message):
@@ -117,7 +117,7 @@ async def update_leaderboard():
             original_channel = bot.get_channel(most_reacted_messages[i]["channel_id"])
             original_message = await original_channel.fetch_message(most_reacted_messages[i]["message_id"])
 
-            await hall_of_fame_message.edit(embed=create_embed(original_message))
+            await hall_of_fame_message.edit(embed=await create_embed(original_message))
             await hall_of_fame_message.edit(content=f"**HallOfFame#{i+1}**")
             if original_message.attachments:
                 await hall_of_fame_message.edit(content=f"**HallOfFame#{i+1}**\n{original_message.attachments[0].url}")
@@ -159,7 +159,7 @@ async def post_hall_of_fame_message(message):
     if video_link:
         await target_channel.send(video_link)
 
-    embed = create_embed(message)
+    embed = await create_embed(message)
     hall_of_fame_message = await target_channel.send(embed=embed)
 
     collection.insert_one({"message_id": int(message.id),
@@ -170,7 +170,7 @@ async def post_hall_of_fame_message(message):
     await update_leaderboard()
 
 
-def create_embed(message):
+async def create_embed(message):
     embed = discord.Embed(
         title=f"Message in #{message.channel.name} has surpassed {reaction_threshold} reactions",
         description=message.content,
@@ -181,7 +181,8 @@ def create_embed(message):
     embed.set_author(name=message.author.name, icon_url=message.author.avatar.url)
     if message.attachments:
         embed.set_image(url=message.attachments[0].url)
-    embed.add_field(name=f"{most_reactions[0].count} Reactions ", value=most_reactions[0].emoji, inline=True)
+    corrected_reactions = await reaction_count_without_author(message)
+    embed.add_field(name=f"{corrected_reactions} Reactions ", value=most_reactions[0].emoji, inline=True)
     embed.add_field(name="Jump to Message", value=message.jump_url, inline=False)
     return embed
 
@@ -202,7 +203,7 @@ async def cmd_random_message(payload):
     if video_link:
         await target_channel.send(video_link)
 
-    embed = create_embed(message)
+    embed = await create_embed(message)
     await target_channel.send(embed=embed)
 
 
