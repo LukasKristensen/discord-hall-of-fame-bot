@@ -178,20 +178,44 @@ async def post_hall_of_fame_message(message):
 
 
 async def create_embed(message):
-    embed = discord.Embed(
-        title=f"Message in #{message.channel.name} has surpassed {reaction_threshold} reactions",
-        description=message.content,
-        color=0x00ff00
-    )
-    most_reactions = message_reactions.most_reactions(message.reactions)
+    # Check if the message is a reply to another message
+    if message.reference and not message.attachments:
+        reference_message = await message.channel.fetch_message(message.reference.message_id)
 
-    embed.set_author(name=message.author.name, icon_url=message.author.avatar.url)
-    if message.attachments:
-        embed.set_image(url=message.attachments[0].url)
-    corrected_reactions = await reaction_count_without_author(message)
-    embed.add_field(name=f"{corrected_reactions} Reactions ", value=most_reactions[0].emoji, inline=True)
-    embed.add_field(name="Jump to Message", value=message.jump_url, inline=False)
-    return embed
+        embed = discord.Embed(
+            title=f"{message.author.name} replied to {reference_message.author.name}'s image",
+            description=message.content,
+            color=0x00ff00
+        )
+        most_reactions = message_reactions.most_reactions(message.reactions)
+
+        embed.set_author(name=message.author.name, icon_url=message.author.avatar.url)
+
+        corrected_reactions = await reaction_count_without_author(message)
+        embed.add_field(name=f"{corrected_reactions} Reactions ", value=most_reactions[0].emoji, inline=True)
+        embed.add_field(name="Jump to Message", value=message.jump_url, inline=False)
+
+        embed.add_field(name=f"{reference_message.author.name}'s message:", value=reference_message.content, inline=False)
+        if reference_message.attachments:
+            embed.set_image(url=reference_message.attachments[0].url)
+        return embed
+
+    else:
+        embed = discord.Embed(
+            title=f"Message in #{message.channel.name} has surpassed {reaction_threshold} reactions",
+            description=message.content,
+            color=0x00ff00
+        )
+        most_reactions = message_reactions.most_reactions(message.reactions)
+
+        embed.set_author(name=message.author.name, icon_url=message.author.avatar.url)
+        if message.attachments:
+            embed.set_image(url=message.attachments[0].url)
+
+        corrected_reactions = await reaction_count_without_author(message)
+        embed.add_field(name=f"{corrected_reactions} Reactions ", value=most_reactions[0].emoji, inline=True)
+        embed.add_field(name="Jump to Message", value=message.jump_url, inline=False)
+        return embed
 
 
 @bot.command(name='get_random_message')
