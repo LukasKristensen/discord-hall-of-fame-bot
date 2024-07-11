@@ -183,7 +183,7 @@ async def create_embed(message):
         reference_message = await message.channel.fetch_message(message.reference.message_id)
 
         embed = discord.Embed(
-            title=f"{message.author.name} replied to {reference_message.author.name}'s image",
+            title=f"{message.author.name} replied to {reference_message.author.name}'s message",
             description=message.content,
             color=0x00ff00
         )
