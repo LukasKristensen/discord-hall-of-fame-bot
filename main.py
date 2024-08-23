@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 from pymongo.mongo_client import MongoClient
 import message_reactions
 import asyncio
-from user_roles import get_user_roles, on_member_update
+
 
 load_dotenv()
 TOKEN = os.getenv('KEY')
@@ -29,7 +29,6 @@ reaction_threshold = 6
 @bot.event
 async def on_ready():
     print(f"Logged in as {bot.user}")
-    await get_user_roles(bot.get_guild(323488126859345931))
     await bot.change_presence(activity=discord.CustomActivity(name=f'{len([x for x in collection.find()])} Hall of Fame messages', type=5))
     await check_all_server_messages(None)
 
@@ -71,11 +70,6 @@ async def on_raw_reaction_add(payload):
     else:
         if collection.find_one({"message_id": int(message.id)}):
             await remove_embed(message_id)
-
-
-@bot.event
-async def member_update(before, after):
-    await on_member_update(before, after)
 
 
 async def update_reaction_counter(message_id, channel_id):

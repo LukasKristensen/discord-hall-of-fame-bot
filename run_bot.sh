@@ -2,4 +2,4 @@
 
 activate discordbot
 
-C:\\Users\\lukad\\.conda\\envs\\discordbot\\python.exe C:\\Users\\lukad\\Documents\\GitHub\\discord-hall-of-fame-bot\\main.py
+C:\\Users\\lukad\\anaconda3\\envs\\hof\\python.exe C:\\Users\\lukad\\Documents\\GitHub\\discord-hall-of-fame-bot\\main.py
