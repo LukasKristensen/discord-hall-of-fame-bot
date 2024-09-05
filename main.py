@@ -6,6 +6,7 @@ from dotenv import load_dotenv
 from pymongo.mongo_client import MongoClient
 import message_reactions
 import asyncio
+import llm_msg
 
 
 load_dotenv()
@@ -24,6 +25,7 @@ collection = db['hall_of_fame_messages']
 server_config = db['server_config']
 target_channel_id = 1176965358796681326
 reaction_threshold = 6
+llm_threshold = 0.97
 
 
 @bot.event
@@ -47,6 +49,20 @@ async def on_raw_reaction_remove(payload):
         await remove_embed(payload.message_id)
 
 
+async def check_outlier(msg_content: str):
+    """
+    Checks whether a message is an outlier for a voting-based message
+    :param msg_content:
+    :return: boolean based on cut-off confidence from LLM
+    """
+    outlier_detection_confidence = llm_msg.check_hof_msg(str(msg_content))
+    if outlier_detection_confidence > llm_threshold:
+        bot_dev = bot.get_user(230698327589650432)
+        await bot_dev.send(f'Outlier detected with confidence: {outlier_detection_confidence}. Msg: {str(msg_content)}')
+        return True
+    return False
+
+
 @bot.event
 async def on_raw_reaction_add(payload):
     channel_id = payload.channel_id
@@ -56,6 +72,9 @@ async def on_raw_reaction_add(payload):
     message = await channel.fetch_message(message_id)
 
     if message.author.bot or channel_id == target_channel_id:
+        return
+
+    if check_outlier(str(message.content)):
         return
 
     corrected_reactions = await reaction_count_without_author(message)
@@ -144,6 +163,8 @@ async def check_all_server_messages(payload=None):
                     continue  # Ignore messages from bots
 
                 if await reaction_count_without_author(message) >= reaction_threshold:
+                    if check_outlier(str(message.content)):
+                        continue # if the message is an outlier continue for a voting message
                     if collection.find_one({"message_id": int(message.id)}):
                         await update_reaction_counter(message.id, message.channel.id)
                         # continue # if a total channel sweep is needed
