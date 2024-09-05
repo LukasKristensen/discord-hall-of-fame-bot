@@ -19,6 +19,10 @@ filter_messages = [
     "Hvor mange er klar til mødet?",
     "Er der nogen der er klar til at spille Apex Legends?",
     "Skal vi ramme virksomheden kl 20? Helst før",
+    "Skal vi ramme virksomheden kl 19?",
+    "Office kl 20?",
+    "Gutter, vi skal spille perfect heist i dag. Skal vi sige kl 20?",
+    "Skal vi sige kl 19:30 med perfect heist?",
 ]
 
 correct_messages = [
@@ -30,6 +34,16 @@ correct_messages = [
     "Håber luffy er med i spillet",
     "https://steamcommunity.com/sharedfiles/filedetails/?id=3262815200",
 ]
+
+labels = [
+    "play games",
+    "check readiness",
+    "check readiness for playing games",
+    "decide time or date",
+    "confirm attendance",
+]
+
+cutoff_threshold = 0.97
 
 labels_summarized = {}
 
@@ -44,7 +58,7 @@ def llm_evaluate(label: str = "confirm attendance", plot_confusion_matrix = Fals
     for message in filter_messages:
         result = classifier(message, label)
 
-        if any(score>0.9 for score in result['scores']):
+        if any(score>cutoff_threshold for score in result['scores']):
             print('\033[92m',result)
             tp += 1
         else:
@@ -54,7 +68,7 @@ def llm_evaluate(label: str = "confirm attendance", plot_confusion_matrix = Fals
     for message in correct_messages:
         result = classifier(message, label)
 
-        if any(score > 0.9 for score in result['scores']):
+        if any(score > cutoff_threshold for score in result['scores']):
             print('\033[92m', result)
             fp += 1
         else:
@@ -86,7 +100,7 @@ def llm_evaluate(label: str = "confirm attendance", plot_confusion_matrix = Fals
         plt.show()
 
 
-for candidate_label in ["play games", "check readiness", "confirm attendance", "other"]:
+for candidate_label in labels:
     llm_evaluate(candidate_label)
 
 for label_eval in labels_summarized:
