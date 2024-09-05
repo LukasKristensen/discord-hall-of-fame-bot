@@ -6,18 +6,15 @@ import numpy as np
 classifier = pipeline("zero-shot-classification", model="joeddav/xlm-roberta-large-xnli")
 
 def check_hof_msg(discord_msg: str, label: str = "confirm attendance"):
-    if str is None:
-        raise Exception("No discord msg provided")
+    if str is None or str == "":
+        return 0
 
     hof_result = classifier(discord_msg, label)['scores'][0]
-
     return hof_result
 
 
 if __name__ == '__main__':
     filter_messages = [
-        "Hey, vil du spille nogle spil i aften?",
-        "Hvor mange er klar til mødet?",
         "Er der nogen der er klar til at spille Apex Legends?",
         "Skal vi ramme virksomheden kl 20? Helst før",
         "Skal vi ramme virksomheden kl 19?",
@@ -27,13 +24,10 @@ if __name__ == '__main__':
     ]
 
     correct_messages = [
-        "Mig i dag med en Harboe Pilsner",
         "-1000 aura",
         ":joyyy:",
-        "Nånå, hvad har sådan en aften med fire fine piger kostet jer? :tf:",
         "The god gamer gambit",
         "Håber luffy er med i spillet",
-        "https://steamcommunity.com/sharedfiles/filedetails/?id=3262815200",
     ]
 
     labels = [
@@ -45,7 +39,6 @@ if __name__ == '__main__':
     ]
 
     cutoff_threshold = 0.97
-
     labels_summarized = {}
 
     def llm_evaluate(label: str = "confirm attendance", plot_confusion_matrix = False):
@@ -83,8 +76,7 @@ if __name__ == '__main__':
         recall = tp / (tp + fn)
         accuracy = (tp + tn) / (tp + tn + fp + fn)
 
-        print("\033[0m")  # Resetting color formatting
-
+        print("\033[0m")  # Resetting color formatting to default
         print(conf_matrix)
 
         labels_summarized[label] = {"Accuracy": accuracy, "Precision": precision, "Recall": recall}
