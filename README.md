@@ -34,7 +34,7 @@ Define the amount of reactions necessary for posting: ```reaction_threshold```
 
 ## Development Log
 
-### 1.05
+### 1.06
 - [x] LLM outlier detection of voting-based messages, which should not be classified as a Hall Of Fame message. 
 
 ### 1.05
