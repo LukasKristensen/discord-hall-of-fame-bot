@@ -164,7 +164,7 @@ async def check_all_server_messages(payload=None):
 
                 if await reaction_count_without_author(message) >= reaction_threshold:
                     if check_outlier(str(message.content)):
-                        continue # if the message is an outlier continue for a voting message
+                        continue # if the message is an outlier for a voting message ignore it
                     if collection.find_one({"message_id": int(message.id)}):
                         await update_reaction_counter(message.id, message.channel.id)
                         # continue # if a total channel sweep is needed
