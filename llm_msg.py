@@ -5,7 +5,7 @@ import numpy as np
 
 classifier = pipeline("zero-shot-classification", model="joeddav/xlm-roberta-large-xnli")
 
-def check_hof_msg(discord_msg: str, label: str = "confirm attendance"):
+def check_hof_msg(discord_msg: str, label: str = "decide time or date"):
     if str is None or str == "":
         return 0
 
@@ -72,9 +72,9 @@ if __name__ == '__main__':
         conf_matrix = np.array([[tn, fp],
                                 [fn, tp]])
 
-        precision = tp / (tp + fp)
-        recall = tp / (tp + fn)
-        accuracy = (tp + tn) / (tp + tn + fp + fn)
+        precision = tp / (tp + fp) if tp > 0 else 0
+        recall = tp / (tp + fn) if tp > 0 else 0
+        accuracy = (tp + tn) / (tp + tn + fp + fn) if (tp + tn) > 0 else 0
 
         print("\033[0m")  # Resetting color formatting to default
         print(conf_matrix)
