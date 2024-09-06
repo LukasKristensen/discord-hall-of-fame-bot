@@ -74,7 +74,7 @@ async def on_raw_reaction_add(payload):
     if message.author.bot or channel_id == target_channel_id:
         return
 
-    if check_outlier(str(message.content)):
+    if await check_outlier(str(message.content)):
         return
 
     corrected_reactions = await reaction_count_without_author(message)
@@ -157,13 +157,13 @@ async def check_all_server_messages(payload=None):
     try:
         for channel in guild.channels:
             if not isinstance(channel, discord.TextChannel):
-                continue
+                continue # Ignore if the current channel is not a text channel
             async for message in channel.history(limit=2000):
                 if message.author.bot:
                     continue  # Ignore messages from bots
 
                 if await reaction_count_without_author(message) >= reaction_threshold:
-                    if check_outlier(str(message.content)):
+                    if await check_outlier(str(message.content)):
                         continue # if the message is an outlier for a voting message ignore it
                     if collection.find_one({"message_id": int(message.id)}):
                         await update_reaction_counter(message.id, message.channel.id)

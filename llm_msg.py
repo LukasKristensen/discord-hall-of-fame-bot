@@ -6,7 +6,7 @@ import numpy as np
 classifier = pipeline("zero-shot-classification", model="joeddav/xlm-roberta-large-xnli")
 
 def check_hof_msg(discord_msg: str, label: str = "decide time or date"):
-    if str is None or str == "":
+    if discord_msg is None or discord_msg == "":
         return 0
 
     hof_result = classifier(discord_msg, label)['scores'][0]
