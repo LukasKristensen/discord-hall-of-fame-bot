@@ -4,7 +4,7 @@ from discord.ext import commands
 import os
 from dotenv import load_dotenv
 from pymongo.mongo_client import MongoClient
-import message_reactions
+from message_reactions import most_reactions, reaction_count_without_author
 import asyncio
 import llm_msg
 
@@ -45,7 +45,7 @@ async def on_raw_reaction_remove(payload):
         if collection.find_one({"message_id": int(payload.message_id)}):
             collection.update_one({"message_id": int(message.id)}, {"$set": {"reaction_count": await reaction_count_without_author(message)}})
             await update_reaction_counter(payload.message_id, payload.channel_id)
-    else:
+    elif collection.find_one({"message_id": int(message.id)}):
         await remove_embed(payload.message_id)
 
 
@@ -101,19 +101,6 @@ async def update_reaction_counter(message_id, channel_id):
     original_message = await bot.get_channel(channel_id).fetch_message(message_id)
 
     await hall_of_fame_message.edit(embed=await create_embed(original_message))
-
-
-async def reaction_count_without_author(message):
-    max_reaction_count = 0
-
-    for reaction in message.reactions:
-        react_count = reaction.count
-
-        users_ids = [user.id async for user in reaction.users()]
-        corrected_count = react_count-1 if message.author.id in users_ids else react_count
-        max_reaction_count = corrected_count if corrected_count > max_reaction_count else max_reaction_count
-
-    return max_reaction_count
 
 
 async def remove_embed(message_id):
@@ -202,12 +189,12 @@ async def create_embed(message):
             description=message.content,
             color=0x00ff00
         )
-        most_reactions = message_reactions.most_reactions(message.reactions)
+        top_reaction = most_reactions(message.reactions)
 
         embed.set_author(name=message.author.name, icon_url=message.author.avatar.url)
 
         corrected_reactions = await reaction_count_without_author(message)
-        embed.add_field(name=f"{corrected_reactions} Reactions ", value=most_reactions[0].emoji, inline=True)
+        embed.add_field(name=f"{corrected_reactions} Reactions ", value=top_reaction[0].emoji, inline=True)
         embed.add_field(name="Jump to Message", value=message.jump_url, inline=False)
 
         embed.add_field(name=f"{reference_message.author.name}'s message:", value=reference_message.content, inline=False)
@@ -221,14 +208,14 @@ async def create_embed(message):
             description=message.content,
             color=0x00ff00
         )
-        most_reactions = message_reactions.most_reactions(message.reactions)
+        top_reaction = most_reactions(message.reactions)
 
         embed.set_author(name=message.author.name, icon_url=message.author.avatar.url)
         if message.attachments:
             embed.set_image(url=message.attachments[0].url)
 
         corrected_reactions = await reaction_count_without_author(message)
-        embed.add_field(name=f"{corrected_reactions} Reactions ", value=most_reactions[0].emoji, inline=True)
+        embed.add_field(name=f"{corrected_reactions} Reactions ", value=top_reaction[0].emoji, inline=True)
         embed.add_field(name="Jump to Message", value=message.jump_url, inline=False)
         return embed
 
