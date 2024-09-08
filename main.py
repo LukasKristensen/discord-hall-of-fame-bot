@@ -74,13 +74,12 @@ async def on_raw_reaction_add(payload):
     if message.author.bot or channel_id == target_channel_id:
         return
 
-    if await check_outlier(str(message.content)):
-        return
-
     corrected_reactions = await reaction_count_without_author(message)
 
     # Check if the message has surpassed the reaction threshold
     if corrected_reactions >= reaction_threshold:
+        if await check_outlier(str(message.content)):
+            return
         if collection.find_one({"message_id": int(message.id)}):
             collection.update_one({"message_id": int(message.id)}, {"$set": {"reaction_count": await reaction_count_without_author(message)}})
             await update_reaction_counter(message_id, payload.channel_id)

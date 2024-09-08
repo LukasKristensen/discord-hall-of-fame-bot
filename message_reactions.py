@@ -17,7 +17,7 @@ def most_reactions(reactions: [discord.Reaction]) -> [discord.Reaction]:
     return biggest
 
 
-def reaction_count_without_author(message):
+async def reaction_count_without_author(message):
     max_reaction_count = 0
 
     for reaction in message.reactions:
