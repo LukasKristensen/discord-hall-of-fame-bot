@@ -23,7 +23,7 @@ bot = commands.Bot(command_prefix="!", intents=discord.Intents.all())
 db = client['caroon']
 collection = db['hall_of_fame_messages']
 server_config = db['server_config']
-target_channel_id = 1176965358796681326
+target_channel_id = 1176965358796681326 # Hall-Of-Fame (HOF) channel
 reaction_threshold = 6
 llm_threshold = 0.97
 
@@ -33,20 +33,6 @@ async def on_ready():
     print(f"Logged in as {bot.user}")
     await bot.change_presence(activity=discord.CustomActivity(name=f'{len([x for x in collection.find()])} Hall of Fame messages', type=5))
     await check_all_server_messages(None)
-
-
-@bot.event
-async def on_raw_reaction_remove(payload):
-    channel_id = payload.channel_id
-    channel = bot.get_channel(channel_id)
-    message = await channel.fetch_message(payload.message_id)
-
-    if await reaction_count_without_author(message) >= reaction_threshold:
-        if collection.find_one({"message_id": int(payload.message_id)}):
-            collection.update_one({"message_id": int(message.id)}, {"$set": {"reaction_count": await reaction_count_without_author(message)}})
-            await update_reaction_counter(payload.message_id, payload.channel_id)
-    elif collection.find_one({"message_id": int(message.id)}):
-        await remove_embed(payload.message_id)
 
 
 async def check_outlier(msg_content: str):
@@ -63,21 +49,23 @@ async def check_outlier(msg_content: str):
     return False
 
 
-@bot.event
-async def on_raw_reaction_add(payload):
-    channel_id = payload.channel_id
-    message_id = payload.message_id
+async def validate_message(message):
+    channel_id = message.channel_id
+    message_id = message.message_id
 
     channel = bot.get_channel(channel_id)
     message = await channel.fetch_message(message_id)
 
-    if message.author.bot or channel_id == target_channel_id:
+    # Checks if the post is from the HOF channel or is from a bot
+    if channel_id == target_channel_id or message.author.bot:
         return
 
+    # Gets the adjusted reaction count corrected for not accounting the author
     corrected_reactions = await reaction_count_without_author(message)
     if corrected_reactions < reaction_threshold:
         return
     else:
+        # If the message is below threshold and is already in the database remove its embed
         if collection.find_one({"message_id": int(message.id)}):
             await remove_embed(message_id)
 
@@ -94,6 +82,10 @@ async def on_raw_reaction_add(payload):
 
 @bot.event
 async def on_raw_reaction_add(payload):
+    await validate_message(payload)
+
+@bot.event
+async def on_raw_reaction_remove(payload):
     await validate_message(payload)
 
 
@@ -137,7 +129,7 @@ async def update_leaderboard():
 
 
 @bot.command(name='apply_reaction_checker')
-async def check_all_server_messages(payload=None):
+async def check_all_server_messages(payload=None, sweep_limit=2000, sweep_limited=True):
     if payload is None:
         guild_id = 323488126859345931
         guild = bot.get_guild(guild_id)
@@ -151,7 +143,7 @@ async def check_all_server_messages(payload=None):
         for channel in guild.channels:
             if not isinstance(channel, discord.TextChannel):
                 continue # Ignore if the current channel is not a text channel
-            async for message in channel.history(limit=2000):
+            async for message in channel.history(limit=sweep_limit):
                 if message.author.bot:
                     continue  # Ignore messages from bots
 
@@ -160,8 +152,10 @@ async def check_all_server_messages(payload=None):
                         continue # if the message is an outlier for a voting message ignore it
                     if collection.find_one({"message_id": int(message.id)}):
                         await update_reaction_counter(message.id, message.channel.id)
-                        # continue # if a total channel sweep is needed
-                        break  # if message is already in the database, no need to check further
+                        if sweep_limited:
+                            break  # if message is already in the database, no need to check further
+                        else:
+                            continue # if a total channel sweep is needed
                     await post_hall_of_fame_message(message)
     except Exception as e:
         print(f'An error occurred: {e}')
