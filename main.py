@@ -75,19 +75,26 @@ async def on_raw_reaction_add(payload):
         return
 
     corrected_reactions = await reaction_count_without_author(message)
-
-    # Check if the message has surpassed the reaction threshold
-    if corrected_reactions >= reaction_threshold:
-        if await check_outlier(str(message.content)):
-            return
-        if collection.find_one({"message_id": int(message.id)}):
-            collection.update_one({"message_id": int(message.id)}, {"$set": {"reaction_count": await reaction_count_without_author(message)}})
-            await update_reaction_counter(message_id, payload.channel_id)
-            return
-        await post_hall_of_fame_message(message)
+    if corrected_reactions < reaction_threshold:
+        return
     else:
         if collection.find_one({"message_id": int(message.id)}):
             await remove_embed(message_id)
+
+    if await check_outlier(str(message.content)):
+        return
+
+    if collection.find_one({"message_id": int(message.id)}):
+        collection.update_one({"message_id": int(message.id)},
+                              {"$set": {"reaction_count": await reaction_count_without_author(message)}})
+        await update_reaction_counter(message_id, channel_id)
+        return
+    await post_hall_of_fame_message(message)
+
+
+@bot.event
+async def on_raw_reaction_add(payload):
+    await validate_message(payload)
 
 
 async def update_reaction_counter(message_id, channel_id):
