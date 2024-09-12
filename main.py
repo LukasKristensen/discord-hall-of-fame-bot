@@ -63,11 +63,9 @@ async def validate_message(message):
     # Gets the adjusted reaction count corrected for not accounting the author
     corrected_reactions = await reaction_count_without_author(message)
     if corrected_reactions < reaction_threshold:
-        return
-    else:
-        # If the message is below threshold and is already in the database remove its embed
         if collection.find_one({"message_id": int(message.id)}):
             await remove_embed(message_id)
+        return
 
     if await check_outlier(str(message.content)):
         return
