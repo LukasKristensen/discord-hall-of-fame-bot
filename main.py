@@ -77,14 +77,22 @@ async def validate_message(message):
         return
     await post_hall_of_fame_message(message)
 
+messages_processing = []
+
 
 @bot.event
 async def on_raw_reaction_add(payload):
-    await validate_message(payload)
+    if not payload.message_id in messages_processing:
+        messages_processing.append(payload.message_id)
+        await validate_message(payload)
+        messages_processing.remove(payload.message_id)
 
 @bot.event
 async def on_raw_reaction_remove(payload):
-    await validate_message(payload)
+    if not payload.message_id in messages_processing:
+        messages_processing.append(payload.message_id)
+        await validate_message(payload)
+        messages_processing.remove(payload.message_id)
 
 
 async def update_reaction_counter(message_id, channel_id):
