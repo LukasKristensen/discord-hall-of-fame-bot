@@ -154,14 +154,14 @@ async def check_all_server_messages(payload=None, sweep_limit=2000, sweep_limite
                     continue  # Ignore messages from bots
 
                 if await reaction_count_without_author(message) >= reaction_threshold:
-                    if await check_outlier(str(message.content)):
-                        continue # if the message is an outlier for a voting message ignore it
                     if collection.find_one({"message_id": int(message.id)}):
                         await update_reaction_counter(message.id, message.channel.id)
                         if sweep_limited:
                             break  # if message is already in the database, no need to check further
                         else:
                             continue # if a total channel sweep is needed
+                    if await check_outlier(str(message.content)):
+                        continue # if the message is an outlier for a voting message ignore it
                     await post_hall_of_fame_message(message)
     except Exception as e:
         print(f'An error occurred: {e}')
