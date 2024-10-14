@@ -118,13 +118,13 @@ async def remove_embed(message_id):
 
 
 async def update_leaderboard():
-    most_reacted_messages = list(collection.find().sort("reaction_count", -1).limit(10))
-    msg_id_array = server_config.find_one({"leaderboard_message_ids": {"$exists": True}})
+    most_reacted_messages = list(collection.find().sort("reaction_count", -1).limit(20))
+    msg_id_array = server_config.find_one({"leaderboard_message_ids_updated": {"$exists": True}})
 
     if msg_id_array:
-        for i in range(10):
+        for i in range(20):
             hall_of_fame_channel = bot.get_channel(target_channel_id)
-            hall_of_fame_message = await hall_of_fame_channel.fetch_message(msg_id_array["leaderboard_message_ids"][i])
+            hall_of_fame_message = await hall_of_fame_channel.fetch_message(msg_id_array["leaderboard_message_ids_updated"][i])
             original_channel = bot.get_channel(most_reacted_messages[i]["channel_id"])
             original_message = await original_channel.fetch_message(most_reacted_messages[i]["message_id"])
 
