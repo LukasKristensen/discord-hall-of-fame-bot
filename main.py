@@ -145,11 +145,11 @@ async def check_all_server_messages(payload=None, sweep_limit=2000, sweep_limite
             payload.message.reply("You are not allowed to use this command")
             return
 
-    try:
-        for channel in guild.channels:
-            if not isinstance(channel, discord.TextChannel):
-                continue # Ignore if the current channel is not a text channel
-            async for message in channel.history(limit=sweep_limit):
+    for channel in guild.channels:
+        if not isinstance(channel, discord.TextChannel):
+            continue # Ignore if the current channel is not a text channel
+        async for message in channel.history(limit=sweep_limit):
+            try:
                 if message.author.bot:
                     continue  # Ignore messages from bots
 
@@ -163,8 +163,8 @@ async def check_all_server_messages(payload=None, sweep_limit=2000, sweep_limite
                     if await check_outlier(str(message.content)):
                         continue # if the message is an outlier for a voting message ignore it
                     await post_hall_of_fame_message(message)
-    except Exception as e:
-        print(f'An error occurred: {e}')
+            except Exception as e:
+                print(f'An error occurred: {e}')
 
 
 async def post_hall_of_fame_message(message):
