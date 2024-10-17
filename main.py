@@ -33,6 +33,7 @@ async def on_ready():
     print(f"Logged in as {bot.user}")
     await bot.change_presence(activity=discord.CustomActivity(name=f'{len([x for x in collection.find()])} Hall of Fame messages', type=5))
     await check_all_server_messages(None)
+    await update_leaderboard()
 
 
 async def check_outlier(msg_content: str):
@@ -182,7 +183,6 @@ async def post_hall_of_fame_message(message):
                            "guild_id": int(message.guild.id),
                            "hall_of_fame_message_id": int(hall_of_fame_message.id),
                            "reaction_count": int(await reaction_count_without_author(message))})
-    await update_leaderboard()
 
 
 async def create_embed(message):
