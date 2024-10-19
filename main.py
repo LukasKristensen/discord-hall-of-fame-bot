@@ -119,9 +119,21 @@ async def remove_embed(message_id):
 
 
 async def update_leaderboard():
-    most_reacted_messages = list(collection.find().sort("reaction_count", -1).limit(20))
+    most_reacted_messages = list(collection.find().sort("reaction_count", -1).limit(30))
     msg_id_array = server_config.find_one({"leaderboard_message_ids_updated": {"$exists": True}})
 
+    # Update the reaction count of the top 30 most reacted messages
+    for i in range(30):
+        message = most_reacted_messages[i]
+        channel = bot.get_channel(message["channel_id"])
+        message = await channel.fetch_message(message["message_id"])
+        collection.update_one({"message_id": int(message.id)},
+                              {"$set": {"reaction_count": await reaction_count_without_author(message)}})
+
+    # Updated all the reaction counts
+    most_reacted_messages = list(collection.find().sort("reaction_count", -1).limit(20))
+
+    # Update the embeds of the top 20 most reacted messages
     if msg_id_array:
         for i in range(20):
             hall_of_fame_channel = bot.get_channel(target_channel_id)
