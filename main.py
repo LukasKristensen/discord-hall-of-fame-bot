@@ -222,7 +222,7 @@ async def create_embed(message):
 
     else:
         embed = discord.Embed(
-            title=f"Message in #{message.channel.name} has surpassed {reaction_threshold} reactions",
+            title=f"Message in <#{message.channel.id}> has surpassed {reaction_threshold} reactions",
             description=message.content,
             color=0x00ff00
         )
