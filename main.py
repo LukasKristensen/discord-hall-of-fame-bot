@@ -25,7 +25,7 @@ collection = db['hall_of_fame_messages']
 server_config = db['server_config']
 target_channel_id = 1176965358796681326 # Hall-Of-Fame (HOF) channel
 reaction_threshold = 6
-llm_threshold = 0.97
+llm_threshold = 0.99
 
 
 @bot.event
