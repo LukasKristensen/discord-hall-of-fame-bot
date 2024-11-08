@@ -244,7 +244,13 @@ async def create_embed(message):
         # Reply message
         embed.add_field(name=f"{message.author.name}'s reply:", value=message.content, inline=False)
 
-        embed.set_image(url=message.attachments[0].url)
+        attachment = message.attachments[0]
+        if attachment.content_type and attachment.content_type.startswith('image'):
+            # If it's an image, display the image
+            embed.set_image(url=attachment.url)
+        else:
+            # If it's not an image (assuming it's a video or other file type)
+            embed.add_field(name="Attachment", value=f"{attachment.url}", inline=False)
         return embed
 
     else:
