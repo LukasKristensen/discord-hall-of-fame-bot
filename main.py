@@ -204,7 +204,6 @@ async def create_embed(message):
 
         embed = discord.Embed(
             title=f"{message.author.name} replied to {reference_message.author.name}'s message",
-            description=message.content,
             color=message.author.color
         )
         top_reaction = most_reactions(message.reactions)
@@ -215,9 +214,18 @@ async def create_embed(message):
         embed.add_field(name=f"{corrected_reactions} Reactions ", value=top_reaction[0].emoji, inline=True)
         embed.add_field(name="Jump to Message", value=message.jump_url, inline=False)
 
-        embed.add_field(name=f"{reference_message.author.name}'s message:", value=reference_message.content, inline=False)
         if reference_message.attachments:
+            # Author of the original message
+            embed.add_field(name=f"{message.author.name}'s reply:", value=message.content, inline=False)
+
+            # Replied message
+            embed.add_field(name=f"{reference_message.author.name}'s message:", value=reference_message.content, inline=False)
             embed.set_image(url=reference_message.attachments[0].url)
+        else:
+            # Author of the replied message
+            embed.add_field(name=f"{reference_message.author.name}'s message:", value=reference_message.content, inline=False)
+            # Author of the original message
+            embed.add_field(name=f"{message.author.name}'s reply:", value=message.content, inline=False)
         return embed
 
     # Include the reference message in the embed if the message has both a reference and attachments
@@ -226,7 +234,6 @@ async def create_embed(message):
 
         embed = discord.Embed(
             title=f"{message.author.name} replied to {reference_message.author.name}'s message",
-            # description=message.content,
             color=message.author.color
         )
 
@@ -246,10 +253,8 @@ async def create_embed(message):
 
         attachment = message.attachments[0]
         if attachment.content_type and attachment.content_type.startswith('image'):
-            # If it's an image, display the image
             embed.set_image(url=attachment.url)
         else:
-            # If it's not an image (assuming it's a video or other file type)
             embed.add_field(name="Attachment", value=f"{attachment.url}", inline=False)
         return embed
 
