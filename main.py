@@ -220,6 +220,33 @@ async def create_embed(message):
             embed.set_image(url=reference_message.attachments[0].url)
         return embed
 
+    # Include the reference message in the embed if the message has both a reference and attachments
+    elif message.reference and message.attachments:
+        reference_message = await message.channel.fetch_message(message.reference.message_id)
+
+        embed = discord.Embed(
+            title=f"{message.author.name} replied to {reference_message.author.name}'s message",
+            # description=message.content,
+            color=0x00ff00
+        )
+
+        top_reaction = most_reactions(message.reactions)
+        embed.set_author(name=message.author.name, icon_url=message.author.avatar.url)
+
+        corrected_reactions = await reaction_count_without_author(message)
+
+        embed.add_field(name=f"{corrected_reactions} Reactions ", value=top_reaction[0].emoji, inline=True)
+        embed.add_field(name="Jump to Message", value=message.jump_url, inline=False)
+
+        # Original message
+        embed.add_field(name=f"{reference_message.author.name}'s message:", value=reference_message.content, inline=False)
+
+        # Reply message
+        embed.add_field(name=f"{message.author.name}'s reply:", value=message.content, inline=False)
+
+        embed.set_image(url=message.attachments[0].url)
+        return embed
+
     else:
         embed = discord.Embed(
             title=f"Message in <#{message.channel.id}> has surpassed {reaction_threshold} reactions",
