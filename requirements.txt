@@ -17,7 +17,7 @@ fsspec==2024.9.0
 huggingface-hub==0.24.6
 idna==3.8
 importlib_resources==6.4.4
-Jinja2==3.1.4
+Jinja2==3.1.5
 kiwisolver==1.4.7
 MarkupSafe==2.1.5
 matplotlib==3.7.5
