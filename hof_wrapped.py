@@ -278,7 +278,6 @@ def add_rankings(embed, user: User, rankings: dict):
             f"**Hall of Fame Posts:** #{user_ranks['hallOfFameMessagePosts']}\n"
             f"**Reactions to Hall of Fame Posts:** #{user_ranks['reactionToHallOfFamePosts']}\n"
             f"**Most Used Channels:** #{user_ranks['mostUsedChannels']}\n"
-            f"**Most Used Emojis:** #{user_ranks['mostUsedEmojis']}\n"
             f"**Received the Most Reactions:** #{user_ranks['usersFans']}\n"
             f"**Gave the Most Reactions:** #{user_ranks['fanOfUsers']}\n"
         ),
