@@ -32,12 +32,10 @@ llm_threshold = 0.99
 @bot.event
 async def on_ready():
     print(f"Logged in as {bot.user}")
-    wrapped_users = await hof_wrapped.main(bot.get_guild(323488126859345931), bot)
-    print(wrapped_users)
-
     await bot.change_presence(activity=discord.CustomActivity(name=f'{len([x for x in collection.find()])} Hall of Fame messages', type=5))
     await check_all_server_messages(None)
     await update_leaderboard()
+    # wrapped_users = await hof_wrapped.main(bot.get_guild(323488126859345931), bot)
 
 
 async def check_outlier(msg_content: str):

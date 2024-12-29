@@ -101,10 +101,9 @@ async def process_message_reactions(message: discord.Message):
 
 async def process_all_server_messages(guild: discord.Guild):
     for channel in guild.channels:
-        print("Checking channel: " + channel.name, channel.id)
         if not isinstance(channel, discord.TextChannel):
             continue
-        async for message in channel.history(limit=1000):
+        async for message in channel.history(limit=None):
             if not isinstance(channel, discord.TextChannel):
                 continue  # Ignore if the current channel is not a text channel
             if message.author.bot:
@@ -163,6 +162,11 @@ def create_embed(user: User, guild: discord.Guild):
         name="📢 Most Used Channels",
         value=channel_list,
         inline=False
+    )
+    embed.add_field(
+        name="🧠 Total amount of channels used",
+        value=f"{len(user.mostUsedChannels)} channels",
+        inline=True
     )
 
     # Most Used Emojis Section
@@ -262,21 +266,21 @@ def get_user_rank(rankings: dict, user: User):
         user_ranks[stat] = user_rank
     return user_ranks
 
-def add_rankings(embed, user: User, guild: discord.Guild, rankings: dict):
+def add_rankings(embed, user: User, rankings: dict):
     user_ranks = get_user_rank(rankings, user)
 
     # Add rankings to the embed
     embed.add_field(
         name="📊 Your Rankings:",
         value=(
-            f"**Message Count Rank:** #{user_ranks['messageCount']}\n"
-            f"**Reaction Count Rank:** #{user_ranks['reactionCount']}\n"
-            f"**Hall of Fame Posts Rank:** #{user_ranks['hallOfFameMessagePosts']}\n"
-            f"**Reactions to Hall of Fame Posts Rank:** #{user_ranks['reactionToHallOfFamePosts']}\n"
-            f"**Most Used Channels Rank:** #{user_ranks['mostUsedChannels']}\n"
-            f"**Most Used Emojis Rank:** #{user_ranks['mostUsedEmojis']}\n"
-            f"**Received the Most Reactions Rank:** #{user_ranks['usersFans']}\n"
-            f"**Gave the Most Reactions Rank:** #{user_ranks['fanOfUsers']}\n"
+            f"**Message Count:** #{user_ranks['messageCount']}\n"
+            f"**Reaction Count:** #{user_ranks['reactionCount']}\n"
+            f"**Hall of Fame Posts:** #{user_ranks['hallOfFameMessagePosts']}\n"
+            f"**Reactions to Hall of Fame Posts:** #{user_ranks['reactionToHallOfFamePosts']}\n"
+            f"**Most Used Channels:** #{user_ranks['mostUsedChannels']}\n"
+            f"**Most Used Emojis:** #{user_ranks['mostUsedEmojis']}\n"
+            f"**Received the Most Reactions:** #{user_ranks['usersFans']}\n"
+            f"**Gave the Most Reactions:** #{user_ranks['fanOfUsers']}\n"
         ),
         inline=False
     )
@@ -286,13 +290,15 @@ def add_rankings(embed, user: User, guild: discord.Guild, rankings: dict):
 async def main(guild: discord.Guild, bot: commands.Bot):
     global rankings
 
+    wrappedChannel = bot.get_channel(1322849654190243861)
+    await wrappedChannel.send("Hall Of Fame Wrapped 2024 is being prepared... 🎁")
+
     initialize_users(guild)
     await process_all_server_messages(guild)
     rankings = rank_stats(users)
 
     for user in users.values():
         wrappedEmbed = create_embed(user, guild)
-        wrappedChannel = bot.get_channel(1322667427829518387)
 
         if wrappedEmbed is not None:
             await wrappedChannel.send("Your Hall Of Fame Wrapped 2024 is here <@" + str(user.id) + "> 🎉", embed=wrappedEmbed)
