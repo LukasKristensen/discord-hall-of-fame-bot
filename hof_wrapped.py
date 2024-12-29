@@ -22,14 +22,16 @@ class User:
     def get_ration_hall_of_fame_posts_to_normal_posts(self):
         ratio = self.hallOfFameMessagePosts / self.messageCount if self.messageCount > 0 else 0
 
-        if ratio > 0.3:
+        if ratio > 0.2:
             return "Hall of fame addict: You have a delicate taste for hall of fame posts"
-        elif ratio > 0.1:
-            return "Hall of fame enthusiast: You have a good taste for hall of fame posts"
         elif ratio > 0.05:
-            return "Hall of fame regular: You either have your own niche or react to a lot of posts"
+            return "Hall of fame enthusiast: You have a good taste for hall of fame posts"
         elif ratio > 0.01:
+            return "Hall of fame regular: You either have your own niche or react to a lot of posts"
+        elif ratio > 0.001:
             return "Hall of fame casual: Not a big fan of hall of fame posts"
+        else:
+            return "Hall of fame hater: You don't react to hall of fame posts at all"
 
 
 def initialize_users(guild: discord.Guild):
@@ -115,54 +117,82 @@ async def process_all_server_messages(guild: discord.Guild):
                 user.mostUsedChannels[channel.id] = 1
             else:
                 user.mostUsedChannels[channel.id] += 1
-        if channel.id == 681082104993284108:
-            break
     return users
 
 def create_embed(user: User, guild: discord.Guild):
-    print("Most used channel count: " + str(len(user.mostUsedChannels)))
-    print("Most used emojis count: " + str(len(user.mostUsedEmojis)))
-    print("Users fans count: " + str(len(user.usersFans)))
-    print("Fan of users count: " + str(len(user.fanOfUsers)))
     if len(user.mostUsedChannels) < 3 or len(user.mostUsedEmojis) < 3 or len(user.usersFans) < 3 or len(user.fanOfUsers) < 3:
         return None
     else:
         print("Creating embed")
-    embed = discord.Embed(title="Hall Of Fame Wrapped", description="User: " + user.member.name)
-    embed.add_field(name="You sent a total of ", value=str(user.messageCount) + " messages", inline=False)
-    embed.add_field(name="You reacted a total of ", value=str(user.reactionCount) + " times", inline=False)
-    embed.add_field(name="You reacted to non-hall of fame posts ", value=str(user.reactionToNonHallOfFamePosts) + " times", inline=False)
-    embed.add_field(name="You reacted to hall of fame posts ", value=str(user.reactionToHallOfFamePosts) + " times", inline=False)
-    embed.add_field(name="You posted a total of ", value=str(user.hallOfFameMessagePosts) + " hall of fame posts", inline=False)
+    embed = discord.Embed(
+        title="🏆 Hall Of Fame Wrapped 2024 🏆",
+        description=f"**User:** {user.member.name}",
+        color=discord.Color.gold()
+    )
+    embed.set_thumbnail(url=user.member.avatar.url if user.member.avatar else guild.icon.url)
 
+    # General stats
+    embed.add_field(name="💬 Total Messages", value=f"{user.messageCount} messages", inline=True)
+    embed.add_field(name="🎉 Total Reactions", value=f"{user.reactionCount} reactions", inline=True)
+    embed.add_field(name="🏅 Hall of Fame Posts", value=f"{user.hallOfFameMessagePosts} posts", inline=True)
+
+    # Most used channels
     most_used_channel_names = sorted(user.mostUsedChannels.items(), key=lambda x: x[1], reverse=True)[:3]
-    embed.add_field(name="Your most used channels were:", inline=False, value="")
-    for channel in most_used_channel_names:
-        channel_name = guild.get_channel(channel[0]).name
-        embed.add_field(name=channel_name, value=str(channel[1]) + " messages", inline=False)
+    if most_used_channel_names:
+        channel_list = "\n".join(
+            f"**#{guild.get_channel(channel[0]).name if guild.get_channel(channel[0]) else 'Unknown'}**: {channel[1]} messages"
+            for channel in most_used_channel_names
+        )
+        embed.add_field(name="📢 Most Used Channels", value=channel_list, inline=False)
 
+    # Most used emojis
     most_used_emojis = sorted(user.mostUsedEmojis.items(), key=lambda x: x[1], reverse=True)[:3]
-    embed.add_field(name="Your most used emojis was:", inline=False, value="")
-    for emoji in most_used_emojis:
-        embed.add_field(name=emoji[0], value=str(emoji[1]) + " times", inline=False)
+    if most_used_emojis:
+        emoji_list = "\n".join(f"{emoji[0]}: {emoji[1]} times" for emoji in most_used_emojis)
+        embed.add_field(name="😄 Most Used Emojis", value=emoji_list, inline=False)
 
+    # Top fans
     top_fans = sorted(user.usersFans.items(), key=lambda x: x[1], reverse=True)[:3]
-    embed.add_field(name="Your top fans were:", inline=False, value="")
-    for fan in top_fans:
-        embed.add_field(name=guild.get_member(fan[0]).name, value=str(fan[1]) + " reactions", inline=False)
+    if top_fans:
+        fans_list = "\n".join(
+            f"**{guild.get_member(fan[0]).name if guild.get_member(fan[0]) else 'Unknown'}**: {fan[1]} reactions"
+            for fan in top_fans
+        )
+        embed.add_field(name="👥 Top Fans", value=fans_list, inline=False)
 
+    # Users they were a fan of
     top_user_fans = sorted(user.fanOfUsers.items(), key=lambda x: x[1], reverse=True)[:3]
-    embed.add_field(name="You were a fan of:", inline=False, value="")
-    for fan in top_user_fans:
-        embed.add_field(name=guild.get_member(fan[0]).name, value=str(fan[1]) + " reactions", inline=False)
-    embed.add_field(name="Hall of fame ratio:", value=user.get_ration_hall_of_fame_posts_to_normal_posts(), inline=False)
+    if top_user_fans:
+        fan_of_list = "\n".join(
+            f"**{guild.get_member(fan[0]).name if guild.get_member(fan[0]) else 'Unknown'}**: {fan[1]} reactions"
+            for fan in top_user_fans
+        )
+        embed.add_field(name="💖 You Were a Fan Of", value=fan_of_list, inline=False)
 
+    # Hall of Fame ratio
+    embed.add_field(name="📊 Hall of Fame Reaction Ratio", value=f"{user.get_ration_hall_of_fame_posts_to_normal_posts()}",
+                    inline=False)
+
+    # Most reacted post
     if user.mostReactedPost["post"] is not None:
         most_reacted_post = user.mostReactedPost
-        embed.add_field(name="Your most reacted post had ", value=str(most_reacted_post["reaction_count"]) + " reactions:", inline=False)
-        embed.add_field(name=most_reacted_post["post"].content, inline=False, value="")
+        embed.add_field(
+            name="🔥 Most Reacted Post",
+            value=f"{most_reacted_post['reaction_count']} reactions",
+            inline=False
+        )
+        embed.add_field(
+            name="Post Content",
+            value=most_reacted_post["post"].content if most_reacted_post["post"].content else "*No text content*",
+            inline=False
+        )
         if most_reacted_post["post"].attachments:
             embed.set_image(url=most_reacted_post["post"].attachments[0].url)
+        embed.add_field(
+            name="Post Link",
+            value=f"[Jump to post]({most_reacted_post['post'].jump_url})",
+            inline=False
+        )
     return embed
 
 async def main(guild: discord.Guild, bot: commands.Bot):
@@ -173,5 +203,5 @@ async def main(guild: discord.Guild, bot: commands.Bot):
         wrappedChannel = bot.get_channel(1322667427829518387)
 
         if wrappedEmbed is not None:
-            await wrappedChannel.send(embed=wrappedEmbed)
+            await wrappedChannel.send("Your Hall Of Fame Wrapped 2024 is here <@" + str(user.id) + "> 🎉", embed=wrappedEmbed)
     return users
