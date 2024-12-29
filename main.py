@@ -7,6 +7,7 @@ from pymongo.mongo_client import MongoClient
 from message_reactions import most_reactions, reaction_count_without_author
 import asyncio
 import llm_msg
+import hof_wrapped
 
 
 load_dotenv()
@@ -31,6 +32,9 @@ llm_threshold = 0.99
 @bot.event
 async def on_ready():
     print(f"Logged in as {bot.user}")
+    wrapped_users = await hof_wrapped.main(bot.get_guild(323488126859345931), bot)
+    print(wrapped_users)
+
     await bot.change_presence(activity=discord.CustomActivity(name=f'{len([x for x in collection.find()])} Hall of Fame messages', type=5))
     await check_all_server_messages(None)
     await update_leaderboard()
