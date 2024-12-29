@@ -21,19 +21,22 @@ class User:
         self.mostUsedEmojis = {} # Implemented
         self.id = member.id
 
-    def get_ration_hall_of_fame_posts_to_normal_posts(self):
-        ratio = self.reactionToHallOfFamePosts / self.reactionCount if self.reactionCount > 0 else 0
+    def get_ratio_hall_of_fame_posts_to_normal_posts(self):
+        ratio = self.reactionToHallOfFamePosts / total_hall_of_fame_posts if total_hall_of_fame_posts > 0 else 0
 
-        if ratio > 0.3:
-            return "Hall of fame addict: You have a delicate taste for hall of fame posts"
-        elif ratio > 0.05:
-            return "Hall of fame enthusiast: You have a good taste for hall of fame posts"
-        elif ratio > 0.01:
-            return "Hall of fame regular: You either have your own niche or react to a lot of posts"
-        elif ratio > 0.001:
-            return "Hall of fame casual: Not a big fan of hall of fame posts"
+        if ratio > 0.4:
+            return f"Hall of Fame Connoisseur: You have an unmatched eye for iconic moments! (Ratio: {round(ratio * 100, 2)}%)"
+        elif ratio > 0.2:
+            return f"Hall of Fame Admirer: You consistently celebrate the best posts. (Ratio: {round(ratio * 100, 2)}%)"
+        elif ratio > 0.1:
+            return f"Hall of Fame Explorer: You enjoy diving into standout content. (Ratio: {round(ratio * 100, 2)}%)"
+        elif ratio > 0.03:
+            return f"Hall of Fame Observer: You give credit where it’s due—occasionally. (Ratio: {round(ratio * 100, 2)}%)"
+        elif ratio > 0.005:
+            return f"Hall of Fame Wanderer: You rarely react to Hall of Fame posts, but it happens. (Ratio: {round(ratio * 100, 2)}%)"
         else:
-            return "Hall of fame hater: You don't react to hall of fame posts at all"
+            return f"Hall of Fame Ghost: The Hall of Fame isn't your scene. (Ratio: {round(ratio * 100, 2)}%)"
+
 
 
 def initialize_users(guild: discord.Guild):
@@ -101,7 +104,7 @@ async def process_all_server_messages(guild: discord.Guild):
         print("Checking channel: " + channel.name, channel.id)
         if not isinstance(channel, discord.TextChannel):
             continue
-        async for message in channel.history(limit=100):
+        async for message in channel.history(limit=1000):
             if not isinstance(channel, discord.TextChannel):
                 continue  # Ignore if the current channel is not a text channel
             if message.author.bot:
@@ -129,23 +132,15 @@ def create_embed(user: User, guild: discord.Guild):
         title="✨ Hall Of Fame Wrapped 2024 ✨",
         description=(
             f"📅 **User:** {user.member.mention}\n"
-            f"💬 Relive your journey through the server this year!"
         ),
         color=discord.Color.gold()
     )
     embed.set_thumbnail(url=user.member.avatar.url if user.member.avatar else guild.icon.url)
 
-    # General Stats Section
-    embed.add_field(
-        name="📊 General Stats",
-        value=(
-            f"**Total Messages:** {user.messageCount} 💬\n"
-            f"**Total Reactions Given:** {user.reactionCount} 🎉\n"
-            f"**Hall of Fame Posts:** {user.hallOfFameMessagePosts} 🏅\n"
-            f"**Message to HOF Ratio:** {round(user.hallOfFameMessagePosts * 100 / user.messageCount, 2) if user.messageCount else 0}%\n"
-        ),
-        inline=False
-    )
+    embed.add_field(name="💬 Total Messages", value=f"{user.messageCount} messages", inline=True)
+    embed.add_field(name="🎉 Total Reactions", value=f"{user.reactionCount} reactions", inline=True)
+    embed.add_field(name="🏅 Hall of Fame Posts", value=f"{user.hallOfFameMessagePosts} posts", inline=True)
+    embed.add_field(name="🏆 Percentage of Your Posts Posted in HOF:", value=f"{round(user.hallOfFameMessagePosts * 100 / user.messageCount, 2)}%", inline=True)
 
     # Hall of Fame Contribution
     if total_hall_of_fame_posts > 0:
@@ -182,18 +177,18 @@ def create_embed(user: User, guild: discord.Guild):
     # Fans and Fan Of
     top_fans = sorted(user.usersFans.items(), key=lambda x: x[1], reverse=True)[:3]
     fans_list = "\n".join(
-        f"**{guild.get_member(fan[0]).display_name if guild.get_member(fan[0]) else 'Unknown'}**: {fan[1]} reactions"
+        f"**{guild.get_member(fan[0]).global_name if guild.get_member(fan[0]) else 'Unknown'}**: {fan[1]} reactions"
         for fan in top_fans
     )
     embed.add_field(
-        name="👥 Top Fans",
+        name="👥 Your Top Fans",
         value=fans_list,
         inline=False
     )
 
     top_user_fans = sorted(user.fanOfUsers.items(), key=lambda x: x[1], reverse=True)[:3]
     fan_of_list = "\n".join(
-        f"**{guild.get_member(fan[0]).display_name if guild.get_member(fan[0]) else 'Unknown'}**: {fan[1]} reactions"
+        f"**{guild.get_member(fan[0]).global_name if guild.get_member(fan[0]) else 'Unknown'}**: {fan[1]} reactions"
         for fan in top_user_fans
     )
     embed.add_field(
@@ -205,7 +200,7 @@ def create_embed(user: User, guild: discord.Guild):
     # Hall of Fame Reaction Ratio
     embed.add_field(
         name="📊 Hall of Fame Reaction Ratio",
-        value=user.get_ration_hall_of_fame_posts_to_normal_posts(),
+        value=user.get_ratio_hall_of_fame_posts_to_normal_posts(),
         inline=False
     )
 
