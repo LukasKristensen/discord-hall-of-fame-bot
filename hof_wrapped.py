@@ -248,7 +248,6 @@ def rank_stats(users: dict):
     # Add users to rankings for each stat
     for user in users.values():
         rankings["messageCount"].append((user.member, user.messageCount))
-        rankings["reactionCount"].append((user.member, user.reactionCount))
         rankings["hallOfFameMessagePosts"].append((user.member, user.hallOfFameMessagePosts))
         rankings["reactionToHallOfFamePosts"].append((user.member, user.reactionToHallOfFamePosts))
         rankings["mostUsedChannels"].append((user.member, len(user.mostUsedChannels)))
@@ -276,7 +275,6 @@ def add_rankings(embed, user: User, rankings: dict):
         name="📊 Your Rankings:",
         value=(
             f"**Message Count:** #{user_ranks['messageCount']}\n"
-            f"**Reaction Count:** #{user_ranks['reactionCount']}\n"
             f"**Hall of Fame Posts:** #{user_ranks['hallOfFameMessagePosts']}\n"
             f"**Reactions to Hall of Fame Posts:** #{user_ranks['reactionToHallOfFamePosts']}\n"
             f"**Most Used Channels:** #{user_ranks['mostUsedChannels']}\n"
