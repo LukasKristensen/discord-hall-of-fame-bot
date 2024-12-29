@@ -101,6 +101,7 @@ async def process_message_reactions(message: discord.Message):
 
 async def process_all_server_messages(guild: discord.Guild):
     for channel in guild.channels:
+        print(f"Processing channel: {channel.name}")
         if not isinstance(channel, discord.TextChannel):
             continue
         async for message in channel.history(limit=None):
@@ -125,7 +126,7 @@ async def process_all_server_messages(guild: discord.Guild):
     return users
 
 def create_embed(user: User, guild: discord.Guild):
-    if len(user.mostUsedChannels) < 3 or len(user.mostUsedEmojis) < 3 or len(user.usersFans) < 3 or len(user.fanOfUsers) < 3:
+    if len(user.mostUsedChannels) < 4:
         return None
     embed = discord.Embed(
         title="✨ Hall Of Fame Wrapped 2024 ✨",
@@ -138,7 +139,7 @@ def create_embed(user: User, guild: discord.Guild):
 
     embed.add_field(name="💬 Total Messages", value=f"{user.messageCount} messages", inline=True)
     embed.add_field(name="🎉 Total Reactions", value=f"{user.reactionCount} reactions", inline=True)
-    embed.add_field(name="🏅 Hall of Fame Posts", value=f"{user.hallOfFameMessagePosts} posts", inline=True)
+    embed.add_field(name="🏅 Hall of Fame", value=f"{user.hallOfFameMessagePosts} posts", inline=True)
     embed.add_field(name="🏆 Percentage of Your Posts Posted in HOF:", value=f"{round(user.hallOfFameMessagePosts * 100 / user.messageCount, 2)}%", inline=True)
 
     # Hall of Fame Contribution
@@ -153,7 +154,8 @@ def create_embed(user: User, guild: discord.Guild):
         )
 
     # Most Used Channels Section
-    most_used_channel_names = sorted(user.mostUsedChannels.items(), key=lambda x: x[1], reverse=True)[:3]
+    most_used_channel_names = sorted(user.mostUsedChannels.items(), key=lambda x: x[1], reverse=True)[:5]
+
     channel_list = "\n".join(
         f"**#{guild.get_channel(channel[0]).name if guild.get_channel(channel[0]) else 'Unknown'}**: {channel[1]} messages"
         for channel in most_used_channel_names
@@ -170,7 +172,7 @@ def create_embed(user: User, guild: discord.Guild):
     )
 
     # Most Used Emojis Section
-    most_used_emojis = sorted(user.mostUsedEmojis.items(), key=lambda x: x[1], reverse=True)[:3]
+    most_used_emojis = sorted(user.mostUsedEmojis.items(), key=lambda x: x[1], reverse=True)[:5]
     emoji_list = "\n".join(f"{emoji[0]}: {emoji[1]} times" for emoji in most_used_emojis)
     embed.add_field(
         name="😄 Most Used Emojis",
@@ -179,7 +181,7 @@ def create_embed(user: User, guild: discord.Guild):
     )
 
     # Fans and Fan Of
-    top_fans = sorted(user.usersFans.items(), key=lambda x: x[1], reverse=True)[:3]
+    top_fans = sorted(user.usersFans.items(), key=lambda x: x[1], reverse=True)[:5]
     fans_list = "\n".join(
         f"**{guild.get_member(fan[0]).global_name if guild.get_member(fan[0]) else 'Unknown'}**: {fan[1]} reactions"
         for fan in top_fans
@@ -190,7 +192,7 @@ def create_embed(user: User, guild: discord.Guild):
         inline=False
     )
 
-    top_user_fans = sorted(user.fanOfUsers.items(), key=lambda x: x[1], reverse=True)[:3]
+    top_user_fans = sorted(user.fanOfUsers.items(), key=lambda x: x[1], reverse=True)[:5]
     fan_of_list = "\n".join(
         f"**{guild.get_member(fan[0]).global_name if guild.get_member(fan[0]) else 'Unknown'}**: {fan[1]} reactions"
         for fan in top_user_fans
@@ -208,7 +210,7 @@ def create_embed(user: User, guild: discord.Guild):
         inline=False
     )
 
-    embed = add_rankings(embed, user, guild, rankings)
+    embed = add_rankings(embed, user, rankings)
 
     # Most Reacted Post Section
     if user.mostReactedPost["post"] is not None:
