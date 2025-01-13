@@ -27,6 +27,7 @@ collection = db['hall_of_fame_messages']
 server_config = db['server_config']
 target_channel_id = 1176965358796681326 # Hall-Of-Fame (HOF) channel
 reaction_threshold = 7
+post_due_date = 28
 llm_threshold = 0.99
 dev_user = 230698327589650432
 
@@ -62,8 +63,7 @@ async def validate_message(message):
     channel = bot.get_channel(channel_id)
     message = await channel.fetch_message(message_id)
 
-    # Check if the message is more than 14 days old
-    if (datetime.datetime.now(timezone.utc) - message.created_at).days > 14:
+    if (datetime.datetime.now(timezone.utc) - message.created_at).days > post_due_date:
         return
 
     # Checks if the post is from the HOF channel or is from a bot
@@ -165,7 +165,7 @@ async def cmd_manual_sweep(payload):
     guild_id = payload.message.content.split(" ")[2]
     await check_all_server_messages(guild_id, sweep_limit)
 
-async def check_all_server_messages(guild_id = 323488126859345931, sweep_limit = 2000, sweep_limited=False):
+async def check_all_server_messages(guild_id = 323488126859345931, sweep_limit = 2000, sweep_limited=True):
     guild = bot.get_guild(guild_id)
 
     for channel in guild.channels:
@@ -176,7 +176,7 @@ async def check_all_server_messages(guild_id = 323488126859345931, sweep_limit =
             try:
                 if message.author.bot:
                     continue  # Ignore messages from bots
-                if (datetime.datetime.now(timezone.utc) - message.created_at).days > 14:
+                if (datetime.datetime.now(timezone.utc) - message.created_at).days > post_due_date:
                     break
                 message_reactions = await reaction_count_without_author(message)
 
