@@ -1,10 +1,12 @@
 import discord as discord
 import message_reactions
 from discord.ext import commands
+import datetime
 
 users = {}
 total_hall_of_fame_posts = 0
 rankings = None
+reactionThreshold: int
 
 class User:
     def __init__(self, member: discord.Member):
@@ -51,7 +53,7 @@ async def process_message_reactions(message: discord.Message):
     users_reacted = []
 
     highest_reaction_count = await message_reactions.reaction_count_without_author(message)
-    if highest_reaction_count >= 6:
+    if highest_reaction_count >= reactionThreshold:
         user_author.hallOfFameMessagePosts += 1
         hall_of_fame_post = True
         total_hall_of_fame_posts += 1
@@ -111,7 +113,7 @@ async def process_all_server_messages(guild: discord.Guild):
                 continue # Ignore if the author of the message is a bot
             if message.author.id not in users:
                 continue # Ignore if the author of the message is not in the users list
-            if message.created_at.year != 2024:
+            if message.created_at.year != datetime.datetime.now().year:
                 break # Check if message is from current year
 
             user = users[message.author.id]
@@ -286,8 +288,12 @@ def add_rankings(embed, user: User, rankings: dict):
     return embed
 
 
-async def main(guild: discord.Guild, bot: commands.Bot):
+async def main(guild: discord.Guild, bot: commands.Bot, reactionThresholdGet: int):
     global rankings
+    global reactionThreshold
+    reactionThreshold = reactionThresholdGet
+
+    print("Hall Of Fame Wrapped 2024 is being prepared... 🎁")
 
     wrappedChannel = bot.get_channel(1322849654190243861)
     await wrappedChannel.send("Hall Of Fame Wrapped 2024 is being prepared... 🎁")

@@ -8,7 +8,8 @@ from message_reactions import most_reactions, reaction_count_without_author
 import asyncio
 import llm_msg
 import hof_wrapped
-
+import datetime
+from datetime import timezone
 
 load_dotenv()
 TOKEN = os.getenv('KEY')
@@ -25,9 +26,9 @@ db = client['caroon']
 collection = db['hall_of_fame_messages']
 server_config = db['server_config']
 target_channel_id = 1176965358796681326 # Hall-Of-Fame (HOF) channel
-reaction_threshold = 6
+reaction_threshold = 8
 llm_threshold = 0.99
-
+dev_user = 230698327589650432
 
 @bot.event
 async def on_ready():
@@ -35,7 +36,9 @@ async def on_ready():
     await bot.change_presence(activity=discord.CustomActivity(name=f'{len([x for x in collection.find()])} Hall of Fame messages', type=5))
     await check_all_server_messages(None)
     await update_leaderboard()
-    # await hof_wrapped.main(bot.get_guild(323488126859345931), bot)
+
+    if datetime.datetime.now().month == 12 and datetime.datetime.now().day == 28:
+        await hof_wrapped.main(bot.get_guild(323488126859345931), bot, reaction_threshold)
 
 
 async def check_outlier(msg_content: str):
@@ -46,7 +49,7 @@ async def check_outlier(msg_content: str):
     """
     outlier_detection_confidence = llm_msg.check_hof_msg(str(msg_content))
     if outlier_detection_confidence > llm_threshold:
-        bot_dev = bot.get_user(230698327589650432)
+        bot_dev = bot.get_user(dev_user)
         await bot_dev.send(f'Outlier detected with confidence: {outlier_detection_confidence}. Msg: {str(msg_content)}')
         return True
     return False
@@ -58,6 +61,10 @@ async def validate_message(message):
 
     channel = bot.get_channel(channel_id)
     message = await channel.fetch_message(message_id)
+
+    # Check if the message is more than 14 days old
+    if (datetime.datetime.now(timezone.utc) - message.created_at).days > 14:
+        return
 
     # Checks if the post is from the HOF channel or is from a bot
     if channel_id == target_channel_id or message.author.bot:
@@ -156,7 +163,7 @@ async def check_all_server_messages(payload=None, sweep_limit=2000, sweep_limite
         guild = bot.get_guild(guild_id)
     else:
         guild = payload.guild
-        if not payload.author.id == 230698327589650432:
+        if not payload.author.id == dev_user:
             payload.message.reply("You are not allowed to use this command")
             return
 
@@ -167,8 +174,9 @@ async def check_all_server_messages(payload=None, sweep_limit=2000, sweep_limite
             try:
                 if message.author.bot:
                     continue  # Ignore messages from bots
+                message_reactions = await reaction_count_without_author(message)
 
-                if await reaction_count_without_author(message) >= reaction_threshold:
+                if message_reactions >= reaction_threshold:
                     if collection.find_one({"message_id": int(message.id)}):
                         await update_reaction_counter(message.id, message.channel.id)
                         if sweep_limited:
@@ -178,6 +186,9 @@ async def check_all_server_messages(payload=None, sweep_limit=2000, sweep_limite
                     if await check_outlier(str(message.content)):
                         continue # if the message is an outlier for a voting message ignore it
                     await post_hall_of_fame_message(message)
+                elif message_reactions >= reaction_threshold-3:
+                    if collection.find_one({"message_id": int(message.id)}):
+                        await remove_embed(message.id)
             except Exception as e:
                 print(f'An error occurred: {e}')
 
