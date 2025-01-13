@@ -21,18 +21,27 @@ Define the amount of reactions necessary for posting: ```reaction_threshold```
 
 ## Commands
 
-| Command | Parameters (optional) | Action | Example |
-| :------------- |:-------------|:-------------|:-------------|
-| !commands | | List of commands | !commands |
-| !favorite_gifs | <user_id> \<msg_limit:10> | Get the most popular gifs from a user | !favorite_gifs 230698327589650432 5 |
-| !server_gifs | \<msg_limit:10> | Get the most popular gifs in the server | !server_gifs 7 |
-| !get_random_message | | Get a random hall-of-fame message from the database |
+| Command | Parameters (optional)     | Action                                              | Example             |
+| :------------- |:--------------------------|:----------------------------------------------------|:--------------------|
+| !commands |                           | List of commands                                    | !commands           |
+| !manual_sweep | <sweep_limit> \<guild_id> | Manually trigger a server sweep                     | !manual_sweep 2000 1180006529575960616 |
+| !get_random_message |                           | Get a random hall-of-fame message from the database |
 
 
 <br>
 
 
 ## Development Log
+
+### 1.10
+- [x] Threshold increase and general adjustments
+
+### 1.09
+- [x] Hall Of Fame Wrapped]
+
+### 1.08
+- [x] Better context vísualization of replied messages
+- [x] Added user's role color to embed color
 
 ### 1.07
 - [x] Solved async simultaneous reacting on posts

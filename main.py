@@ -26,7 +26,7 @@ db = client['caroon']
 collection = db['hall_of_fame_messages']
 server_config = db['server_config']
 target_channel_id = 1176965358796681326 # Hall-Of-Fame (HOF) channel
-reaction_threshold = 8
+reaction_threshold = 7
 llm_threshold = 0.99
 dev_user = 230698327589650432
 
@@ -34,7 +34,7 @@ dev_user = 230698327589650432
 async def on_ready():
     print(f"Logged in as {bot.user}")
     await bot.change_presence(activity=discord.CustomActivity(name=f'{len([x for x in collection.find()])} Hall of Fame messages', type=5))
-    await check_all_server_messages(None)
+    await check_all_server_messages()
     await update_leaderboard()
 
     if datetime.datetime.now().month == 12 and datetime.datetime.now().day == 28:
@@ -156,18 +156,20 @@ async def update_leaderboard():
                 await hall_of_fame_message.edit(content=f"**HallOfFame#{i+1}**\n{original_message.attachments[0].url}")
 
 
-@bot.command(name='apply_reaction_checker')
-async def check_all_server_messages(payload=None, sweep_limit=2000, sweep_limited=True):
-    if payload is None:
-        guild_id = 323488126859345931
-        guild = bot.get_guild(guild_id)
-    else:
-        guild = payload.guild
-        if not payload.author.id == dev_user:
-            payload.message.reply("You are not allowed to use this command")
-            return
+@bot.command(name='manual_sweep')
+async def cmd_manual_sweep(payload):
+    if not payload.author.id == dev_user:
+        payload.message.reply("You are not allowed to use this command")
+        return
+    sweep_limit = payload.message.content.split(" ")[1]
+    guild_id = payload.message.content.split(" ")[2]
+    await check_all_server_messages(guild_id, sweep_limit)
+
+async def check_all_server_messages(guild_id = 323488126859345931, sweep_limit = 2000, sweep_limited=False):
+    guild = bot.get_guild(guild_id)
 
     for channel in guild.channels:
+        print('Checking channel: ' + channel.name)
         if not isinstance(channel, discord.TextChannel):
             continue # Ignore if the current channel is not a text channel
         async for message in channel.history(limit=sweep_limit):
