@@ -176,6 +176,8 @@ async def check_all_server_messages(guild_id = 323488126859345931, sweep_limit =
             try:
                 if message.author.bot:
                     continue  # Ignore messages from bots
+                if (datetime.datetime.now(timezone.utc) - message.created_at).days > 14:
+                    break
                 message_reactions = await reaction_count_without_author(message)
 
                 if message_reactions >= reaction_threshold:
