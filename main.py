@@ -83,7 +83,7 @@ async def validate_message(message):
     if collection.find_one({"message_id": int(message.id)}):
         collection.update_one({"message_id": int(message.id)},
                               {"$set": {"reaction_count": await reaction_count_without_author(message)}})
-        await update_reaction_counter(message_id, channel_id)
+        await update_reaction_counter(message)
         return
     await post_hall_of_fame_message(message)
 
@@ -105,16 +105,19 @@ async def on_raw_reaction_remove(payload):
         messages_processing.remove(payload.message_id)
 
 
-async def update_reaction_counter(message_id, channel_id):
-    message_sent = collection.find_one({"message_id": int(message_id)})
+async def update_reaction_counter(message):
+    message_sent = collection.find_one({"message_id": int(message.id)})
     if not message_sent["hall_of_fame_message_id"]:
         return
     hall_of_fame_message_id = message_sent["hall_of_fame_message_id"]
     target_channel = bot.get_channel(target_channel_id)
     hall_of_fame_message = await target_channel.fetch_message(hall_of_fame_message_id)
-    original_message = await bot.get_channel(channel_id).fetch_message(message_id)
 
-    await hall_of_fame_message.edit(embed=await create_embed(original_message))
+    embed = hall_of_fame_message.embeds[0]
+    corrected_reactions = await reaction_count_without_author(message)
+
+    embed.set_field_at(index=0, name=f"{corrected_reactions} Reactions ", value=most_reactions(message.reactions)[0].emoji, inline=True)
+    await hall_of_fame_message.edit(embed=embed)
 
 
 async def remove_embed(message_id):
@@ -165,11 +168,10 @@ async def cmd_manual_sweep(payload):
     guild_id = payload.message.content.split(" ")[2]
     await check_all_server_messages(guild_id, sweep_limit)
 
-async def check_all_server_messages(guild_id = 323488126859345931, sweep_limit = 2000, sweep_limited=True):
+async def check_all_server_messages(guild_id = 323488126859345931, sweep_limit = 2000, sweep_limited=False):
     guild = bot.get_guild(guild_id)
 
     for channel in guild.channels:
-        print('Checking channel: ' + channel.name)
         if not isinstance(channel, discord.TextChannel):
             continue # Ignore if the current channel is not a text channel
         async for message in channel.history(limit=sweep_limit):
@@ -182,7 +184,7 @@ async def check_all_server_messages(guild_id = 323488126859345931, sweep_limit =
 
                 if message_reactions >= reaction_threshold:
                     if collection.find_one({"message_id": int(message.id)}):
-                        await update_reaction_counter(message.id, message.channel.id)
+                        await update_reaction_counter(message)
                         if sweep_limited:
                             break  # if message is already in the database, no need to check further
                         else:
