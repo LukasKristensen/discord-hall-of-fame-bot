@@ -57,8 +57,8 @@ async def check_outlier(msg_content: str):
 
 
 async def validate_message(message):
-    channel_id = message.channel_id
-    message_id = message.message_id
+    channel_id: int = message.channel_id
+    message_id: int = message.message_id
 
     channel = bot.get_channel(channel_id)
     message = await channel.fetch_message(message_id)
@@ -73,7 +73,7 @@ async def validate_message(message):
     # Gets the adjusted reaction count corrected for not accounting the author
     corrected_reactions = await reaction_count_without_author(message)
     if corrected_reactions < reaction_threshold:
-        if collection.find_one({"message_id": int(message.id)}):
+        if collection.find_one({"message_id": int(message_id)}):
             await remove_embed(message_id)
         return
 
@@ -91,21 +91,21 @@ messages_processing = []
 
 
 @bot.event
-async def on_raw_reaction_add(payload):
+async def on_raw_reaction_add(payload: discord.RawReactionActionEvent):
     if not payload.message_id in messages_processing:
         messages_processing.append(payload.message_id)
         await validate_message(payload)
         messages_processing.remove(payload.message_id)
 
 @bot.event
-async def on_raw_reaction_remove(payload):
+async def on_raw_reaction_remove(payload: discord.RawReactionActionEvent):
     if not payload.message_id in messages_processing:
         messages_processing.append(payload.message_id)
         await validate_message(payload)
         messages_processing.remove(payload.message_id)
 
 
-async def update_reaction_counter(message):
+async def update_reaction_counter(message: discord.Message):
     message_sent = collection.find_one({"message_id": int(message.id)})
     if not message_sent["hall_of_fame_message_id"]:
         return
@@ -120,7 +120,7 @@ async def update_reaction_counter(message):
     await hall_of_fame_message.edit(embed=embed)
 
 
-async def remove_embed(message_id):
+async def remove_embed(message_id: int):
     message = collection.find_one({"message_id": int(message_id)})
     if "hall_of_fame_message_id" not in message:
         return
@@ -199,7 +199,7 @@ async def check_all_server_messages(guild_id = 323488126859345931, sweep_limit =
                 print(f'An error occurred: {e}')
 
 
-async def post_hall_of_fame_message(message):
+async def post_hall_of_fame_message(message: discord.Message):
     target_channel = bot.get_channel(target_channel_id)
     video_link = check_video_extension(message)
 
@@ -216,7 +216,7 @@ async def post_hall_of_fame_message(message):
                            "reaction_count": int(await reaction_count_without_author(message))})
 
 
-async def create_embed(message):
+async def create_embed(message: discord.Message):
     # Check if the message is a reply to another message
     if message.reference and not message.attachments:
         reference_message = await message.channel.fetch_message(message.reference.message_id)
@@ -329,7 +329,7 @@ async def cmd_help(payload):
 
 
 @bot.event
-async def on_message(message):
+async def on_message(message: discord.Message):
     if message.author.bot:
         return
     if message.channel.id == target_channel_id and not message.author.bot:
