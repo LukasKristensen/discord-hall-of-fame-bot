@@ -33,6 +33,10 @@ dev_user = 230698327589650432
 
 @bot.event
 async def on_ready():
+    """
+    Event handler for when the bot is ready. Sets the bot's presence and runs the routine to check historical messages
+    :return:
+    """
     print(f"Logged in as {bot.user}")
     await bot.change_presence(activity=discord.CustomActivity(name=f'{len([x for x in collection.find()])} Hall of Fame messages', type=5))
     await check_all_server_messages()
@@ -45,7 +49,7 @@ async def on_ready():
 async def check_outlier(msg_content: str):
     """
     Checks whether a message is an outlier for a voting-based message
-    :param msg_content:
+    :param msg_content: The content of the message
     :return: boolean based on cut-off confidence from LLM
     """
     outlier_detection_confidence = llm_msg.check_hof_msg(str(msg_content))
@@ -56,14 +60,20 @@ async def check_outlier(msg_content: str):
     return False
 
 
-async def validate_message(message):
+async def validate_message(message: discord.RawReactionActionEvent):
+    """
+    Check if the message is valid for posting based on the reaction count, date and origin of the message
+    :param message: The message to validate
+    :return: None
+    """
     channel_id: int = message.channel_id
     message_id: int = message.message_id
 
     channel = bot.get_channel(channel_id)
     message = await channel.fetch_message(message_id)
 
-    if (datetime.datetime.now(timezone.utc) - message.created_at).days > post_due_date:
+    # Checks if the post is older than the due date and has not been added to the database
+    if (datetime.datetime.now(timezone.utc) - message.created_at).days > post_due_date and not collection.find_one({"message_id": int(message.id)}):
         return
 
     # Checks if the post is from the HOF channel or is from a bot
@@ -92,6 +102,11 @@ messages_processing = []
 
 @bot.event
 async def on_raw_reaction_add(payload: discord.RawReactionActionEvent):
+    """
+    Event handler for when a reaction is added to a message
+    :param payload: The payload of the event
+    :return: None
+    """
     if not payload.message_id in messages_processing:
         messages_processing.append(payload.message_id)
         await validate_message(payload)
@@ -99,6 +114,11 @@ async def on_raw_reaction_add(payload: discord.RawReactionActionEvent):
 
 @bot.event
 async def on_raw_reaction_remove(payload: discord.RawReactionActionEvent):
+    """
+    Event handler for when a reaction is removed from a message
+    :param payload: The payload of the event
+    :return: None
+    """
     if not payload.message_id in messages_processing:
         messages_processing.append(payload.message_id)
         await validate_message(payload)
@@ -106,6 +126,11 @@ async def on_raw_reaction_remove(payload: discord.RawReactionActionEvent):
 
 
 async def update_reaction_counter(message: discord.Message):
+    """
+    Update the reaction counter of a message in the Hall of Fame.
+    :param message: The Discord message to update the reaction counter for.
+    :return: None
+    """
     message_sent = collection.find_one({"message_id": int(message.id)})
     if not message_sent["hall_of_fame_message_id"]:
         return
@@ -121,6 +146,11 @@ async def update_reaction_counter(message: discord.Message):
 
 
 async def remove_embed(message_id: int):
+    """
+    Remove the embed of a message in the Hall of Fame
+    :param message_id: The message ID of the message to remove the embed for
+    :return: None
+    """
     message = collection.find_one({"message_id": int(message_id)})
     if "hall_of_fame_message_id" not in message:
         return
@@ -131,6 +161,10 @@ async def remove_embed(message_id: int):
 
 
 async def update_leaderboard():
+    """
+    Update the top 20 most reacted messages in the Hall of Fame
+    :return: None
+    """
     most_reacted_messages = list(collection.find().sort("reaction_count", -1).limit(30))
     msg_id_array = server_config.find_one({"leaderboard_message_ids_updated": {"$exists": True}})
 
@@ -161,6 +195,11 @@ async def update_leaderboard():
 
 @bot.command(name='manual_sweep')
 async def cmd_manual_sweep(payload):
+    """
+    Command to manually sweep all messages in a server
+    :param payload: The payload of the command
+    :return: None
+    """
     if not payload.author.id == dev_user:
         payload.message.reply("You are not allowed to use this command")
         return
@@ -169,6 +208,13 @@ async def cmd_manual_sweep(payload):
     await check_all_server_messages(guild_id, sweep_limit)
 
 async def check_all_server_messages(guild_id = 323488126859345931, sweep_limit = 2000, sweep_limited=False):
+    """
+    Check all messages in a server for Hall of Fame messages
+    :param guild_id: The ID of the guild to check the messages for
+    :param sweep_limit: The limit of messages to check
+    :param sweep_limited: Whether the sweep is limited to a certain amount of messages
+    :return: None
+    """
     guild = bot.get_guild(guild_id)
 
     for channel in guild.channels:
@@ -179,7 +225,7 @@ async def check_all_server_messages(guild_id = 323488126859345931, sweep_limit =
                 if message.author.bot:
                     continue  # Ignore messages from bots
                 if (datetime.datetime.now(timezone.utc) - message.created_at).days > post_due_date:
-                    break
+                    break # If the message is older than the due date, no need to check further
                 message_reactions = await reaction_count_without_author(message)
 
                 if message_reactions >= reaction_threshold:
@@ -200,6 +246,11 @@ async def check_all_server_messages(guild_id = 323488126859345931, sweep_limit =
 
 
 async def post_hall_of_fame_message(message: discord.Message):
+    """
+    Post a message in the Hall of Fame channel
+    :param message: The message to post in the Hall of Fame channel
+    :return: None
+    """
     target_channel = bot.get_channel(target_channel_id)
     video_link = check_video_extension(message)
 
@@ -217,6 +268,11 @@ async def post_hall_of_fame_message(message: discord.Message):
 
 
 async def create_embed(message: discord.Message):
+    """
+    Create an embed for a message in the Hall of Fame channel
+    :param message: The message to create an embed for
+    :return: The embed for the message
+    """
     # Check if the message is a reply to another message
     if message.reference and not message.attachments:
         reference_message = await message.channel.fetch_message(message.reference.message_id)
@@ -297,6 +353,11 @@ async def create_embed(message: discord.Message):
 
 @bot.command(name='get_random_message')
 async def cmd_random_message(payload):
+    """
+    Command to get a random message from the Hall of Fame database
+    :param payload: The payload of the command
+    :return: None
+    """
     sender_channel = payload.channel.id
 
     all_messages = [x for x in collection.find()]
@@ -317,6 +378,11 @@ async def cmd_random_message(payload):
 
 @bot.command(name='commands')
 async def cmd_help(payload):
+    """
+    Command to list all available commands
+    :param payload: The payload of the command
+    :return: None
+    """
     embed = discord.Embed(
         title="Commands",
         color=0x00ff00
@@ -330,6 +396,11 @@ async def cmd_help(payload):
 
 @bot.event
 async def on_message(message: discord.Message):
+    """
+    Event handler for when a message is sent in a channel
+    :param message: The payload of the event
+    :return: None
+    """
     if message.author.bot:
         return
     if message.channel.id == target_channel_id and not message.author.bot:
@@ -341,6 +412,11 @@ async def on_message(message: discord.Message):
 
 
 def check_video_extension(message):
+    """
+    Checks if the message contains a video attachment
+    :param message: The payload of the event
+    :return: The URL of the video attachment if it exists, otherwise None
+    """
     if not message.attachments:
         return None
     url = message.attachments[0].url
@@ -356,4 +432,3 @@ def check_video_extension(message):
 if TOKEN is None or mongo_uri is None:
     raise ValueError("TOKEN environment variable is not set in the .env file")
 bot.run(TOKEN)
-
