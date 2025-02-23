@@ -288,23 +288,25 @@ def add_rankings(embed, user: User, rankings: dict):
     return embed
 
 
-async def main(guild: discord.Guild, bot: commands.Bot, reactionThresholdGet: int):
+async def main(guild_id: int, bot: commands.Bot, get_reaction_threshold: int):
     global rankings
     global reactionThreshold
-    reactionThreshold = reactionThresholdGet
+    reactionThreshold = get_reaction_threshold
 
     print("Hall Of Fame Wrapped 2024 is being prepared... 🎁")
 
-    wrappedChannel = bot.get_channel(1322849654190243861)
-    await wrappedChannel.send("Hall Of Fame Wrapped 2024 is being prepared... 🎁")
+    guild = bot.get_guild(guild_id)
+    # TODO: Make the channel dynamic so that it will create a new thread in the HOF channel for each server
+    wrapped_channel = bot.get_channel(1322849654190243861)
+    await wrapped_channel.send("Hall Of Fame Wrapped 2024 is being prepared... 🎁")
 
     initialize_users(guild)
     await process_all_server_messages(guild)
     rankings = rank_stats(users)
 
     for user in users.values():
-        wrappedEmbed = create_embed(user, guild)
+        wrapped_embed = create_embed(user, guild)
 
-        if wrappedEmbed is not None:
-            await wrappedChannel.send("Your Hall Of Fame Wrapped 2024 is here <@" + str(user.id) + "> 🎉", embed=wrappedEmbed)
+        if wrapped_embed is not None:
+            await wrapped_channel.send("Your Hall Of Fame Wrapped 2024 is here <@" + str(user.id) + "> 🎉", embed=wrapped_embed)
     return users
