@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 from pymongo.mongo_client import MongoClient
 import commands
 import events
+import utils
 
 load_dotenv()
 TOKEN = os.getenv('KEY')
@@ -53,7 +54,8 @@ dev_user = 230698327589650432
 @bot.event
 async def on_ready():
     global server_classes
-    server_classes = await events.on_ready(bot, tree, db_client)
+    server_classes = await utils.get_server_classes(db_client)
+    await events.on_ready(bot, tree, db_client, server_classes)
 
 @bot.event
 async def on_raw_reaction_add(payload: discord.RawReactionActionEvent):
