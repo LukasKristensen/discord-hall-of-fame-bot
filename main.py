@@ -21,6 +21,19 @@ bot = commands.Bot(command_prefix="!", intents=discord.Intents.all())
 #       -   If opening up for multiple servers: create security measures to
 #           validate that the origin of the message correlates to the server
 #       -   Research topic: How reliable is the `guild_id` attribute of a message? Can it be spoofed?
+#       -   Server join routine:
+#               - Setup new db document for the server
+#               - Create a new HOF channel for the server and store the channel_id in the db
+#               - Create a new leaderboard message for the server and store the message_id in the db
+#               - Create a new server config document for the server
+#               - Server setup routine for configuring the bot with threshold and other settings
+#       -   Server leave routine:
+#               - Delete the db document for the server
+#       -   Refactor the code to be able to handle multiple servers
+#       -   Setup a server on azure to host the bot
+#       -   Research db security measures to prevent unauthorized access
+#       -   Disable getRandomMessage or add a server parameter to the command
+#       -   Optimize the code to handle multiple servers without performance issues on scaling
 
 db = client['caroon']
 collection = db['hall_of_fame_messages']
