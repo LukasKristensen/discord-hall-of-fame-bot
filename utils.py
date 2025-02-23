@@ -2,6 +2,7 @@ import discord
 import datetime
 from datetime import timezone
 from message_reactions import most_reactions, reaction_count_without_author
+import server_class
 
 async def validate_message(message: discord.RawReactionActionEvent, bot: discord.Client, collection,
                            reaction_threshold: int, post_due_date: int, target_channel_id: int):
@@ -82,7 +83,7 @@ async def remove_embed(message_id: int, collection, bot: discord.Client, target_
     hall_of_fame_message = await target_channel.fetch_message(hall_of_fame_message_id)
     await hall_of_fame_message.edit(content="** **", embed=None)
 
-async def update_leaderboard(collection, bot: discord.Client, server_config, target_channel_id: int, reaction_threshold: int):
+async def update_leaderboard(collection, bot: discord.Client, server_config, target_channel_id: int, reaction_threshold: int, leaderboard_length: int = 20):
     """
     Update the leaderboard of the Hall of Fame channel with the top 20 most reacted messages
     :param collection:
@@ -90,13 +91,14 @@ async def update_leaderboard(collection, bot: discord.Client, server_config, tar
     :param server_config:
     :param target_channel_id:
     :param reaction_threshold:
+    :param leaderboard_length:
     :return:
     """
     most_reacted_messages = list(collection.find().sort("reaction_count", -1).limit(30))
     msg_id_array = server_config.find_one({"leaderboard_message_ids": {"$exists": True}})
 
     # Update the reaction count of the top 30 most reacted messages
-    for i in range(30):
+    for i in range(min(len(most_reacted_messages), collection.count_documents({})-1)):
         message = most_reacted_messages[i]
         channel = bot.get_channel(message["channel_id"])
         message = await channel.fetch_message(message["message_id"])
@@ -108,7 +110,7 @@ async def update_leaderboard(collection, bot: discord.Client, server_config, tar
 
     # Update the embeds of the top 20 most reacted messages
     if msg_id_array:
-        for i in range(20):
+        for i in range(min(leaderboard_length, collection.count_documents({})-1)):
             hall_of_fame_channel = bot.get_channel(target_channel_id)
             hall_of_fame_message = await hall_of_fame_channel.fetch_message(msg_id_array["leaderboard_message_ids"][i])
             original_channel = bot.get_channel(most_reacted_messages[i]["channel_id"])
@@ -293,26 +295,48 @@ async def create_database_context(server, db_client):
     :return: The database context
     """
     database = db_client[str(server.id)]
-    new_collection = database['hall_of_fame_messages']
 
-    new_collection.insert_one({"message_id": 1, "channel_id": 1, "guild_id": 1, "hall_of_fame_message_id": 1, "reaction_count": 1})
+    hall_of_fame_messages = database['hall_of_fame_messages']
+    hall_of_fame_messages.insert_one({"message_id": 1, "channel_id": 1, "guild_id": 1, "hall_of_fame_message_id": 1, "reaction_count": 1})
+
     new_server_config = database['server_config']
 
     # Create a new channel for the Hall of Fame
     hall_of_fame_channel = await server.create_text_channel("hall-of-fame")
-    await hall_of_fame_channel.send("Hall of Fame channel created.\nCreating 20 temporary messages for the leaderboard\n(do not delete these messages, they are for future use)")
 
-    for i in range(20):
+    await hall_of_fame_channel.send(
+        "Hall of Fame channel created.\nCreating 20 temporary messages for the leaderboard\n"+
+        "(do not delete these messages, they are for future use)\n"+
+        "Use the command /reaction_threshold_configure to set the reaction threshold for posting a message in the Hall of Fame channel.")
+
+    # Set the permissions for the Hall of Fame channel to only allow the bot to read messages
+    if server.me.guild_permissions.administrator:
+        await hall_of_fame_channel.set_permissions(server.default_role, read_messages=True, send_messages=False)
+
+    leader_board_messages = []
+    for i in range(10):
         message = await hall_of_fame_channel.send(f"**HallOfFame#{i+1}**")
-        new_server_config.update_one({}, {"$push": {"leaderboard_message_ids": int(message.id) }})
+        leader_board_messages.append(message.id)
+
+    new_server_config.insert_one({
+        "guild_id": server.id,
+        "hall_of_fame_channel_id": hall_of_fame_channel.id,
+        "reaction_threshold": 7,
+        "post_due_date": 28,
+        "leaderboard_message_ids": leader_board_messages,
+        "sweep_limit": 1000,
+        "sweep_limited": False
+    })
     print(f"Database context created for server {server.id}")
 
-    new_server_config.update_one({}, {"$set": {
-        "target_channel_id": hall_of_fame_channel.id,
-        "reaction_threshold": 7,
-        "post_due_date": 28
-    }})
-    return database
+    new_server_class = server_class.Server(
+        hall_of_fame_channel_id= hall_of_fame_channel.id,
+        guild_id=server.id,
+        reaction_threshold=7,
+        sweep_limit=1000,
+        sweep_limited=False,
+        post_due_date=28)
+    return new_server_class
 
 
 def delete_database_context(server_id: int, db_client):
@@ -322,8 +346,30 @@ def delete_database_context(server_id: int, db_client):
     :param db_client: The MongoDB client
     :return: None
     """
-    db = db_client[str(server_id)]
-    print(f"Deleting database context for server {server_id}", db)
-    db.drop_collection('hall_of_fame_messages')
-    db.drop_collection('server_config')
+    print(f"Deleting database context for server {server_id}")
     db_client.drop_database(str(server_id))
+
+def get_server_classes(db_client):
+    """
+    Get all server classes from the database
+    :param db_client: The MongoDB client
+    :return: A list of server classes
+    """
+    all_database_names = db_client.list_database_names()
+    db_clients = []
+    for database_name in all_database_names:
+        if database_name.isnumeric():
+            db_clients.append(db_client[database_name])
+
+    server_classes = {}
+    for db in db_clients:
+        server_config = db['server_config']
+        server_config = server_config.find_one({})
+        server_classes[server_config["guild_id"]] = server_class.Server(
+            hall_of_fame_channel_id= server_config["hall_of_fame_channel_id"],
+            guild_id=server_config["guild_id"],
+            reaction_threshold=server_config["reaction_threshold"],
+            sweep_limit=server_config["sweep_limit"],
+            sweep_limited=server_config["sweep_limited"],
+            post_due_date=server_config["post_due_date"])
+    return server_classes

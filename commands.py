@@ -64,3 +64,22 @@ async def manual_sweep(interaction, guild_id: int, sweep_limit: int, sweep_limit
         await interaction.response.send_message("You are not authorized to use this command")
         return
     await utils.check_all_server_messages(guild_id, sweep_limit, sweep_limited, bot, collection, reaction_threshold, post_due_date, target_channel_id)
+
+async def set_reaction_threshold(interaction, reaction_threshold: int, db_client):
+    """
+    Command to set the reaction threshold for posting a message in the Hall of Fame
+    :param interaction:
+    :param reaction_threshold:
+    :param db_client:
+    :return:
+    """
+    if interaction.user.id != interaction.guild.owner_id:
+        await interaction.response.send_message("You are not authorized to use this command (only for server owner)")
+        return False
+
+    db = db_client[str(interaction.guild_id)]
+    server_config = db['server_config']
+    server_config.update_one({"guild_id": interaction.guild_id}, {"$set": {"reaction_threshold": reaction_threshold}})
+
+    await interaction.response.send_message(f"Reaction threshold set to {reaction_threshold}")
+    return True
