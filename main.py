@@ -34,6 +34,7 @@ bot = commands.Bot(command_prefix="!", intents=discord.Intents.all())
 #       -   Research db security measures to prevent unauthorized access
 #       -   Disable getRandomMessage or add a server parameter to the command
 #       -   Optimize the code to handle multiple servers without performance issues on scaling
+#       -   Disable LLM model for now, as it is not optimized for multiple servers
 
 db = client['caroon']
 collection = db['hall_of_fame_messages']
