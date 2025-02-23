@@ -3,20 +3,13 @@ import asyncio
 import datetime
 import utils
 
-async def on_ready(bot: discord.Client, tree, guild_id: int, sweep_limit: int, sweep_limited: bool,
-                   collection, reaction_threshold: int, post_due_date: int, target_channel_id: int, server_config):
+async def on_ready(bot: discord.Client, tree, db_client, server_classes):
     """
     Event handler for when the bot is ready
     :param bot:
     :param tree:
-    :param guild_id:
-    :param sweep_limit:
-    :param sweep_limited:
-    :param collection:
-    :param reaction_threshold:
-    :param post_due_date:
-    :param target_channel_id:
-    :param server_config:
+    :param db_client:
+    :param server_classes:
     :return:
     """
     try:
@@ -24,11 +17,28 @@ async def on_ready(bot: discord.Client, tree, guild_id: int, sweep_limit: int, s
         print(f"Logged in as {bot.user}")
     except discord.HTTPException as e:
         print(f"Failed to sync commands: {e}")
-    await bot.change_presence(
-        activity=discord.CustomActivity(name=f'{len([x for x in collection.find()])} Hall of Fame messages', type=5))
-    await utils.check_all_server_messages(guild_id, sweep_limit, sweep_limited,  bot, collection, reaction_threshold,
-                                          post_due_date, target_channel_id)
-    await utils.update_leaderboard(collection, bot, server_config, target_channel_id, reaction_threshold)
+    hof_total_messages = 0
+
+    for server_class in server_classes.values():
+        server_collection = db_client[str(server_class.guild_id)]["hall_of_fame_messages"]
+        server_config = db_client[str(server_class.guild_id)]["server_config"]
+        hof_total_messages += server_collection.count_documents({})
+        await utils.check_all_server_messages(
+            server_class.guild_id,
+            server_class.sweep_limit,
+            server_class.sweep_limited,
+            bot,
+            server_collection,
+            server_class.reaction_threshold,
+            server_class.post_due_date,
+            server_class.hall_of_fame_channel_id)
+        await utils.update_leaderboard(
+            server_collection,
+            bot,
+            server_config,
+            server_class.hall_of_fame_channel_id,
+            server_class.reaction_threshold)
+    await bot.change_presence(activity=discord.CustomActivity(name=f'{hof_total_messages} Hall of Fame messages', type=5))
 
     if datetime.datetime.now().month == 12 and datetime.datetime.now().day == 28:
         pass
@@ -82,7 +92,7 @@ async def on_message(message, bot, target_channel_id):
 
 async def guild_join(server, db_client):
     print(f"Joined server {server.name}")
-    await utils.create_database_context(server, db_client)
+    return await utils.create_database_context(server, db_client)
 
 async def guild_remove(server, db_client):
     print(f"Left server {server.name}")

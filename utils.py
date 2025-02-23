@@ -289,7 +289,7 @@ def check_video_extension(message):
             return video_url
     return None
 
-async def create_database_context(server, db_client):
+async def create_database_context(server, db_client, leader_board_length: int = 10):
     """
     Create a database context for the server
     :param server: The server object
@@ -307,7 +307,7 @@ async def create_database_context(server, db_client):
     hall_of_fame_channel = await server.create_text_channel("hall-of-fame")
 
     await hall_of_fame_channel.send(
-        "Hall of Fame channel created.\nCreating 20 temporary messages for the leaderboard\n"+
+        f"Hall of Fame channel created.\nCreating {leader_board_length} temporary messages for the leaderboard\n"+
         "(do not delete these messages, they are for future use)\n"+
         "Use the command /reaction_threshold_configure to set the reaction threshold for posting a message in the Hall of Fame channel.")
 
@@ -316,7 +316,7 @@ async def create_database_context(server, db_client):
         await hall_of_fame_channel.set_permissions(server.default_role, read_messages=True, send_messages=False)
 
     leader_board_messages = []
-    for i in range(10):
+    for i in range(leader_board_length):
         message = await hall_of_fame_channel.send(f"**HallOfFame#{i+1}**")
         leader_board_messages.append(message.id)
 
