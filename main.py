@@ -83,12 +83,9 @@ async def on_raw_reaction_remove(payload: discord.RawReactionActionEvent):
 
 @bot.event
 async def on_message(message: discord.Message):
-    print(f"message.guild.id: {message.guild.id} in: {server_classes}")
     server_class = server_classes[message.guild.id]
     target_channel_id = server_class.hall_of_fame_channel_id
-
     await events.on_message(message, bot, target_channel_id)
-
 
 @bot.event
 async def on_guild_join(server):
