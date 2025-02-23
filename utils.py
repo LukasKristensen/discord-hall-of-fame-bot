@@ -140,6 +140,8 @@ async def check_all_server_messages(guild_id: int, sweep_limit: int, sweep_limit
     for channel in guild.channels:
         if not isinstance(channel, discord.TextChannel):
             continue # Ignore if the current channel is not a text channel
+        if channel.id == target_channel_id:
+            continue
         async for message in channel.history(limit=sweep_limit):
             try:
                 if message.author.bot:

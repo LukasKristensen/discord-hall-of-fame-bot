@@ -54,7 +54,7 @@ dev_user = 230698327589650432
 @bot.event
 async def on_ready():
     global server_classes
-    server_classes = await utils.get_server_classes(db_client)
+    server_classes = utils.get_server_classes(db_client)
     await events.on_ready(bot, tree, db_client, server_classes)
 
 @bot.event
