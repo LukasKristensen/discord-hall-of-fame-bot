@@ -18,23 +18,29 @@ client = MongoClient(mongo_uri)
 bot = commands.Bot(command_prefix="!", intents=discord.Intents.all())
 
 # todo: Make dynamic for multiple servers
-#       -   If opening up for multiple servers: create security measures to
+#       [-] If opening up for multiple servers: create security measures to
 #           validate that the origin of the message correlates to the server
-#       -   Research topic: How reliable is the `guild_id` attribute of a message? Can it be spoofed?
-#       -   Server join routine:
-#               - Setup new db document for the server
-#               - Create a new HOF channel for the server and store the channel_id in the db
-#               - Create a new leaderboard message for the server and store the message_id in the db
-#               - Create a new server config document for the server
-#               - Server setup routine for configuring the bot with threshold and other settings
-#       -   Server leave routine:
-#               - Delete the db document for the server
-#       -   Refactor the code to be able to handle multiple servers
-#       -   Setup a server on azure to host the bot
-#       -   Research db security measures to prevent unauthorized access
-#       -   Disable getRandomMessage or add a server parameter to the command
-#       -   Optimize the code to handle multiple servers without performance issues on scaling
-#       -   Disable LLM model for now, as it is not optimized for multiple servers
+#       [-] Research topic: How reliable is the `guild_id` attribute of a message? Can it be spoofed?
+#       [-] Server join routine:
+#               [-] Setup new db document for the server
+#               [-] Create a new HOF channel for the server and store the channel_id in the db
+#               [-] Create a new leaderboard message for the server and store the message_id in the db
+#               [-] Create a new server config document for the server
+#               [-] Server setup routine for configuring the bot with threshold and other settings
+#       [-] Server leave routine:
+#               [-] Delete the db document for the server
+#       [-] Refactor the code to be able to handle multiple servers
+#       [-] Setup a server on azure to host the bot
+#       [-] Research db security measures to prevent unauthorized access
+#       [-] Disable getRandomMessage or add a server parameter to the command
+#       [-] Optimize the code to handle multiple servers without performance issues on scaling
+#       [x] Disable LLM model for now, as it is not optimized for multiple servers
+#       [-] Language support MVP:
+#               [-] Support Danish and English
+#               [-] Add a language parameter to the command in the bot setup routine or as a command
+#               [-] Translations document for each language
+#               [-] Implement the translations in the bot
+#       [-] Refactor the bot for supporting slash commands (Better user experience)
 
 db = client['caroon']
 collection = db['hall_of_fame_messages']
@@ -58,20 +64,6 @@ async def on_ready():
 
     if datetime.datetime.now().month == 12 and datetime.datetime.now().day == 28:
         await hof_wrapped.main(bot.get_guild(323488126859345931), bot, reaction_threshold)
-
-
-async def check_outlier(msg_content: str):
-    """
-    Checks whether a message is an outlier for a voting-based message
-    :param msg_content: The content of the message
-    :return: boolean based on cut-off confidence from LLM
-    """
-    outlier_detection_confidence = llm_msg.check_hof_msg(str(msg_content))
-    if outlier_detection_confidence > llm_threshold:
-        bot_dev = bot.get_user(dev_user)
-        await bot_dev.send(f'Outlier detected with confidence: {outlier_detection_confidence}. Msg: {str(msg_content)}')
-        return True
-    return False
 
 
 async def validate_message(message: discord.RawReactionActionEvent):
@@ -99,9 +91,6 @@ async def validate_message(message: discord.RawReactionActionEvent):
     if corrected_reactions < reaction_threshold:
         if collection.find_one({"message_id": int(message_id)}):
             await remove_embed(message_id)
-        return
-
-    if await check_outlier(str(message.content)):
         return
 
     if collection.find_one({"message_id": int(message.id)}):
@@ -249,8 +238,6 @@ async def check_all_server_messages(guild_id = 323488126859345931, sweep_limit =
                             break  # if message is already in the database, no need to check further
                         else:
                             continue # if a total channel sweep is needed
-                    if await check_outlier(str(message.content)):
-                        continue # if the message is an outlier for a voting message ignore it
                     await post_hall_of_fame_message(message)
                 elif message_reactions >= reaction_threshold-3:
                     if collection.find_one({"message_id": int(message.id)}):
