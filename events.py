@@ -79,3 +79,11 @@ async def on_message(message, bot, target_channel_id):
         await asyncio.sleep(5)
         await msg.delete()
     await bot.process_commands(message)
+
+async def guild_join(server, db_client):
+    print(f"Joined server {server.name}")
+    await utils.create_database_context(server, db_client)
+
+async def guild_remove(server, db_client):
+    print(f"Left server {server.name}")
+    utils.delete_database_context(server.id, db_client)

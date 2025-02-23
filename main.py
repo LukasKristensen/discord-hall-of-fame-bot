@@ -79,6 +79,15 @@ async def on_raw_reaction_remove(payload: discord.RawReactionActionEvent):
 async def on_message(message: discord.Message):
     await events.on_message(message, bot, target_channel_id)
 
+
+@bot.event
+async def on_guild_join(server):
+    await events.guild_join(server, client)
+
+@bot.event
+async def on_guild_remove(server):
+    await events.guild_remove(server, client)
+
 @tree.command(name="get_random_message", description="Get a random message from the Hall of Fame database")
 async def get_random_message(interaction: discord.Interaction):
     await commands.get_random_message(interaction, collection, bot, reaction_threshold)

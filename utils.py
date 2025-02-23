@@ -93,7 +93,7 @@ async def update_leaderboard(collection, bot: discord.Client, server_config, tar
     :return:
     """
     most_reacted_messages = list(collection.find().sort("reaction_count", -1).limit(30))
-    msg_id_array = server_config.find_one({"leaderboard_message_ids_updated": {"$exists": True}})
+    msg_id_array = server_config.find_one({"leaderboard_message_ids": {"$exists": True}})
 
     # Update the reaction count of the top 30 most reacted messages
     for i in range(30):
@@ -110,7 +110,7 @@ async def update_leaderboard(collection, bot: discord.Client, server_config, tar
     if msg_id_array:
         for i in range(20):
             hall_of_fame_channel = bot.get_channel(target_channel_id)
-            hall_of_fame_message = await hall_of_fame_channel.fetch_message(msg_id_array["leaderboard_message_ids_updated"][i])
+            hall_of_fame_message = await hall_of_fame_channel.fetch_message(msg_id_array["leaderboard_message_ids"][i])
             original_channel = bot.get_channel(most_reacted_messages[i]["channel_id"])
             original_message = await original_channel.fetch_message(most_reacted_messages[i]["message_id"])
 
@@ -284,3 +284,46 @@ def check_video_extension(message):
             video_url = url.split(extension)[0] + extension
             return video_url
     return None
+
+async def create_database_context(server, db_client):
+    """
+    Create a database context for the server
+    :param server: The server object
+    :param db_client: The MongoDB client
+    :return: The database context
+    """
+    database = db_client[str(server.id)]
+    new_collection = database['hall_of_fame_messages']
+
+    new_collection.insert_one({"message_id": 1, "channel_id": 1, "guild_id": 1, "hall_of_fame_message_id": 1, "reaction_count": 1})
+    new_server_config = database['server_config']
+
+    # Create a new channel for the Hall of Fame
+    hall_of_fame_channel = await server.create_text_channel("hall-of-fame")
+    await hall_of_fame_channel.send("Hall of Fame channel created.\nCreating 20 temporary messages for the leaderboard\n(do not delete these messages, they are for future use)")
+
+    for i in range(20):
+        message = await hall_of_fame_channel.send(f"**HallOfFame#{i+1}**")
+        new_server_config.update_one({}, {"$push": {"leaderboard_message_ids": int(message.id) }})
+    print(f"Database context created for server {server.id}")
+
+    new_server_config.update_one({}, {"$set": {
+        "target_channel_id": hall_of_fame_channel.id,
+        "reaction_threshold": 7,
+        "post_due_date": 28
+    }})
+    return database
+
+
+def delete_database_context(server_id: int, db_client):
+    """
+    Delete the database context for the server
+    :param server_id: The ID of the server
+    :param db_client: The MongoDB client
+    :return: None
+    """
+    db = db_client[str(server_id)]
+    print(f"Deleting database context for server {server_id}", db)
+    db.drop_collection('hall_of_fame_messages')
+    db.drop_collection('server_config')
+    db_client.drop_database(str(server_id))
