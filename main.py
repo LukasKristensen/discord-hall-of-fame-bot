@@ -9,11 +9,13 @@ import events
 load_dotenv()
 TOKEN = os.getenv('KEY')
 mongo_uri = os.getenv('MONGO_URI')
-client = MongoClient(mongo_uri)
+db_client = MongoClient(mongo_uri)
 messages_processing = []
 
 bot = discord_commands.Bot(command_prefix="!", intents=discord.Intents.all())
 tree = bot.tree
+server_classes = {}
+dev_user = 230698327589650432
 
 # todo: Make dynamic for multiple servers
 #       [-] If opening up for multiple servers: create security measures to
@@ -46,60 +48,83 @@ tree = bot.tree
 #       [-] Extract all variables to a config file in the db for each server
 #       [-] Refactor historical search to be date-sorted, so they are first stored in a list and then sorted by date and then posted
 
-db = client['caroon']
-collection = db['hall_of_fame_messages']
-server_config = db['server_config']
-target_channel_id = 1176965358796681326 # Hall-Of-Fame (HOF) channel
-target_guild_id = 323488126859345931
-reaction_threshold = 7
-post_due_date = 28
-dev_user = 230698327589650432
 
 #region Events
 @bot.event
 async def on_ready():
-    await events.on_ready(bot, tree, target_guild_id, 2000, False, collection, reaction_threshold,
-                          post_due_date, target_channel_id, server_config)
+    global server_classes
+    server_classes = await events.on_ready(bot, tree, db_client)
 
 @bot.event
 async def on_raw_reaction_add(payload: discord.RawReactionActionEvent):
+    server_class = server_classes[payload.guild_id]
+    collection = db_client[str(server_class.guild_id)]["hall_of_fame_messages"]
+    temp_reaction_threshold = server_class.reaction_threshold
+    post_due_date = server_class.post_due_date
+    target_channel_id = server_class.hall_of_fame_channel_id
+
     if not payload.message_id in messages_processing:
         messages_processing.append(payload.message_id)
-        await events.on_raw_reaction_add(payload, bot, collection, reaction_threshold, post_due_date, target_channel_id)
+        await events.on_raw_reaction_add(payload, bot, collection, temp_reaction_threshold, post_due_date, target_channel_id)
         messages_processing.remove(payload.message_id)
 
 @bot.event
 async def on_raw_reaction_remove(payload: discord.RawReactionActionEvent):
+    server_class = server_classes[payload.guild_id]
+    collection = db_client[str(server_class.guild_id)]["hall_of_fame_messages"]
+    temp_reaction_threshold = server_class.reaction_threshold
+    post_due_date = server_class.post_due_date
+    target_channel_id = server_class.hall_of_fame_channel_id
+
     if not payload.message_id in messages_processing:
         messages_processing.append(payload.message_id)
-        await events.on_raw_reaction_remove(payload, bot, collection, reaction_threshold, post_due_date, target_channel_id)
+        await events.on_raw_reaction_remove(payload, bot, collection, temp_reaction_threshold, post_due_date, target_channel_id)
         messages_processing.remove(payload.message_id)
 
 @bot.event
 async def on_message(message: discord.Message):
+    print(f"message.guild.id: {message.guild.id} in: {server_classes}")
+    server_class = server_classes[message.guild.id]
+    target_channel_id = server_class.hall_of_fame_channel_id
+
     await events.on_message(message, bot, target_channel_id)
 
 
 @bot.event
 async def on_guild_join(server):
-    await events.guild_join(server, client)
+    new_server_class = await events.guild_join(server, db_client)
+    server_classes[server.id] = new_server_class
 
 @bot.event
 async def on_guild_remove(server):
-    await events.guild_remove(server, client)
+    await events.guild_remove(server, db_client)
+    server_classes.pop(server.id)
 
 @tree.command(name="get_random_message", description="Get a random message from the Hall of Fame database")
 async def get_random_message(interaction: discord.Interaction):
-    await commands.get_random_message(interaction, collection, bot, reaction_threshold)
+    collection = db_client[str(interaction.guild_id)]["hall_of_fame_messages"]
+    temp_reaction_threshold = server_classes[interaction.guild_id].reaction_threshold
+    await commands.get_random_message(interaction, collection, bot, temp_reaction_threshold)
 
 @tree.command(name="commands", description="List of commands")
 async def get_commands(interaction: discord.Interaction):
     await commands.get_commands(interaction)
 
-@tree.command(name="manual_sweep", description="Manually sweep all messages in a server [DEV]")
+@tree.command(name="manual_sweep", description="Manually sweep all messages in a server [DEV ONLY]")
 async def manual_sweep(interaction: discord.Interaction, sweep_limit: int, guild_id: int, sweep_limited: bool):
-    await commands.manual_sweep(interaction, guild_id, sweep_limit, sweep_limited, bot, collection, reaction_threshold,
-                                post_due_date, target_channel_id, dev_user)
+    collection = db_client[str(guild_id)]["hall_of_fame_messages"]
+    temp_reaction_threshold = server_classes[guild_id].reaction_threshold
+    post_due_date = server_classes[guild_id].post_due_date
+    target_channel_id = server_classes[guild_id].hall_of_fame_channel_id
+
+    await commands.manual_sweep(interaction, guild_id, sweep_limit, sweep_limited, bot, collection,
+                                temp_reaction_threshold, post_due_date, target_channel_id, dev_user)
+
+@tree.command(name="reaction_threshold_configure", description="Configure the amount of reactions needed to post a message in the Hall of Fame")
+async def configure_bot(interaction: discord.Interaction, reaction_threshold: int):
+    completion = await commands.set_reaction_threshold(interaction, reaction_threshold, db_client)
+    if completion:
+        server_classes[interaction.guild_id].reaction_threshold = reaction_threshold
 
 # Check if the TOKEN variable is set
 if TOKEN is None or mongo_uri is None:
