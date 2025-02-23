@@ -3,7 +3,6 @@ from discord.ext import commands as discord_commands
 import os
 from dotenv import load_dotenv
 from pymongo.mongo_client import MongoClient
-import utils
 import commands
 import events
 
@@ -66,14 +65,14 @@ async def on_ready():
 async def on_raw_reaction_add(payload: discord.RawReactionActionEvent):
     if not payload.message_id in messages_processing:
         messages_processing.append(payload.message_id)
-        await events.on_raw_reaction_add(payload, utils.validate_message)
+        await events.on_raw_reaction_add(payload, bot, collection, reaction_threshold, post_due_date, target_channel_id)
         messages_processing.remove(payload.message_id)
 
 @bot.event
 async def on_raw_reaction_remove(payload: discord.RawReactionActionEvent):
     if not payload.message_id in messages_processing:
         messages_processing.append(payload.message_id)
-        await events.on_raw_reaction_remove(payload, utils.validate_message)
+        await events.on_raw_reaction_remove(payload, bot, collection, reaction_threshold, post_due_date, target_channel_id)
         messages_processing.remove(payload.message_id)
 
 @bot.event

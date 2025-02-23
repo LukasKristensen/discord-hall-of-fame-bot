@@ -35,23 +35,33 @@ async def on_ready(bot: discord.Client, tree, guild_id: int, sweep_limit: int, s
         # disabled until tested for dynamic usage across multiple servers and refactored
         # await hof_wrapped.main(bot.get_guild(guild_id), collection, reaction_threshold, target_channel_id)
 
-async def on_raw_reaction_add(payload, validate_message):
+async def on_raw_reaction_add(message: discord.RawReactionActionEvent, bot: discord.Client, collection,
+                              reaction_threshold: int, post_due_date: int, target_channel_id: int):
     """
     Event handler for when a reaction is added to a message
-    :param payload:
-    :param validate_message:
+    :param message:
+    :param bot:
+    :param collection:
+    :param reaction_threshold:
+    :param post_due_date:
+    :param target_channel_id:
     :return:
     """
-    await validate_message(payload)
+    await utils.validate_message(message, bot, collection, reaction_threshold, post_due_date, target_channel_id)
 
-async def on_raw_reaction_remove(payload, validate_message):
+async def on_raw_reaction_remove(message: discord.RawReactionActionEvent, bot: discord.Client, collection,
+                              reaction_threshold: int, post_due_date: int, target_channel_id: int):
     """
-    Event handler for when a reaction is removed from a message
-    :param payload:
-    :param validate_message:
-    :return:
+    Event handler for when a reaction is added to a message
+    :param message: The message that the reaction was removed from
+    :param bot: The bot client
+    :param collection: The collection of messages
+    :param reaction_threshold: The threshold for reactions
+    :param post_due_date: The due date for posting
+    :param target_channel_id: The target channel id
+    :return: None
     """
-    await validate_message(payload)
+    await utils.validate_message(message, bot, collection, reaction_threshold, post_due_date, target_channel_id)
 
 async def on_message(message, bot, target_channel_id):
     """
