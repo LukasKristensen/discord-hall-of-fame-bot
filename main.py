@@ -101,6 +101,19 @@ async def on_guild_remove(server):
     await events.guild_remove(server, db_client)
     server_classes.pop(server.id)
 
+@tree.command(name="setup", description="Setup the bot for the server [Owner Only]")
+async def setup(interaction: discord.Interaction):
+    if interaction.user.id != interaction.guild.owner_id:
+        await interaction.response.send_message("You are not authorized to use this command")
+        return
+    if interaction.guild_id in server_classes:
+        await interaction.response.send_message("The server is already set up")
+        return
+
+    server = interaction.guild
+    new_server_class = await events.guild_join(server, db_client)
+    server_classes[server.id] = new_server_class
+
 @tree.command(name="get_random_message", description="Get a random message from the Hall of Fame database")
 async def get_random_message(interaction: discord.Interaction):
     collection = db_client[str(interaction.guild_id)]["hall_of_fame_messages"]

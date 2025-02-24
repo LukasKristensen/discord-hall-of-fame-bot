@@ -310,8 +310,7 @@ async def create_database_context(server, db_client, leader_board_length: int = 
 
     await hall_of_fame_channel.send(
         f"Hall of Fame channel created.\nCreating {leader_board_length} temporary messages for the leaderboard.\n" +
-        "Please do not delete these messages, they are for future use.\n" +
-        "Use the command `/reaction_threshold_configure` to set the reaction threshold for posting a message in the Hall of Fame channel."
+        "Please do not delete these messages, they are for future use.\n"
     )
 
     # Set the permissions for the Hall of Fame channel to only allow the bot to read messages
