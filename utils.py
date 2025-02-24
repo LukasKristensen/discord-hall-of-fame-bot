@@ -140,9 +140,7 @@ async def check_all_server_messages(guild_id: int, sweep_limit: int, sweep_limit
     for channel in guild.channels:
         if not isinstance(channel, discord.TextChannel):
             continue # Ignore if the current channel is not a text channel
-        print("checking if the channel is the hall of fame channel:", channel.id, target_channel_id)
         if channel.id == target_channel_id:
-            print("skipping the hall of fame channel")
             continue
         async for message in channel.history(limit=sweep_limit):
             try:
