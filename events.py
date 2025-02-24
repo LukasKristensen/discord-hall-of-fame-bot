@@ -20,6 +20,7 @@ async def on_ready(bot: discord.Client, tree, db_client, server_classes):
     hof_total_messages = 0
 
     for server_class in server_classes.values():
+        print(f"Checking server {server_class.guild_id}")
         server_collection = db_client[str(server_class.guild_id)]["hall_of_fame_messages"]
         server_config = db_client[str(server_class.guild_id)]["server_config"]
         hof_total_messages += server_collection.count_documents({})
