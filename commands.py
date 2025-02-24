@@ -40,6 +40,7 @@ async def get_help(interaction):
     )
     embed.add_field(name="/help", value="List of commands", inline=False)
     embed.add_field(name="/get_random_message", value="Get a random message from the database", inline=False)
+    embed.add_field(name="/set_reaction_threshold_hof", value="Set the amount of reactions needed for a post to reach hall of fame", inline=False)
     embed.add_field(name="", value="", inline=True)
     embed.add_field(name="Need help?", value="Join the community server: https://discord.gg/r98WC5GHcn", inline=False)
     embed.add_field(name="Contribute on Github", value="https://github.com/LukasKristensen/discord-hall-of-fame-bot", inline=False)
