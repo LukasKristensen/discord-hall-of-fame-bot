@@ -47,6 +47,7 @@ async def get_help(interaction):
     embed.add_field(name="", value="", inline=True)
     embed.add_field(name="Need help?", value="Join the community server: https://discord.gg/r98WC5GHcn", inline=False)
     embed.add_field(name="Contribute on Github", value="https://github.com/LukasKristensen/discord-hall-of-fame-bot", inline=False)
+    embed.add_field(name="Invite the bot", value="https://discord.com/oauth2/authorize?client_id=1177041673352663070", inline=False)
     await interaction.response.send_message(embed=embed)
 
 async def manual_sweep(interaction, guild_id: int, sweep_limit: int, sweep_limited: bool, bot: discord.Client,
