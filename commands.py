@@ -28,7 +28,7 @@ async def get_random_message(interaction, collection, bot, reaction_threshold):
     embed = await utils.create_embed(message, reaction_threshold)
     await interaction.response.send_message(embed=embed)
 
-async def get_commands(interaction):
+async def get_help(interaction):
     """
     Command to get a list of commands
     :param interaction:
@@ -38,9 +38,10 @@ async def get_commands(interaction):
         title="Commands",
         color=0x00ff00
     )
-    embed.add_field(name="/commands", value="List of commands", inline=False)
+    embed.add_field(name="/help", value="List of commands", inline=False)
     embed.add_field(name="/get_random_message", value="Get a random message from the database", inline=False)
     embed.add_field(name="", value="", inline=True)
+    embed.add_field(name="Need help?", value="Join the community server: https://discord.gg/r98WC5GHcn", inline=False)
     embed.add_field(name="Contribute on Github", value="https://github.com/LukasKristensen/discord-hall-of-fame-bot", inline=False)
     await interaction.response.send_message(embed=embed)
 

@@ -307,18 +307,25 @@ async def create_database_context(server, db_client, leader_board_length: int = 
     hall_of_fame_channel = await server.create_text_channel("hall-of-fame")
 
     await hall_of_fame_channel.send(
-        f"Hall of Fame channel created.\nCreating {leader_board_length} temporary messages for the leaderboard\n"+
-        "(do not delete these messages, they are for future use)\n"+
-        "Use the command /reaction_threshold_configure to set the reaction threshold for posting a message in the Hall of Fame channel.")
+        f"Hall of Fame channel created.\nCreating {leader_board_length} temporary messages for the leaderboard.\n" +
+        "Please do not delete these messages, they are for future use.\n" +
+        "Use the command `/reaction_threshold_configure` to set the reaction threshold for posting a message in the Hall of Fame channel."
+    )
 
     # Set the permissions for the Hall of Fame channel to only allow the bot to read messages
     if server.me.guild_permissions.administrator:
         await hall_of_fame_channel.set_permissions(server.default_role, read_messages=True, send_messages=False)
 
+    hall_of_fame_channel.send("**Leaderboard:**")
     leader_board_messages = []
     for i in range(leader_board_length):
         message = await hall_of_fame_channel.send(f"**HallOfFame#{i+1}**")
         leader_board_messages.append(message.id)
+
+    # pin the leaderboard messages in reverse order
+    for i in range(leader_board_length):
+        await hall_of_fame_channel.get_partial_message(leader_board_messages[-1-i]).pin()
+        await hall_of_fame_channel.last_message.delete()
 
     new_server_config.insert_one({
         "guild_id": server.id,

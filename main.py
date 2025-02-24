@@ -107,9 +107,9 @@ async def get_random_message(interaction: discord.Interaction):
     temp_reaction_threshold = server_classes[interaction.guild_id].reaction_threshold
     await commands.get_random_message(interaction, collection, bot, temp_reaction_threshold)
 
-@tree.command(name="commands", description="List of commands")
-async def get_commands(interaction: discord.Interaction):
-    await commands.get_commands(interaction)
+@tree.command(name="help", description="List of commands")
+async def get_help(interaction: discord.Interaction):
+    await commands.get_help(interaction)
 
 @tree.command(name="manual_sweep", description="Manually sweep all messages in a server [DEV ONLY]")
 async def manual_sweep(interaction: discord.Interaction, sweep_limit: int, guild_id: int, sweep_limited: bool):
