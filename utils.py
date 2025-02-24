@@ -325,7 +325,11 @@ async def create_database_context(server, db_client, leader_board_length: int = 
     # pin the leaderboard messages in reverse order
     for i in range(leader_board_length):
         await hall_of_fame_channel.get_partial_message(leader_board_messages[-1-i]).pin()
-        await hall_of_fame_channel.last_message.delete()
+
+        async for pin_notification in hall_of_fame_channel.history(limit=1):
+            if pin_notification.type == discord.MessageType.pins_add:
+                await pin_notification.delete()
+                break
 
     new_server_config.insert_one({
         "guild_id": server.id,
