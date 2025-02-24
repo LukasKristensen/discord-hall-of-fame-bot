@@ -140,6 +140,10 @@ async def check_all_server_messages(guild_id: int, sweep_limit: int, sweep_limit
     for channel in guild.channels:
         if not isinstance(channel, discord.TextChannel):
             continue # Ignore if the current channel is not a text channel
+        print("checking if the channel is the hall of fame channel:", channel.id, target_channel_id)
+        if channel.id == target_channel_id:
+            print("skipping the hall of fame channel")
+            continue
         async for message in channel.history(limit=sweep_limit):
             try:
                 if message.author.bot:
@@ -287,11 +291,13 @@ def check_video_extension(message):
             return video_url
     return None
 
-async def create_database_context(server, db_client):
+async def create_database_context(server, db_client, leader_board_length: int = 10, reaction_threshold_default: int=7):
     """
     Create a database context for the server
     :param server: The server object
     :param db_client: The MongoDB client
+    :param leader_board_length: The number of messages to display in the leaderboard
+    :param reaction_threshold_default: The default reaction threshold for a message to be posted in the Hall of Fame
     :return: The database context
     """
     database = db_client[str(server.id)]
@@ -305,34 +311,44 @@ async def create_database_context(server, db_client):
     hall_of_fame_channel = await server.create_text_channel("hall-of-fame")
 
     await hall_of_fame_channel.send(
-        "Hall of Fame channel created.\nCreating 20 temporary messages for the leaderboard\n"+
-        "(do not delete these messages, they are for future use)\n"+
-        "Use the command /reaction_threshold_configure to set the reaction threshold for posting a message in the Hall of Fame channel.")
+        f"Hall of Fame channel created.\nCreating {leader_board_length} temporary messages for the leaderboard.\n" +
+        "Please do not delete these messages, they are for future use.\n" +
+        "Use the command `/reaction_threshold_configure` to set the reaction threshold for posting a message in the Hall of Fame channel."
+    )
 
     # Set the permissions for the Hall of Fame channel to only allow the bot to read messages
     if server.me.guild_permissions.administrator:
         await hall_of_fame_channel.set_permissions(server.default_role, read_messages=True, send_messages=False)
 
+    hall_of_fame_channel.send("**Leaderboard:**")
     leader_board_messages = []
-    for i in range(10):
+    for i in range(leader_board_length):
         message = await hall_of_fame_channel.send(f"**HallOfFame#{i+1}**")
         leader_board_messages.append(message.id)
+
+    # pin the leaderboard messages in reverse order
+    for i in range(leader_board_length):
+        await hall_of_fame_channel.get_partial_message(leader_board_messages[-1-i]).pin()
+        await hall_of_fame_channel.last_message.delete()
 
     new_server_config.insert_one({
         "guild_id": server.id,
         "hall_of_fame_channel_id": hall_of_fame_channel.id,
-        "reaction_threshold": 7,
+        "reaction_threshold": reaction_threshold_default,
         "post_due_date": 28,
         "leaderboard_message_ids": leader_board_messages,
         "sweep_limit": 1000,
         "sweep_limited": False
     })
     print(f"Database context created for server {server.id}")
+    await hall_of_fame_channel.send(
+        f"The amount of reactions needed for a post to reach Hall of Fame is set to {reaction_threshold_default} by default.\n" +
+        "Use the command `/reaction_threshold_configure` to set the reaction threshold for posting a message in the Hall of Fame channel.")
 
     new_server_class = server_class.Server(
         hall_of_fame_channel_id= hall_of_fame_channel.id,
         guild_id=server.id,
-        reaction_threshold=7,
+        reaction_threshold=reaction_threshold_default,
         sweep_limit=1000,
         sweep_limited=False,
         post_due_date=28)

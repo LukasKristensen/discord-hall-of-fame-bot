@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 from pymongo.mongo_client import MongoClient
 import commands
 import events
+import utils
 
 load_dotenv()
 TOKEN = os.getenv('KEY')
@@ -53,7 +54,8 @@ dev_user = 230698327589650432
 @bot.event
 async def on_ready():
     global server_classes
-    server_classes = await events.on_ready(bot, tree, db_client)
+    server_classes = utils.get_server_classes(db_client)
+    await events.on_ready(bot, tree, db_client, server_classes)
 
 @bot.event
 async def on_raw_reaction_add(payload: discord.RawReactionActionEvent):
@@ -83,6 +85,8 @@ async def on_raw_reaction_remove(payload: discord.RawReactionActionEvent):
 
 @bot.event
 async def on_message(message: discord.Message):
+    if message.author == bot.user:
+        return
     server_class = server_classes[message.guild.id]
     target_channel_id = server_class.hall_of_fame_channel_id
     await events.on_message(message, bot, target_channel_id)
@@ -103,9 +107,9 @@ async def get_random_message(interaction: discord.Interaction):
     temp_reaction_threshold = server_classes[interaction.guild_id].reaction_threshold
     await commands.get_random_message(interaction, collection, bot, temp_reaction_threshold)
 
-@tree.command(name="commands", description="List of commands")
-async def get_commands(interaction: discord.Interaction):
-    await commands.get_commands(interaction)
+@tree.command(name="help", description="List of commands")
+async def get_help(interaction: discord.Interaction):
+    await commands.get_help(interaction)
 
 @tree.command(name="manual_sweep", description="Manually sweep all messages in a server [DEV ONLY]")
 async def manual_sweep(interaction: discord.Interaction, sweep_limit: int, guild_id: int, sweep_limited: bool):
