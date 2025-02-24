@@ -140,7 +140,9 @@ async def check_all_server_messages(guild_id: int, sweep_limit: int, sweep_limit
     for channel in guild.channels:
         if not isinstance(channel, discord.TextChannel):
             continue # Ignore if the current channel is not a text channel
+        print("checking if the channel is the hall of fame channel:", channel.id, target_channel_id)
         if channel.id == target_channel_id:
+            print("skipping the hall of fame channel")
             continue
         async for message in channel.history(limit=sweep_limit):
             try:
@@ -294,6 +296,8 @@ async def create_database_context(server, db_client, leader_board_length: int = 
     Create a database context for the server
     :param server: The server object
     :param db_client: The MongoDB client
+    :param leader_board_length: The number of messages to display in the leaderboard
+    :param reaction_threshold_default: The default reaction threshold for a message to be posted in the Hall of Fame
     :return: The database context
     """
     database = db_client[str(server.id)]
@@ -337,10 +341,9 @@ async def create_database_context(server, db_client, leader_board_length: int = 
         "sweep_limited": False
     })
     print(f"Database context created for server {server.id}")
-  await hall_of_fame_channel.send(
-        f"The amount of reactions needed for a post to reach Hall of Fame is set to {reaction_threshold_default} by default.
-        "Use the command `/reaction_threshold_configure` to set the reaction threshold for posting a message in the Hall of Fame channel."
-  )
+    await hall_of_fame_channel.send(
+        f"The amount of reactions needed for a post to reach Hall of Fame is set to {reaction_threshold_default} by default.\n" +
+        "Use the command `/reaction_threshold_configure` to set the reaction threshold for posting a message in the Hall of Fame channel.")
 
     new_server_class = server_class.Server(
         hall_of_fame_channel_id= hall_of_fame_channel.id,
