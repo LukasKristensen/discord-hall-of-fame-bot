@@ -300,8 +300,6 @@ async def create_database_context(server, db_client, leader_board_length: int = 
     """
     database = db_client[str(server.id)]
 
-    database.create_collection('hall_of_fame_messages')
-
     new_server_config = database['server_config']
 
     # Create a new channel for the Hall of Fame
@@ -340,6 +338,8 @@ async def create_database_context(server, db_client, leader_board_length: int = 
         "sweep_limit": 1000,
         "sweep_limited": False
     })
+    database.create_collection('hall_of_fame_messages')
+
     print(f"Database context created for server {server.id}")
     await hall_of_fame_channel.send(
         f"The amount of reactions needed for a post to reach Hall of Fame is set to {reaction_threshold_default} by default.\n" +

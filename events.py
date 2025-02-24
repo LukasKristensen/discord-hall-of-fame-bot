@@ -17,28 +17,34 @@ async def on_ready(bot: discord.Client, tree, db_client, server_classes):
         print(f"Logged in as {bot.user}")
     except discord.HTTPException as e:
         print(f"Failed to sync commands: {e}")
+    await bot.change_presence(activity=discord.CustomActivity(name="New /slash commands integrated", type=5))
+
     hof_total_messages = 0
 
     for server_class in server_classes.values():
-        print(f"Checking server {server_class.guild_id}")
-        server_collection = db_client[str(server_class.guild_id)]["hall_of_fame_messages"]
-        server_config = db_client[str(server_class.guild_id)]["server_config"]
-        hof_total_messages += server_collection.count_documents({})
-        await utils.check_all_server_messages(
-            server_class.guild_id,
-            server_class.sweep_limit,
-            server_class.sweep_limited,
-            bot,
-            server_collection,
-            server_class.reaction_threshold,
-            server_class.post_due_date,
-            server_class.hall_of_fame_channel_id)
-        await utils.update_leaderboard(
-            server_collection,
-            bot,
-            server_config,
-            server_class.hall_of_fame_channel_id,
-            server_class.reaction_threshold)
+        try:
+            print(f"Checking server {server_class.guild_id}")
+            server_collection = db_client[str(server_class.guild_id)]["hall_of_fame_messages"]
+            server_config = db_client[str(server_class.guild_id)]["server_config"]
+            hof_total_messages += server_collection.count_documents({})
+            await utils.check_all_server_messages(
+                server_class.guild_id,
+                server_class.sweep_limit,
+                server_class.sweep_limited,
+                bot,
+                server_collection,
+                server_class.reaction_threshold,
+                server_class.post_due_date,
+                server_class.hall_of_fame_channel_id)
+            await utils.update_leaderboard(
+                server_collection,
+                bot,
+                server_config,
+                server_class.hall_of_fame_channel_id,
+                server_class.reaction_threshold)
+        except Exception as e:
+            print(f"Failed to check server {server_class.guild_id}: {e}")
+            # TODO: Log error here to a discord channel for debugging - Include server id and error message
     await bot.change_presence(activity=discord.CustomActivity(name=f'{hof_total_messages} Hall of Fame messages', type=5))
 
     if datetime.datetime.now().month == 12 and datetime.datetime.now().day == 28:
