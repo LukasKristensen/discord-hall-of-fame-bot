@@ -3,35 +3,32 @@ The purpose of the bot is to monitor the maximum amount of message reactions and
 
 <br>
 
-## Installing
-Create an .env file containing the bot key:
-```KEY:SECRET```
-
-Install packages:
-```pip install -r requirements.txt```
-
-<br>
-
 ## Configuring
-Define your Hall Of Fame channel by updating the ID to the discord channel: ```YOUR_DEDICATED_CHANNEL_ID```
 
-Define the amount of reactions necessary for posting: ```reaction_threshold```
+Add the bot to your discord server: https://discord.com/oauth2/authorize?client_id=1177041673352663070
+
+Join the Hall of Fame communit server: https://discord.gg/r98WC5GHcn
 
 <br>
 
 ## Commands
 
-| Command | Parameters (optional)     | Action                                              | Example             |
+| Command | Parameters | Action | Example |
 | :------------- |:--------------------------|:----------------------------------------------------|:--------------------|
-| !commands |                           | List of commands                                    | !commands           |
-| !manual_sweep | <sweep_limit> \<guild_id> | Manually trigger a server sweep                     | !manual_sweep 2000 1180006529575960616 |
-| !get_random_message |                           | Get a random hall-of-fame message from the database |
+| /help | | List of commands | /help |
+| /reaction_threshold_configure | <reaction_threshold:int> | Sets the Hall Of Fame reaction threshold for your server | /reaction_threshold_configure 5
+| /manual_sweep | <sweep_limit> \<guild_id> | Manually trigger a server sweep | /manual_sweep 2000 1180006529575960616 |
+| /get_random_message | | Get a random hall-of-fame message from the database | /get_random_message
+
 
 
 <br>
 
 
 ## Development Log
+
+### 1.11
+- [x] Refactored code-base for cloud deployment and for handling multiple servers
 
 ### 1.10
 - [x] Threshold increase and general adjustments
@@ -65,7 +62,6 @@ Define the amount of reactions necessary for posting: ```reaction_threshold```
 - [x] Servers most used gifs
 - [x] Users most used gifs
 
-
 ### 1.01
 - [x] Problem with using discord user profile pictures using Discord<=2.0.0
 - [x] Deploy on a remote server
@@ -76,16 +72,3 @@ Define the amount of reactions necessary for posting: ```reaction_threshold```
 - [x] When posting the message highlight the reaction emoji from the original message
 - [x] Fix message IDs not being saved/loaded correctly when validating if it has already been sent
 - [x] Create a getRandom() function for grabbing a random hall-of-fame post
-
-### Future
-- [ ] Gamebot: The user gets a hall-of-fame post and should guess if another post has more or less reactions
-- [ ] Refactor code to use the discord "interactions" library (enables the slash commands feature)
-- [ ] Make youtube videos available for preview in the hall-of-fame messages e.g. by posting the link separately (domains: https://youtu.be and https://www.youtube.com)
-- [ ] Sending a file-embed and a message-embed in the same message (makes it easier for referencing)
-
-### If bot should be invited to other servers
-- [ ] Create a command for updating variable names (restricted to user permissions)
-- [ ] Make a folder for each server with private value preferences
-- [ ] Create and specify database configs for specific server
-- [ ] Command for disabling/enabling user posts in hall-of-fame
-
