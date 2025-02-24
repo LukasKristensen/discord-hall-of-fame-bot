@@ -289,7 +289,7 @@ def check_video_extension(message):
             return video_url
     return None
 
-async def create_database_context(server, db_client, leader_board_length: int = 10):
+async def create_database_context(server, db_client, leader_board_length: int = 10, reaction_threshold_default: int=7):
     """
     Create a database context for the server
     :param server: The server object
@@ -330,18 +330,22 @@ async def create_database_context(server, db_client, leader_board_length: int = 
     new_server_config.insert_one({
         "guild_id": server.id,
         "hall_of_fame_channel_id": hall_of_fame_channel.id,
-        "reaction_threshold": 7,
+        "reaction_threshold": reaction_threshold_default,
         "post_due_date": 28,
         "leaderboard_message_ids": leader_board_messages,
         "sweep_limit": 1000,
         "sweep_limited": False
     })
     print(f"Database context created for server {server.id}")
+  await hall_of_fame_channel.send(
+        f"The amount of reactions needed for a post to reach Hall of Fame is set to {reaction_threshold_default} by default.
+        "Use the command `/reaction_threshold_configure` to set the reaction threshold for posting a message in the Hall of Fame channel."
+  )
 
     new_server_class = server_class.Server(
         hall_of_fame_channel_id= hall_of_fame_channel.id,
         guild_id=server.id,
-        reaction_threshold=7,
+        reaction_threshold=reaction_threshold_default,
         sweep_limit=1000,
         sweep_limited=False,
         post_due_date=28)
