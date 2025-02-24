@@ -300,8 +300,7 @@ async def create_database_context(server, db_client, leader_board_length: int = 
     """
     database = db_client[str(server.id)]
 
-    hall_of_fame_messages = database['hall_of_fame_messages']
-    hall_of_fame_messages.insert_one({"message_id": 1, "channel_id": 1, "guild_id": 1, "hall_of_fame_message_id": 1, "reaction_count": 1})
+    database.create_collection('hall_of_fame_messages')
 
     new_server_config = database['server_config']
 

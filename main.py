@@ -1,5 +1,6 @@
 import discord
 from discord.ext import commands as discord_commands
+from discord.app_commands import check
 import os
 from dotenv import load_dotenv
 from pymongo.mongo_client import MongoClient
@@ -101,7 +102,23 @@ async def on_guild_remove(server):
     await events.guild_remove(server, db_client)
     server_classes.pop(server.id)
 
+def is_dev_user(interaction: discord.Interaction):
+    return interaction.user.id == dev_user
+
+def is_owner(interaction: discord.Interaction):
+    return interaction.user.id == interaction.guild.owner_id
+
+@tree.command(name="restart", description="Restart the bot [DEV ONLY]")
+@check(is_dev_user)
+async def restart(interaction: discord.Interaction):
+    if interaction.user.id != dev_user:
+        await interaction.response.send_message("You are not authorized to use this command")
+        return
+    await interaction.response.send_message("Restarting the bot")
+    await bot.close()
+
 @tree.command(name="setup", description="Setup the bot for the server [Owner Only]")
+@check(is_owner)
 async def setup(interaction: discord.Interaction):
     if interaction.user.id != interaction.guild.owner_id:
         await interaction.response.send_message("You are not authorized to use this command")
@@ -125,6 +142,7 @@ async def get_help(interaction: discord.Interaction):
     await commands.get_help(interaction)
 
 @tree.command(name="manual_sweep", description="Manually sweep all messages in a server [DEV ONLY]")
+@check(is_owner)
 async def manual_sweep(interaction: discord.Interaction, sweep_limit: int, guild_id: int, sweep_limited: bool):
     collection = db_client[str(guild_id)]["hall_of_fame_messages"]
     temp_reaction_threshold = server_classes[guild_id].reaction_threshold
@@ -135,6 +153,7 @@ async def manual_sweep(interaction: discord.Interaction, sweep_limit: int, guild
                                 temp_reaction_threshold, post_due_date, target_channel_id, dev_user)
 
 @tree.command(name="reaction_threshold_configure", description="Configure the amount of reactions needed to post a message in the Hall of Fame")
+@check(is_owner)
 async def configure_bot(interaction: discord.Interaction, reaction_threshold: int):
     completion = await commands.set_reaction_threshold(interaction, reaction_threshold, db_client)
     if completion:
