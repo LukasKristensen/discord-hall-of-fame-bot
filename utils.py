@@ -417,3 +417,9 @@ async def send_server_owner_error_message(owner, e):
                 print("Error message already sent to server owner")
         except Exception as history_error:
             print(f"Failed to fetch the message history of the server owner: {history_error}")
+
+async def error_logging(bot, message):
+    target_guild = bot.get_guild(1180006529575960616)
+    target_channel = target_guild.get_channel(1344070396575617085)
+
+    await target_channel.send(f"{datetime.datetime.now()}: {message}")

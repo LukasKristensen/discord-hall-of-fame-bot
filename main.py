@@ -61,6 +61,7 @@ async def on_ready():
     for key, value in new_server_classes_dict.items():
         server_classes[key] = value
     print("Dictionary after on_ready: ", server_classes)
+    await utils.error_logging(bot, f"Logged in as {bot.user}")
 
 @bot.event
 async def on_raw_reaction_add(payload: discord.RawReactionActionEvent):
@@ -100,24 +101,26 @@ async def on_message(message: discord.Message):
 async def on_guild_join(server):
     new_server_class = await events.guild_join(server, db_client)
     server_classes[server.id] = new_server_class
+    await utils.error_logging(bot, f"Joined server {server.name}, id: {server.id}")
 
 @bot.event
 async def on_guild_remove(server):
     await events.guild_remove(server, db_client)
     server_classes.pop(server.id)
+    await utils.error_logging(bot, f"Left server {server.name}, id: {server.id}")
 
 @tree.command(name="restart", description="Restart the bot [Dev Only]")
 async def restart(interaction: discord.Interaction):
     if not await check_if_dev_user(interaction): return
 
     await interaction.response.send_message("Restarting the bot")
+    await utils.error_logging(bot, "Restarting the bot")
     await bot.close()
 
 @tree.command(name="setup", description="Setup the bot for the server [Owner Only]")
 async def setup(interaction: discord.Interaction, reaction_threshold: int):
     if not await check_if_server_owner(interaction): return
 
-    print("checking if",interaction.guild_id,"is in",db_client.list_database_names())
     if str(interaction.guild_id) in db_client.list_database_names():
         await interaction.response.send_message("The server is already set up")
         return
@@ -128,16 +131,19 @@ async def setup(interaction: discord.Interaction, reaction_threshold: int):
         await interaction.response.send_message(f"Failed to setup the bot for the server: {e}")
 
     server_classes[interaction.guild.id] = new_server_class
+    await utils.error_logging(bot, f"Setup the bot for the server {interaction.guild.name}, id: {interaction.guild.id}")
 
 @tree.command(name="get_random_message", description="Get a random message from the Hall of Fame database")
 async def get_random_message(interaction: discord.Interaction):
     collection = db_client[str(interaction.guild_id)]["hall_of_fame_messages"]
     temp_reaction_threshold = server_classes[interaction.guild_id].reaction_threshold
     await commands.get_random_message(interaction, collection, bot, temp_reaction_threshold)
+    await utils.error_logging(bot, f"Get random message command used by {interaction.user.name} in {interaction.guild.name} ({interaction.guild_id})")
 
 @tree.command(name="help", description="List of commands")
 async def get_help(interaction: discord.Interaction):
     await commands.get_help(interaction)
+    await utils.error_logging(bot, f"Help command used by {interaction.user.name} in {interaction.guild.name} ({interaction.guild_id})")
 
 @tree.command(name="manual_sweep", description="Check for any historical message that should be in the Hall of Fame [Dev Only]")
 async def manual_sweep(interaction: discord.Interaction, guild_id: str):
@@ -151,6 +157,7 @@ async def manual_sweep(interaction: discord.Interaction, guild_id: str):
 
     await commands.manual_sweep(interaction, int(guild_id), None, False, bot, collection,
                                 temp_reaction_threshold, post_due_date, target_channel_id, dev_user)
+    await utils.error_logging(bot, f"Manual sweep command used by {interaction.user.name} in {interaction.guild.name} ({interaction.guild_id})")
 
 @tree.command(name="reaction_threshold_configure", description="Configure the amount of reactions needed to post a message in the Hall of Fame [Owner Only]")
 async def configure_bot(interaction: discord.Interaction, reaction_threshold: int):
@@ -159,6 +166,7 @@ async def configure_bot(interaction: discord.Interaction, reaction_threshold: in
     completion = await commands.set_reaction_threshold(interaction, reaction_threshold, db_client)
     if completion:
         server_classes[interaction.guild_id].reaction_threshold = reaction_threshold
+    await utils.error_logging(bot, f"Reaction threshold configure command used by {interaction.user.name} in {interaction.guild.name} ({interaction.guild_id})")
 
 async def check_if_server_owner(interaction: discord.Interaction):
     """
