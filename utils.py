@@ -135,9 +135,8 @@ async def check_all_server_messages(guild_id: int, sweep_limit, sweep_limited: b
     :param target_channel_id:
     :return:
     """
-    print(f"T Checking all messages in server {guild_id}")
     guild = bot.get_guild(guild_id)
-    print(f"T Checking all messages in server {guild.name}")
+    print(f"Checking all messages in server {guild.name} ({guild_id})")
 
     for channel in guild.channels:
         try:
