@@ -19,7 +19,7 @@ async def get_random_message(interaction, collection, bot, reaction_threshold):
 
     msg_channel = bot.get_channel(int(random_msg["channel_id"]))
     if not msg_channel:
-        await interaction.response.send_message("No available messages in the database")
+        await interaction.response.send_message("No available messages in the database for this server")
         return
     message = await msg_channel.fetch_message(int(random_msg["message_id"]))
     target_channel = bot.get_channel(sender_channel)
