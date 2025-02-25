@@ -54,140 +54,110 @@ dev_user = 230698327589650432
 #region Events
 @bot.event
 async def on_ready():
-    try:
-        global server_classes
-        server_classes = utils.get_server_classes(db_client)
-        await events.on_ready(bot, tree, db_client, server_classes)
-    except Exception as e:
-        print(e)
+    global server_classes
+    server_classes = utils.get_server_classes(db_client)
+    await events.on_ready(bot, tree, db_client, server_classes)
 
 @bot.event
 async def on_raw_reaction_add(payload: discord.RawReactionActionEvent):
-    try:
-        server_class = server_classes[payload.guild_id]
-        collection = db_client[str(server_class.guild_id)]["hall_of_fame_messages"]
-        temp_reaction_threshold = server_class.reaction_threshold
-        post_due_date = server_class.post_due_date
-        target_channel_id = server_class.hall_of_fame_channel_id
+    server_class = server_classes[payload.guild_id]
+    collection = db_client[str(server_class.guild_id)]["hall_of_fame_messages"]
+    temp_reaction_threshold = server_class.reaction_threshold
+    post_due_date = server_class.post_due_date
+    target_channel_id = server_class.hall_of_fame_channel_id
 
-        if not payload.message_id in messages_processing:
-            messages_processing.append(payload.message_id)
-            await events.on_raw_reaction_add(payload, bot, collection, temp_reaction_threshold, post_due_date, target_channel_id)
-            messages_processing.remove(payload.message_id)
-    except Exception as e:
-        print(e)
+    if not payload.message_id in messages_processing:
+        messages_processing.append(payload.message_id)
+        await events.on_raw_reaction_add(payload, bot, collection, temp_reaction_threshold, post_due_date, target_channel_id)
+        messages_processing.remove(payload.message_id)
 
 @bot.event
 async def on_raw_reaction_remove(payload: discord.RawReactionActionEvent):
-    try:
-        server_class = server_classes[payload.guild_id]
-        collection = db_client[str(server_class.guild_id)]["hall_of_fame_messages"]
-        temp_reaction_threshold = server_class.reaction_threshold
-        post_due_date = server_class.post_due_date
-        target_channel_id = server_class.hall_of_fame_channel_id
+    server_class = server_classes[payload.guild_id]
+    collection = db_client[str(server_class.guild_id)]["hall_of_fame_messages"]
+    temp_reaction_threshold = server_class.reaction_threshold
+    post_due_date = server_class.post_due_date
+    target_channel_id = server_class.hall_of_fame_channel_id
 
-        if not payload.message_id in messages_processing:
-            messages_processing.append(payload.message_id)
-            await events.on_raw_reaction_remove(payload, bot, collection, temp_reaction_threshold, post_due_date, target_channel_id)
-            messages_processing.remove(payload.message_id)
-    except Exception as e:
-        print(e)
+    if not payload.message_id in messages_processing:
+        messages_processing.append(payload.message_id)
+        await events.on_raw_reaction_remove(payload, bot, collection, temp_reaction_threshold, post_due_date, target_channel_id)
+        messages_processing.remove(payload.message_id)
 
 @bot.event
 async def on_message(message: discord.Message):
-    try:
-        if message.author == bot.user:
-            return
-        server_class = server_classes[message.guild.id]
-        target_channel_id = server_class.hall_of_fame_channel_id
-        await events.on_message(message, bot, target_channel_id)
-    except Exception as e:
-        print(e)
+    if message.author == bot.user:
+        return
+    server_class = server_classes[message.guild.id]
+    target_channel_id = server_class.hall_of_fame_channel_id
+    await events.on_message(message, bot, target_channel_id)
 
 @bot.event
 async def on_guild_join(server):
-    try:
-        new_server_class = await events.guild_join(server, db_client)
-        server_classes[server.id] = new_server_class
-    except Exception as e:
-        print(e)
+    new_server_class = await events.guild_join(server, db_client)
+    server_classes[server.id] = new_server_class
+
 @bot.event
 async def on_guild_remove(server):
-    try:
-        await events.guild_remove(server, db_client)
-        server_classes.pop(server.id)
-    except Exception as e:
-        print(e)
+    await events.guild_remove(server, db_client)
+    server_classes.pop(server.id)
+
+def is_dev_user(interaction: discord.Interaction):
+    return interaction.user.id == dev_user
+
+def is_owner(interaction: discord.Interaction):
+    return interaction.user.id == interaction.guild.owner_id
 
 @tree.command(name="restart", description="Restart the bot [DEV ONLY]")
+@check(is_dev_user)
 async def restart(interaction: discord.Interaction):
-    try:
-        if interaction.user.id != dev_user:
-            await interaction.response.send_message("You are not authorized to use this command")
-            return
-        await interaction.response.send_message("Restarting the bot")
-        await bot.close()
-    except Exception as e:
-        print(e)
+    if interaction.user.id != dev_user:
+        await interaction.response.send_message("You are not authorized to use this command")
+        return
+    await interaction.response.send_message("Restarting the bot")
+    await bot.close()
 
 @tree.command(name="setup", description="Setup the bot for the server [Owner Only]")
+@check(is_owner)
 async def setup(interaction: discord.Interaction):
-    try:
-        if interaction.user.id != interaction.guild.owner_id:
-            await interaction.response.send_message("You are not authorized to use this command")
-            return
-        if interaction.guild_id in server_classes:
-            await interaction.response.send_message("The server is already set up")
-            return
+    if interaction.user.id != interaction.guild.owner_id:
+        await interaction.response.send_message("You are not authorized to use this command")
+        return
+    if interaction.guild_id in server_classes:
+        await interaction.response.send_message("The server is already set up")
+        return
 
-        server = interaction.guild
-        new_server_class = await events.guild_join(server, db_client)
-        server_classes[server.id] = new_server_class
-    except Exception as e:
-        print(e)
+    server = interaction.guild
+    new_server_class = await events.guild_join(server, db_client)
+    server_classes[server.id] = new_server_class
 
 @tree.command(name="get_random_message", description="Get a random message from the Hall of Fame database")
 async def get_random_message(interaction: discord.Interaction):
-    try:
-        collection = db_client[str(interaction.guild_id)]["hall_of_fame_messages"]
-        temp_reaction_threshold = server_classes[interaction.guild_id].reaction_threshold
-        await commands.get_random_message(interaction, collection, bot, temp_reaction_threshold)
-    except Exception as e:
-        print(e)
+    collection = db_client[str(interaction.guild_id)]["hall_of_fame_messages"]
+    temp_reaction_threshold = server_classes[interaction.guild_id].reaction_threshold
+    await commands.get_random_message(interaction, collection, bot, temp_reaction_threshold)
 
 @tree.command(name="help", description="List of commands")
 async def get_help(interaction: discord.Interaction):
-    try:
-        await commands.get_help(interaction)
-    except Exception as e:
-        print(e)
+    await commands.get_help(interaction)
 
 @tree.command(name="manual_sweep", description="Manually sweep all messages in a server [DEV ONLY]")
+@check(is_owner)
 async def manual_sweep(interaction: discord.Interaction, sweep_limit: int, guild_id: int, sweep_limited: bool):
-    try:
-        if interaction.user.id != dev_user:
-            await interaction.response.send_message("You are not authorized to use this command")
-            return
-        collection = db_client[str(guild_id)]["hall_of_fame_messages"]
-        temp_reaction_threshold = server_classes[guild_id].reaction_threshold
-        post_due_date = server_classes[guild_id].post_due_date
-        target_channel_id = server_classes[guild_id].hall_of_fame_channel_id
+    collection = db_client[str(guild_id)]["hall_of_fame_messages"]
+    temp_reaction_threshold = server_classes[guild_id].reaction_threshold
+    post_due_date = server_classes[guild_id].post_due_date
+    target_channel_id = server_classes[guild_id].hall_of_fame_channel_id
 
-        await commands.manual_sweep(interaction, guild_id, sweep_limit, sweep_limited, bot, collection,
-                                    temp_reaction_threshold, post_due_date, target_channel_id, dev_user)
-    except Exception as e:
-        print(e)
+    await commands.manual_sweep(interaction, guild_id, sweep_limit, sweep_limited, bot, collection,
+                                temp_reaction_threshold, post_due_date, target_channel_id, dev_user)
 
 @tree.command(name="reaction_threshold_configure", description="Configure the amount of reactions needed to post a message in the Hall of Fame")
+@check(is_owner)
 async def configure_bot(interaction: discord.Interaction, reaction_threshold: int):
-    try:
-        if interaction.user.id != interaction.guild.owner_id:
-            await interaction.response.send_message("You are not authorized to use this command (only for server owner)")
-        completion = await commands.set_reaction_threshold(interaction, reaction_threshold, db_client)
-        if completion:
-            server_classes[interaction.guild_id].reaction_threshold = reaction_threshold
-    except Exception as e:
-        print(e)
+    completion = await commands.set_reaction_threshold(interaction, reaction_threshold, db_client)
+    if completion:
+        server_classes[interaction.guild_id].reaction_threshold = reaction_threshold
 
 # Check if the TOKEN variable is set
 if TOKEN is None or mongo_uri is None:
