@@ -46,12 +46,13 @@ async def get_help(interaction):
     embed.add_field(name="/reaction_threshold_configure", value="Set the amount of reactions needed for a post to reach hall of fame", inline=False)
     embed.add_field(name="/setup", value="If you are the server owner, set up the bot for the server if it is not already", inline=False)
     embed.add_field(name="", value="", inline=True)
+    embed.add_field(name="Having trouble setting up the bot?", value="Make sure the bot has the correct permissions in the server or try to re-invite it", inline=False)
     embed.add_field(name="Need help?", value="Join the community server: https://discord.gg/r98WC5GHcn", inline=False)
     embed.add_field(name="Contribute on Github", value="https://github.com/LukasKristensen/discord-hall-of-fame-bot", inline=False)
     embed.add_field(name="Invite the bot", value="https://discord.com/oauth2/authorize?client_id=1177041673352663070", inline=False)
     await interaction.response.send_message(embed=embed)
 
-async def manual_sweep(interaction, guild_id: int, sweep_limit: int, sweep_limited: bool, bot: discord.Client,
+async def manual_sweep(interaction, guild_id: int, sweep_limit, sweep_limited: bool, bot: discord.Client,
                        collection, reaction_threshold: int, post_due_date: int, target_channel_id: int, dev_user: int):
     """
     Command to manually sweep all messages in a server [DEV]
@@ -70,7 +71,7 @@ async def manual_sweep(interaction, guild_id: int, sweep_limit: int, sweep_limit
     if interaction.user.id != dev_user:
         await interaction.response.send_message("You are not authorized to use this command")
         return
-    await utils.check_all_server_messages(guild_id, sweep_limit, sweep_limited, bot, collection, reaction_threshold, post_due_date, target_channel_id)
+    await utils.check_all_server_messages(int(guild_id), sweep_limit, sweep_limited, bot, collection, reaction_threshold, post_due_date, target_channel_id)
 
 async def set_reaction_threshold(interaction, reaction_threshold: int, db_client):
     """

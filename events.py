@@ -20,6 +20,20 @@ async def on_ready(bot: discord.Client, tree, db_client, server_classes):
     await bot.change_presence(activity=discord.CustomActivity(name="New /slash commands integrated", type=5))
 
     hof_total_messages = 0
+    new_server_classes = {}
+
+    # Check if any of the joined guilds are not in the database
+    for guild in bot.guilds:
+        try:
+            print(f"Checking guild {guild.name}")
+            if not str(guild.id) in db_client.list_database_names():
+                print(f"Guild {guild.name} not found in database, creating...")
+                new_server_class = await utils.create_database_context(guild, db_client)
+                new_server_classes[guild.id] = new_server_class
+        except Exception as e:
+            print(f"Failed to create database context for guild {guild.name}: {e}")
+            await utils.send_server_owner_error_message(guild.owner, e)
+
 
     for server_class in server_classes.values():
         try:
@@ -51,6 +65,7 @@ async def on_ready(bot: discord.Client, tree, db_client, server_classes):
         pass
         # disabled until tested for dynamic usage across multiple servers and refactored
         # await hof_wrapped.main(bot.get_guild(guild_id), collection, reaction_threshold, target_channel_id)
+    return new_server_classes
 
 async def on_raw_reaction_add(message: discord.RawReactionActionEvent, bot: discord.Client, collection,
                               reaction_threshold: int, post_due_date: int, target_channel_id: int):
@@ -97,9 +112,12 @@ async def on_message(message, bot, target_channel_id):
         await msg.delete()
     await bot.process_commands(message)
 
-async def guild_join(server, db_client):
+async def guild_join(server, db_client, reaction_threshold: int = 7):
     print(f"Joined server {server.name}")
-    return await utils.create_database_context(server, db_client)
+    try:
+        return await utils.create_database_context(server, db_client, reaction_threshold_default=reaction_threshold)
+    except Exception as e:
+        print(f"Failed to create database context for server {server.name}: {e}")
 
 async def guild_remove(server, db_client):
     print(f"Left server {server.name}")

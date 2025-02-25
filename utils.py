@@ -121,12 +121,12 @@ async def update_leaderboard(collection, bot: discord.Client, server_config, tar
             if original_message.attachments:
                 await hall_of_fame_message.edit(content=f"**HallOfFame#{i+1}**\n{original_message.attachments[0].url}")
 
-async def check_all_server_messages(guild_id: int, sweep_limit: int, sweep_limited: bool, bot: discord.Client,
+async def check_all_server_messages(guild_id: int, sweep_limit, sweep_limited: bool, bot: discord.Client,
                                     collection, reaction_threshold: int, post_due_date: int, target_channel_id: int):
     """
     Check all messages in a server for Hall of Fame eligibility
     :param guild_id:
-    :param sweep_limit:
+    :param sweep_limit: Int/None
     :param sweep_limited:
     :param bot:
     :param collection:
@@ -135,34 +135,39 @@ async def check_all_server_messages(guild_id: int, sweep_limit: int, sweep_limit
     :param target_channel_id:
     :return:
     """
+    print(f"T Checking all messages in server {guild_id}")
     guild = bot.get_guild(guild_id)
+    print(f"T Checking all messages in server {guild.name}")
 
     for channel in guild.channels:
-        if not isinstance(channel, discord.TextChannel):
-            continue # Ignore if the current channel is not a text channel
-        if channel.id == target_channel_id:
-            continue
-        async for message in channel.history(limit=sweep_limit):
-            try:
-                if message.author.bot:
-                    continue  # Ignore messages from bots
-                if (datetime.datetime.now(timezone.utc) - message.created_at).days > post_due_date:
-                    break # If the message is older than the due date, no need to check further
-                message_reactions = await reaction_count_without_author(message)
+        try:
+            if not isinstance(channel, discord.TextChannel):
+                continue # Ignore if the current channel is not a text channel
+            if channel.id == target_channel_id:
+                continue
+            async for message in channel.history(limit=sweep_limit):
+                try:
+                    if message.author.bot:
+                        continue  # Ignore messages from bots
+                    if (datetime.datetime.now(timezone.utc) - message.created_at).days > post_due_date and sweep_limit is not None:
+                        break # If the message is older than the due date, no need to check further
+                    message_reactions = await reaction_count_without_author(message)
 
-                if message_reactions >= reaction_threshold:
-                    if collection.find_one({"message_id": int(message.id)}):
-                        await update_reaction_counter(message, collection, bot, target_channel_id)
-                        if sweep_limited:
-                            break  # if message is already in the database, no need to check further
-                        else:
-                            continue # if a total channel sweep is needed
-                    await post_hall_of_fame_message(message, bot, collection, target_channel_id, reaction_threshold)
-                elif message_reactions >= reaction_threshold-3:
-                    if collection.find_one({"message_id": int(message.id)}):
-                        await remove_embed(message.id, collection, bot, target_channel_id)
-            except Exception as e:
-                print(f'An error occurred: {e}')
+                    if message_reactions >= reaction_threshold:
+                        if collection.find_one({"message_id": int(message.id)}):
+                            await update_reaction_counter(message, collection, bot, target_channel_id)
+                            if sweep_limited:
+                                break  # if message is already in the database, no need to check further
+                            else:
+                                continue # if a total channel sweep is needed
+                        await post_hall_of_fame_message(message, bot, collection, target_channel_id, reaction_threshold)
+                    elif message_reactions >= reaction_threshold-3:
+                        if collection.find_one({"message_id": int(message.id)}):
+                            await remove_embed(message.id, collection, bot, target_channel_id)
+                except Exception as e:
+                    print(f'An error occurred: {e}')
+        except Exception as e:
+            print(f'An error occurred: {e}')
 
 async def post_hall_of_fame_message(message: discord.Message, bot: discord.Client, collection, target_channel_id: int, reaction_threshold: int):
     """
@@ -389,3 +394,27 @@ def get_server_classes(db_client):
             sweep_limited=server_config["sweep_limited"],
             post_due_date=server_config["post_due_date"])
     return server_classes
+
+
+async def send_server_owner_error_message(owner, e):
+    """
+    Send an error message to the server owner
+    :param owner: The owner of the server
+    :param e: The error message
+    :return: None
+    """
+    if owner:
+        try:
+            # Fetch the message history of the owner
+            messages = []
+            async for message in owner.history(limit=100):
+                messages.append(message)
+            # Check if the specific message has already been sent
+            message_already_sent = any("Failed to set up the bot for your server" in msg.content for msg in messages)
+            if not message_already_sent:
+                print(f"Sending error message to server owner {owner.name}")
+                await owner.send(f"Failed to set up the bot for your server: {e}")
+            else:
+                print("Error message already sent to server owner")
+        except Exception as history_error:
+            print(f"Failed to fetch the message history of the server owner: {history_error}")
