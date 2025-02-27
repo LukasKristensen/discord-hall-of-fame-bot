@@ -347,7 +347,8 @@ async def create_database_context(server, db_client, leader_board_length: int = 
     print(f"Database context created for server {server.id}")
     await hall_of_fame_channel.send(
         f"The amount of reactions needed for a post to reach Hall of Fame is set to {reaction_threshold_default} by default.\n" +
-        "Use the command `/reaction_threshold_configure` to set the reaction threshold for posting a message in the Hall of Fame channel.")
+        "Use the command `/reaction_threshold_configure` to set the reaction threshold for posting a message in the Hall of Fame channel.\n" +
+        "Note that the reaction threshold does not take into account the author's reaction to their own message.)"
 
     new_server_class = server_class.Server(
         hall_of_fame_channel_id= hall_of_fame_channel.id,
