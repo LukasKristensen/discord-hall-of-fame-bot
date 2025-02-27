@@ -121,6 +121,10 @@ async def restart(interaction: discord.Interaction):
 async def setup(interaction: discord.Interaction, reaction_threshold: int):
     if not await check_if_server_owner(interaction): return
 
+    if not interaction.guild.me.guild_permissions.manage_channels or not interaction.guild.me.guild_permissions.manage_messages:
+        await interaction.response.send_message("The bot does not have the required permissions to setup the server")
+        return
+
     if str(interaction.guild_id) in db_client.list_database_names():
         await interaction.response.send_message("The server is already set up")
         return
