@@ -210,7 +210,7 @@ async def create_embed(message: discord.Message, reaction_threshold: int):
         )
         top_reaction = most_reactions(message.reactions)
 
-        embed.set_author(name=message.author.name, icon_url=message.author.avatar.url)
+        embed.set_author(name=message.author.name, icon_url=message.author.avatar.url if message.author.avatar else None)
 
         corrected_reactions = await reaction_count_without_author(message)
         embed.add_field(name=f"{corrected_reactions} Reactions ", value=top_reaction[0].emoji, inline=True)
@@ -240,7 +240,7 @@ async def create_embed(message: discord.Message, reaction_threshold: int):
         )
 
         top_reaction = most_reactions(message.reactions)
-        embed.set_author(name=message.author.name, icon_url=message.author.avatar.url)
+        embed.set_author(name=message.author.name, icon_url=message.author.avatar.url if message.author.avatar else None)
 
         corrected_reactions = await reaction_count_without_author(message)
 
@@ -268,7 +268,7 @@ async def create_embed(message: discord.Message, reaction_threshold: int):
         )
         top_reaction = most_reactions(message.reactions)
 
-        embed.set_author(name=message.author.name, icon_url=message.author.avatar.url)
+        embed.set_author(name=message.author.name, icon_url=message.author.avatar.url if message.author.avatar else None)
         if message.attachments:
             embed.set_image(url=message.attachments[0].url)
 
