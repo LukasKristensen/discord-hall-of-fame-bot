@@ -38,10 +38,17 @@ async def validate_message(message: discord.RawReactionActionEvent, bot: discord
         return
 
     if collection.find_one({"message_id": int(message.id)}):
-        collection.update_one({"message_id": int(message.id)},
-                              {"$set": {"reaction_count": await reaction_count_without_author(message)}})
-        await update_reaction_counter(message, collection, bot, target_channel_id)
-        return
+        message_update = collection.find_one({"message_id": int(message.id)})
+        message_to_update = await bot.get_channel(target_channel_id).fetch_message(message_update["hall_of_fame_message_id"])
+        if len(message_to_update.embeds) > 0:
+            collection.update_one({"message_id": int(message.id)},
+                                  {"$set": {"reaction_count": await reaction_count_without_author(message)}})
+            await update_reaction_counter(message, collection, bot, target_channel_id)
+            return
+        else:
+            await message_to_update.edit(embed=await create_embed(message, reaction_threshold))
+            return
+
     await post_hall_of_fame_message(message, bot, collection, target_channel_id, reaction_threshold)
 
 async def update_reaction_counter(message: discord.Message, collection, bot: discord.Client, target_channel_id: int):
