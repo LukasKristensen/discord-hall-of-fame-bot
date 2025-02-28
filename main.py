@@ -55,13 +55,13 @@ dev_user = 230698327589650432
 @bot.event
 async def on_ready():
     global server_classes
+    await utils.error_logging(bot, f"Logged in as {bot.user}")
     server_classes = utils.get_server_classes(db_client)
     new_server_classes_dict = await events.on_ready(bot, tree, db_client, server_classes)
     print("New server classes: ", new_server_classes_dict)
     for key, value in new_server_classes_dict.items():
         server_classes[key] = value
     print("Dictionary after on_ready: ", server_classes)
-    await utils.error_logging(bot, f"Logged in as {bot.user}")
 
 @bot.event
 async def on_raw_reaction_add(payload: discord.RawReactionActionEvent):
