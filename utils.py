@@ -1,3 +1,4 @@
+import random
 import discord
 import datetime
 from datetime import timezone
@@ -235,6 +236,13 @@ async def create_embed(message: discord.Message, reaction_threshold: int):
             embed.add_field(name=f"{reference_message.author.name}'s message:", value=reference_message.content, inline=False)
             # Author of the original message
             embed.add_field(name=f"{message.author.name}'s reply:", value=message.content, inline=False)
+
+        possible_footers = [
+            "Enjoying the bot? Vote for it on top.gg: https://top.gg/bot/1177041673352663070",
+            ""
+        ]
+        embed.set_footer(text=random.choice(possible_footers))
+
         return embed
 
     # Include the reference message in the embed if the message has both a reference and attachments
