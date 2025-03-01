@@ -201,6 +201,19 @@ async def post_hall_of_fame_message(message: discord.Message, bot: discord.Clien
                            "hall_of_fame_message_id": int(hall_of_fame_message.id),
                            "reaction_count": int(await reaction_count_without_author(message))})
 
+async def set_footer(embed: discord.Embed):
+    """
+    Set the footer of an embed
+    :param embed: The embed to set the footer for
+    :return: None
+    """
+    possible_footers = [
+        "Enjoying the bot? Vote for it on top.gg: https://top.gg/bot/1177041673352663070",
+        ""
+    ]
+    embed.set_footer(text=random.choice(possible_footers))
+    return embed
+
 async def create_embed(message: discord.Message, reaction_threshold: int):
     """
     Create an embed for a message in the Hall of Fame channel
@@ -237,12 +250,7 @@ async def create_embed(message: discord.Message, reaction_threshold: int):
             # Author of the original message
             embed.add_field(name=f"{message.author.name}'s reply:", value=message.content, inline=False)
 
-        possible_footers = [
-            "Enjoying the bot? Vote for it on top.gg: https://top.gg/bot/1177041673352663070",
-            ""
-        ]
-        embed.set_footer(text=random.choice(possible_footers))
-
+        embed = await set_footer(embed)
         return embed
 
     # Include the reference message in the embed if the message has both a reference and attachments
@@ -273,6 +281,8 @@ async def create_embed(message: discord.Message, reaction_threshold: int):
             embed.set_image(url=attachment.url)
         else:
             embed.add_field(name="Attachment", value=f"{attachment.url}", inline=False)
+
+        embed = await set_footer(embed)
         return embed
 
     else:
@@ -290,6 +300,8 @@ async def create_embed(message: discord.Message, reaction_threshold: int):
         corrected_reactions = await reaction_count_without_author(message)
         embed.add_field(name=f"{corrected_reactions} Reactions ", value=top_reaction[0].emoji, inline=True)
         embed.add_field(name="Jump to Message", value=message.jump_url, inline=False)
+
+        embed = await set_footer(embed)
         return embed
 
 def check_video_extension(message):
