@@ -448,12 +448,24 @@ async def send_server_owner_error_message(owner, e):
             print(f"Failed to fetch the message history of the server owner: {history_error}")
 
 async def error_logging(bot, message):
+    """
+    Log an error message to the error channel
+    :param bot:
+    :param message:
+    :return:
+    """
     target_guild = bot.get_guild(1180006529575960616)
     target_channel = target_guild.get_channel(1344070396575617085)
 
     await target_channel.send(f"{datetime.datetime.now()}: {message}")
 
 async def create_feedback_form(interaction, bot):
+    """
+    Create a feedback form for the user and send the feedback to the feedback channel
+    :param interaction:
+    :param bot:
+    :return:
+    """
     class FeedbackModal(discord.ui.Modal, title="Feedback Form"):
         fb_title = discord.ui.TextInput(
             style=discord.TextStyle.short,
