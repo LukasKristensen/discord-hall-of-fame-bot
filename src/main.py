@@ -1,6 +1,5 @@
 import discord
 from discord.ext import commands as discord_commands
-from discord.app_commands import check
 import os
 from dotenv import load_dotenv
 from pymongo.mongo_client import MongoClient
