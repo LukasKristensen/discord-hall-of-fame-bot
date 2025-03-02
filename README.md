@@ -18,8 +18,8 @@ Join the Hall of Fame communit server: https://discord.gg/r98WC5GHcn
 | /help | | List of commands | /help |
 | /reaction_threshold_configure | <reaction_threshold:int> | Sets the Hall Of Fame reaction threshold for your server | /reaction_threshold_configure 5
 | /setup | | If you are the server owner, set up the bot for the server if it is not already | /setup |
-| /manual_sweep | <sweep_limit> \<guild_id> | Manually trigger a server sweep | /manual_sweep 2000 1180006529575960616 |
 | /get_random_message | | Get a random hall-of-fame message from the database | /get_random_message
+| /feedback | | Opens a pop-up form in discord for leaving feedback to the bot developers | /feedback
 
 
 
@@ -29,13 +29,15 @@ Join the Hall of Fame communit server: https://discord.gg/r98WC5GHcn
 ## Development Log
 
 ### 1.11
+- [x] Approved for top.gg - vote here for the bot: https://top.gg/bot/1177041673352663070
+- [x] Slash Commands!
 - [x] Refactored code-base for cloud deployment and for handling multiple servers
 
 ### 1.10
 - [x] Threshold increase and general adjustments
 
 ### 1.09
-- [x] Hall Of Fame Wrapped]
+- [x] Hall Of Fame Wrapped
 
 ### 1.08
 - [x] Better context vísualization of replied messages
