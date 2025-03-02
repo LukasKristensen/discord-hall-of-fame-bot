@@ -26,29 +26,15 @@ dev_user = 230698327589650432
 #               [-] Put as many security measures in place as possible to prevent unauthorized access
 #                       [-] Is the requesting user a part of the guild
 #               [-] Research how to validate the origin of a message
-#       [x] Server join routine:
-#               [x] Setup new db document for the server
-#               [x] Create a new HOF channel for the server and store the channel_id in the db
-#               [x] Create a new leaderboard message for the server and store the message_id in the db
-#               [x] Create a new server config document for the server
-#               [x] Server setup routine for configuring the bot with threshold and other settings
-#       [x] Server leave routine:
-#               [x] Delete the db document for the server
-#       [x] Refactor the code to be able to handle multiple servers
-#       [x] Setup a server on azure to host the bot
 #       [-] Research db security measures to prevent unauthorized access
-#       [x] Disable getRandomMessage or add a server parameter to the command
 #       [-] Optimize the code to handle multiple servers without performance issues on scaling
-#       [x] Disable LLM model for now, as it is not optimized for multiple servers
 #       [-] Language support MVP:
 #               [-] Support Danish and English
 #               [-] Add a language parameter to the command in the bot setup routine or as a command
 #               [-] Translations document for each language
 #               [-] Implement the translations in the bot
-#       [x] Refactor the bot for supporting slash commands (Better user experience)
-#       [x] Make HOF Wrapped channel dynamic, so that it will create a new thread in the HOF channel for each server
-#       [x] Extract all variables to a config file in the db for each server
 #       [-] Refactor historical search to be date-sorted, so they are first stored in a list and then sorted by date and then posted
+#       [-] Make certain commands voting-exclusive with the endpoint: https://docs.top.gg/docs/API/bot/#individual-user-vote
 
 
 #region Events
