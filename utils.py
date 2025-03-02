@@ -207,11 +207,11 @@ async def set_footer(embed: discord.Embed):
     :param embed: The embed to set the footer for
     :return: None
     """
-    possible_footers = [
-        "Enjoying the bot? Vote for it on top.gg: https://top.gg/bot/1177041673352663070",
-        ""
-    ]
-    embed.set_footer(text=random.choice(possible_footers))
+    if random.random() > 0.1:
+        return embed
+
+    embed.add_field(name="", value="** **", inline=False)
+    embed.add_field(name="Enjoying the bot? Vote for it on top.gg", value="https://top.gg/bot/1177041673352663070", inline=True)
     return embed
 
 async def create_embed(message: discord.Message, reaction_threshold: int):
