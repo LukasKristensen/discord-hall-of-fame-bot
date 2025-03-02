@@ -158,6 +158,10 @@ async def configure_bot(interaction: discord.Interaction, reaction_threshold: in
         server_classes[interaction.guild_id].reaction_threshold = reaction_threshold
     await utils.error_logging(bot, f"Reaction threshold configure command used by {interaction.user.name} in {interaction.guild.name} ({interaction.guild_id})")
 
+@tree.command(name="feedback", description="Send feedback to the developer")
+async def send_feedback(interaction: discord.Interaction):
+    await utils.create_feedback_form(interaction, bot)
+
 async def check_if_server_owner(interaction: discord.Interaction):
     """
     Check if the user is the server owner

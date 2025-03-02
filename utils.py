@@ -2,6 +2,7 @@ import random
 import discord
 import datetime
 from datetime import timezone
+import asyncio
 from message_reactions import most_reactions, reaction_count_without_author
 import server_class
 
@@ -451,3 +452,38 @@ async def error_logging(bot, message):
     target_channel = target_guild.get_channel(1344070396575617085)
 
     await target_channel.send(f"{datetime.datetime.now()}: {message}")
+
+async def create_feedback_form(interaction, bot):
+    class FeedbackModal(discord.ui.Modal, title="Feedback Form"):
+        fb_title = discord.ui.TextInput(
+            style=discord.TextStyle.short,
+            placeholder="Give your feedback here",
+            required=True,
+            label="Title"
+        )
+        message = discord.ui.TextInput(
+            style=discord.TextStyle.paragraph,
+            placeholder="Give your feedback here",
+            required=True,
+            max_length=500,
+            label="Message"
+        )
+
+        async def on_submit(self, interaction) -> None:
+            target_guild = bot.get_guild(1180006529575960616)
+            target_channel = target_guild.get_channel(1345558910836412456)
+            embed = discord.Embed(
+                title="New feedback",
+                color=discord.Color.yellow()
+            )
+            embed.add_field(name=self.fb_title.label, value=self.fb_title.value, inline=False)
+            embed.add_field(name=self.message.label, value=self.message.value, inline=False)
+            embed.set_author(name=interaction.user.name, icon_url=interaction.user.avatar.url if interaction.user.avatar else None)
+            embed.add_field(name="Guild", value=interaction.guild.id, inline=True)
+            embed.add_field(name="UserId", value=interaction.user.id, inline=True)
+            await target_channel.send(embed=embed)
+            await interaction.response.send_message(f"Thanks for your feedback, {interaction.user.mention}")
+            await asyncio.sleep(5)
+            await interaction.delete_original_response()
+
+    await interaction.response.send_modal(FeedbackModal())
