@@ -34,6 +34,12 @@ dev_user = 230698327589650432
 #               [-] Implement the translations in the bot
 #       [-] Refactor historical search to be date-sorted, so they are first stored in a list and then sorted by date and then posted
 #       [-] Make certain commands voting-exclusive with the endpoint: https://docs.top.gg/docs/API/bot/#individual-user-vote
+#       [ ] Settings config
+#               [ ] Make a settings command to configure the bot where each setting is an array of options and the second parameter is the value
+#               [ ] Set the reaction threshold = Default: 5
+#               [ ] Set the post due date = Default: 14 days
+#               [ ] Can people message in the Hall of Fame channel? = Default: No
+#               [ ] Can people use commands in the Hall of Fame channel? = Default: No
 
 
 #region Events
