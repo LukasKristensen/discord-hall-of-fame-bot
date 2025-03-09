@@ -208,8 +208,9 @@ async def post_hall_of_fame_message(message: discord.Message, bot: discord.Clien
                            "guild_id": int(message.guild.id),
                            "hall_of_fame_message_id": int(hall_of_fame_message.id),
                            "reaction_count": int(await reaction_count_without_author(message))})
-    main.total_message_count += 1
-    await bot.change_presence(activity=discord.CustomActivity(name=f'{main.total_message_count} Hall of Fame messages', type=5))
+    if main.total_message_count > 0:
+        main.total_message_count += 1
+        await bot.change_presence(activity=discord.CustomActivity(name=f'{main.total_message_count} Hall of Fame messages', type=5))
 
 
 async def set_footer(embed: discord.Embed):
