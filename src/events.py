@@ -2,6 +2,7 @@ import discord
 import asyncio
 import datetime
 import utils
+import main
 
 async def on_ready(bot: discord.Client, tree, db_client, server_classes):
     """
@@ -59,6 +60,7 @@ async def on_ready(bot: discord.Client, tree, db_client, server_classes):
         except Exception as e:
             print(f"Failed to check server {server_class.guild_id}: {e}")
             # TODO: Log error here to a discord channel for debugging - Include server id and error message
+    main.total_message_count = hof_total_messages
     await bot.change_presence(activity=discord.CustomActivity(name=f'{hof_total_messages} Hall of Fame messages', type=5))
 
     if datetime.datetime.now().month == 12 and datetime.datetime.now().day == 28:
@@ -95,16 +97,18 @@ async def on_raw_reaction_remove(message: discord.RawReactionActionEvent, bot: d
     """
     await utils.validate_message(message, bot, collection, reaction_threshold, post_due_date, target_channel_id)
 
-async def on_message(message, bot, target_channel_id):
+async def on_message(message, bot, target_channel_id, allow_messages_in_hof_channel):
     """
     Event handler for when a message is sent in a channel
     :param message:
     :param bot:
     :param target_channel_id:
+    :param allow_messages_in_hof_channel:
     :return:
     """
-    if message.author.bot:
+    if message.author.bot or allow_messages_in_hof_channel:
         return
+
     if message.channel.id == target_channel_id and not message.author.bot:
         await message.delete()
         msg = await message.channel.send(f"Only Hall of Fame messages are allowed in this channel, {message.author.mention}")

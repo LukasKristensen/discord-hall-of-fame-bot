@@ -5,6 +5,7 @@ from datetime import timezone
 import asyncio
 from message_reactions import most_reactions, reaction_count_without_author
 import server_class
+import main
 
 async def validate_message(message: discord.RawReactionActionEvent, bot: discord.Client, collection,
                            reaction_threshold: int, post_due_date: int, target_channel_id: int):
@@ -45,7 +46,7 @@ async def validate_message(message: discord.RawReactionActionEvent, bot: discord
         if len(message_to_update.embeds) > 0:
             collection.update_one({"message_id": int(message.id)},
                                   {"$set": {"reaction_count": await reaction_count_without_author(message)}})
-            await update_reaction_counter(message, collection, bot, target_channel_id)
+            await update_reaction_counter(message, collection, bot, target_channel_id, reaction_threshold)
             return
         else:
             await message_to_update.edit(embed=await create_embed(message, reaction_threshold))
@@ -53,13 +54,14 @@ async def validate_message(message: discord.RawReactionActionEvent, bot: discord
 
     await post_hall_of_fame_message(message, bot, collection, target_channel_id, reaction_threshold)
 
-async def update_reaction_counter(message: discord.Message, collection, bot: discord.Client, target_channel_id: int):
+async def update_reaction_counter(message: discord.Message, collection, bot: discord.Client, target_channel_id: int, reaction_threshold: int):
     """
     Update the reaction counter of a message in the Hall of Fame
     :param message:
     :param collection:
     :param bot:
     :param target_channel_id:
+    :param reaction_threshold:
     :return:
     """
     message_sent = collection.find_one({"message_id": int(message.id)})
@@ -68,6 +70,11 @@ async def update_reaction_counter(message: discord.Message, collection, bot: dis
     hall_of_fame_message_id = message_sent["hall_of_fame_message_id"]
     target_channel = bot.get_channel(target_channel_id)
     hall_of_fame_message = await target_channel.fetch_message(hall_of_fame_message_id)
+
+    if not hall_of_fame_message.embeds:
+        # Post the message in the Hall of Fame channel if it was removed
+        await hall_of_fame_message.edit(embed=await create_embed(message, reaction_threshold))
+        return
 
     embed = hall_of_fame_message.embeds[0]
     corrected_reactions = await reaction_count_without_author(message)
@@ -163,7 +170,7 @@ async def check_all_server_messages(guild_id: int, sweep_limit, sweep_limited: b
 
                     if message_reactions >= reaction_threshold:
                         if collection.find_one({"message_id": int(message.id)}):
-                            await update_reaction_counter(message, collection, bot, target_channel_id)
+                            await update_reaction_counter(message, collection, bot, target_channel_id, reaction_threshold)
                             if sweep_limited:
                                 break  # if message is already in the database, no need to check further
                             else:
@@ -201,6 +208,9 @@ async def post_hall_of_fame_message(message: discord.Message, bot: discord.Clien
                            "guild_id": int(message.guild.id),
                            "hall_of_fame_message_id": int(hall_of_fame_message.id),
                            "reaction_count": int(await reaction_count_without_author(message))})
+    main.total_message_count += 1
+    await bot.change_presence(activity=discord.CustomActivity(name=f'{main.total_message_count} Hall of Fame messages', type=5))
+
 
 async def set_footer(embed: discord.Embed):
     """
@@ -346,7 +356,7 @@ async def create_database_context(server, db_client, leader_board_length: int = 
     if server.me.guild_permissions.administrator:
         await hall_of_fame_channel.set_permissions(server.default_role, read_messages=True, send_messages=False)
 
-    hall_of_fame_channel.send("**Leaderboard:**")
+    await hall_of_fame_channel.send("**Leaderboard:**")
     leader_board_messages = []
     for i in range(leader_board_length):
         message = await hall_of_fame_channel.send(f"**HallOfFame#{i+1}**")
@@ -368,15 +378,16 @@ async def create_database_context(server, db_client, leader_board_length: int = 
         "post_due_date": 28,
         "leaderboard_message_ids": leader_board_messages,
         "sweep_limit": 1000,
-        "sweep_limited": False
+        "sweep_limited": False,
+        "include_author_in_reaction_calculation": True,
+        "allow_messages_in_hof_channel": False
     })
     database.create_collection('hall_of_fame_messages')
 
     print(f"Database context created for server {server.id}")
     await hall_of_fame_channel.send(
         f"The amount of reactions needed for a post to reach Hall of Fame is set to {reaction_threshold_default} by default.\n" +
-        "Use the command `/reaction_threshold_configure` to set the reaction threshold for posting a message in the Hall of Fame channel.\n" +
-        "Note that the reaction threshold does not take into account the author's reaction to their own message.")
+        "Use the command `/reaction_threshold_configure` to set the reaction threshold for posting a message in the Hall of Fame channel.")
 
     new_server_class = server_class.Server(
         hall_of_fame_channel_id= hall_of_fame_channel.id,
@@ -384,7 +395,9 @@ async def create_database_context(server, db_client, leader_board_length: int = 
         reaction_threshold=reaction_threshold_default,
         sweep_limit=1000,
         sweep_limited=False,
-        post_due_date=28)
+        post_due_date=28,
+        include_author_in_reaction_calculation=True,
+        allow_messages_in_hof_channel=False)
     return new_server_class
 
 
@@ -420,7 +433,9 @@ def get_server_classes(db_client):
             reaction_threshold=server_config["reaction_threshold"],
             sweep_limit=server_config["sweep_limit"],
             sweep_limited=server_config["sweep_limited"],
-            post_due_date=server_config["post_due_date"])
+            post_due_date=server_config["post_due_date"],
+            allow_messages_in_hof_channel=server_config["allow_messages_in_hof_channel"],
+            include_author_in_reaction_calculation=server_config["include_author_in_reaction_calculation"])
     return server_classes
 
 

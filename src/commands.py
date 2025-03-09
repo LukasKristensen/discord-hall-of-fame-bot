@@ -14,7 +14,10 @@ async def get_random_message(interaction, collection, bot, reaction_threshold):
     sender_channel = interaction.channel.id
 
     all_messages = [x for x in collection.find()]
-    random_num = random.randint(0, len(all_messages)-1)
+    if not all_messages:
+        await interaction.response.send_message("No available messages in the database for this server")
+        return
+    random_num = random.randint(0, len(all_messages))
     random_msg = all_messages[random_num]
 
     msg_channel = bot.get_channel(int(random_msg["channel_id"]))
@@ -45,6 +48,8 @@ async def get_help(interaction):
     embed.add_field(name="/get_random_message", value="Get a random message from the database", inline=False)
     embed.add_field(name="/reaction_threshold_configure", value="Set the amount of reactions needed for a post to reach hall of fame", inline=False)
     embed.add_field(name="/setup", value="If you are the server owner, set up the bot for the server if it is not already", inline=False)
+    embed.add_field(name="/include_authors_reaction", value="Should the author of a message be included in the reaction count?", inline=False)
+    embed.add_field(name="/allow_messages_in_hof_channel", value="Allow anyone to type in the Hall of Fame channel", inline=False)
     embed.add_field(name="", value="", inline=True)
     embed.add_field(name="Having trouble setting up the bot?", value="Make sure the bot has the correct permissions in the server or try to re-invite it", inline=False)
     embed.add_field(name="Need help?", value="Join the community server: https://discord.gg/r98WC5GHcn", inline=False)

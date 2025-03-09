@@ -6,12 +6,19 @@ from pymongo.mongo_client import MongoClient
 import commands
 import events
 import utils
+import asyncio
 
+dev_test = os.getenv('DEV_TEST') == "True"
 load_dotenv()
-TOKEN = os.getenv('KEY')
-mongo_uri = os.getenv('MONGO_URI')
+if dev_test:
+    TOKEN = os.getenv('DEV_KEY')
+    mongo_uri = os.getenv('DEV_MONGO_URI')
+else:
+    TOKEN = os.getenv('KEY')
+    mongo_uri = os.getenv('MONGO_URI')
 db_client = MongoClient(mongo_uri)
 messages_processing = []
+total_message_count = 0
 
 bot = discord_commands.Bot(command_prefix="!", intents=discord.Intents.all())
 tree = bot.tree
@@ -35,11 +42,13 @@ dev_user = 230698327589650432
 #       [-] Refactor historical search to be date-sorted, so they are first stored in a list and then sorted by date and then posted
 #       [-] Make certain commands voting-exclusive with the endpoint: https://docs.top.gg/docs/API/bot/#individual-user-vote
 #       [ ] Settings config
-#               [ ] Make a settings command to configure the bot where each setting is an array of options and the second parameter is the value
-#               [ ] Set the reaction threshold = Default: 5
+#               [-] Set the reaction threshold = Default: 5
 #               [ ] Set the post due date = Default: 14 days
-#               [ ] Can people message in the Hall of Fame channel? = Default: No
+#               [-] Can people message in the Hall of Fame channel? = Default: No
 #               [ ] Can people use commands in the Hall of Fame channel? = Default: No
+#               [-] Is author's own reaction included in the threshold? = Default: Yes
+#       [ ] Add daily recurring tasks to the bot
+#               [ ] Update the leaderboard
 
 
 #region Events
@@ -49,10 +58,8 @@ async def on_ready():
     await utils.error_logging(bot, f"Logged in as {bot.user}")
     server_classes = utils.get_server_classes(db_client)
     new_server_classes_dict = await events.on_ready(bot, tree, db_client, server_classes)
-    print("New server classes: ", new_server_classes_dict)
     for key, value in new_server_classes_dict.items():
         server_classes[key] = value
-    print("Dictionary after on_ready: ", server_classes)
 
 @bot.event
 async def on_raw_reaction_add(payload: discord.RawReactionActionEvent):
@@ -86,7 +93,8 @@ async def on_message(message: discord.Message):
         return
     server_class = server_classes[message.guild.id]
     target_channel_id = server_class.hall_of_fame_channel_id
-    await events.on_message(message, bot, target_channel_id)
+    allow_messages_in_hof = server_class.allow_messages_in_hof_channel
+    await events.on_message(message, bot, target_channel_id, allow_messages_in_hof)
 
 @bot.event
 async def on_guild_join(server):
@@ -100,15 +108,16 @@ async def on_guild_remove(server):
     server_classes.pop(server.id)
     await utils.error_logging(bot, f"Left server {server.name}, id: {server.id}")
 
-@tree.command(name="restart", description="Restart the bot [Dev Only]")
-async def restart(interaction: discord.Interaction):
-    if not await check_if_dev_user(interaction): return
+@bot.command(name="restart")
+async def restart(payload):
+    if payload.message.author.id != dev_user:
+        await payload.message.channel.send("You are not authorized to use this command")
+        return
 
-    await interaction.response.send_message("Restarting the bot")
     await utils.error_logging(bot, "Restarting the bot")
     await bot.close()
 
-@tree.command(name="setup", description="Setup the bot for the server [Owner Only]")
+@tree.command(name="setup", description="Setup the bot for the server if it is not already [Owner Only]")
 async def setup(interaction: discord.Interaction, reaction_threshold: int):
     if not await check_if_server_owner(interaction): return
 
@@ -140,7 +149,7 @@ async def get_help(interaction: discord.Interaction):
     await commands.get_help(interaction)
     await utils.error_logging(bot, f"Help command used by {interaction.user.name} in {interaction.guild.name} ({interaction.guild_id})")
 
-@tree.command(name="manual_sweep", description="Check for any historical message that should be in the Hall of Fame [Dev Only]")
+# Disabled for now
 async def manual_sweep(interaction: discord.Interaction, guild_id: str):
     if not await check_if_dev_user(interaction): return
     collection = db_client[guild_id]["hall_of_fame_messages"]
@@ -167,6 +176,32 @@ async def configure_bot(interaction: discord.Interaction, reaction_threshold: in
 async def send_feedback(interaction: discord.Interaction):
     await utils.create_feedback_form(interaction, bot)
 
+@tree.command(name="include_authors_reaction", description="Should the author's own reaction be included in the reaction threshold calculation? [Owner Only]")
+async def include_author_own_reaction_in_threshold(interaction: discord.Interaction, include: bool):
+    if not await check_if_server_owner(interaction): return
+
+    db = db_client[str(interaction.guild_id)]
+    server_config = db['server_config']
+    server_config.update_one({"guild_id": interaction.guild_id}, {"$set": {"include_author_in_reaction_calculation": include}})
+    server_classes[interaction.guild_id].include_author_in_reaction_calculation = include
+    await interaction.response.send_message(f"Author's own reaction included in the reaction threshold: {include}")
+    await utils.error_logging(bot, f"Include author's own reaction in threshold command used by {interaction.user.name} in {interaction.guild.name} ({interaction.guild_id})")
+    await asyncio.sleep(5)
+    await interaction.delete_original_response()
+
+@tree.command(name="allow_messages_in_hof_channel", description="Should people be allowed to send messages in the Hall of Fame channel? [Owner Only]")
+async def allow_messages_in_hof_channel(interaction: discord.Interaction, allow: bool):
+    if not await check_if_server_owner(interaction): return
+
+    db = db_client[str(interaction.guild_id)]
+    server_config = db['server_config']
+    server_config.update_one({"guild_id": interaction.guild_id}, {"$set": {"allow_messages_in_hof_channel": allow}})
+    server_classes[interaction.guild_id].allow_messages_in_hof_channel = allow
+    await interaction.response.send_message(f"People are allowed to send messages in the Hall of Fame channel: {allow}")
+    await utils.error_logging(bot, f"Allow messages in Hall of Fame channel command used by {interaction.user.name} in {interaction.guild.name} ({interaction.guild_id})")
+    await asyncio.sleep(5)
+    await interaction.delete_original_response()
+
 async def check_if_server_owner(interaction: discord.Interaction):
     """
     Check if the user is the server owner
@@ -189,7 +224,8 @@ async def check_if_dev_user(interaction: discord.Interaction):
         return False
     return True
 
-# Check if the TOKEN variable is set
-if TOKEN is None or mongo_uri is None:
-    raise ValueError("TOKEN environment variable is not set in the .env file")
-bot.run(TOKEN)
+if __name__ == "__main__":
+    # Check if the TOKEN variable is set
+    if TOKEN is None or mongo_uri is None:
+        raise ValueError("TOKEN environment variable is not set in the .env file")
+    bot.run(TOKEN)
