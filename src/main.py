@@ -49,6 +49,8 @@ dev_user = 230698327589650432
 #               [-] Is author's own reaction included in the threshold? = Default: Yes
 #       [ ] Add daily recurring tasks to the bot
 #               [ ] Update the leaderboard
+#       [ ] Command for: View server settings
+#       [ ] Command for: Get server statistics
 
 
 #region Events
