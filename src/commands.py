@@ -58,7 +58,7 @@ async def get_help(interaction):
     await interaction.response.send_message(embed=embed)
 
 async def manual_sweep(interaction, guild_id: int, sweep_limit, sweep_limited: bool, bot: discord.Client,
-                       collection, reaction_threshold: int, post_due_date: int, target_channel_id: int, dev_user: int):
+                       collection, reaction_threshold: int, post_due_date: int, target_channel_id: int, dev_user: int, allow_messages_in_hof_channel: bool):
     """
     Command to manually sweep all messages in a server [DEV]
     :param interaction:
@@ -76,7 +76,7 @@ async def manual_sweep(interaction, guild_id: int, sweep_limit, sweep_limited: b
     if interaction.user.id != dev_user:
         await interaction.response.send_message("You are not authorized to use this command")
         return
-    await utils.check_all_server_messages(int(guild_id), sweep_limit, sweep_limited, bot, collection, reaction_threshold, post_due_date, target_channel_id)
+    await utils.check_all_server_messages(int(guild_id), sweep_limit, sweep_limited, bot, collection, reaction_threshold, post_due_date, target_channel_id, allow_messages_in_hof_channel)
 
 async def set_reaction_threshold(interaction, reaction_threshold: int, db_client):
     """

@@ -162,9 +162,10 @@ async def manual_sweep(interaction: discord.Interaction, guild_id: str):
     temp_reaction_threshold = server_classes[guild_id].reaction_threshold
     post_due_date = server_classes[guild_id].post_due_date
     target_channel_id = server_classes[guild_id].hall_of_fame_channel_id
+    check_for_msg_in_hof = server_classes[guild_id].allow_messages_in_hof_channel
 
     await commands.manual_sweep(interaction, int(guild_id), None, False, bot, collection,
-                                temp_reaction_threshold, post_due_date, target_channel_id, dev_user)
+                                temp_reaction_threshold, post_due_date, target_channel_id, dev_user, check_for_msg_in_hof)
     await utils.error_logging(bot, f"Manual sweep command used by {interaction.user.name} in {interaction.guild.name} ({interaction.guild_id})")
 
 @tree.command(name="reaction_threshold_configure", description="Configure the amount of reactions needed to post a message in the Hall of Fame [Owner Only]")
