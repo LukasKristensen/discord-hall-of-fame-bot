@@ -70,10 +70,11 @@ async def on_raw_reaction_add(payload: discord.RawReactionActionEvent):
     temp_reaction_threshold = server_class.reaction_threshold
     post_due_date = server_class.post_due_date
     target_channel_id = server_class.hall_of_fame_channel_id
+    check_for_msg_in_hof = server_class.allow_messages_in_hof_channel
 
     if not payload.message_id in messages_processing:
         messages_processing.append(payload.message_id)
-        await events.on_raw_reaction_add(payload, bot, collection, temp_reaction_threshold, post_due_date, target_channel_id)
+        await events.on_raw_reaction_add(payload, bot, collection, temp_reaction_threshold, post_due_date, target_channel_id, check_for_msg_in_hof)
         messages_processing.remove(payload.message_id)
 
 @bot.event
@@ -83,10 +84,11 @@ async def on_raw_reaction_remove(payload: discord.RawReactionActionEvent):
     temp_reaction_threshold = server_class.reaction_threshold
     post_due_date = server_class.post_due_date
     target_channel_id = server_class.hall_of_fame_channel_id
+    check_for_msg_in_hof = server_class.allow_messages_in_hof_channel
 
     if not payload.message_id in messages_processing:
         messages_processing.append(payload.message_id)
-        await events.on_raw_reaction_remove(payload, bot, collection, temp_reaction_threshold, post_due_date, target_channel_id)
+        await events.on_raw_reaction_remove(payload, bot, collection, temp_reaction_threshold, post_due_date, target_channel_id, check_for_msg_in_hof)
         messages_processing.remove(payload.message_id)
 
 @bot.event

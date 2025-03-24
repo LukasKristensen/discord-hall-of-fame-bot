@@ -50,7 +50,8 @@ async def on_ready(bot: discord.Client, tree, db_client, server_classes):
                 server_collection,
                 server_class.reaction_threshold,
                 server_class.post_due_date,
-                server_class.hall_of_fame_channel_id)
+                server_class.hall_of_fame_channel_id,
+                server_class.allow_messages_in_hof_channel)
             await utils.update_leaderboard(
                 server_collection,
                 bot,
@@ -70,7 +71,7 @@ async def on_ready(bot: discord.Client, tree, db_client, server_classes):
     return new_server_classes
 
 async def on_raw_reaction_add(message: discord.RawReactionActionEvent, bot: discord.Client, collection,
-                              reaction_threshold: int, post_due_date: int, target_channel_id: int):
+                              reaction_threshold: int, post_due_date: int, target_channel_id: int, allow_messages_in_hof_channel: bool):
     """
     Event handler for when a reaction is added to a message
     :param message:
@@ -79,12 +80,13 @@ async def on_raw_reaction_add(message: discord.RawReactionActionEvent, bot: disc
     :param reaction_threshold:
     :param post_due_date:
     :param target_channel_id:
+    :param allow_messages_in_hof_channel:
     :return:
     """
-    await utils.validate_message(message, bot, collection, reaction_threshold, post_due_date, target_channel_id)
+    await utils.validate_message(message, bot, collection, reaction_threshold, post_due_date, target_channel_id, allow_messages_in_hof_channel)
 
 async def on_raw_reaction_remove(message: discord.RawReactionActionEvent, bot: discord.Client, collection,
-                              reaction_threshold: int, post_due_date: int, target_channel_id: int):
+                              reaction_threshold: int, post_due_date: int, target_channel_id: int, allow_messages_in_hof_channel: bool):
     """
     Event handler for when a reaction is added to a message
     :param message: The message that the reaction was removed from
@@ -93,9 +95,10 @@ async def on_raw_reaction_remove(message: discord.RawReactionActionEvent, bot: d
     :param reaction_threshold: The threshold for reactions
     :param post_due_date: The due date for posting
     :param target_channel_id: The target channel id
+    :param allow_messages_in_hof_channel: Whether messages are allowed in the hall of fame channel
     :return: None
     """
-    await utils.validate_message(message, bot, collection, reaction_threshold, post_due_date, target_channel_id)
+    await utils.validate_message(message, bot, collection, reaction_threshold, post_due_date, target_channel_id, allow_messages_in_hof_channel)
 
 async def on_message(message, bot, target_channel_id, allow_messages_in_hof_channel):
     """

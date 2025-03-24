@@ -8,7 +8,7 @@ import server_class
 import main
 
 async def validate_message(message: discord.RawReactionActionEvent, bot: discord.Client, collection,
-                           reaction_threshold: int, post_due_date: int, target_channel_id: int):
+                           reaction_threshold: int, post_due_date: int, target_channel_id: int, allow_messages_in_hof_channel: bool):
     """
     Check if the message is valid for posting based on the reaction count, date and origin of the message
     :param message: The message to validate
@@ -30,7 +30,7 @@ async def validate_message(message: discord.RawReactionActionEvent, bot: discord
         return
 
     # Checks if the post is from the HOF channel or is from a bot
-    if channel_id == target_channel_id or message.author.bot:
+    if (channel_id == target_channel_id or message.author.bot) and not allow_messages_in_hof_channel:
         return
 
     # Gets the adjusted reaction count corrected for not accounting the author
@@ -138,7 +138,7 @@ async def update_leaderboard(collection, bot: discord.Client, server_config, tar
                 await hall_of_fame_message.edit(content=f"**HallOfFame#{i+1}**\n{original_message.attachments[0].url}")
 
 async def check_all_server_messages(guild_id: int, sweep_limit, sweep_limited: bool, bot: discord.Client,
-                                    collection, reaction_threshold: int, post_due_date: int, target_channel_id: int):
+                                    collection, reaction_threshold: int, post_due_date: int, target_channel_id: int, allow_messages_in_hof_channel: bool):
     """
     Check all messages in a server for Hall of Fame eligibility
     :param guild_id:
@@ -149,6 +149,7 @@ async def check_all_server_messages(guild_id: int, sweep_limit, sweep_limited: b
     :param reaction_threshold:
     :param post_due_date:
     :param target_channel_id:
+    :param allow_messages_in_hof_channel:
     :return:
     """
     guild = bot.get_guild(guild_id)
@@ -158,7 +159,7 @@ async def check_all_server_messages(guild_id: int, sweep_limit, sweep_limited: b
         try:
             if not isinstance(channel, discord.TextChannel):
                 continue # Ignore if the current channel is not a text channel
-            if channel.id == target_channel_id:
+            if channel.id == target_channel_id and not allow_messages_in_hof_channel:
                 continue
             async for message in channel.history(limit=sweep_limit):
                 try:
