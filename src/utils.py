@@ -30,7 +30,7 @@ async def validate_message(message: discord.RawReactionActionEvent, bot: discord
         return
 
     # Checks if the post is from the HOF channel or is from a bot
-    if (channel_id == target_channel_id or message.author.bot) and not allow_messages_in_hof_channel:
+    if (channel_id == target_channel_id and not allow_messages_in_hof_channel) or message.author.bot :
         return
 
     # Gets the adjusted reaction count corrected for not accounting the author
