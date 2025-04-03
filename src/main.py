@@ -104,13 +104,13 @@ async def on_message(message: discord.Message):
 async def on_guild_join(server):
     new_server_class = await events.guild_join(server, db_client)
     server_classes[server.id] = new_server_class
-    await utils.error_logging(bot, f"Joined server {server.name}, id: {server.id}")
+    await utils.error_logging(bot, f"Joined server {server.name} server_id: {server.id}")
 
 @bot.event
 async def on_guild_remove(server):
+    await utils.error_logging(bot, f"Left server {server.name}", server.id)
     await events.guild_remove(server, db_client)
     server_classes.pop(server.id)
-    await utils.error_logging(bot, f"Left server {server.name}, id: {server.id}")
 
 @bot.command(name="restart")
 async def restart(payload):
@@ -139,19 +139,19 @@ async def setup(interaction: discord.Interaction, reaction_threshold: int):
         await interaction.response.send_message(f"Failed to setup the bot for the server: {e}")
 
     server_classes[interaction.guild.id] = new_server_class
-    await utils.error_logging(bot, f"Setup the bot for the server {interaction.guild.name}, id: {interaction.guild.id}")
+    await utils.error_logging(bot, f"Setup the bot for the server {interaction.guild.name}", interaction.guild.id)
 
 @tree.command(name="get_random_message", description="Get a random message from the Hall of Fame database")
 async def get_random_message(interaction: discord.Interaction):
     collection = db_client[str(interaction.guild_id)]["hall_of_fame_messages"]
     temp_reaction_threshold = server_classes[interaction.guild_id].reaction_threshold
     await commands.get_random_message(interaction, collection, bot, temp_reaction_threshold)
-    await utils.error_logging(bot, f"Get random message command used by {interaction.user.name} in {interaction.guild.name} ({interaction.guild_id})")
+    await utils.error_logging(bot, f"Get random message command used by {interaction.user.name} in {interaction.guild.name}", interaction.guild.id)
 
 @tree.command(name="help", description="List of commands")
 async def get_help(interaction: discord.Interaction):
     await commands.get_help(interaction)
-    await utils.error_logging(bot, f"Help command used by {interaction.user.name} in {interaction.guild.name} ({interaction.guild_id})")
+    await utils.error_logging(bot, f"Help command used by {interaction.user.name} in {interaction.guild.name}", interaction.guild.id)
 
 # Disabled for now
 async def manual_sweep(interaction: discord.Interaction, guild_id: str):
@@ -166,7 +166,7 @@ async def manual_sweep(interaction: discord.Interaction, guild_id: str):
 
     await commands.manual_sweep(interaction, int(guild_id), None, False, bot, collection,
                                 temp_reaction_threshold, post_due_date, target_channel_id, dev_user, check_for_msg_in_hof)
-    await utils.error_logging(bot, f"Manual sweep command used by {interaction.user.name} in {interaction.guild.name} ({interaction.guild_id})")
+    await utils.error_logging(bot, f"Manual sweep command used by {interaction.user.name} in {interaction.guild.name}", interaction.guild.id)
 
 @tree.command(name="reaction_threshold_configure", description="Configure the amount of reactions needed to post a message in the Hall of Fame [Owner Only]")
 async def configure_bot(interaction: discord.Interaction, reaction_threshold: int):
@@ -175,7 +175,7 @@ async def configure_bot(interaction: discord.Interaction, reaction_threshold: in
     completion = await commands.set_reaction_threshold(interaction, reaction_threshold, db_client)
     if completion:
         server_classes[interaction.guild_id].reaction_threshold = reaction_threshold
-    await utils.error_logging(bot, f"Reaction threshold configure command used by {interaction.user.name} in {interaction.guild.name} ({interaction.guild_id})")
+    await utils.error_logging(bot, f"Reaction threshold configure command used by {interaction.user.name} in {interaction.guild.name}", interaction.guild.id)
 
 @tree.command(name="feedback", description="Send feedback to the developer")
 async def send_feedback(interaction: discord.Interaction):
@@ -190,7 +190,7 @@ async def include_author_own_reaction_in_threshold(interaction: discord.Interact
     server_config.update_one({"guild_id": interaction.guild_id}, {"$set": {"include_author_in_reaction_calculation": include}})
     server_classes[interaction.guild_id].include_author_in_reaction_calculation = include
     await interaction.response.send_message(f"Author's own reaction included in the reaction threshold: {include}")
-    await utils.error_logging(bot, f"Include author's own reaction in threshold command used by {interaction.user.name} in {interaction.guild.name} ({interaction.guild_id})")
+    await utils.error_logging(bot, f"Include author's own reaction in threshold command used by {interaction.user.name} in {interaction.guild.name}", interaction.guild.id)
     await asyncio.sleep(5)
     await interaction.delete_original_response()
 
@@ -203,7 +203,7 @@ async def allow_messages_in_hof_channel(interaction: discord.Interaction, allow:
     server_config.update_one({"guild_id": interaction.guild_id}, {"$set": {"allow_messages_in_hof_channel": allow}})
     server_classes[interaction.guild_id].allow_messages_in_hof_channel = allow
     await interaction.response.send_message(f"People are allowed to send messages in the Hall of Fame channel: {allow}")
-    await utils.error_logging(bot, f"Allow messages in Hall of Fame channel command used by {interaction.user.name} in {interaction.guild.name} ({interaction.guild_id})")
+    await utils.error_logging(bot, f"Allow messages in Hall of Fame channel command used by {interaction.user.name} in {interaction.guild.name}", interaction.guild.id)
     await asyncio.sleep(5)
     await interaction.delete_original_response()
 
