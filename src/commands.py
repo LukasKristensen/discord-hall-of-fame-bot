@@ -50,6 +50,7 @@ async def get_help(interaction):
     embed.add_field(name="/setup", value="If you are the server owner, set up the bot for the server if it is not already", inline=False)
     embed.add_field(name="/include_authors_reaction", value="Should the author of a message be included in the reaction count?", inline=False)
     embed.add_field(name="/allow_messages_in_hof_channel", value="Allow anyone to type in the Hall of Fame channel", inline=False)
+    embed.add_field(name="/vote", value="Support the bot by voting for it on top.gg: https://top.gg/bot/1177041673352663070/vote", inline=False)
     embed.add_field(name="", value="", inline=True)
     embed.add_field(name="Having trouble setting up the bot?", value="Make sure the bot has the correct permissions in the server or try to re-invite it", inline=False)
     embed.add_field(name="Need help?", value="Join the community server: https://discord.gg/r98WC5GHcn", inline=False)

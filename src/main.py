@@ -207,6 +207,11 @@ async def allow_messages_in_hof_channel(interaction: discord.Interaction, allow:
     await asyncio.sleep(5)
     await interaction.delete_original_response()
 
+@tree.command(name="vote", description="Vote for the bot on top.gg")
+async def vote(interaction: discord.Interaction):
+    await interaction.response.send_message("Vote for the bot on top.gg: https://top.gg/bot/1177041673352663070/vote")
+    await utils.error_logging(bot, f"Vote command used by {interaction.user.name} in {interaction.guild.name}", interaction.guild.id)
+
 async def check_if_server_owner(interaction: discord.Interaction):
     """
     Check if the user is the server owner
