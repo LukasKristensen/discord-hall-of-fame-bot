@@ -7,7 +7,7 @@ The purpose of the bot is to monitor the maximum amount of message reactions and
 
 Add the bot to your discord server: https://discord.com/oauth2/authorize?client_id=1177041673352663070
 
-Join the Hall of Fame communit server: https://discord.gg/r98WC5GHcn
+Join the Hall of Fame community server: https://discord.gg/r98WC5GHcn
 
 <br>
 

@@ -378,7 +378,7 @@ async def create_database_context(server, db_client, leader_board_length: int = 
         "guild_id": server.id,
         "hall_of_fame_channel_id": hall_of_fame_channel.id,
         "reaction_threshold": reaction_threshold_default,
-        "post_due_date": 28,
+        "post_due_date": 1000,
         "leaderboard_message_ids": leader_board_messages,
         "sweep_limit": 1000,
         "sweep_limited": False,

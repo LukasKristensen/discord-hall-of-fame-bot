@@ -27,32 +27,10 @@ server_classes = {}
 dev_user = 230698327589650432
 
 # todo: Make dynamic for multiple servers
-#       [-] If opening up for multiple servers: create security measures to
-#           validate that the origin of the message correlates to the server
-#       [-] Research topic: How reliable is the `guild_id` attribute of a message? Can it be spoofed?
-#               [-] Put as many security measures in place as possible to prevent unauthorized access
-#                       [-] Is the requesting user a part of the guild
-#               [-] Research how to validate the origin of a message
-#       [-] Research db security measures to prevent unauthorized access
-#       [-] Optimize the code to handle multiple servers without performance issues on scaling
-#       [-] Language support MVP:
-#               [-] Support Danish and English
-#               [-] Add a language parameter to the command in the bot setup routine or as a command
-#               [-] Translations document for each language
-#               [-] Implement the translations in the bot
-#       [-] Refactor historical search to be date-sorted, so they are first stored in a list and then sorted by date and then posted
-#       [-] Make certain commands voting-exclusive with the endpoint: https://docs.top.gg/docs/API/bot/#individual-user-vote
-#       [-] Settings config
-#               [-] Set the reaction threshold = Default: 5
-#               [-] Set the post due date = Default: 14 days
-#               [-] Can people message in the Hall of Fame channel? = Default: No
-#               [-] Can people use commands in the Hall of Fame channel? = Default: No
-#               [-] Is author's own reaction included in the threshold? = Default: Yes
 #       [ ] Add daily recurring tasks to the bot
 #               [ ] Update the leaderboard
-#       [-] Command for: View server settings
 #       [ ] Command for: Get server statistics
-
+#       [ ] Optimize the UX flow from inviting the bot to the server to setting it up
 
 #region Events
 @bot.event
