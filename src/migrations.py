@@ -9,9 +9,13 @@ db_client = MongoClient(mongo_uri)
 dev_mongo_uri = os.getenv('DEV_MONGO_URI')
 dev_db_client = MongoClient(dev_mongo_uri)
 
-target_migrations = [dev_db_client]
+target_migrations = [db_client]
 
 for target_migration in target_migrations:
     for guild in target_migration.list_database_names():
+        if not guild.isdigit():
+            continue
         collection = target_migration[guild]["server_config"]
-        collection.update_one({}, {"$set": {"allow_messages_in_hof_channel": False}})
+        collection.update_one({}, {"$set": {"whitelisted_emojis": []}})
+        collection.update_one({}, {"$set": {"custom_emoji_check_logic": False}})
+    print("Updated total of ", target_migration.list_database_names(), " databases")

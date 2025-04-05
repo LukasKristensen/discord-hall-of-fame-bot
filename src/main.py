@@ -1,4 +1,5 @@
 import discord
+from discord import app_commands
 from discord.ext import commands as discord_commands
 import os
 from dotenv import load_dotenv
@@ -12,10 +13,10 @@ dev_test = os.getenv('DEV_TEST') == "True"
 load_dotenv()
 if dev_test:
     TOKEN = os.getenv('DEV_KEY')
-    mongo_uri = os.getenv('DEV_MONGO_URI')
+    # mongo_uri = os.getenv('DEV_MONGO_URI')
 else:
     TOKEN = os.getenv('KEY')
-    mongo_uri = os.getenv('MONGO_URI')
+mongo_uri = os.getenv('MONGO_URI')
 db_client = MongoClient(mongo_uri)
 messages_processing = []
 total_message_count = 0
@@ -41,15 +42,15 @@ dev_user = 230698327589650432
 #               [-] Implement the translations in the bot
 #       [-] Refactor historical search to be date-sorted, so they are first stored in a list and then sorted by date and then posted
 #       [-] Make certain commands voting-exclusive with the endpoint: https://docs.top.gg/docs/API/bot/#individual-user-vote
-#       [ ] Settings config
+#       [-] Settings config
 #               [-] Set the reaction threshold = Default: 5
-#               [ ] Set the post due date = Default: 14 days
+#               [-] Set the post due date = Default: 14 days
 #               [-] Can people message in the Hall of Fame channel? = Default: No
-#               [ ] Can people use commands in the Hall of Fame channel? = Default: No
+#               [-] Can people use commands in the Hall of Fame channel? = Default: No
 #               [-] Is author's own reaction included in the threshold? = Default: Yes
 #       [ ] Add daily recurring tasks to the bot
 #               [ ] Update the leaderboard
-#       [ ] Command for: View server settings
+#       [-] Command for: View server settings
 #       [ ] Command for: Get server statistics
 
 
@@ -211,6 +212,124 @@ async def allow_messages_in_hof_channel(interaction: discord.Interaction, allow:
 async def vote(interaction: discord.Interaction):
     await interaction.response.send_message("Vote for the bot on top.gg: https://top.gg/bot/1177041673352663070/vote")
     await utils.error_logging(bot, f"Vote command used by {interaction.user.name} in {interaction.guild.name}", interaction.guild.id)
+
+@tree.command(name="custom_emoji_check_logic", description="Here you can decide if it only should be whitelisted emojis or all emojis")
+@discord.app_commands.choices(
+    config_option=[
+        app_commands.Choice(name="All emojis", value="all_emojis"),
+        app_commands.Choice(name="Only whitelisted emojis", value="whitelisted_emojis")
+    ]
+)
+async def custom_emoji_check_logic(interaction: discord.Interaction, config_option: app_commands.Choice[str]):
+    if not await check_if_server_owner(interaction): return
+    custom_emoji_check = False
+    if config_option.value == "whitelisted_emojis":
+        custom_emoji_check = True
+
+    db = db_client[str(interaction.guild_id)]
+    server_config = db['server_config']
+    server_config.update_one({"guild_id": interaction.guild_id}, {"$set": {"custom_emoji_check_logic": custom_emoji_check}})
+    server_classes[interaction.guild_id].custom_emoji_check_logic = custom_emoji_check
+    await interaction.response.send_message(f"Custom emoji check logic: {custom_emoji_check}")
+    await utils.error_logging(bot, f"Custom emoji check logic command used by {interaction.user.name} in {interaction.guild.name}", interaction.guild.id)
+
+@tree.command(name="whitelist_emoji", description="Whitelist an emoji for the server if custom emoji check logic is enabled [Owner Only]")
+async def whitelist_emoji(interaction: discord.Interaction, emoji: str):
+    if not await check_if_server_owner(interaction): return
+
+    server_class = server_classes[interaction.guild_id]
+    if not server_class.custom_emoji_check_logic:
+        await interaction.response.send_message("Custom emoji check logic is not enabled for this server")
+        return
+
+    db = db_client[str(interaction.guild_id)]
+    server_config = db['server_config']
+    whitelist = db['server_config'].find_one({"guild_id": interaction.guild_id})["whitelisted_emojis"]
+
+    if emoji not in whitelist:
+        whitelist.append(emoji)
+        server_config.update_one({"guild_id": interaction.guild_id}, {"$set": {"whitelisted_emojis": whitelist}})
+        server_class.whitelisted_emojis = whitelist
+        await interaction.response.send_message(f"Emoji {emoji} added to the whitelist")
+    else:
+        await interaction.response.send_message(f"Emoji {emoji} is already in the whitelist")
+    await utils.error_logging(bot, f"Whitelist emoji command used by {interaction.user.name} in {interaction.guild.name}", interaction.guild.id)
+
+
+@tree.command(name="unwhitelist_emoji", description="Unwhitelist an emoji for the server if custom emoji check logic is enabled [Owner Only]")
+async def unwhitelist_emoji(interaction: discord.Interaction, emoji: str):
+    if not await check_if_server_owner(interaction): return
+
+    server_class = server_classes[interaction.guild_id]
+    if not server_class.custom_emoji_check_logic:
+        await interaction.response.send_message("Custom emoji check logic is not enabled for this server")
+        return
+
+    db = db_client[str(interaction.guild_id)]
+    server_config = db['server_config']
+    whitelist = db['server_config'].find_one({"guild_id": interaction.guild_id})["whitelisted_emojis"]
+
+    if emoji in whitelist:
+        whitelist.remove(emoji)
+        server_config.update_one({"guild_id": interaction.guild_id}, {"$set": {"whitelisted_emojis": whitelist}})
+        server_class.whitelisted_emojis = whitelist
+        await interaction.response.send_message(f"Emoji {emoji} removed from the whitelist")
+    else:
+        await interaction.response.send_message(f"Emoji {emoji} is not in the whitelist")
+    await utils.error_logging(bot, f"Unwhitelist emoji command used by {interaction.user.name} in {interaction.guild.name}", interaction.guild.id)
+
+@tree.command(name="clear_whitelist", description="Clear the whitelist for the server if custom emoji check logic is enabled [Owner Only]")
+async def clear_whitelist(interaction: discord.Interaction):
+    if not await check_if_server_owner(interaction): return
+    server_class = server_classes[interaction.guild_id]
+    if not server_class.custom_emoji_check_logic:
+        await interaction.response.send_message("Custom emoji check logic is not enabled for this server")
+        return
+    db = db_client[str(interaction.guild_id)]
+    server_config = db['server_config']
+    server_config.update_one({"guild_id": interaction.guild_id}, {"$set": {"whitelisted_emojis": []}})
+    server_class.whitelisted_emojis = []
+    await interaction.response.send_message("Whitelist cleared")
+    await utils.error_logging(bot, f"Clear whitelist command used by {interaction.user.name} in {interaction.guild.name}", interaction.guild.id)
+
+
+@tree.command(name="get_server_config", description="Get the server config")
+async def get_server_config(interaction: discord.Interaction):
+    if not await check_if_server_owner(interaction): return
+
+    server_class = server_classes[interaction.guild_id]
+    print("server_class: ", server_class)
+    config_message = (
+        f"**Server Configuration:**\n"
+        f"```"
+        f"Reaction Threshold: {server_class.reaction_threshold}\n"
+        f"Post Due Date: {server_class.post_due_date} days\n"
+        f"Allow Messages in HOF Channel: {server_class.allow_messages_in_hof_channel}\n"
+        f"Include Author in Reaction Calculation: {server_class.include_author_in_reaction_calculation}\n"
+        f"Custom Emoji Check Logic: {server_class.custom_emoji_check_logic}\n"
+    )
+    if server_class.custom_emoji_check_logic:
+        config_message += f"Whitelisted Emojis: {', '.join(server_class.whitelisted_emojis)}\n"
+    config_message += f"```"
+
+    await interaction.response.send_message(config_message)
+    await utils.error_logging(bot, f"Get server config command used by {interaction.user.name} in {interaction.guild.name}", interaction.guild.id)
+
+@tree.command(name="set_post_due_date", description="How many days ago should the post be to be considered old and not valid? [Owner Only]")
+async def set_post_due_date(interaction: discord.Interaction, post_due_date: int):
+    if not await check_if_server_owner(interaction): return
+
+    db = db_client[str(interaction.guild_id)]
+    server_config = db['server_config']
+    server_config.update_one({"guild_id": interaction.guild_id}, {"$set": {"post_due_date": post_due_date}})
+    server_classes[interaction.guild_id].post_due_date = post_due_date
+    await interaction.response.send_message(f"Post due date set to {post_due_date} days")
+    await utils.error_logging(bot, f"Set post due date command used by {interaction.user.name} in {interaction.guild.name}", interaction.guild.id)
+
+@tree.command(name="invite", description="Invite the bot to your server")
+async def invite(interaction: discord.Interaction):
+    await interaction.response.send_message("Invite the bot to your server: https://discord.com/oauth2/authorize?client_id=1177041673352663070")
+    await utils.error_logging(bot, f"Invite command used by {interaction.user.name} in {interaction.guild.name}", interaction.guild.id)
 
 async def check_if_server_owner(interaction: discord.Interaction):
     """

@@ -17,6 +17,7 @@ async def validate_message(message: discord.RawReactionActionEvent, bot: discord
     :param reaction_threshold: The minimum number of reactions for a message to be posted in the Hall of Fame
     :param post_due_date: The number of days after which a message is no longer eligible for the Hall of Fame
     :param target_channel_id: The ID of the Hall of Fame channel
+    :param allow_messages_in_hof_channel: Whether messages are allowed in the Hall of Fame channel
     :return: None
     """
     channel_id: int = message.channel_id
@@ -382,7 +383,9 @@ async def create_database_context(server, db_client, leader_board_length: int = 
         "sweep_limit": 1000,
         "sweep_limited": False,
         "include_author_in_reaction_calculation": True,
-        "allow_messages_in_hof_channel": False
+        "allow_messages_in_hof_channel": False,
+        "custom_emoji_check_logic": False,
+        "whitelisted_emojis": []
     })
     database.create_collection('hall_of_fame_messages')
 
@@ -400,7 +403,9 @@ async def create_database_context(server, db_client, leader_board_length: int = 
         sweep_limited=False,
         post_due_date=28,
         include_author_in_reaction_calculation=True,
-        allow_messages_in_hof_channel=False)
+        allow_messages_in_hof_channel=False,
+        custom_emoji_check_logic=False,
+        whitelisted_emojis=[])
     return new_server_class
 
 
@@ -438,7 +443,9 @@ def get_server_classes(db_client):
             sweep_limited=server_config["sweep_limited"],
             post_due_date=server_config["post_due_date"],
             allow_messages_in_hof_channel=server_config["allow_messages_in_hof_channel"],
-            include_author_in_reaction_calculation=server_config["include_author_in_reaction_calculation"])
+            include_author_in_reaction_calculation=server_config["include_author_in_reaction_calculation"],
+            custom_emoji_check_logic=server_config["include_author_in_reaction_calculation"],
+            whitelisted_emojis=server_config["whitelisted_emojis"])
     return server_classes
 
 
@@ -504,7 +511,7 @@ async def create_feedback_form(interaction, bot):
             label="Message"
         )
 
-        async def on_submit(self, interaction) -> None:
+        async def on_submit(self, feedback_interaction) -> None:
             target_guild = bot.get_guild(1180006529575960616)
             target_channel = target_guild.get_channel(1345558910836412456)
             embed = discord.Embed(
@@ -513,12 +520,12 @@ async def create_feedback_form(interaction, bot):
             )
             embed.add_field(name=self.fb_title.label, value=self.fb_title.value, inline=False)
             embed.add_field(name=self.message.label, value=self.message.value, inline=False)
-            embed.set_author(name=interaction.user.name, icon_url=interaction.user.avatar.url if interaction.user.avatar else None)
-            embed.add_field(name="Guild", value=interaction.guild.id, inline=True)
-            embed.add_field(name="UserId", value=interaction.user.id, inline=True)
+            embed.set_author(name=feedback_interaction.user.name, icon_url=feedback_interaction.user.avatar.url if feedback_interaction.user.avatar else None)
+            embed.add_field(name="Guild", value=feedback_interaction.guild.id, inline=True)
+            embed.add_field(name="UserId", value=feedback_interaction.user.id, inline=True)
             await target_channel.send(embed=embed)
-            await interaction.response.send_message(f"Thanks for your feedback, {interaction.user.mention}")
+            await feedback_interaction.response.send_message(f"Thanks for your feedback, {feedback_interaction.user.mention}")
             await asyncio.sleep(5)
-            await interaction.delete_original_response()
+            await feedback_interaction.delete_original_response()
 
     await interaction.response.send_modal(FeedbackModal())
