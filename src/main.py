@@ -295,8 +295,6 @@ async def clear_whitelist(interaction: discord.Interaction):
 
 @tree.command(name="get_server_config", description="Get the server config")
 async def get_server_config(interaction: discord.Interaction):
-    if not await check_if_server_owner(interaction): return
-
     server_class = server_classes[interaction.guild_id]
     print("server_class: ", server_class)
     config_message = (
