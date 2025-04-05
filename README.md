@@ -30,8 +30,23 @@ Join the Hall of Fame communit server: https://discord.gg/r98WC5GHcn
 
 <br>
 
+## Custom Emoji Whitelist
+A custom emoji filter can be applied to the bot, so that it will only look for emojis configured to the server.
+  - To enable it: ``/custom_emoji_check_logic``
+  - Adding emojis to the whitelist: ``/whitelist_emoji``
+  - Removing emojis from the whitelist: ``/unwhitelist_emoji`` or ``/clear_whitelist``
+
+<br>
+
 
 ## Development Log
+
+### 1.12
+- [x] ``/get_server_config`` for viewing the current server settings for the bot
+- [x] Added custom emoji whitelist logic for the reaction threshold
+  - To enable it: ``/custom_emoji_check_logic``
+  - Adding emojis to the whitelist: ``/whitelist_emoji``
+  - Removing emojis from the whitelist: ``/unwhitelist_emoji`` or ``/clear_whitelist``
 
 ### 1.11
 - [x] Approved for top.gg - vote here for the bot: https://top.gg/bot/1177041673352663070
