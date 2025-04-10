@@ -385,7 +385,8 @@ async def create_database_context(server, db_client, leader_board_length: int = 
         "include_author_in_reaction_calculation": True,
         "allow_messages_in_hof_channel": False,
         "custom_emoji_check_logic": False,
-        "whitelisted_emojis": []
+        "whitelisted_emojis": [],
+        "joined_date": datetime.datetime.now(timezone.utc)
     })
     database.create_collection('hall_of_fame_messages')
 

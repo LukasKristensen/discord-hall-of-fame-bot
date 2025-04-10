@@ -41,6 +41,7 @@ async def on_ready():
     new_server_classes_dict = await events.on_ready(bot, tree, db_client, server_classes)
     for key, value in new_server_classes_dict.items():
         server_classes[key] = value
+    await utils.error_logging(bot, f"Loaded a total of {len(server_classes)} servers.")
 
 @bot.event
 async def on_raw_reaction_add(payload: discord.RawReactionActionEvent):
