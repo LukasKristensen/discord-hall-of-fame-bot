@@ -13,7 +13,8 @@ pull_changes() {
 
 run_bot() {
     echo "Starting bot in tmux session..."
-    tmux new-session -d -s bot_session 'python3 main.py'
+    # When main.py exits, the tmux session is killed automatically
+    tmux new-session -d -s bot_session 'python3 main.py; tmux kill-session -t bot_session'
 }
 
 # Kill any existing bot session before starting
@@ -27,7 +28,7 @@ while true; do
     pull_changes
     run_bot
 
-    # Wait until the bot process stops before restarting
+    # Wait until the bot session ends before restarting
     while tmux has-session -t bot_session 2>/dev/null; do
         sleep 5  # Check every 5 seconds
     done
