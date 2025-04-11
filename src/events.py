@@ -82,7 +82,7 @@ async def bot_login(bot, tree):
         print(f"Logged in as {bot.user}")
     except discord.HTTPException as e:
         print(f"Failed to sync commands: {e}")
-    await bot.change_presence(activity=discord.CustomActivity(name="New /slash commands integrated", type=5))
+    await bot.change_presence(activity=discord.CustomActivity(name="🔥 Sweeping for legendary posts!", type=5))
 
 
 async def on_raw_reaction_add(message: discord.RawReactionActionEvent, bot: discord.Client, collection,
