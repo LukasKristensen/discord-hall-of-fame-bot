@@ -28,8 +28,19 @@ while true; do
     pull_changes
     run_bot
 
-    # Wait until the bot session ends before restarting
+    # Track start time for 24-hour cycle
+    start_time=$(date +%s)
+
     while tmux has-session -t bot_session 2>/dev/null; do
+        current_time=$(date +%s)
+        elapsed=$((current_time - start_time))
+
+        if [ "$elapsed" -ge 60 ]; then
+            echo "24 hours passed. Restarting bot..."
+            tmux kill-session -t bot_session
+            break
+        fi
+
         sleep 5  # Check every 5 seconds
     done
 
