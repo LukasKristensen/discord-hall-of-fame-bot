@@ -217,9 +217,10 @@ async def custom_emoji_check_logic(interaction: discord.Interaction, config_opti
     server_config = db['server_config']
     server_config.update_one({"guild_id": interaction.guild_id}, {"$set": {"custom_emoji_check_logic": custom_emoji_check}})
     server_classes[interaction.guild_id].custom_emoji_check_logic = custom_emoji_check
-    await interaction.response.send_message(f"Custom emoji check logic: {custom_emoji_check} \n"
-                                            f"\n"
-                                            f"You can now use the commands `/whitelist_emoji`, `/unwhitelist_emoji` and `/clear_whitelist` to manage the whitelist")
+    response = f"Custom emoji check logic set to {config_option.name}"
+    if config_option.value == "whitelisted_emojis":
+        response += "\n\nYou can now use the commands `/whitelist_emoji`, `/unwhitelist_emoji` and `/clear_whitelist` to manage the whitelist"
+    await interaction.response.send_message(response)
     await utils.error_logging(bot, f"Custom emoji check logic command used by {interaction.user.name} in {interaction.guild.name}", interaction.guild.id)
 
 @tree.command(name="whitelist_emoji", description="Whitelist an emoji for the server if custom emoji check logic is enabled [Owner Only]")
