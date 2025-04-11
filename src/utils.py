@@ -361,7 +361,7 @@ async def create_database_context(server, db_client, leader_board_length: int = 
         f"   • ⚠️ *Please do not delete these messages as they are required for future use.*\n"
     )
 
-    # Set the permissions for the Hall of Fame channel to only allow the bot to read messages
+    # Set the permissions for the Hall of Fame channel to only allow the bot to write messages
     if server.me.guild_permissions.administrator:
         await hall_of_fame_channel.set_permissions(server.default_role, read_messages=True, send_messages=False)
 

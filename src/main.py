@@ -21,7 +21,7 @@ db_client = MongoClient(mongo_uri)
 messages_processing = []
 total_message_count = 0
 
-bot = discord_commands.Bot(command_prefix="!", intents=discord.Intents.all())
+bot = discord_commands.Bot(command_prefix="!", intents=discord.Intents.default())
 tree = bot.tree
 server_classes = {}
 dev_user = 230698327589650432
