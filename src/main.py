@@ -36,12 +36,18 @@ dev_user = 230698327589650432
 @bot.event
 async def on_ready():
     global server_classes
+    await events.bot_login(bot, tree)
     await utils.error_logging(bot, f"Logged in as {bot.user}")
+
     server_classes = utils.get_server_classes(db_client)
-    new_server_classes_dict = await events.on_ready(bot, tree, db_client, server_classes)
+    new_server_classes_dict = await events.check_for_new_server_classes(bot, db_client)
     for key, value in new_server_classes_dict.items():
         server_classes[key] = value
-    await utils.error_logging(bot, f"Loaded a total of {len(server_classes)} servers and a total of {total_message_count} messages in the database")
+    await utils.error_logging(bot, f"Loaded a total of {len(server_classes)} servers")
+
+    await events.historical_sweep(bot, db_client, server_classes)
+    await utils.error_logging(bot, f"Loaded a total of {total_message_count} hall of fame messages in the database")
+    await events.post_wrapped()
 
 @bot.event
 async def on_raw_reaction_add(payload: discord.RawReactionActionEvent):

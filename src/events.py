@@ -4,37 +4,15 @@ import datetime
 import utils
 import main
 
-async def on_ready(bot: discord.Client, tree, db_client, server_classes):
+async def historical_sweep(bot: discord.Client, db_client, server_classes):
     """
     Event handler for when the bot is ready
     :param bot:
-    :param tree:
     :param db_client:
     :param server_classes:
     :return:
     """
-    try:
-        await tree.sync()
-        print(f"Logged in as {bot.user}")
-    except discord.HTTPException as e:
-        print(f"Failed to sync commands: {e}")
-    await bot.change_presence(activity=discord.CustomActivity(name="New /slash commands integrated", type=5))
-
     hof_total_messages = 0
-    new_server_classes = {}
-
-    # Check if any of the joined guilds are not in the database
-    for guild in bot.guilds:
-        try:
-            print(f"Checking guild {guild.name}")
-            if not str(guild.id) in db_client.list_database_names():
-                print(f"Guild {guild.name} not found in database, creating...")
-                new_server_class = await utils.create_database_context(guild, db_client)
-                new_server_classes[guild.id] = new_server_class
-        except Exception as e:
-            print(f"Failed to create database context for guild {guild.name}: {e}")
-            await utils.send_server_owner_error_message(guild.owner, e)
-
 
     for server_class in server_classes.values():
         try:
@@ -63,12 +41,49 @@ async def on_ready(bot: discord.Client, tree, db_client, server_classes):
             # TODO: Log error here to a discord channel for debugging - Include server id and error message
     main.total_message_count = hof_total_messages
     await bot.change_presence(activity=discord.CustomActivity(name=f'{hof_total_messages} Hall of Fame messages', type=5))
+    print("total_message_count: ", hof_total_messages)
 
+
+async def post_wrapped():
+    """
+    Compute and post the hall of fame wrapped for individual servers
+    :return:
+    """
     if datetime.datetime.now().month == 12 and datetime.datetime.now().day == 28:
         pass
         # disabled until tested for dynamic usage across multiple servers and refactored
         # await hof_wrapped.main(bot.get_guild(guild_id), collection, reaction_threshold, target_channel_id)
+
+
+async def check_for_new_server_classes(bot, db_client):
+    """
+    Check if any of the joined guilds are not in the database
+    :param bot:
+    :param db_client:
+    :return:
+    """
+    new_server_classes = {}
+    for guild in bot.guilds:
+        try:
+            print(f"Checking guild {guild.name}")
+            if not str(guild.id) in db_client.list_database_names():
+                print(f"Guild {guild.name} not found in database, creating...")
+                new_server_class = await utils.create_database_context(guild, db_client)
+                new_server_classes[guild.id] = new_server_class
+        except Exception as e:
+            print(f"Failed to create database context for guild {guild.name}: {e}")
+            await utils.send_server_owner_error_message(guild.owner, e)
     return new_server_classes
+
+
+async def bot_login(bot, tree):
+    try:
+        await tree.sync()
+        print(f"Logged in as {bot.user}")
+    except discord.HTTPException as e:
+        print(f"Failed to sync commands: {e}")
+    await bot.change_presence(activity=discord.CustomActivity(name="New /slash commands integrated", type=5))
+
 
 async def on_raw_reaction_add(message: discord.RawReactionActionEvent, bot: discord.Client, collection,
                               reaction_threshold: int, post_due_date: int, target_channel_id: int, allow_messages_in_hof_channel: bool):
