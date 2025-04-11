@@ -1,3 +1,4 @@
+from datetime import datetime
 import discord
 from discord import app_commands
 from discord.ext import commands as discord_commands
@@ -8,6 +9,7 @@ import commands
 import events
 import utils
 import asyncio
+import version
 
 dev_test = os.getenv('DEV_TEST') == "True"
 load_dotenv()
@@ -38,6 +40,7 @@ async def on_ready():
     global server_classes
     global total_message_count
 
+    version.DATE = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     await events.bot_login(bot, tree)
     await utils.error_logging(bot, f"Logged in as {bot.user}")
 
