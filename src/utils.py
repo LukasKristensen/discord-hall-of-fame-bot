@@ -157,6 +157,8 @@ async def check_all_server_messages(guild_id: int, sweep_limit, sweep_limited: b
     print(f"Checking all messages in server {guild.name} ({guild_id})")
 
     for channel in guild.channels:
+        if not channel.permissions_for(guild.me).read_messages:
+            continue
         try:
             if not isinstance(channel, discord.TextChannel):
                 continue # Ignore if the current channel is not a text channel
