@@ -36,6 +36,8 @@ dev_user = 230698327589650432
 @bot.event
 async def on_ready():
     global server_classes
+    global total_message_count
+
     await events.bot_login(bot, tree)
     await utils.error_logging(bot, f"Logged in as {bot.user}")
 
@@ -45,7 +47,7 @@ async def on_ready():
         server_classes[key] = value
     await utils.error_logging(bot, f"Loaded a total of {len(server_classes)} servers")
 
-    await events.historical_sweep(bot, db_client, server_classes)
+    total_message_count = await events.historical_sweep(bot, db_client, server_classes)
     await utils.error_logging(bot, f"Loaded a total of {total_message_count} hall of fame messages in the database")
     await events.post_wrapped()
 
