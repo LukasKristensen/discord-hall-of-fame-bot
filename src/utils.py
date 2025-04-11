@@ -353,8 +353,12 @@ async def create_database_context(server, db_client, leader_board_length: int = 
     hall_of_fame_channel = await server.create_text_channel("hall-of-fame")
 
     await hall_of_fame_channel.send(
-        f"Hall of Fame channel created.\nCreating {leader_board_length} temporary messages for the leaderboard.\n" +
-        "Please do not delete these messages, they are for future use.\n"
+        f"🎉 **Hall of Fame Channel Created!** 🎉\n\n"
+        f"🔹 **All Hall of Fame Messages**:\n"
+        f"   • All messages that meet the reaction threshold will be posted in this channel.\n\n"
+        f"🔹 **Temporary Leaderboard Messages in pinned messages**:\n"
+        f"   • The top {leader_board_length} most reacted messages will be displayed on the leaderboard.\n"
+        f"   • ⚠️ *Please do not delete these messages as they are required for future use.*\n"
     )
 
     # Set the permissions for the Hall of Fame channel to only allow the bot to read messages
@@ -394,9 +398,15 @@ async def create_database_context(server, db_client, leader_board_length: int = 
 
     print(f"Database context created for server {server.id}")
     await hall_of_fame_channel.send(
-        f"The amount of reactions needed for a post to reach Hall of Fame is set to {reaction_threshold_default} by default.\n" +
-        "The threshold is calculated based on the highest count of a single reaction on a message.\n" +
-        "Use the command `/reaction_threshold_configure` to set the reaction threshold for posting a message in the Hall of Fame channel.")
+        f"🎉 **Welcome to the Hall of Fame!** 🎉\n\n"
+        f"🔹 **Reaction Threshold**: {reaction_threshold_default} reactions (default)\n"
+        f"🔹 **How it works**:\n"
+        f"   • The threshold is based on the highest count of a single reaction on a message.\n"
+        f"   • Use `/reaction_threshold_configure` to customize the threshold.\n"
+        f"   • Use `/get_server_config` to view the current server configuration.\n\n"
+        f"✨ **Want to only track specific emojis?**\n"
+        f"   • Use `/custom_emoji_check_logic` to enable custom emoji tracking.\n"
+    )
 
     new_server_class = server_class.Server(
         hall_of_fame_channel_id= hall_of_fame_channel.id,

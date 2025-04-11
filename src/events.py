@@ -2,7 +2,6 @@ import discord
 import asyncio
 import datetime
 import utils
-import main
 
 async def historical_sweep(bot: discord.Client, db_client, server_classes):
     """
