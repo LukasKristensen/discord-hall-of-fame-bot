@@ -144,3 +144,34 @@ async def guild_remove(server, db_client):
     print(f"Left server {server.name}")
     utils.delete_database_context(server.id, db_client)
 
+async def daily_task(bot, db_client, server_classes):
+    """
+    Daily task to check for updating the leaderboard
+    :param bot:
+    :param db_client:
+    :param server_classes:
+    :return:
+    """
+
+    for server_class in server_classes.values():
+        try:
+            print(f"Checking server {server_class.guild_id}")
+            server_collection = db_client[str(server_class.guild_id)]["hall_of_fame_messages"]
+            server_config = db_client[str(server_class.guild_id)]["server_config"]
+            await utils.update_leaderboard(
+                server_collection,
+                bot,
+                server_config,
+                server_class.hall_of_fame_channel_id,
+                server_class.reaction_threshold)
+        except Exception as e:
+            print(f"Failed to update leaderboard for server {server_class.guild_id}: {e}")
+            await utils.error_logging(bot, e, server_class.guild_id)
+
+
+    await utils.error_logging(bot, f"Checking for db entries that are not in the guilds")
+    for db_server in db_client.list_database_names():
+        if int(db_server) not in bot.guilds:
+            print(f"Server {db_server} not found in bot guilds, deleting from database")
+            await utils.error_logging(bot, f"Could not find server {db_server} in bot guilds")
+    await utils.error_logging(bot, f"Checked {len(server_classes)} servers for daily task")

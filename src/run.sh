@@ -7,12 +7,17 @@ source ../../myenv/bin/activate
 
 pull_changes() {
     echo "Pulling latest changes..."
-    git pull origin main
-    echo "Finished pulling changes."
+    output=$(git pull origin main)
+    echo "$output"
+
+    if [[ "$output" == *"Already up to date."* ]]; then
+        return 1  # No updates
+    else
+        return 0  # New updates
+    fi
 }
 
 run_bot() {
-  # Kill any existing bot session before starting
   if tmux has-session -t bot_session 2>/dev/null; then
       echo "Stopping existing bot session..."
       tmux kill-session -t bot_session
@@ -24,7 +29,12 @@ run_bot() {
 }
 
 while true; do
-  pull_changes
-  run_bot
-  sleep 60
+  if pull_changes; then
+    echo "Changes detected. Restarting bot..."
+    run_bot
+  else
+    echo "No changes. Bot not restarted."
+  fi
+
+  sleep 60  # 24 hours = 86400 seconds
 done
