@@ -153,6 +153,7 @@ async def daily_task(bot, db_client, server_classes):
     :return:
     """
 
+    await utils.error_logging(bot, f"Starting daily task for {len(server_classes)} servers")
     for server_class in server_classes.values():
         try:
             print(f"Checking server {server_class.guild_id}")
