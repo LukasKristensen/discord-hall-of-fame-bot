@@ -12,18 +12,19 @@ pull_changes() {
 }
 
 run_bot() {
-    echo "Starting bot in tmux session..."
-    tmux new-session -d -s bot_session 'python3 main.py; tmux kill-session -t bot_session'
-}
+  # Kill any existing bot session before starting
+  if tmux has-session -t bot_session 2>/dev/null; then
+      echo "Stopping existing bot session..."
+      tmux kill-session -t bot_session
+      sleep 2
+  fi
 
-# Kill any existing bot session before starting
-if tmux has-session -t bot_session 2>/dev/null; then
-    echo "Stopping existing bot session..."
-    tmux kill-session -t bot_session
-    sleep 2
-fi
+  echo "Starting bot in tmux session..."
+  tmux new-session -d -s bot_session 'python3 main.py; tmux kill-session -t bot_session'
+}
 
 while true; do
   pull_changes
   run_bot
+  sleep 60
 done

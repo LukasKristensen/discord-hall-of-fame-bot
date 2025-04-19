@@ -58,7 +58,7 @@ async def on_ready():
     print("Starting daily task")
     daily_task.start()
 
-@tasks.loop(minutes=1.0)
+@tasks.loop(minutes=60.0)
 async def daily_task():
     print("Running daily task")
     # await events.daily_task(bot, db_client, server_classes)
