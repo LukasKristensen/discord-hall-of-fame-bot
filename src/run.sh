@@ -28,6 +28,9 @@ run_bot() {
   tmux new-session -d -s bot_session 'python3 main.py; tmux kill-session -t bot_session'
 }
 
+# Start the bot for the first time
+run_bot
+
 while true; do
   if pull_changes; then
     echo "Changes detected. Restarting bot..."
@@ -36,5 +39,5 @@ while true; do
     echo "No changes. Bot not restarted."
   fi
 
-  sleep 60  # 24 hours = 86400 seconds
+  sleep 60
 done
