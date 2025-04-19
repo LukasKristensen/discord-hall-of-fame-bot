@@ -22,5 +22,7 @@ if tmux has-session -t bot_session 2>/dev/null; then
     tmux kill-session -t bot_session
     sleep 2
 
-pull_changes
-run_bot
+
+while true; do
+  pull_changes
+  run_bot
