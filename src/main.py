@@ -2,6 +2,7 @@ from datetime import datetime
 import discord
 from discord import app_commands
 from discord.ext import commands as discord_commands
+from discord.ext import tasks
 import os
 from dotenv import load_dotenv
 from pymongo.mongo_client import MongoClient
@@ -53,6 +54,12 @@ async def on_ready():
     total_message_count = await events.historical_sweep(bot, db_client, server_classes)
     await utils.error_logging(bot, f"Loaded a total of {total_message_count} hall of fame messages in the database")
     await events.post_wrapped()
+    
+
+@tasks.loop(hours=24)
+async def daily_task():
+    await events.daily_task(bot, db_client, server_classes)
+    await utils.error_logging(bot, f"Daily task completed")
 
 @bot.event
 async def on_raw_reaction_add(payload: discord.RawReactionActionEvent):

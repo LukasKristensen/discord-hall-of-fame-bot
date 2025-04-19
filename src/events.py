@@ -143,3 +143,4 @@ async def guild_join(server, db_client, reaction_threshold: int = 7):
 async def guild_remove(server, db_client):
     print(f"Left server {server.name}")
     utils.delete_database_context(server.id, db_client)
+
