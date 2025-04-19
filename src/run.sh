@@ -26,3 +26,4 @@ fi
 while true; do
   pull_changes
   run_bot
+done
