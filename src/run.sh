@@ -3,7 +3,7 @@
 cd "$(dirname "$0")"
 cd src
 
-source ../myenv/bin/activate
+source ../../myenv/bin/activate
 
 pull_changes() {
     echo "Pulling latest changes..."
