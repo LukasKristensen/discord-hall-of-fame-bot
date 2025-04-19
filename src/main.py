@@ -51,14 +51,14 @@ async def on_ready():
         server_classes[key] = value
     await utils.error_logging(bot, f"Loaded a total of {len(server_classes)} servers")
 
-    # total_message_count = await events.historical_sweep(bot, db_client, server_classes)
-    # await utils.error_logging(bot, f"Loaded a total of {total_message_count} hall of fame messages in the database")
+    total_message_count = await events.historical_sweep(bot, db_client, server_classes)
+    await utils.error_logging(bot, f"Loaded a total of {total_message_count} hall of fame messages in the database")
     await events.post_wrapped()
 
     print("Starting daily task")
     daily_task.start()
 
-@tasks.loop(minutes=5)
+@tasks.loop(hours=24)
 async def daily_task():
     print("Running daily task")
     await events.daily_task(bot, db_client, server_classes)

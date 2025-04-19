@@ -169,7 +169,6 @@ async def daily_task(bot, db_client, server_classes):
             print(f"Failed to update leaderboard for server {server_class.guild_id}: {e}")
             await utils.error_logging(bot, e, server_class.guild_id)
 
-
     await utils.error_logging(bot, f"Checking for db entries that are not in the guilds")
     for db_server in db_client.list_database_names():
         if int(db_server) not in bot.guilds:
