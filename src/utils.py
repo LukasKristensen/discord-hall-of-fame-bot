@@ -223,10 +223,9 @@ async def set_footer(embed: discord.Embed):
     :param embed: The embed to set the footer for
     :return: None
     """
-    if random.random() > 0.1:
+    if random.random() > 0.15 or embed.image:
         return embed
 
-    embed.add_field(name="", value="** **", inline=False)
     embed.add_field(name="Enjoying the bot? Vote for it on top.gg", value="https://top.gg/bot/1177041673352663070/vote", inline=True)
     return embed
 
