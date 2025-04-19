@@ -63,7 +63,7 @@ async def daily_task():
     print("Running daily task")
     # await events.daily_task(bot, db_client, server_classes)
     await utils.error_logging(bot, f"Daily task completed")
-    await bot.close()
+    # await bot.close()
 
 @bot.event
 async def on_raw_reaction_add(payload: discord.RawReactionActionEvent):
