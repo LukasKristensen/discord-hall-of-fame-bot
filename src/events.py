@@ -171,7 +171,7 @@ async def daily_task(bot, db_client, server_classes):
 
     await utils.error_logging(bot, f"Checking for db entries that are not in the guilds")
     for db_server in db_client.list_database_names():
-        if int(db_server) not in bot.guilds:
+        if int(db_server) not in [guild.id for guild in bot.guilds]:
             print(f"Server {db_server} not found in bot guilds, deleting from database")
             await utils.error_logging(bot, f"Could not find server {db_server} in bot guilds")
     await utils.error_logging(bot, f"Checked {len(server_classes)} servers for daily task")
