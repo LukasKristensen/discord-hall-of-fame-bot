@@ -242,7 +242,7 @@ async def create_embed(message: discord.Message, reaction_threshold: int):
 
         embed = discord.Embed(
             title=f"{message.author.name} replied to {reference_message.author.name}'s message",
-            color=message.author.color
+            color=message.author.top_role.color
         )
         top_reaction = most_reactions(message.reactions)
 
