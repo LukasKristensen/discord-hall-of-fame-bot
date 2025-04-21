@@ -84,6 +84,7 @@ async def bot_login(bot, tree):
     except discord.HTTPException as e:
         print(f"Failed to sync commands: {e}")
     await bot.change_presence(activity=discord.CustomActivity(name="🔥 Sweeping for legendary posts!", type=5))
+    await utils.error_logging(bot, f"Total servers: {len(bot.guilds)}")
 
 
 async def on_raw_reaction_add(message: discord.RawReactionActionEvent, bot: discord.Client, collection,
@@ -157,7 +158,7 @@ async def daily_task(bot, db_client, server_classes, dev_testing):
     """
 
     await utils.error_logging(bot, f"Starting daily task for {len(server_classes)} servers")
-    for server_class in server_classes.values():
+    for server_class in list(server_classes.values()):
         try:
             print(f"Checking server {server_class.guild_id}")
             server_collection = db_client[str(server_class.guild_id)]["hall_of_fame_messages"]

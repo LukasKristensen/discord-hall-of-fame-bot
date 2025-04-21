@@ -295,6 +295,10 @@ async def main(guild_id: int, bot: commands.Bot, get_reaction_threshold: int, ha
 
     print(f"Hall Of Fame Wrapped {datetime.datetime.now().year} is being prepared... 🎁")
 
+    # Todo: Create a DB entry for the current years wrapped to ensure that the wrapped is not created multiple times
+    #           - If it exists, return and do not create a new wrapped
+    #           - It should be an integer, 0 for not created, 1 for created, 2 for posted
+
     guild = bot.get_guild(guild_id)
 
     hall_of_fame_channel = bot.get_channel(hall_of_fame_channel_id)

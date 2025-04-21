@@ -352,6 +352,10 @@ async def create_database_context(server, db_client, leader_board_length: int = 
 
     # Create a new channel for the Hall of Fame
     hall_of_fame_channel = await server.create_text_channel("hall-of-fame")
+    await hall_of_fame_channel.edit(
+        topic="Leaderboard in pinned messages - Patch notes: https://discord.gg/GmFtfySetp",
+        reason="Creating Hall of Fame channel"
+    )
 
     await hall_of_fame_channel.send(
         f"🎉 **Hall of Fame Channel Created!** 🎉\n\n"

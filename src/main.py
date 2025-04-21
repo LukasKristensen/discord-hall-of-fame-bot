@@ -29,12 +29,6 @@ tree = bot.tree
 server_classes = {}
 dev_user = 230698327589650432
 
-# todo: Make dynamic for multiple servers
-#       [ ] Add daily recurring tasks to the bot
-#               [ ] Update the leaderboard
-#       [ ] Command for: Get server statistics
-#       [ ] Optimize the UX flow from inviting the bot to the server to setting it up
-
 #region Events
 @bot.event
 async def on_ready():

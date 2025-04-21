@@ -41,6 +41,15 @@ A custom emoji filter can be applied to the bot, so that it will only look for e
 
 ## Development Log
 
+### 1.13
+- [x] Fixed Intents for Embed Colors
+  - Resolved bug causing inconsistent embed colors.
+  - Embed colors now dynamically match the top role color.
+- [x] Leaderboard 24h Recurring Job
+  - Leaderboard now updates automatically every 24 hours.
+- [x] HOF Wrapped Tweaks
+  - Minor improvements to the Hall of Fame Wrapped (December event).
+
 ### 1.12
 - [x] ``/get_server_config`` for viewing the current server settings for the bot
 - [x] Added custom emoji whitelist logic for the reaction threshold
