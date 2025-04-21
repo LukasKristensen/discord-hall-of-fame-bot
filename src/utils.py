@@ -244,7 +244,7 @@ async def create_embed(message: discord.Message, reaction_threshold: int):
         print("message.author:", message.author)
         embed = discord.Embed(
             title=f"{message.author.name} replied to {reference_message.author.name}'s message",
-            color=discord.Color.from_str("#D3AF37")
+            color=message.author.color
         )
         top_reaction = most_reactions(message.reactions)
 
@@ -276,7 +276,7 @@ async def create_embed(message: discord.Message, reaction_threshold: int):
 
         embed = discord.Embed(
             title=f"{message.author.name} replied to {reference_message.author.name}'s message",
-            color=discord.Color.from_str("#D3AF37")
+            color=message.author.color
         )
 
         top_reaction = most_reactions(message.reactions)
@@ -306,7 +306,7 @@ async def create_embed(message: discord.Message, reaction_threshold: int):
         embed = discord.Embed(
             title=f"Message in <#{message.channel.id}> has surpassed {reaction_threshold} reactions",
             description=message.content,
-            color=discord.Color.from_str("#D3AF37")
+            color=message.author.color
         )
         top_reaction = most_reactions(message.reactions)
 

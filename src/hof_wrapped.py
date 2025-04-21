@@ -128,10 +128,10 @@ async def process_all_server_messages(guild: discord.Guild):
     return users
 
 def create_embed(user: User, guild: discord.Guild):
-    if len(user.mostUsedChannels) < 4:
+    if len(user.mostUsedChannels) < 3:
         return None
     embed = discord.Embed(
-        title="✨ Hall Of Fame Wrapped 2024 ✨",
+        title=f"✨ Hall Of Fame Wrapped {datetime.datetime.now().year} ✨",
         description=(
             f"📅 **User:** {user.member.mention}\n"
         ),
@@ -288,17 +288,22 @@ def add_rankings(embed, user: User, rankings: dict):
     return embed
 
 
-async def main(guild_id: int, bot: commands.Bot, get_reaction_threshold: int):
+async def main(guild_id: int, bot: commands.Bot, get_reaction_threshold: int, hall_of_fame_channel_id: int):
     global rankings
     global reactionThreshold
     reactionThreshold = get_reaction_threshold
 
-    print("Hall Of Fame Wrapped 2024 is being prepared... 🎁")
+    print(f"Hall Of Fame Wrapped {datetime.datetime.now().year} is being prepared... 🎁")
 
     guild = bot.get_guild(guild_id)
-    # TODO: Make the channel dynamic so that it will create a new thread in the HOF channel for each server
-    wrapped_channel = bot.get_channel(1322849654190243861)
-    await wrapped_channel.send("Hall Of Fame Wrapped 2024 is being prepared... 🎁")
+
+    hall_of_fame_channel = bot.get_channel(hall_of_fame_channel_id)
+    wrapped_channel = await hall_of_fame_channel.create_thread(
+        name=f"Hall Of Fame Wrapped {datetime.datetime.now().year}",
+        auto_archive_duration=60,
+        reason=f"Creating a new thread for Hall Of Fame Wrapped {datetime.datetime.now().year}"
+    )
+    await wrapped_channel.send(f"Hall Of Fame Wrapped {datetime.datetime.now().year} is being prepared... 🎁")
 
     initialize_users(guild)
     await process_all_server_messages(guild)
@@ -308,5 +313,5 @@ async def main(guild_id: int, bot: commands.Bot, get_reaction_threshold: int):
         wrapped_embed = create_embed(user, guild)
 
         if wrapped_embed is not None:
-            await wrapped_channel.send("Your Hall Of Fame Wrapped 2024 is here <@" + str(user.id) + "> 🎉", embed=wrapped_embed)
+            await wrapped_channel.send(f"Your Hall Of Fame Wrapped {datetime.datetime.now().year} is here <@" + str(user.id) + "> 🎉", embed=wrapped_embed)
     return users

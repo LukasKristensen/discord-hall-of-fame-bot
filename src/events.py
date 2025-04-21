@@ -50,6 +50,7 @@ async def post_wrapped():
     """
     if datetime.datetime.now().month == 12 and datetime.datetime.now().day == 28:
         pass
+        # Todo: Evaluate and improve performance in a local environments before deploying to production
         # disabled until tested for dynamic usage across multiple servers and refactored
         # await hof_wrapped.main(bot.get_guild(guild_id), collection, reaction_threshold, target_channel_id)
 
