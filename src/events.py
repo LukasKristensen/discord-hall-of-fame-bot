@@ -68,6 +68,7 @@ async def check_for_new_server_classes(bot, db_client):
             print(f"Checking guild {guild.name}")
             if not str(guild.id) in db_client.list_database_names():
                 print(f"Guild {guild.name} not found in database, creating...")
+                await utils.error_logging(bot, f"Guild {guild.name} not found in database, creating...", guild.id)
                 new_server_class = await utils.create_database_context(guild, db_client)
                 new_server_classes[guild.id] = new_server_class
         except Exception as e:
@@ -145,12 +146,13 @@ async def guild_remove(server, db_client):
     print(f"Left server {server.name}")
     utils.delete_database_context(server.id, db_client)
 
-async def daily_task(bot, db_client, server_classes):
+async def daily_task(bot, db_client, server_classes, dev_testing):
     """
     Daily task to check for updating the leaderboard
     :param bot:
     :param db_client:
     :param server_classes:
+    :param dev_testing:
     :return:
     """
 
@@ -172,7 +174,7 @@ async def daily_task(bot, db_client, server_classes):
 
     await utils.error_logging(bot, f"Checking for db entries that are not in the guilds")
     for db_server in db_client.list_database_names():
-        if int(db_server) not in [guild.id for guild in bot.guilds]:
+        if db_server.isdigit() and not dev_testing and int(db_server) not in [guild.id for guild in bot.guilds]:
             print(f"Server {db_server} not found in bot guilds, deleting from database")
             await utils.error_logging(bot, f"Could not find server {db_server} in bot guilds")
     await utils.error_logging(bot, f"Checked {len(server_classes)} servers for daily task")

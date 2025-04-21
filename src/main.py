@@ -24,7 +24,7 @@ db_client = MongoClient(mongo_uri)
 messages_processing = []
 total_message_count = 0
 
-bot = discord_commands.Bot(command_prefix="!", intents=discord.Intents.default())
+bot = discord_commands.Bot(command_prefix="!", intents=discord.Intents.default() | discord.Intents(members=True))
 tree = bot.tree
 server_classes = {}
 dev_user = 230698327589650432
@@ -51,9 +51,10 @@ async def on_ready():
         server_classes[key] = value
     await utils.error_logging(bot, f"Loaded a total of {len(server_classes)} servers")
 
-    total_message_count = await events.historical_sweep(bot, db_client, server_classes)
-    await utils.error_logging(bot, f"Loaded a total of {total_message_count} hall of fame messages in the database")
-    await events.post_wrapped()
+    if not dev_test:
+        total_message_count = await events.historical_sweep(bot, db_client, server_classes)
+        await utils.error_logging(bot, f"Loaded a total of {total_message_count} hall of fame messages in the database")
+        await events.post_wrapped()
 
     print("Starting daily task")
     daily_task.start()
@@ -61,7 +62,7 @@ async def on_ready():
 @tasks.loop(hours=24)
 async def daily_task():
     print("Running daily task")
-    await events.daily_task(bot, db_client, server_classes)
+    await events.daily_task(bot, db_client, server_classes, dev_test)
     await utils.error_logging(bot, f"Daily task completed")
 
 @bot.event
