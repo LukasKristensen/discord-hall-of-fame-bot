@@ -437,17 +437,20 @@ def delete_database_context(server_id: int, db_client):
     print(f"Deleting database context for server {server_id}")
     db_client.drop_database(str(server_id))
 
-def get_server_classes(db_client):
+def get_server_classes(db_client, bot):
     """
     Get all server classes from the database
     :param db_client: The MongoDB client
+    :param bot: The Discord bot
     :return: A list of server classes
     """
     all_database_names = db_client.list_database_names()
     db_clients = []
     for database_name in all_database_names:
-        if database_name.isnumeric():
+        if database_name.isnumeric() and bot.get_guild(int(database_name)):
             db_clients.append(db_client[database_name])
+        else:
+            error_logging(bot, f"Database {database_name} does not exist or is not a server database")
 
     server_classes = {}
     for db in db_clients:

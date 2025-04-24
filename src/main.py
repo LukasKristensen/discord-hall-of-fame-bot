@@ -39,7 +39,7 @@ async def on_ready():
     await events.bot_login(bot, tree)
     await utils.error_logging(bot, f"Logged in as {bot.user}")
 
-    server_classes = utils.get_server_classes(db_client)
+    server_classes = utils.get_server_classes(db_client, bot)
     new_server_classes_dict = await events.check_for_new_server_classes(bot, db_client)
     for key, value in new_server_classes_dict.items():
         server_classes[key] = value
