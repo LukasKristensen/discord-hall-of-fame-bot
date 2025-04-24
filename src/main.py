@@ -55,9 +55,13 @@ async def on_ready():
 
 @tasks.loop(hours=24)
 async def daily_task():
-    print("Running daily task")
-    await events.daily_task(bot, db_client, server_classes, dev_test)
-    await utils.error_logging(bot, f"Daily task completed")
+    try:
+        print("Running daily task")
+        await events.daily_task(bot, db_client, server_classes, dev_test)
+        await utils.error_logging(bot, f"Daily task completed")
+    except Exception as e:
+        print(f"Error in daily_task: {e}")
+        await utils.error_logging(bot, f"Error in daily_task: {e}")
 
 @bot.event
 async def on_raw_reaction_add(payload: discord.RawReactionActionEvent):
