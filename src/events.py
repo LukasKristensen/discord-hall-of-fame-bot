@@ -83,7 +83,7 @@ async def bot_login(bot, tree):
         print(f"Logged in as {bot.user}")
     except discord.HTTPException as e:
         print(f"Failed to sync commands: {e}")
-    await bot.change_presence(activity=discord.CustomActivity(name="🔥 Sweeping for legendary posts!", type=5))
+    await bot.change_presence(activity=discord.CustomActivity(name="🔥 Sweeping for legendary moments!", type=5))
     await utils.error_logging(bot, f"Total servers: {len(bot.guilds)}")
 
 
