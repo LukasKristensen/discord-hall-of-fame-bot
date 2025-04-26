@@ -13,7 +13,7 @@ async def historical_sweep(bot: discord.Client, db_client, server_classes):
     """
     hof_total_messages = 0
 
-    for server_class in server_classes.values():
+    for server_class in list(server_classes.values()):
         try:
             print(f"Checking server {server_class.guild_id}")
             server_collection = db_client[str(server_class.guild_id)]["hall_of_fame_messages"]
