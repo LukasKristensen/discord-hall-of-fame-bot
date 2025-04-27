@@ -52,6 +52,8 @@ async def on_ready():
 
     print("Starting daily task")
     daily_task.start()
+    print("Starting check votes task")
+    check_votes.start()
 
 @tasks.loop(hours=24)
 async def daily_task():
@@ -63,7 +65,21 @@ async def daily_task():
     except Exception as e:
         print(f"Error in daily_task: {e}")
         await utils.error_logging(bot, f"Error in daily_task: {e}")
-    await utils.error_logging(bot, "Total messages in the database: ", total_message_count)
+    await utils.error_logging(bot, f"Total messages in the database: {total_message_count}")
+
+@tasks.loop(hours=12)
+async def check_votes():
+    await utils.error_logging(bot, "Checking votes")
+    return
+
+    # Check for all users in database which does not have a vote flag set and increment their vote count
+    try:
+        await events.check_votes(bot, db_client)
+        await utils.error_logging(bot, "Votes checked")
+    except Exception as e:
+        print(f"Error in check_votes: {e}")
+        await utils.error_logging(bot, f"Error in check_votes: {e}")
+    # reset the vote flag for all users in the database
 
 @bot.event
 async def on_raw_reaction_add(payload: discord.RawReactionActionEvent):
@@ -214,6 +230,13 @@ async def vote(interaction: discord.Interaction):
     await interaction.response.send_message("Vote for the bot on top.gg: https://top.gg/bot/1177041673352663070/vote")
     await utils.error_logging(bot, f"Vote command used by {interaction.user.name} in {interaction.guild.name}", interaction.guild.id)
 
+    return
+    # update the user's vote status in the database and increase their vote count
+    # db = db_client[str(interaction.guild_id)]
+    # server_config = db['server_config']
+    # user_id = interaction.user.id
+    
+
 @tree.command(name="custom_emoji_check_logic", description="Here you can decide if it only should be whitelisted emojis or all emojis")
 @discord.app_commands.choices(
     config_option=[
@@ -341,6 +364,7 @@ async def check_if_server_owner(interaction: discord.Interaction):
     """
     if interaction.user.id != interaction.guild.owner_id:
         await interaction.response.send_message("You are not authorized to use this command, only for server owner")
+        await utils.error_logging(bot, f"User {interaction.user.name} tried to use a command that requires server owner permissions in {interaction.guild.name}", interaction.guild.id)
         return False
     return True
 
