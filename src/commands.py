@@ -2,6 +2,7 @@ import random
 import discord
 import utils
 import version
+import main
 
 async def get_random_message(interaction, collection, bot, reaction_threshold):
     """
@@ -48,7 +49,7 @@ async def get_help(interaction):
     embed.add_field(name="/help", value="List of commands", inline=False)
     embed.add_field(name="/get_random_message", value="Get a random message from the database", inline=False)
     embed.add_field(name="/reaction_threshold_configure", value="Set the amount of reactions needed for a post to reach hall of fame", inline=False)
-    embed.add_field(name="/setup", value="If you are the server owner, set up the bot for the server if it is not already", inline=False)
+    embed.add_field(name="/setup", value="Set up the bot for the server if it is not already", inline=False)
     embed.add_field(name="/include_authors_reaction", value="Should the author of a message be included in the reaction count?", inline=False)
     embed.add_field(name="/allow_messages_in_hof_channel", value="Allow anyone to type in the Hall of Fame channel", inline=False)
     embed.add_field(name="/custom_emoji_check_logic", value="Use only whitelisted emojis for the reaction count", inline=False)
@@ -96,9 +97,7 @@ async def set_reaction_threshold(interaction, reaction_threshold: int, db_client
     :param db_client:
     :return:
     """
-    if interaction.user.id != interaction.guild.owner_id:
-        await interaction.response.send_message("You are not authorized to use this command (only for server owner)")
-        return False
+    if not await main.check_if_user_has_manage_server_permission(interaction): return
 
     db = db_client[str(interaction.guild_id)]
     server_config = db['server_config']

@@ -493,7 +493,7 @@ async def send_server_owner_error_message(owner, e):
         except Exception as history_error:
             print(f"Failed to fetch the message history of the server owner: {history_error}")
 
-async def error_logging(bot, message, server_id = None):
+async def error_logging(bot, message, server_id = None, new_value = None):
     """
     Log an error message to the error channel
     :param bot:
@@ -503,12 +503,14 @@ async def error_logging(bot, message, server_id = None):
     """
     target_guild = bot.get_guild(1180006529575960616)
     target_channel = target_guild.get_channel(1344070396575617085)
+    logging_message = f"{datetime.datetime.now()}: {message}."
 
     if server_id:
         total_guild_hall_of_fame_messages = main.db_client[str(server_id)]['hall_of_fame_messages'].count_documents({})
-        await target_channel.send(f"{datetime.datetime.now()}: {message}. [Server ID: {server_id}] [Total Hall of Fame messages: {total_guild_hall_of_fame_messages}]")
-    else:
-        await target_channel.send(f"{datetime.datetime.now()}: {message}")
+        logging_message += f" [Server ID: {server_id}] [Total Hall of Fame messages: {total_guild_hall_of_fame_messages}]"
+    if new_value:
+        logging_message += f" [New value: {new_value}]"
+    await target_channel.send(f"```{logging_message}```")
 
 async def create_feedback_form(interaction, bot):
     """

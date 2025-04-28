@@ -139,9 +139,9 @@ async def restart(payload):
     await utils.error_logging(bot, "Restarting the bot")
     await bot.close()
 
-@tree.command(name="setup", description="Setup the bot for the server if it is not already [Owner Only]")
+@tree.command(name="setup", description="Setup the bot for the server if it is not already")
 async def setup(interaction: discord.Interaction, reaction_threshold: int):
-    if not await check_if_server_owner(interaction): return
+    if not await check_if_user_has_manage_server_permission(interaction): return
 
     if not interaction.guild.me.guild_permissions.manage_channels or not interaction.guild.me.guild_permissions.manage_messages:
         await interaction.response.send_message("The bot does not have the required permissions to setup the server")
@@ -186,42 +186,42 @@ async def manual_sweep(interaction: discord.Interaction, guild_id: str):
                                 temp_reaction_threshold, post_due_date, target_channel_id, dev_user, check_for_msg_in_hof)
     await utils.error_logging(bot, f"Manual sweep command used by {interaction.user.name} in {interaction.guild.name}", interaction.guild.id)
 
-@tree.command(name="reaction_threshold_configure", description="Configure the amount of reactions needed to post a message in the Hall of Fame [Owner Only]")
+@tree.command(name="reaction_threshold_configure", description="Configure the amount of reactions needed to post a message in the Hall of Fame")
 async def configure_bot(interaction: discord.Interaction, reaction_threshold: int):
-    if not await check_if_server_owner(interaction): return
+    if not await check_if_user_has_manage_server_permission(interaction): return
 
     completion = await commands.set_reaction_threshold(interaction, reaction_threshold, db_client)
     if completion:
         server_classes[interaction.guild_id].reaction_threshold = reaction_threshold
-    await utils.error_logging(bot, f"Reaction threshold configure command used by {interaction.user.name} in {interaction.guild.name}", interaction.guild.id)
+    await utils.error_logging(bot, f"Reaction threshold configure command used by {interaction.user.name} in {interaction.guild.name}", interaction.guild.id, reaction_threshold)
 
 @tree.command(name="feedback", description="Send feedback to the developer")
 async def send_feedback(interaction: discord.Interaction):
     await utils.create_feedback_form(interaction, bot)
 
-@tree.command(name="include_authors_reaction", description="Should the author's own reaction be included in the reaction threshold calculation? [Owner Only]")
+@tree.command(name="include_authors_reaction", description="Should the author's own reaction be included in the reaction threshold calculation?")
 async def include_author_own_reaction_in_threshold(interaction: discord.Interaction, include: bool):
-    if not await check_if_server_owner(interaction): return
+    if not await check_if_user_has_manage_server_permission(interaction): return
 
     db = db_client[str(interaction.guild_id)]
     server_config = db['server_config']
     server_config.update_one({"guild_id": interaction.guild_id}, {"$set": {"include_author_in_reaction_calculation": include}})
     server_classes[interaction.guild_id].include_author_in_reaction_calculation = include
     await interaction.response.send_message(f"Author's own reaction included in the reaction threshold: {include}")
-    await utils.error_logging(bot, f"Include author's own reaction in threshold command used by {interaction.user.name} in {interaction.guild.name}", interaction.guild.id)
+    await utils.error_logging(bot, f"Include author's own reaction in threshold command used by {interaction.user.name} in {interaction.guild.name}", interaction.guild.id, include)
     await asyncio.sleep(5)
     await interaction.delete_original_response()
 
-@tree.command(name="allow_messages_in_hof_channel", description="Should people be allowed to send messages in the Hall of Fame channel? [Owner Only]")
+@tree.command(name="allow_messages_in_hof_channel", description="Should people be allowed to send messages in the Hall of Fame channel?")
 async def allow_messages_in_hof_channel(interaction: discord.Interaction, allow: bool):
-    if not await check_if_server_owner(interaction): return
+    if not await check_if_user_has_manage_server_permission(interaction): return
 
     db = db_client[str(interaction.guild_id)]
     server_config = db['server_config']
     server_config.update_one({"guild_id": interaction.guild_id}, {"$set": {"allow_messages_in_hof_channel": allow}})
     server_classes[interaction.guild_id].allow_messages_in_hof_channel = allow
     await interaction.response.send_message(f"People are allowed to send messages in the Hall of Fame channel: {allow}")
-    await utils.error_logging(bot, f"Allow messages in Hall of Fame channel command used by {interaction.user.name} in {interaction.guild.name}", interaction.guild.id)
+    await utils.error_logging(bot, f"Allow messages in Hall of Fame channel command used by {interaction.user.name} in {interaction.guild.name}", interaction.guild.id, allow)
     await asyncio.sleep(5)
     await interaction.delete_original_response()
 
@@ -245,7 +245,7 @@ async def vote(interaction: discord.Interaction):
     ]
 )
 async def custom_emoji_check_logic(interaction: discord.Interaction, config_option: app_commands.Choice[str]):
-    if not await check_if_server_owner(interaction): return
+    if not await check_if_user_has_manage_server_permission(interaction): return
     custom_emoji_check = False
     if config_option.value == "whitelisted_emojis":
         custom_emoji_check = True
@@ -258,11 +258,11 @@ async def custom_emoji_check_logic(interaction: discord.Interaction, config_opti
     if config_option.value == "whitelisted_emojis":
         response += "\n\nYou can now use the commands `/whitelist_emoji`, `/unwhitelist_emoji` and `/clear_whitelist` to manage the whitelist"
     await interaction.response.send_message(response)
-    await utils.error_logging(bot, f"Custom emoji check logic command used by {interaction.user.name} in {interaction.guild.name}", interaction.guild.id)
+    await utils.error_logging(bot, f"Custom emoji check logic command used by {interaction.user.name} in {interaction.guild.name}", interaction.guild.id, str(config_option.value))
 
-@tree.command(name="whitelist_emoji", description="Whitelist an emoji for the server if custom emoji check logic is enabled [Owner Only]")
+@tree.command(name="whitelist_emoji", description="Whitelist an emoji for the server if custom emoji check logic is enabled")
 async def whitelist_emoji(interaction: discord.Interaction, emoji: str):
-    if not await check_if_server_owner(interaction): return
+    if not await check_if_user_has_manage_server_permission(interaction): return
 
     server_class = server_classes[interaction.guild_id]
     if not server_class.custom_emoji_check_logic:
@@ -280,12 +280,12 @@ async def whitelist_emoji(interaction: discord.Interaction, emoji: str):
         await interaction.response.send_message(f"Emoji {emoji} added to the whitelist")
     else:
         await interaction.response.send_message(f"Emoji {emoji} is already in the whitelist")
-    await utils.error_logging(bot, f"Whitelist emoji command used by {interaction.user.name} in {interaction.guild.name}", interaction.guild.id)
+    await utils.error_logging(bot, f"Whitelist emoji command used by {interaction.user.name} in {interaction.guild.name}", interaction.guild.id, emoji)
 
 
-@tree.command(name="unwhitelist_emoji", description="Unwhitelist an emoji for the server if custom emoji check logic is enabled [Owner Only]")
+@tree.command(name="unwhitelist_emoji", description="Unwhitelist an emoji for the server if custom emoji check logic is enabled")
 async def unwhitelist_emoji(interaction: discord.Interaction, emoji: str):
-    if not await check_if_server_owner(interaction): return
+    if not await check_if_user_has_manage_server_permission(interaction): return
 
     server_class = server_classes[interaction.guild_id]
     if not server_class.custom_emoji_check_logic:
@@ -303,11 +303,11 @@ async def unwhitelist_emoji(interaction: discord.Interaction, emoji: str):
         await interaction.response.send_message(f"Emoji {emoji} removed from the whitelist")
     else:
         await interaction.response.send_message(f"Emoji {emoji} is not in the whitelist")
-    await utils.error_logging(bot, f"Unwhitelist emoji command used by {interaction.user.name} in {interaction.guild.name}", interaction.guild.id)
+    await utils.error_logging(bot, f"Unwhitelist emoji command used by {interaction.user.name} in {interaction.guild.name}", interaction.guild.id, emoji)
 
-@tree.command(name="clear_whitelist", description="Clear the whitelist for the server if custom emoji check logic is enabled [Owner Only]")
+@tree.command(name="clear_whitelist", description="Clear the whitelist for the server if custom emoji check logic is enabled")
 async def clear_whitelist(interaction: discord.Interaction):
-    if not await check_if_server_owner(interaction): return
+    if not await check_if_user_has_manage_server_permission(interaction): return
     server_class = server_classes[interaction.guild_id]
     if not server_class.custom_emoji_check_logic:
         await interaction.response.send_message("Custom emoji check logic is not enabled for this server")
@@ -340,31 +340,30 @@ async def get_server_config(interaction: discord.Interaction):
     await interaction.response.send_message(config_message)
     await utils.error_logging(bot, f"Get server config command used by {interaction.user.name} in {interaction.guild.name}", interaction.guild.id)
 
-@tree.command(name="set_post_due_date", description="How many days ago should the post be to be considered old and not valid? [Owner Only]")
+@tree.command(name="set_post_due_date", description="How many days ago should the post be to be considered old and not valid?")
 async def set_post_due_date(interaction: discord.Interaction, post_due_date: int):
-    if not await check_if_server_owner(interaction): return
+    if not await check_if_user_has_manage_server_permission(interaction): return
 
     db = db_client[str(interaction.guild_id)]
     server_config = db['server_config']
     server_config.update_one({"guild_id": interaction.guild_id}, {"$set": {"post_due_date": post_due_date}})
     server_classes[interaction.guild_id].post_due_date = post_due_date
     await interaction.response.send_message(f"Post due date set to {post_due_date} days")
-    await utils.error_logging(bot, f"Set post due date command used by {interaction.user.name} in {interaction.guild.name}", interaction.guild.id)
+    await utils.error_logging(bot, f"Set post due date command used by {interaction.user.name} in {interaction.guild.name}", interaction.guild.id, post_due_date)
 
 @tree.command(name="invite", description="Invite the bot to your server")
 async def invite(interaction: discord.Interaction):
     await interaction.response.send_message("Invite the bot to your server: https://discord.com/oauth2/authorize?client_id=1177041673352663070")
     await utils.error_logging(bot, f"Invite command used by {interaction.user.name} in {interaction.guild.name}", interaction.guild.id)
 
-async def check_if_server_owner(interaction: discord.Interaction):
+async def check_if_user_has_manage_server_permission(interaction: discord.Interaction):
     """
-    Check if the user is the server owner
+    Check if the user has manage server permission
     :param interaction:
-    :return: True if the user is the server owner
+    :return: True if the user has manage server permission
     """
-    if interaction.user.id != interaction.guild.owner_id:
-        await interaction.response.send_message("You are not authorized to use this command, only for server owner")
-        await utils.error_logging(bot, f"User {interaction.user.name} tried to use a command that requires server owner permissions in {interaction.guild.name}", interaction.guild.id)
+    if not interaction.user.guild_permissions.manage_guild:
+        await interaction.response.send_message("You are not authorized to use this command, only for members with manage server permission")
         return False
     return True
 

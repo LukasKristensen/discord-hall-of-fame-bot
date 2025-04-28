@@ -13,19 +13,19 @@ Join the Hall of Fame community server: https://discord.gg/r98WC5GHcn
 
 ## Commands
 
-| Command | Parameters | Action | Example |
-| :------------- |:--------------------------|:----------------------------------------------------|:--------------------|
-| /help | | List of commands | /help |
-| /get_random_message | | Get a random message from the database | /get_random_message |
+| Command | Parameters | Action                                                              | Example |
+| :------------- |:--------------------------|:--------------------------------------------------------------------|:--------------------|
+| /help | | List of commands                                                    | /help |
+| /get_random_message | | Get a random message from the database                              | /get_random_message |
 | /reaction_threshold_configure | <reaction_threshold:int> | Set the amount of reactions needed for a post to reach hall of fame | /reaction_threshold_configure 5 |
-| /setup | | If you are the server owner, set up the bot for the server if it is not already | /setup |
-| /include_authors_reaction | | Should the author of a message be included in the reaction count? | /include_authors_reaction |
-| /allow_messages_in_hof_channel | | Allow anyone to type in the Hall of Fame channel | /allow_messages_in_hof_channel |
-| /custom_emoji_check_logic | All emojis or Only whitelisted emojis | Use only whitelisted emojis for the reaction count | /custom_emoji_check_logic |
-| /whitelist_emoji | <emoji> | Add a whitelisted emoji to the list [custom_emoji_check_logic] | /whitelist_emoji 👍 |
+| /setup | | Set up the bot for the server if it is not already                  | /setup |
+| /include_authors_reaction | | Should the author of a message be included in the reaction count?   | /include_authors_reaction |
+| /allow_messages_in_hof_channel | | Allow anyone to type in the Hall of Fame channel                    | /allow_messages_in_hof_channel |
+| /custom_emoji_check_logic | All emojis or Only whitelisted emojis | Use only whitelisted emojis for the reaction count                  | /custom_emoji_check_logic |
+| /whitelist_emoji | <emoji> | Add a whitelisted emoji to the list [custom_emoji_check_logic]      | /whitelist_emoji 👍 |
 | /unwhitelist_emoji | <emoji> | Remove a whitelisted emoji from the list [custom_emoji_check_logic] | /unwhitelist_emoji 👍 |
-| /clear_whitelist | | Clear the whitelist of emojis [custom_emoji_check_logic] | /clear_whitelist |
-| /get_server_config | | Get the current bot configuration for the server | /get_server_config |
+| /clear_whitelist | | Clear the whitelist of emojis [custom_emoji_check_logic]            | /clear_whitelist |
+| /get_server_config | | Get the current bot configuration for the server                    | /get_server_config |
 
 
 <br>
