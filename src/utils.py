@@ -507,11 +507,11 @@ async def error_logging(bot, message, server_id = None, new_value = None):
 
     if server_id:
         total_guild_hall_of_fame_messages = main.db_client[str(server_id)]['hall_of_fame_messages'].count_documents({})
-        logging_message += f" [Server ID: {server_id}] [Total Hall of Fame messages: {total_guild_hall_of_fame_messages}]"
+        logging_message += f"\n[Server ID: {server_id}] [Total Hall of Fame messages: {total_guild_hall_of_fame_messages}]"
     if new_value:
-        logging_message += f" [New value: {new_value}]"
-    await target_channel.send(f"```{logging_message}```")
-
+        logging_message += f"\n[New value: {new_value}]"
+    await target_channel.send(f"```diff\n{logging_message}\n```")
+    
 async def create_feedback_form(interaction, bot):
     """
     Create a feedback form for the user and send the feedback to the feedback channel
