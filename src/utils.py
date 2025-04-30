@@ -511,7 +511,7 @@ async def error_logging(bot, message, server_id = None, new_value = None):
     if new_value:
         logging_message += f"\n[New value: {new_value}]"
     await target_channel.send(f"```diff\n{logging_message}\n```")
-    
+
 async def create_feedback_form(interaction, bot):
     """
     Create a feedback form for the user and send the feedback to the feedback channel

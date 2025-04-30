@@ -122,7 +122,7 @@ async def on_message(message: discord.Message):
 async def on_guild_join(server):
     new_server_class = await events.guild_join(server, db_client)
     server_classes[server.id] = new_server_class
-    await utils.error_logging(bot, f"Joined server {server.name} server_id: {server.id}")
+    await utils.error_logging(bot, f"Joined server {server.name}", server.id)
 
 @bot.event
 async def on_guild_remove(server):
@@ -364,6 +364,7 @@ async def check_if_user_has_manage_server_permission(interaction: discord.Intera
     """
     if not interaction.user.guild_permissions.manage_guild:
         await interaction.response.send_message("You are not authorized to use this command, only for members with manage server permission")
+        await utils.error_logging(bot, f"User {interaction.user.name} does not have manage server permission", interaction.guild_id)
         return False
     return True
 
@@ -375,6 +376,7 @@ async def check_if_dev_user(interaction: discord.Interaction):
     """
     if interaction.user.id != dev_user:
         await interaction.response.send_message("You are not authorized to use this command, only for developers")
+        await utils.error_logging(bot, f"User {interaction.user.name} is not a developer", interaction.guild_id)
         return False
     return True
 
