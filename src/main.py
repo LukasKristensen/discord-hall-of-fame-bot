@@ -186,7 +186,7 @@ async def manual_sweep(interaction: discord.Interaction, guild_id: str):
                                 temp_reaction_threshold, post_due_date, target_channel_id, dev_user, check_for_msg_in_hof)
     await utils.error_logging(bot, f"Manual sweep command used by {interaction.user.name} in {interaction.guild.name}", interaction.guild.id)
 
-@tree.command(name="reaction_threshold_configure", description="Configure the amount of reactions needed to post a message in the Hall of Fame")
+@tree.command(name="set_reaction_threshold", description="Configure the amount of reactions needed to post a message in the Hall of Fame")
 async def configure_bot(interaction: discord.Interaction, reaction_threshold: int):
     if not await check_if_user_has_manage_server_permission(interaction): return
 

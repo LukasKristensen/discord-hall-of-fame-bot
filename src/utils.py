@@ -407,7 +407,7 @@ async def create_database_context(server, db_client, leader_board_length: int = 
         f"🔹 **Reaction Threshold**: {reaction_threshold_default} reactions (default)\n"
         f"🔹 **How it works**:\n"
         f"   • The threshold is based on the highest count of a single reaction on a message.\n"
-        f"   • Use `/reaction_threshold_configure` to customize the threshold.\n"
+        f"   • Use `/set_reaction_threshold` to customize the threshold.\n"
         f"   • Use `/get_server_config` to view the current server configuration.\n\n"
         f"✨ **Want to only track specific emojis?**\n"
         f"   • Use `/custom_emoji_check_logic` to enable custom emoji tracking.\n"

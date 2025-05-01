@@ -48,7 +48,7 @@ async def get_help(interaction):
     )
     embed.add_field(name="/help", value="List of commands", inline=False)
     embed.add_field(name="/get_random_message", value="Get a random message from the database", inline=False)
-    embed.add_field(name="/reaction_threshold_configure", value="Set the amount of reactions needed for a post to reach hall of fame", inline=False)
+    embed.add_field(name="/set_reaction_threshold", value="Set the amount of reactions needed for a post to reach hall of fame", inline=False)
     embed.add_field(name="/setup", value="Set up the bot for the server if it is not already", inline=False)
     embed.add_field(name="/include_authors_reaction", value="Should the author of a message be included in the reaction count?", inline=False)
     embed.add_field(name="/allow_messages_in_hof_channel", value="Allow anyone to type in the Hall of Fame channel", inline=False)
