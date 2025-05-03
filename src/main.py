@@ -266,7 +266,7 @@ async def whitelist_emoji(interaction: discord.Interaction, emoji: str):
 
     server_class = server_classes[interaction.guild_id]
     if not server_class.custom_emoji_check_logic:
-        await interaction.response.send_message("Custom emoji check logic is not enabled for this server")
+        await interaction.response.send_message("Custom emoji check logic is not enabled for this server. Use `/custom_emoji_check_logic` to enable it")
         return
 
     db = db_client[str(interaction.guild_id)]
@@ -289,7 +289,7 @@ async def unwhitelist_emoji(interaction: discord.Interaction, emoji: str):
 
     server_class = server_classes[interaction.guild_id]
     if not server_class.custom_emoji_check_logic:
-        await interaction.response.send_message("Custom emoji check logic is not enabled for this server")
+        await interaction.response.send_message("Custom emoji check logic is not enabled for this server. Use `/custom_emoji_check_logic` to enable it")
         return
 
     db = db_client[str(interaction.guild_id)]
@@ -310,7 +310,7 @@ async def clear_whitelist(interaction: discord.Interaction):
     if not await check_if_user_has_manage_server_permission(interaction): return
     server_class = server_classes[interaction.guild_id]
     if not server_class.custom_emoji_check_logic:
-        await interaction.response.send_message("Custom emoji check logic is not enabled for this server")
+        await interaction.response.send_message("Custom emoji check logic is not enabled for this server. Use `/custom_emoji_check_logic` to enable it")
         return
     db = db_client[str(interaction.guild_id)]
     server_config = db['server_config']
