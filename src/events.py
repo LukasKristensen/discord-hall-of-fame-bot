@@ -38,8 +38,6 @@ async def historical_sweep(bot: discord.Client, db_client, server_classes):
         except Exception as e:
             print(f"Failed to check server {server_class.guild_id}: {e}")
             await utils.error_logging(bot, f"Failed to check server: {e}", server_class.guild_id)
-    await bot.change_presence(activity=discord.CustomActivity(name=f'{hof_total_messages} Hall of Fame messages', type=5))
-    print("total_message_count: ", hof_total_messages)
     return hof_total_messages
 
 
