@@ -348,58 +348,59 @@ async def create_database_context(server, db_client, leader_board_length: int = 
     :param reaction_threshold_default: The default reaction threshold for a message to be posted in the Hall of Fame
     :return: The database context
     """
-    database = db_client[str(server.id)]
 
+    database = db_client[str(server.id)]
     new_server_config = database['server_config']
 
     # Create a new channel for the Hall of Fame
     hall_of_fame_channel = await server.create_text_channel("hall-of-fame")
     await hall_of_fame_channel.edit(
-        topic="Leaderboard in pinned messages - Patch notes: https://discord.gg/GmFtfySetp",
+        topic="Patch notes: https://discord.gg/GmFtfySetp",
         reason="Creating Hall of Fame channel"
     )
 
-    await hall_of_fame_channel.send(
-        f"🎉 **Hall of Fame Channel Created!** 🎉\n\n"
-        f"🔹 **All Hall of Fame Messages**:\n"
-        f"   • All messages that meet the reaction threshold will be posted in this channel.\n\n"
-        f"🔹 **Temporary Leaderboard Messages in pinned messages**:\n"
-        f"   • The top {leader_board_length} most reacted messages will be displayed on the leaderboard.\n"
-        f"   • ⚠️ *Please do not delete these messages as they are required for future use.*\n"
-    )
+    # await hall_of_fame_channel.send(
+    #     f"🎉 **Hall of Fame Channel Created!** 🎉\n\n"
+    #     f"🔹 **All Hall of Fame Messages**:\n"
+    #     f"   • All messages that meet the reaction threshold will be posted in this channel.\n\n"
+    #     f"🔹 **Temporary Leaderboard Messages in pinned messages**:\n"
+    #     f"   • The top {leader_board_length} most reacted messages will be displayed on the leaderboard.\n"
+    #     f"   • ⚠️ *Please do not delete these messages as they are required for future use.*\n"
+    # )
 
     # Set the permissions for the Hall of Fame channel to only allow the bot to write messages
     if server.me.guild_permissions.administrator:
         await hall_of_fame_channel.set_permissions(server.default_role, read_messages=True, send_messages=False)
 
-    await hall_of_fame_channel.send("**Leaderboard:**")
-    leader_board_messages = []
-    for i in range(leader_board_length):
-        message = await hall_of_fame_channel.send(f"**HallOfFame#{i+1}**")
-        leader_board_messages.append(message.id)
+    # await hall_of_fame_channel.send("**Leaderboard:**")
+    # leader_board_messages = []
+    # for i in range(leader_board_length):
+    #     message = await hall_of_fame_channel.send(f"**HallOfFame#{i+1}**")
+    #     leader_board_messages.append(message.id)
 
     # pin the leaderboard messages in reverse order
-    for i in range(leader_board_length):
-        await hall_of_fame_channel.get_partial_message(leader_board_messages[-1-i]).pin()
-
-        async for pin_notification in hall_of_fame_channel.history(limit=1):
-            if pin_notification.type == discord.MessageType.pins_add:
-                await pin_notification.delete()
-                break
+    # for i in range(leader_board_length):
+    #     await hall_of_fame_channel.get_partial_message(leader_board_messages[-1-i]).pin()
+    #
+    #     async for pin_notification in hall_of_fame_channel.history(limit=1):
+    #         if pin_notification.type == discord.MessageType.pins_add:
+    #             await pin_notification.delete()
+    #             break
 
     new_server_config.insert_one({
         "guild_id": server.id,
         "hall_of_fame_channel_id": hall_of_fame_channel.id,
         "reaction_threshold": reaction_threshold_default,
         "post_due_date": 1000,
-        "leaderboard_message_ids": leader_board_messages,
+        # "leaderboard_message_ids": leader_board_messages,
         "sweep_limit": 1000,
         "sweep_limited": False,
         "include_author_in_reaction_calculation": True,
         "allow_messages_in_hof_channel": False,
         "custom_emoji_check_logic": False,
         "whitelisted_emojis": [],
-        "joined_date": datetime.datetime.now(timezone.utc)
+        "joined_date": datetime.datetime.now(timezone.utc),
+        "leaderboard_setup": False
     })
     database.create_collection('hall_of_fame_messages')
 
@@ -425,7 +426,8 @@ async def create_database_context(server, db_client, leader_board_length: int = 
         include_author_in_reaction_calculation=True,
         allow_messages_in_hof_channel=False,
         custom_emoji_check_logic=False,
-        whitelisted_emojis=[])
+        whitelisted_emojis=[],
+        leaderboard_setup=False)
     return new_server_class
 
 
@@ -468,7 +470,8 @@ async def get_server_classes(db_client, bot):
             allow_messages_in_hof_channel=server_config["allow_messages_in_hof_channel"],
             include_author_in_reaction_calculation=server_config["include_author_in_reaction_calculation"],
             custom_emoji_check_logic=server_config["include_author_in_reaction_calculation"],
-            whitelisted_emojis=server_config["whitelisted_emojis"])
+            whitelisted_emojis=server_config["whitelisted_emojis"],
+            leaderboard_setup=server_config["leaderboard_setup"])
     return server_classes
 
 
@@ -501,6 +504,7 @@ async def error_logging(bot, message, server_id = None, new_value = None):
     :param bot:
     :param message:
     :param server_id: The ID of the server
+    :param new_value: The new value of the server configuration
     :return:
     """
     target_guild = bot.get_guild(1180006529575960616)

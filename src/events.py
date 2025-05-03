@@ -49,7 +49,7 @@ async def post_wrapped():
     :return:
     """
     if datetime.datetime.now().month == 12 and datetime.datetime.now().day == 28:
-        pass
+        return
         # Todo: Evaluate and improve performance in a local environments before deploying to production
         # disabled until tested for dynamic usage across multiple servers and refactored
         # await hof_wrapped.main(bot.get_guild(guild_id), collection, reaction_threshold, target_channel_id)
@@ -159,6 +159,9 @@ async def daily_task(bot, db_client, server_classes, dev_testing):
 
     await utils.error_logging(bot, f"Starting daily task for {len(server_classes)} servers")
     for server_class in list(server_classes.values()):
+        if not server_class.leaderboard_setup:
+            await utils.error_logging(bot, f"Server {server_class.guild_id} not setup for leaderboard", server_class.guild_id)
+            continue
         try:
             print(f"Checking server {server_class.guild_id}")
             server_collection = db_client[str(server_class.guild_id)]["hall_of_fame_messages"]

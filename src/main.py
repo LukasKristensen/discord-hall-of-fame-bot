@@ -47,10 +47,11 @@ async def on_ready():
         server_classes[key] = value
     await utils.error_logging(bot, f"Loaded a total of {len(server_classes)} servers")
 
-    if not dev_test:
-        total_message_count = await events.historical_sweep(bot, db_client, server_classes)
-        await utils.error_logging(bot, f"Loaded a total of {total_message_count} hall of fame messages in the database")
-        await events.post_wrapped()
+    # Historical sweep disabled due to high uptime and performance impact
+    # if not dev_test:
+    #     total_message_count = await events.historical_sweep(bot, db_client, server_classes)
+    #     await utils.error_logging(bot, f"Loaded a total of {total_message_count} hall of fame messages in the database")
+    await events.post_wrapped()
 
     print("Starting daily task")
     daily_task.start()
