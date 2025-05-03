@@ -7,8 +7,6 @@ from message_reactions import most_reactions, reaction_count_without_author
 import server_class
 import main
 from bot_stats import BotStats
-from src.main import bot_stats
-
 
 async def validate_message(message: discord.RawReactionActionEvent, bot: discord.Client, collection,
                            reaction_threshold: int, post_due_date: int, target_channel_id: int, allow_messages_in_hof_channel: bool):
