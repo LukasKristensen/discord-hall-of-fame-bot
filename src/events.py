@@ -55,7 +55,7 @@ async def post_wrapped():
         # await hof_wrapped.main(bot.get_guild(guild_id), collection, reaction_threshold, target_channel_id)
 
 
-async def check_for_new_server_classes(bot, db_client):
+async def check_for_new_server_classes(bot: discord.Client, db_client):
     """
     Check if any of the joined guilds are not in the database
     :param bot:
@@ -77,7 +77,7 @@ async def check_for_new_server_classes(bot, db_client):
     return new_server_classes
 
 
-async def bot_login(bot, tree):
+async def bot_login(bot: discord.Client, tree):
     try:
         await tree.sync()
         print(f"Logged in as {bot.user}")
@@ -117,7 +117,7 @@ async def on_raw_reaction_remove(message: discord.RawReactionActionEvent, bot: d
     """
     await utils.validate_message(message, bot, collection, reaction_threshold, post_due_date, target_channel_id, allow_messages_in_hof_channel)
 
-async def on_message(message, bot, target_channel_id, allow_messages_in_hof_channel):
+async def on_message(message, bot: discord.Client, target_channel_id, allow_messages_in_hof_channel):
     """
     Event handler for when a message is sent in a channel
     :param message:
@@ -147,7 +147,7 @@ async def guild_remove(server, db_client):
     print(f"Left server {server.name}")
     utils.delete_database_context(server.id, db_client)
 
-async def daily_task(bot, db_client, server_classes, dev_testing):
+async def daily_task(bot: discord.Client, db_client, server_classes, dev_testing):
     """
     Daily task to check for updating the leaderboard
     :param bot:

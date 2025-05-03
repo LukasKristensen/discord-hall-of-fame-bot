@@ -479,7 +479,7 @@ async def send_server_owner_error_message(owner, e):
         except Exception as history_error:
             print(f"Failed to fetch the message history of the server owner: {history_error}")
 
-async def error_logging(bot, message, server_id = None, new_value = None):
+async def error_logging(bot: discord.Client, message, server_id = None, new_value = None):
     """
     Log an error message to the error channel
     :param bot:

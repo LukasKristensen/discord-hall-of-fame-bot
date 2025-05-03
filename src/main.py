@@ -29,13 +29,11 @@ tree = bot.tree
 server_classes = {}
 dev_user = 230698327589650432
 bot_stats = BotStats()
-total_message_count = bot_stats.total_messages
 
 #region Events
 @bot.event
 async def on_ready():
     global server_classes
-    global total_message_count
 
     version.DATE = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     await events.bot_login(bot, tree)
@@ -46,18 +44,12 @@ async def on_ready():
     for key, value in new_server_classes_dict.items():
         server_classes[key] = value
     await utils.error_logging(bot, f"Loaded a total of {len(server_classes)} servers")
-
-    # Historical sweep disabled due to high uptime and performance impact
-    # if not dev_test:
-    #     total_message_count = await events.historical_sweep(bot, db_client, server_classes)
     await utils.error_logging(bot,f"Loaded a total of {bot_stats.total_messages} hall of fame messages in the database")
     if bot_stats.total_messages > 0:
         await bot.change_presence(activity=discord.CustomActivity(name=f'{bot_stats.total_messages} Hall of Fame messages', type=5))
     await events.post_wrapped()
 
-    print("Starting daily task")
     daily_task.start()
-    print("Starting check votes task")
     check_votes.start()
 
 @tasks.loop(hours=24)
@@ -70,14 +62,25 @@ async def daily_task():
     except Exception as e:
         print(f"Error in daily_task: {e}")
         await utils.error_logging(bot, f"Error in daily_task: {e}")
-    await utils.error_logging(bot, f"Total messages in the database: {total_message_count}")
+    await utils.error_logging(bot, f"Total messages in the database: {bot_stats.total_message_count}")
 
-@tasks.loop(hours=12)
+    # Update the db with bot stats for over time
+    db_client["bot_stats"]["total_messages"].insert_one(
+        {"timestamp": datetime.now(),
+         "total_messages": bot_stats.total_message_count})
+    db_client["bot_stats"]["server_count"].insert_one(
+        {"timestamp": datetime.now(),
+         "server_count": len(server_classes)})
+
+@tasks.loop(hours=24)
 async def check_votes():
     await utils.error_logging(bot, "Checking votes")
+    # loop over all users, who have previously voted and check if they have voted again
     return
 
+    # if not user.claimed_vote_for_today:
     # Check for all users in database which does not have a vote flag set and increment their vote count
+    # claimed_vote_for_today = True
     try:
         await events.check_votes(bot, db_client)
         await utils.error_logging(bot, "Votes checked")
@@ -85,6 +88,7 @@ async def check_votes():
         print(f"Error in check_votes: {e}")
         await utils.error_logging(bot, f"Error in check_votes: {e}")
     # reset the vote flag for all users in the database
+    # claimed_vote_for_today = False
 
 @bot.event
 async def on_raw_reaction_add(payload: discord.RawReactionActionEvent):
@@ -358,6 +362,17 @@ async def set_post_due_date(interaction: discord.Interaction, post_due_date: int
 async def invite(interaction: discord.Interaction):
     await interaction.response.send_message("Invite the bot to your server: https://discord.com/oauth2/authorize?client_id=1177041673352663070")
     await utils.error_logging(bot, f"Invite command used by {interaction.user.name} in {interaction.guild.name}", interaction.guild.id)
+
+@tree.command(name="claim_vote", description="Claim your vote for the bot")
+async def claim_vote(interaction: discord.Interaction):
+    # check if the user has already voted by using the top.gg API link and update the users vote status in the database
+    # todo: create a new collection for user data and a new document for each user if they don't exist
+    #             - user_id
+    #             - vote_count
+    #             - hof_currency
+    #             - claimed_vote_for_today: bool
+    #             - hof_wrapped_2025 posted?
+    return
 
 async def check_if_user_has_manage_server_permission(interaction: discord.Interaction):
     """
