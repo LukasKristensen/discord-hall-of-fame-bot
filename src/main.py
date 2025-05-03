@@ -11,6 +11,7 @@ import events
 import utils
 import asyncio
 import version
+from bot_stats import BotStats
 
 dev_test = os.getenv('DEV_TEST') == "True"
 load_dotenv()
@@ -22,12 +23,13 @@ else:
 mongo_uri = os.getenv('MONGO_URI')
 db_client = MongoClient(mongo_uri)
 messages_processing = []
-total_message_count = 0
 
 bot = discord_commands.Bot(command_prefix="!", intents=discord.Intents.default() | discord.Intents(members=True))
 tree = bot.tree
 server_classes = {}
 dev_user = 230698327589650432
+bot_stats = BotStats()
+total_message_count = bot_stats.total_messages
 
 #region Events
 @bot.event
@@ -39,7 +41,7 @@ async def on_ready():
     await events.bot_login(bot, tree)
     await utils.error_logging(bot, f"Logged in as {bot.user}")
 
-    server_classes = utils.get_server_classes(db_client, bot)
+    server_classes = await utils.get_server_classes(db_client, bot)
     new_server_classes_dict = await events.check_for_new_server_classes(bot, db_client)
     for key, value in new_server_classes_dict.items():
         server_classes[key] = value

@@ -6,6 +6,7 @@ import asyncio
 from message_reactions import most_reactions, reaction_count_without_author
 import server_class
 import main
+from bot_stats import BotStats
 
 async def validate_message(message: discord.RawReactionActionEvent, bot: discord.Client, collection,
                            reaction_threshold: int, post_due_date: int, target_channel_id: int, allow_messages_in_hof_channel: bool):
@@ -212,9 +213,10 @@ async def post_hall_of_fame_message(message: discord.Message, bot: discord.Clien
                            "guild_id": int(message.guild.id),
                            "hall_of_fame_message_id": int(hall_of_fame_message.id),
                            "reaction_count": int(await reaction_count_without_author(message))})
-    if main.total_message_count > 0:
-        main.total_message_count += 1
-        await bot.change_presence(activity=discord.CustomActivity(name=f'{main.total_message_count} Hall of Fame messages', type=5))
+    bot_stats = BotStats()
+    if bot_stats.total_message_count > 0:
+        bot_stats.total_message_count += 1
+        await bot.change_presence(activity=discord.CustomActivity(name=f'{bot_stats.total_message_count} Hall of Fame messages', type=5))
 
 
 async def set_footer(embed: discord.Embed):
@@ -437,7 +439,7 @@ def delete_database_context(server_id: int, db_client):
     print(f"Deleting database context for server {server_id}")
     db_client.drop_database(str(server_id))
 
-def get_server_classes(db_client, bot):
+async def get_server_classes(db_client, bot):
     """
     Get all server classes from the database
     :param db_client: The MongoDB client
@@ -450,7 +452,7 @@ def get_server_classes(db_client, bot):
         if database_name.isnumeric() and bot.get_guild(int(database_name)):
             db_clients.append(db_client[database_name])
         else:
-            error_logging(bot, f"Database {database_name} does not exist or is not a server database")
+            await error_logging(bot, f"Database {database_name} does not exist or is not a server database")
 
     server_classes = {}
     for db in db_clients:
