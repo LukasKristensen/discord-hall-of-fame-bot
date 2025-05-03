@@ -141,7 +141,6 @@ async def restart(payload):
     await utils.error_logging(bot, "Restarting the bot")
     await bot.close()
 
-@tree.command(name="setup", description="Setup the bot for the server if it is not already")
 async def setup(interaction: discord.Interaction, reaction_threshold: int):
     if not await check_if_user_has_manage_server_permission(interaction): return
 
@@ -161,7 +160,6 @@ async def setup(interaction: discord.Interaction, reaction_threshold: int):
     server_classes[interaction.guild.id] = new_server_class
     await utils.error_logging(bot, f"Setup the bot for the server {interaction.guild.name}", interaction.guild.id)
 
-@tree.command(name="get_random_message", description="Get a random message from the Hall of Fame database")
 async def get_random_message(interaction: discord.Interaction):
     collection = db_client[str(interaction.guild_id)]["hall_of_fame_messages"]
     temp_reaction_threshold = server_classes[interaction.guild_id].reaction_threshold

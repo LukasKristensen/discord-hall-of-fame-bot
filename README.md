@@ -16,9 +16,7 @@ Join the Hall of Fame community server: https://discord.gg/r98WC5GHcn
 | Command                           | Parameters | Action                                                              | Example                             |
 |:----------------------------------|:--------------------------|:--------------------------------------------------------------------|:------------------------------------|
 | /help                             | | List of commands                                                    | /help                               |
-| /get_random_message               | | Get a random message from the database                              | /get_random_message                 |
 | /set_reaction_threshold | <reaction_threshold:int> | Set the amount of reactions needed for a post to reach hall of fame | /set_reaction_threshold 5 |
-| /setup                            | | Set up the bot for the server if it is not already                  | /setup                              |
 | /include_authors_reaction         | | Should the author of a message be included in the reaction count?   | /include_authors_reaction           |
 | /allow_messages_in_hof_channel    | | Allow anyone to type in the Hall of Fame channel                    | /allow_messages_in_hof_channel      |
 | /custom_emoji_check_logic         | All emojis or Only whitelisted emojis | Use only whitelisted emojis for the reaction count                  | /custom_emoji_check_logic           |
