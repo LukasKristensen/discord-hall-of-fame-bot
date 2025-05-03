@@ -373,7 +373,7 @@ async def create_database_context(server, db_client, leader_board_length: int = 
         await hall_of_fame_channel.set_permissions(server.default_role, read_messages=True, send_messages=False)
 
     # await hall_of_fame_channel.send("**Leaderboard:**")
-    # leader_board_messages = []
+    leader_board_messages = []
     # for i in range(leader_board_length):
     #     message = await hall_of_fame_channel.send(f"**HallOfFame#{i+1}**")
     #     leader_board_messages.append(message.id)
@@ -392,7 +392,7 @@ async def create_database_context(server, db_client, leader_board_length: int = 
         "hall_of_fame_channel_id": hall_of_fame_channel.id,
         "reaction_threshold": reaction_threshold_default,
         "post_due_date": 1000,
-        # "leaderboard_message_ids": leader_board_messages,
+        "leaderboard_message_ids": leader_board_messages,
         "sweep_limit": 1000,
         "sweep_limited": False,
         "include_author_in_reaction_calculation": True,
