@@ -50,7 +50,8 @@ async def on_ready():
     # Historical sweep disabled due to high uptime and performance impact
     # if not dev_test:
     #     total_message_count = await events.historical_sweep(bot, db_client, server_classes)
-    #     await utils.error_logging(bot, f"Loaded a total of {total_message_count} hall of fame messages in the database")
+    await bot.change_presence(activity=discord.CustomActivity(name=f'{total_message_count} Hall of Fame messages', type=5))
+    await utils.error_logging(bot, f"Loaded a total of {total_message_count} hall of fame messages in the database")
     await events.post_wrapped()
 
     print("Starting daily task")

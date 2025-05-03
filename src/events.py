@@ -131,7 +131,7 @@ async def on_message(message, bot, target_channel_id, allow_messages_in_hof_chan
 
     if message.channel.id == target_channel_id and not message.author.bot:
         await message.delete()
-        msg = await message.channel.send(f"Only Hall of Fame messages are allowed in this channel, {message.author.mention}")
+        msg = await message.channel.send(f"Only Hall of Fame messages are allowed in this channel, {message.author.mention}. Can be disabled by `/allow_messages_in_hof_channel`")
         await asyncio.sleep(5)
         await msg.delete()
     await bot.process_commands(message)

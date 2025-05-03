@@ -7,6 +7,8 @@ from message_reactions import most_reactions, reaction_count_without_author
 import server_class
 import main
 from bot_stats import BotStats
+from src.main import bot_stats
+
 
 async def validate_message(message: discord.RawReactionActionEvent, bot: discord.Client, collection,
                            reaction_threshold: int, post_due_date: int, target_channel_id: int, allow_messages_in_hof_channel: bool):
@@ -359,33 +361,11 @@ async def create_database_context(server, db_client, leader_board_length: int = 
         reason="Creating Hall of Fame channel"
     )
 
-    # await hall_of_fame_channel.send(
-    #     f"🎉 **Hall of Fame Channel Created!** 🎉\n\n"
-    #     f"🔹 **All Hall of Fame Messages**:\n"
-    #     f"   • All messages that meet the reaction threshold will be posted in this channel.\n\n"
-    #     f"🔹 **Temporary Leaderboard Messages in pinned messages**:\n"
-    #     f"   • The top {leader_board_length} most reacted messages will be displayed on the leaderboard.\n"
-    #     f"   • ⚠️ *Please do not delete these messages as they are required for future use.*\n"
-    # )
-
     # Set the permissions for the Hall of Fame channel to only allow the bot to write messages
     if server.me.guild_permissions.administrator:
         await hall_of_fame_channel.set_permissions(server.default_role, read_messages=True, send_messages=False)
 
-    # await hall_of_fame_channel.send("**Leaderboard:**")
     leader_board_messages = []
-    # for i in range(leader_board_length):
-    #     message = await hall_of_fame_channel.send(f"**HallOfFame#{i+1}**")
-    #     leader_board_messages.append(message.id)
-
-    # pin the leaderboard messages in reverse order
-    # for i in range(leader_board_length):
-    #     await hall_of_fame_channel.get_partial_message(leader_board_messages[-1-i]).pin()
-    #
-    #     async for pin_notification in hall_of_fame_channel.history(limit=1):
-    #         if pin_notification.type == discord.MessageType.pins_add:
-    #             await pin_notification.delete()
-    #             break
 
     new_server_config.insert_one({
         "guild_id": server.id,
@@ -450,9 +430,12 @@ async def get_server_classes(db_client, bot):
     """
     all_database_names = db_client.list_database_names()
     db_clients = []
+    stats = BotStats()
+
     for database_name in all_database_names:
         if database_name.isnumeric() and bot.get_guild(int(database_name)):
             db_clients.append(db_client[database_name])
+            stats.total_messages += db_client[database_name]['hall_of_fame_messages'].count_documents({})
         else:
             await error_logging(bot, f"Database {database_name} does not exist or is not a server database")
 
