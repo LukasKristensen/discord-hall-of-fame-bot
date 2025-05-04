@@ -72,6 +72,7 @@ async def check_for_new_server_classes(bot: discord.Client, db_client):
         except Exception as e:
             print(f"Failed to create database context for guild {guild.name}: {e}")
             await utils.send_server_owner_error_message(guild.owner, e)
+            await utils.error_logging(bot, f"Sending error message to server owner: {e}", guild.id)
     return new_server_classes
 
 
