@@ -259,7 +259,7 @@ async def custom_emoji_check_logic(interaction: discord.Interaction, config_opti
     server_classes[interaction.guild_id].custom_emoji_check_logic = custom_emoji_check
     response = f"Custom emoji check logic set to {config_option.name}"
     if config_option.value == "whitelisted_emojis":
-        response += "\n\nYou can now use the commands `/whitelist_emoji`, `/unwhitelist_emoji` and `/clear_whitelist` to manage the whitelist"
+        response += "\n\nYou can now use the commands </whitelist_emoji:1358208382473076849>, </unwhitelist_emoji:1358208382473076850> and </clear_whitelist:1358208382473076851> to manage the whitelist"
     await interaction.response.send_message(response)
     await utils.error_logging(bot, f"Custom emoji check logic command used by {interaction.user.name} in {interaction.guild.name}", interaction.guild.id, str(config_option.value))
 
@@ -269,7 +269,7 @@ async def whitelist_emoji(interaction: discord.Interaction, emoji: str):
 
     server_class = server_classes[interaction.guild_id]
     if not server_class.custom_emoji_check_logic:
-        await interaction.response.send_message("Custom emoji check logic is not enabled for this server. Use `/custom_emoji_check_logic` to enable it")
+        await interaction.response.send_message("Custom emoji check logic is not enabled for this server. Use </custom_emoji_check_logic:1358208382473076848> to enable it")
         return
 
     db = db_client[str(interaction.guild_id)]
@@ -292,7 +292,7 @@ async def unwhitelist_emoji(interaction: discord.Interaction, emoji: str):
 
     server_class = server_classes[interaction.guild_id]
     if not server_class.custom_emoji_check_logic:
-        await interaction.response.send_message("Custom emoji check logic is not enabled for this server. Use `/custom_emoji_check_logic` to enable it")
+        await interaction.response.send_message("Custom emoji check logic is not enabled for this server. Use </custom_emoji_check_logic:1358208382473076848> to enable it")
         return
 
     db = db_client[str(interaction.guild_id)]
@@ -313,7 +313,7 @@ async def clear_whitelist(interaction: discord.Interaction):
     if not await check_if_user_has_manage_server_permission(interaction): return
     server_class = server_classes[interaction.guild_id]
     if not server_class.custom_emoji_check_logic:
-        await interaction.response.send_message("Custom emoji check logic is not enabled for this server. Use `/custom_emoji_check_logic` to enable it")
+        await interaction.response.send_message("Custom emoji check logic is not enabled for this server. Use </custom_emoji_check_logic:1358208382473076848> to enable it")
         return
     db = db_client[str(interaction.guild_id)]
     server_config = db['server_config']
@@ -358,17 +358,6 @@ async def set_post_due_date(interaction: discord.Interaction, post_due_date: int
 async def invite(interaction: discord.Interaction):
     await interaction.response.send_message("Invite the bot to your server: <https://discord.com/oauth2/authorize?client_id=1177041673352663070>")
     await utils.error_logging(bot, f"Invite command used by {interaction.user.name} in {interaction.guild.name}", interaction.guild.id)
-
-@tree.command(name="claim_vote", description="Claim your vote for the bot")
-async def claim_vote(interaction: discord.Interaction):
-    # check if the user has already voted by using the top.gg API link and update the users vote status in the database
-    # todo: create a new collection for user data and a new document for each user if they don't exist
-    #             - user_id
-    #             - vote_count
-    #             - hof_currency
-    #             - claimed_vote_for_today: bool
-    #             - hof_wrapped_2025 posted?
-    return
 
 async def check_if_user_has_manage_server_permission(interaction: discord.Interaction):
     """
