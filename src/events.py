@@ -142,6 +142,12 @@ async def guild_join(server, db_client, bot, reaction_threshold: int = 7):
     except Exception as e:
         await utils.error_logging(bot, f"Failed to create database context for server {server.name}: {e}", server.id)
         await utils.send_server_owner_error_message(server.owner,f"Failed to setup Hall Of Fame for server {server.name}. This may be due to missing permissions, try re-inviting the bot with the correct permissions. If the problem persists, please contact support. https://discord.gg/awZ83mmGrJ")
+        try:
+            channel = server.text_channels[0]
+            await channel.send(f"Failed to setup Hall Of Fame for server {server.name}. This may be due to missing permissions, try re-inviting the bot with the correct permissions. If the problem persists, please contact support. https://discord.gg/awZ83mmGrJ")
+            await utils.error_logging(bot, f"Sent an error message to the first text channel {channel.name} on server {server.name}", server.id)
+        except Exception as e:
+            print(f"Failed to send message to server owner: {e}")
         print(f"Failed to create database context for server {server.name}: {e}")
 
 async def guild_remove(server, db_client):

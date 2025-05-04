@@ -55,7 +55,7 @@ async def get_help(interaction):
     embed.add_field(name="/unwhitelist_emoji", value="Remove a whitelisted emoji from the list [custom_emoji_check_logic]", inline=False)
     embed.add_field(name="/clear_whitelist", value="Clear the whitelist of emojis [custom_emoji_check_logic]", inline=False)
     embed.add_field(name="/get_server_config", value="Get the current bot configuration for the server", inline=False)
-    embed.add_field(name="/feedback", value="Send feedback to the developers!", inline=False)
+    embed.add_field(name="/feedback", value="Got a feature request or bug report? Let us know!", inline=False)
     embed.add_field(name="/vote", value="Support the bot by voting for it on top.gg: https://top.gg/bot/1177041673352663070/vote", inline=False)
     embed.add_field(name="", value="", inline=True)
     embed.add_field(name="Having trouble setting up the bot?", value="Make sure the bot has the correct permissions in the server or try to re-invite it", inline=False)
