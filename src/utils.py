@@ -384,13 +384,13 @@ async def create_database_context(server, db_client, leader_board_length: int = 
 
     print(f"Database context created for server {server.id}")
     await hall_of_fame_channel.send(
-        f"🎉 **Welcome to the Hall of Fame!** 🎉\n\n"
-        f"When a message receives **{reaction_threshold_default} or more** (default threshold) of the same reaction, it’s automatically **reposted here** to celebrate its popularity.\n"
+        f"🎉 **Welcome to the Hall of Fame!** 🎉\n"
+        f"When a message receives **{reaction_threshold_default} or more** (default threshold) of the same reaction, it’s automatically **reposted here** to celebrate its popularity.\n\n"
         f"🔧 **Customize your setup:**\n"
-        f"   • Change the reaction threshold with </set_reaction_threshold:1367582528675774595>.\n"
-        f"   • View your current settings with </get_server_config:1358208382473076852>.\n\n"
+        f"   • Change the reaction threshold with </set_reaction_threshold:1367582528675774595>\n"
+        f"   • View your current settings with </get_server_config:1358208382473076852>\n\n"
         f"✨ **Want to only track specific emojis?**\n"
-        f"   Enable emoji filtering with </custom_emoji_check_logic:1358208382473076848>.\n"
+        f"   Enable emoji filtering with </custom_emoji_check_logic:1358208382473076848>\n"
     )
 
     new_server_class = server_class.Server(
