@@ -71,7 +71,7 @@ async def check_for_new_server_classes(bot: discord.Client, db_client):
                 new_server_classes[guild.id] = new_server_class
         except Exception as e:
             print(f"Failed to create database context for guild {guild.name}: {e}")
-            await utils.send_server_owner_error_message(guild.owner, e)
+            await utils.send_server_owner_error_message(guild.owner, f"Failed to setup Hall Of Fame for server {guild.name}. This may be due to missing permissions, try re-inviting the bot with the correct permissions. If the problem persists, please contact support.")
             await utils.error_logging(bot, f"Sending error message to server owner: {e}", guild.id)
     return new_server_classes
 

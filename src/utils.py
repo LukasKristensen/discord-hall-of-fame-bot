@@ -473,7 +473,7 @@ async def send_server_owner_error_message(owner, e):
             message_already_sent = any("Failed to set up the bot for your server" in msg.content for msg in messages)
             if not message_already_sent:
                 print(f"Sending error message to server owner {owner.name}")
-                await owner.send(f"Failed to set up the bot for your server: {e}")
+                await owner.send(f"{e}")
             else:
                 print("Error message already sent to server owner")
         except Exception as history_error:
