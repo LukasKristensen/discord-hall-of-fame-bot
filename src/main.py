@@ -47,15 +47,11 @@ async def on_ready():
         server_classes[key] = value
     await utils.error_logging(bot, f"Loaded a total of {len(server_classes)} servers")
     await utils.error_logging(bot,f"Loaded a total of {bot_stats.total_messages} hall of fame messages in the database")
-    if not dev_test:
-        topgg_response = topgg_api.post_bot_stats(len(bot.guilds), topgg_api_key)
-        await utils.error_logging(bot, f"Posted bot stats to top.gg: {topgg_response[0]} - {topgg_response[1]}")
     if bot_stats.total_messages > 0:
         await bot.change_presence(activity=discord.CustomActivity(name=f'{bot_stats.total_messages} Hall of Fame messages', type=5))
     await events.post_wrapped()
 
     daily_task.start()
-    check_votes.start()
 
 @tasks.loop(hours=24)
 async def daily_task():
@@ -77,14 +73,9 @@ async def daily_task():
         {"timestamp": datetime.now(),
          "server_count": len(server_classes)})
 
-@tasks.loop(hours=24)
-async def check_votes():
-    await utils.error_logging(bot, "Checking votes")
-    # loop over all users, who have previously voted and check if they have voted again
-    return
-
-    # Todo: Make a webserver for listening to incoming webhooks from top.gg (https://gist.github.com/DorianAarno/65084eee8eee8d9310f06c5af8e1785a)
-
+    if not dev_test:
+        topgg_response = topgg_api.post_bot_stats(len(bot.guilds), topgg_api_key)
+        await utils.error_logging(bot, f"Posted bot stats to top.gg: {topgg_response[0]} - {topgg_response[1]}")
 
 @bot.event
 async def on_raw_reaction_add(payload: discord.RawReactionActionEvent):
