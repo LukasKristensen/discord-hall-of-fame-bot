@@ -18,14 +18,14 @@ pull_changes() {
 }
 
 run_bot() {
-  if tmux has-session -t bot_session 2>/dev/null; then
+  if tmux has-session -t bot 2>/dev/null; then
       echo "Stopping existing bot session..."
-      tmux kill-session -t bot_session
+      tmux kill-session -t bot
       sleep 2
   fi
 
   echo "Starting bot in tmux session..."
-  tmux new-session -d -s bot_session 'python3 main.py; tmux kill-session -t bot_session'
+  tmux new-session -d -s bot 'python3 main.py; tmux kill-session -t bot'
 }
 
 # Start the bot for the first time
