@@ -7,7 +7,6 @@ from message_reactions import most_reactions, reaction_count_without_author
 import server_class
 import main
 from bot_stats import BotStats
-from discord.ui import Button, View
 
 async def validate_message(message: discord.RawReactionActionEvent, bot: discord.Client, collection,
                            reaction_threshold: int, post_due_date: int, target_channel_id: int, allow_messages_in_hof_channel: bool):
@@ -340,18 +339,6 @@ def check_video_extension(message):
             return video_url
     return None
 
-class ReactionThresholdView(View):
-    def __init__(self):
-        super().__init__()
-        self.add_item(Button(label="Set Reaction Threshold", style=discord.ButtonStyle.primary, custom_id="set_reaction_threshold"))
-
-    @discord.ui.button(label="Set Reaction Threshold", style=discord.ButtonStyle.primary)
-    async def set_reaction_threshold_button(self, interaction: discord.Interaction, button: Button):
-        await interaction.response.send_message(
-            "Use the `/set_reaction_threshold` command to set the reaction threshold.",
-            ephemeral=True
-        )
-
 async def create_database_context(server, db_client, leader_board_length: int = 10, reaction_threshold_default: int=7):
     """
     Create a database context for the server
@@ -403,8 +390,7 @@ async def create_database_context(server, db_client, leader_board_length: int = 
         f"   • Change the reaction threshold with </set_reaction_threshold:1367582528675774595>.\n"
         f"   • View your current settings with </get_server_config:1358208382473076852>.\n\n"
         f"✨ **Want to only track specific emojis?**\n"
-        f"   Enable emoji filtering with </custom_emoji_check_logic:1358208382473076848>.\n",
-        view=ReactionThresholdView()
+        f"   Enable emoji filtering with </custom_emoji_check_logic:1358208382473076848>.\n"
     )
 
     new_server_class = server_class.Server(
