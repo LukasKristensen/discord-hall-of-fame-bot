@@ -47,8 +47,9 @@ async def on_ready():
         server_classes[key] = value
     await utils.error_logging(bot, f"Loaded a total of {len(server_classes)} servers")
     await utils.error_logging(bot,f"Loaded a total of {bot_stats.total_messages} hall of fame messages in the database")
-    topgg_response = topgg_api.post_bot_stats(len(bot.guilds), topgg_api_key)
-    await utils.error_logging(bot, f"Posted bot stats to top.gg: {topgg_response[0]} - {topgg_response[1]}")
+    if not dev_test:
+        topgg_response = topgg_api.post_bot_stats(len(bot.guilds), topgg_api_key)
+        await utils.error_logging(bot, f"Posted bot stats to top.gg: {topgg_response[0]} - {topgg_response[1]}")
     if bot_stats.total_messages > 0:
         await bot.change_presence(activity=discord.CustomActivity(name=f'{bot_stats.total_messages} Hall of Fame messages', type=5))
     await events.post_wrapped()

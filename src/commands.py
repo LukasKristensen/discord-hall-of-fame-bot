@@ -46,7 +46,7 @@ async def get_help(interaction):
         title="Commands",
         color=0x00ff00
     )
-    embed.add_field(name="/help", value="List of commands", inline=False)
+    embed.add_field(name="</help:1343460166263115796>", value="List of commands", inline=False)
     embed.add_field(name="/set_reaction_threshold", value="Set the amount of reactions needed for a post to reach hall of fame", inline=False)
     embed.add_field(name="/include_authors_reaction", value="Should the author of a message be included in the reaction count?", inline=False)
     embed.add_field(name="/allow_messages_in_hof_channel", value="Allow anyone to type in the Hall of Fame channel", inline=False)

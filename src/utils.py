@@ -385,13 +385,12 @@ async def create_database_context(server, db_client, leader_board_length: int = 
     print(f"Database context created for server {server.id}")
     await hall_of_fame_channel.send(
         f"🎉 **Welcome to the Hall of Fame!** 🎉\n\n"
-        f"🔹 **Reaction Threshold**: {reaction_threshold_default} reactions (default)\n"
-        f"🔹 **How it works**:\n"
-        f"   • The threshold is based on the highest count of a single reaction on a message.\n"
-        f"   • Use `/set_reaction_threshold` to customize the threshold.\n"
-        f"   • Use `/get_server_config` to view the current server configuration.\n\n"
+        f"When a message receives **{reaction_threshold_default} or more** (default threshold) of the same reaction, it’s automatically **reposted here** to celebrate its popularity.\n"
+        f"🔧 **Customize your setup:**\n"
+        f"   • Change the reaction threshold with </set_reaction_threshold:1367582528675774595>.\n"
+        f"   • View your current settings with </get_server_config:1358208382473076852>.\n\n"
         f"✨ **Want to only track specific emojis?**\n"
-        f"   • Use `/custom_emoji_check_logic` to enable custom emoji tracking.\n"
+        f"   Enable emoji filtering with </custom_emoji_check_logic:1358208382473076848>.\n"
     )
 
     new_server_class = server_class.Server(
