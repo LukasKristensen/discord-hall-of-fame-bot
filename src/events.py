@@ -134,11 +134,13 @@ async def on_message(message, bot: discord.Client, target_channel_id, allow_mess
         await msg.delete()
     await bot.process_commands(message)
 
-async def guild_join(server, db_client, reaction_threshold: int = 7):
+async def guild_join(server, db_client, bot, reaction_threshold: int = 7):
     print(f"Joined server {server.name}")
     try:
         return await utils.create_database_context(server, db_client, reaction_threshold_default=reaction_threshold)
     except Exception as e:
+        await utils.error_logging(bot, f"Failed to create database context for server {server.name}: {e}", server.id)
+        await utils.send_server_owner_error_message(server.owner, f"Failed to create database context for server {server.name}. This may be due to missing permissions, try re-inviting the bot with the correct permissions. If the problem persists, please contact support.")
         print(f"Failed to create database context for server {server.name}: {e}")
 
 async def guild_remove(server, db_client):
