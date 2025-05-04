@@ -360,7 +360,7 @@ async def set_post_due_date(interaction: discord.Interaction, post_due_date: int
 
 @tree.command(name="invite", description="Invite the bot to your server")
 async def invite(interaction: discord.Interaction):
-    await interaction.response.send_message("Invite the bot to your server: https://discord.com/oauth2/authorize?client_id=1177041673352663070")
+    await interaction.response.send_message("Invite the bot to your server: <https://discord.com/oauth2/authorize?client_id=1177041673352663070>")
     await utils.error_logging(bot, f"Invite command used by {interaction.user.name} in {interaction.guild.name}", interaction.guild.id)
 
 @tree.command(name="claim_vote", description="Claim your vote for the bot")
