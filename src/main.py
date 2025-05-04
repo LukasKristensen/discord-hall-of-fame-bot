@@ -12,6 +12,7 @@ import utils
 import asyncio
 import version
 from bot_stats import BotStats
+import topgg_api
 
 dev_test = os.getenv('DEV_TEST') == "True"
 load_dotenv()
@@ -21,6 +22,7 @@ if dev_test:
 else:
     TOKEN = os.getenv('KEY')
 mongo_uri = os.getenv('MONGO_URI')
+topgg_api_key = os.getenv('TOPGG_API_KEY')
 db_client = MongoClient(mongo_uri)
 messages_processing = []
 
@@ -45,6 +47,8 @@ async def on_ready():
         server_classes[key] = value
     await utils.error_logging(bot, f"Loaded a total of {len(server_classes)} servers")
     await utils.error_logging(bot,f"Loaded a total of {bot_stats.total_messages} hall of fame messages in the database")
+    topgg_response = topgg_api.post_bot_stats(len(bot.guilds), topgg_api_key)
+    await utils.error_logging(bot, f"Posted bot stats to top.gg: {topgg_response[0]} - {topgg_response[1]}")
     if bot_stats.total_messages > 0:
         await bot.change_presence(activity=discord.CustomActivity(name=f'{bot_stats.total_messages} Hall of Fame messages', type=5))
     await events.post_wrapped()
@@ -78,17 +82,8 @@ async def check_votes():
     # loop over all users, who have previously voted and check if they have voted again
     return
 
-    # if not user.claimed_vote_for_today:
-    # Check for all users in database which does not have a vote flag set and increment their vote count
-    # claimed_vote_for_today = True
-    try:
-        await events.check_votes(bot, db_client)
-        await utils.error_logging(bot, "Votes checked")
-    except Exception as e:
-        print(f"Error in check_votes: {e}")
-        await utils.error_logging(bot, f"Error in check_votes: {e}")
-    # reset the vote flag for all users in the database
-    # claimed_vote_for_today = False
+    # Todo: Make a webserver for listening to incoming webhooks from top.gg (https://gist.github.com/DorianAarno/65084eee8eee8d9310f06c5af8e1785a)
+
 
 @bot.event
 async def on_raw_reaction_add(payload: discord.RawReactionActionEvent):
