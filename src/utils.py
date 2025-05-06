@@ -140,7 +140,8 @@ async def update_leaderboard(collection, bot: discord.Client, server_config, tar
                 await hall_of_fame_message.edit(content=f"**HallOfFame#{i+1}**\n{original_message.attachments[0].url}")
 
 async def check_all_server_messages(guild_id: int, sweep_limit, sweep_limited: bool, bot: discord.Client,
-                                    collection, reaction_threshold: int, post_due_date: int, target_channel_id: int, allow_messages_in_hof_channel: bool):
+                                    collection, reaction_threshold: int, post_due_date: int, target_channel_id: int,
+                                    allow_messages_in_hof_channel: bool, interaction: discord.Interaction = None):
     """
     Check all messages in a server for Hall of Fame eligibility
     :param guild_id:
@@ -155,12 +156,21 @@ async def check_all_server_messages(guild_id: int, sweep_limit, sweep_limited: b
     :return:
     """
     guild = bot.get_guild(guild_id)
-    print(f"Checking all messages in server {guild.name} ({guild_id})")
+
+    status_message = "Checking all messages in server, this may take a while due to the amount of messages and rate limits"
+    messages_to_post = []
+
+    # Write a response to the interaction to indicate that the sweep is in progress
+    await interaction.response.send_message(status_message, ephemeral=False)
 
     for channel in guild.channels:
         if not channel.permissions_for(guild.me).read_messages:
             continue
         try:
+            await interaction.edit_original_response(content=
+                                                     status_message+
+                                                     f"\n\nChecking channel {channel.name} ({channel.id})"+
+                                                     f"\nTotal HOF messages waiting to post: {len(messages_to_post)}")
             if not isinstance(channel, discord.TextChannel):
                 continue # Ignore if the current channel is not a text channel
             if channel.id == target_channel_id and not allow_messages_in_hof_channel:
@@ -180,7 +190,7 @@ async def check_all_server_messages(guild_id: int, sweep_limit, sweep_limited: b
                                 break  # if message is already in the database, no need to check further
                             else:
                                 continue # if a total channel sweep is needed
-                        await post_hall_of_fame_message(message, bot, collection, target_channel_id, reaction_threshold)
+                        messages_to_post.append(message)
                     elif message_reactions >= reaction_threshold-3:
                         if collection.find_one({"message_id": int(message.id)}):
                             await remove_embed(message.id, collection, bot, target_channel_id)
@@ -188,6 +198,10 @@ async def check_all_server_messages(guild_id: int, sweep_limit, sweep_limited: b
                     print(f'An error occurred: {e}')
         except Exception as e:
             print(f'An error occurred: {e}')
+
+    messages_to_post.sort(key=lambda msg: msg.created_at)
+    for message in messages_to_post:
+        await post_hall_of_fame_message(message, bot, collection, target_channel_id, reaction_threshold)
 
 async def post_hall_of_fame_message(message: discord.Message, bot: discord.Client, collection, target_channel_id: int, reaction_threshold: int):
     """
