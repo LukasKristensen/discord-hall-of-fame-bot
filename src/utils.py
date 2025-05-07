@@ -31,8 +31,8 @@ async def validate_message(message: discord.RawReactionActionEvent, bot: discord
     if (datetime.datetime.now(timezone.utc) - message.created_at).days > post_due_date and not collection.find_one({"message_id": int(message.id)}):
         return
 
-    # Checks if the post is from the HOF channel or is from a bot
-    if (channel_id == target_channel_id and not allow_messages_in_hof_channel) or message.author.bot :
+    # Checks if the message is from a bot
+    if message.author.bot:
         return
 
     # Gets the adjusted reaction count corrected for not accounting the author
