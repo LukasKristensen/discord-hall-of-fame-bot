@@ -16,5 +16,5 @@ for target_migration in target_migrations:
         if not guild.isdigit():
             continue
         collection = target_migration[guild]["server_config"]
-        collection.update_one({}, {"$set": {"leaderboard_setup": True}})
+        collection.update_one({}, {"$set": {"ignore_bot_messages": False}})
     print("Updated total of ", target_migration.list_database_names(), " databases")

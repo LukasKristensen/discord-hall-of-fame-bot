@@ -9,7 +9,8 @@ import main
 from bot_stats import BotStats
 
 async def validate_message(message: discord.RawReactionActionEvent, bot: discord.Client, collection,
-                           reaction_threshold: int, post_due_date: int, target_channel_id: int, allow_messages_in_hof_channel: bool):
+                           reaction_threshold: int, post_due_date: int, target_channel_id: int, allow_messages_in_hof_channel: bool,
+                           ignore_bot_messages: bool = False):
     """
     Check if the message is valid for posting based on the reaction count, date and origin of the message
     :param message: The message to validate
@@ -19,6 +20,7 @@ async def validate_message(message: discord.RawReactionActionEvent, bot: discord
     :param post_due_date: The number of days after which a message is no longer eligible for the Hall of Fame
     :param target_channel_id: The ID of the Hall of Fame channel
     :param allow_messages_in_hof_channel: Whether messages are allowed in the Hall of Fame channel
+    :param ignore_bot_messages: Whether to ignore messages from bots
     :return: None
     """
     channel_id: int = message.channel_id
@@ -32,7 +34,7 @@ async def validate_message(message: discord.RawReactionActionEvent, bot: discord
         return
 
     # Checks if the message is from a bot
-    if message.author.bot:
+    if message.author.bot and ignore_bot_messages:
         return
 
     # Gets the adjusted reaction count corrected for not accounting the author
@@ -392,7 +394,8 @@ async def create_database_context(server, db_client, leader_board_length: int = 
         "custom_emoji_check_logic": False,
         "whitelisted_emojis": [],
         "joined_date": datetime.datetime.now(timezone.utc),
-        "leaderboard_setup": False
+        "leaderboard_setup": False,
+        "ignore_bot_messages": False
     })
     database.create_collection('hall_of_fame_messages')
 
@@ -418,7 +421,8 @@ async def create_database_context(server, db_client, leader_board_length: int = 
         allow_messages_in_hof_channel=False,
         custom_emoji_check_logic=False,
         whitelisted_emojis=[],
-        leaderboard_setup=False)
+        leaderboard_setup=False,
+        ignore_bot_messages=False)
     return new_server_class
 
 
@@ -465,7 +469,8 @@ async def get_server_classes(db_client, bot):
             include_author_in_reaction_calculation=server_config["include_author_in_reaction_calculation"],
             custom_emoji_check_logic=server_config["include_author_in_reaction_calculation"],
             whitelisted_emojis=server_config["whitelisted_emojis"],
-            leaderboard_setup=server_config["leaderboard_setup"])
+            leaderboard_setup=server_config["leaderboard_setup"],
+            ignore_bot_messages=server_config["ignore_bot_messages"])
     return server_classes
 
 

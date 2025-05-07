@@ -86,8 +86,8 @@ async def bot_login(bot: discord.Client, tree):
     await utils.error_logging(bot, f"Total servers: {len(bot.guilds)}")
 
 
-async def on_raw_reaction_add(message: discord.RawReactionActionEvent, bot: discord.Client, collection,
-                              reaction_threshold: int, post_due_date: int, target_channel_id: int, allow_messages_in_hof_channel: bool):
+async def on_raw_reaction_add(message: discord.RawReactionActionEvent, bot: discord.Client, collection, reaction_threshold: int,
+                              post_due_date: int, target_channel_id: int, allow_messages_in_hof_channel: bool, ignore_bot_messages: bool):
     """
     Event handler for when a reaction is added to a message
     :param message:
@@ -97,12 +97,14 @@ async def on_raw_reaction_add(message: discord.RawReactionActionEvent, bot: disc
     :param post_due_date:
     :param target_channel_id:
     :param allow_messages_in_hof_channel:
+    :param ignore_bot_messages:
     :return:
     """
-    await utils.validate_message(message, bot, collection, reaction_threshold, post_due_date, target_channel_id, allow_messages_in_hof_channel)
+    await utils.validate_message(message, bot, collection, reaction_threshold, post_due_date, target_channel_id, allow_messages_in_hof_channel, ignore_bot_messages)
 
 async def on_raw_reaction_remove(message: discord.RawReactionActionEvent, bot: discord.Client, collection,
-                              reaction_threshold: int, post_due_date: int, target_channel_id: int, allow_messages_in_hof_channel: bool):
+                              reaction_threshold: int, post_due_date: int, target_channel_id: int, allow_messages_in_hof_channel: bool,
+                                ignore_bot_messages: bool = False):
     """
     Event handler for when a reaction is added to a message
     :param message: The message that the reaction was removed from
@@ -112,9 +114,10 @@ async def on_raw_reaction_remove(message: discord.RawReactionActionEvent, bot: d
     :param post_due_date: The due date for posting
     :param target_channel_id: The target channel id
     :param allow_messages_in_hof_channel: Whether messages are allowed in the hall of fame channel
+    :param ignore_bot_messages: Whether to ignore bot messages
     :return: None
     """
-    await utils.validate_message(message, bot, collection, reaction_threshold, post_due_date, target_channel_id, allow_messages_in_hof_channel)
+    await utils.validate_message(message, bot, collection, reaction_threshold, post_due_date, target_channel_id, allow_messages_in_hof_channel, ignore_bot_messages)
 
 async def on_message(message, bot: discord.Client, target_channel_id, allow_messages_in_hof_channel):
     """

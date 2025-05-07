@@ -85,10 +85,12 @@ async def on_raw_reaction_add(payload: discord.RawReactionActionEvent):
     post_due_date = server_class.post_due_date
     target_channel_id = server_class.hall_of_fame_channel_id
     check_for_msg_in_hof = server_class.allow_messages_in_hof_channel
+    ignore_bot_messages = server_class.ignore_bot_messages
 
     if not payload.message_id in messages_processing:
         messages_processing.append(payload.message_id)
-        await events.on_raw_reaction_add(payload, bot, collection, temp_reaction_threshold, post_due_date, target_channel_id, check_for_msg_in_hof)
+        await events.on_raw_reaction_add(payload, bot, collection, temp_reaction_threshold, post_due_date,
+                                         target_channel_id, check_for_msg_in_hof, ignore_bot_messages)
         messages_processing.remove(payload.message_id)
 
 @bot.event
@@ -99,10 +101,12 @@ async def on_raw_reaction_remove(payload: discord.RawReactionActionEvent):
     post_due_date = server_class.post_due_date
     target_channel_id = server_class.hall_of_fame_channel_id
     check_for_msg_in_hof = server_class.allow_messages_in_hof_channel
+    ignore_bot_messages = server_class.ignore_bot_messages
 
     if not payload.message_id in messages_processing:
         messages_processing.append(payload.message_id)
-        await events.on_raw_reaction_remove(payload, bot, collection, temp_reaction_threshold, post_due_date, target_channel_id, check_for_msg_in_hof)
+        await events.on_raw_reaction_remove(payload, bot, collection, temp_reaction_threshold, post_due_date,
+                                            target_channel_id, check_for_msg_in_hof, ignore_bot_messages)
         messages_processing.remove(payload.message_id)
 
 @bot.event
@@ -319,10 +323,11 @@ async def get_server_config(interaction: discord.Interaction):
         f"**Server Configuration:**\n"
         f"```"
         f"Reaction Threshold: {server_class.reaction_threshold}\n"
-        f"Post Validity (How many days back a post is considered valid): {server_class.post_due_date}\n"
         f"Allow Messages in HOF Channel: {server_class.allow_messages_in_hof_channel}\n"
         f"Include Author in Reaction Calculation: {server_class.include_author_in_reaction_calculation}\n"
         f"Custom Emoji Check Logic: {server_class.custom_emoji_check_logic}\n"
+        f"Ignore Bot Messages: {server_class.ignore_bot_messages}\n"
+        f"Post Validity (How many days back a post is considered valid): {server_class.post_due_date}\n"
     )
     if server_class.custom_emoji_check_logic:
         config_message += f"Whitelisted Emojis: {', '.join(server_class.whitelisted_emojis)}\n"
@@ -346,6 +351,16 @@ async def set_post_due_date(interaction: discord.Interaction, post_due_date: int
 async def invite(interaction: discord.Interaction):
     await interaction.response.send_message("Invite the bot to your server: <https://discord.com/oauth2/authorize?client_id=1177041673352663070>")
     await utils.error_logging(bot, f"Invite command used by {interaction.user.name} in {interaction.guild.name}", interaction.guild.id)
+
+@tree.command(name="ignore_bot_messages", description="Should the bot ignore messages from other bots?")
+async def ignore_bot_messages(interaction: discord.Interaction, should_ignore_bot_messages: bool):
+    if not await check_if_user_has_manage_server_permission(interaction): return
+    db = db_client[str(interaction.guild_id)]
+    server_config = db['server_config']
+    server_config.update_one({"guild_id": interaction.guild_id}, {"$set": {"ignore_bot_messages": should_ignore_bot_messages}})
+    server_classes[interaction.guild_id].ignore_bot_messages = should_ignore_bot_messages
+    await interaction.response.send_message(f"Ignore bot messages set to {should_ignore_bot_messages}")
+    await utils.error_logging(bot, f"Ignore bot messages command used by {interaction.user.name} in {interaction.guild.name}", interaction.guild.id, should_ignore_bot_messages)
 
 async def check_if_user_has_manage_server_permission(interaction: discord.Interaction):
     """

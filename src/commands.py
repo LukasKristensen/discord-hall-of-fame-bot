@@ -55,6 +55,7 @@ async def get_help(interaction):
     embed.add_field(name="</unwhitelist_emoji:1358208382473076850>", value="Remove a whitelisted emoji from the list [custom_emoji_check_logic]", inline=False)
     embed.add_field(name="</clear_whitelist:1358208382473076851>", value="Clear the whitelist of emojis [custom_emoji_check_logic]", inline=False)
     embed.add_field(name="</get_server_config:1358208382473076852>", value="Get the current bot configuration for the server", inline=False)
+    embed.add_field(name="</ignore_bot_messages:1369721901726961686>", value="Should the bot ignore messages from other bots?", inline=False)
     embed.add_field(name="</feedback:1345567421834068060>", value="Got a feature request or bug report? Let us know!", inline=False)
     embed.add_field(name="</vote:1357399188526334074>", value="Support the bot by voting for it on top.gg: https://top.gg/bot/1177041673352663070/vote", inline=False)
     embed.add_field(name="", value="", inline=True)
