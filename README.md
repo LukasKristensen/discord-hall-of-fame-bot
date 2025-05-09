@@ -44,7 +44,7 @@ A custom emoji filter can be applied to the bot, so that it will only look for e
 ## Development Log
 
 ### 1.14
-- [x] Refactored all the external command reference to be interactive.
+- [x] Refactored all the external command references to be interactive.
 - [x] Added command option /ignore_bot_messages for whether to ignore bot messages or not.
 - [x] Top.gg API Integration: The bot now supports top.gg API for stats reporting.
 - [x] Server Management: Configuration access now extended to ServerManagers, not just ServerOwners.
