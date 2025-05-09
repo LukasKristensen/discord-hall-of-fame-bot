@@ -72,10 +72,7 @@ async def daily_task():
     db_client["bot_stats"]["server_count"].insert_one(
         {"timestamp": datetime.now(),
          "server_count": len(server_classes)})
-
-    if not dev_test:
-        topgg_response = topgg_api.post_bot_stats(len(bot.guilds), topgg_api_key)
-        await utils.error_logging(bot, f"Posted bot stats to top.gg: {topgg_response[0]} - {topgg_response[1]}")
+    await post_topgg_stats()
 
 @bot.event
 async def on_raw_reaction_add(payload: discord.RawReactionActionEvent):
@@ -123,12 +120,14 @@ async def on_guild_join(server):
     new_server_class = await events.guild_join(server, db_client, bot)
     server_classes[server.id] = new_server_class
     await utils.error_logging(bot, f"Joined server {server.name}", server.id)
+    await post_topgg_stats()
 
 @bot.event
 async def on_guild_remove(server):
     await utils.error_logging(bot, f"Left server {server.name}", server.id)
     await events.guild_remove(server, db_client)
     server_classes.pop(server.id)
+    await post_topgg_stats()
 
 @bot.command(name="restart")
 async def restart(payload):
@@ -385,6 +384,14 @@ async def check_if_dev_user(interaction: discord.Interaction):
         await utils.error_logging(bot, f"User {interaction.user.name} is not a developer", interaction.guild_id)
         return False
     return True
+
+async def post_topgg_stats():
+    """
+    Post the bot stats to top.gg
+    """
+    if not dev_test:
+        topgg_response = topgg_api.post_bot_stats(len(bot.guilds), topgg_api_key)
+        await utils.error_logging(bot, f"Posted bot stats to top.gg: {topgg_response[0]} - {topgg_response[1]}")
 
 if __name__ == "__main__":
     # Check if the TOKEN variable is set
