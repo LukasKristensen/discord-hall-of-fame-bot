@@ -43,6 +43,16 @@ A custom emoji filter can be applied to the bot, so that it will only look for e
 
 ## Development Log
 
+### 1.14
+- [x] Refactored all the external command reference to be interactive.
+- [x] Added command option /ignore_bot_messages for whether to ignore bot messages or not.
+- [x] Top.gg API Integration: The bot now supports top.gg API for stats reporting.
+- [x] Server Management: Configuration access now extended to ServerManagers, not just ServerOwners.
+- [x] Introduced singleton-based variable handling for better maintainability.
+- [x] Fixed an issue where it would not post hall of fame messages from users, when they were from the hall of fame channel.
+- [x] Leaderboards disabled by default for new servers: It seems to cause confusion for first-time users.
+- [x] Concurrency issue fixed on startup routine for loading server classes
+
 ### 1.13
 - [x] Fixed Intents for Embed Colors
   - Resolved bug causing inconsistent embed colors.
