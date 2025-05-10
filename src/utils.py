@@ -8,6 +8,7 @@ import server_class
 import main
 from bot_stats import BotStats
 
+
 async def validate_message(message: discord.RawReactionActionEvent, bot: discord.Client, collection,
                            reaction_threshold: int, post_due_date: int, target_channel_id: int, allow_messages_in_hof_channel: bool,
                            ignore_bot_messages: bool = False):
@@ -58,6 +59,7 @@ async def validate_message(message: discord.RawReactionActionEvent, bot: discord
 
     await post_hall_of_fame_message(message, bot, collection, target_channel_id, reaction_threshold)
 
+
 async def update_reaction_counter(message: discord.Message, collection, bot: discord.Client, target_channel_id: int, reaction_threshold: int):
     """
     Update the reaction counter of a message in the Hall of Fame
@@ -86,6 +88,7 @@ async def update_reaction_counter(message: discord.Message, collection, bot: dis
     embed.set_field_at(index=0, name=f"{corrected_reactions} Reactions ", value=most_reactions(message.reactions)[0].emoji, inline=True)
     await hall_of_fame_message.edit(embed=embed)
 
+
 async def remove_embed(message_id: int, collection, bot: discord.Client, target_channel_id: int):
     """
     Remove the embed of a message in the Hall of Fame
@@ -102,6 +105,7 @@ async def remove_embed(message_id: int, collection, bot: discord.Client, target_
     target_channel = bot.get_channel(target_channel_id)
     hall_of_fame_message = await target_channel.fetch_message(hall_of_fame_message_id)
     await hall_of_fame_message.edit(content="** **", embed=None)
+
 
 async def update_leaderboard(collection, bot: discord.Client, server_config, target_channel_id: int, reaction_threshold: int, leaderboard_length: int = 20):
     """
@@ -140,6 +144,7 @@ async def update_leaderboard(collection, bot: discord.Client, server_config, tar
             await hall_of_fame_message.edit(content=f"**HallOfFame#{i+1}**")
             if original_message.attachments:
                 await hall_of_fame_message.edit(content=f"**HallOfFame#{i+1}**\n{original_message.attachments[0].url}")
+
 
 async def check_all_server_messages(guild_id: int, sweep_limit, sweep_limited: bool, bot: discord.Client,
                                     collection, reaction_threshold: int, post_due_date: int, target_channel_id: int,
@@ -205,6 +210,7 @@ async def check_all_server_messages(guild_id: int, sweep_limit, sweep_limited: b
     for message in messages_to_post:
         await post_hall_of_fame_message(message, bot, collection, target_channel_id, reaction_threshold)
 
+
 async def post_hall_of_fame_message(message: discord.Message, bot: discord.Client, collection, target_channel_id: int, reaction_threshold: int):
     """
     Post a message in the Hall of Fame channel
@@ -246,6 +252,7 @@ async def set_footer(embed: discord.Embed):
 
     embed.add_field(name="Enjoying the bot? Vote for it on top.gg", value="https://top.gg/bot/1177041673352663070/vote", inline=True)
     return embed
+
 
 async def create_embed(message: discord.Message, reaction_threshold: int):
     """
@@ -339,6 +346,7 @@ async def create_embed(message: discord.Message, reaction_threshold: int):
         embed = await set_footer(embed)
         return embed
 
+
 def check_video_extension(message):
     """
     Checks if the message contains a video attachment
@@ -354,6 +362,7 @@ def check_video_extension(message):
             video_url = url.split(extension)[0] + extension
             return video_url
     return None
+
 
 async def create_database_context(server, db_client, leader_board_length: int = 10, reaction_threshold_default: int=7):
     """
@@ -436,6 +445,7 @@ def delete_database_context(server_id: int, db_client):
     print(f"Deleting database context for server {server_id}")
     db_client.drop_database(str(server_id))
 
+
 async def get_server_classes(db_client, bot):
     """
     Get all server classes from the database
@@ -497,6 +507,7 @@ async def send_server_owner_error_message(owner, e):
         except Exception as history_error:
             print(f"Failed to fetch the message history of the server owner: {history_error}")
 
+
 async def error_logging(bot: discord.Client, message, server_id = None, new_value = None):
     """
     Log an error message to the error channel
@@ -516,6 +527,7 @@ async def error_logging(bot: discord.Client, message, server_id = None, new_valu
     if new_value:
         logging_message += f"\n[New value: {new_value}]"
     await target_channel.send(f"```diff\n{logging_message}\n```")
+
 
 async def create_feedback_form(interaction, bot):
     """

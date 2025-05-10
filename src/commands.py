@@ -4,6 +4,7 @@ import utils
 import version
 import main
 
+
 async def get_random_message(interaction, collection, bot, reaction_threshold):
     """
     Command to get a random message from the Hall of Fame database
@@ -36,6 +37,7 @@ async def get_random_message(interaction, collection, bot, reaction_threshold):
     embed = await utils.create_embed(message, reaction_threshold)
     await interaction.response.send_message(embed=embed)
 
+
 async def get_help(interaction):
     """
     Command to get a list of commands
@@ -66,6 +68,7 @@ async def get_help(interaction):
     embed.set_footer(text=f"Bot Version: {version.VERSION} - {version.DATE}")
     await interaction.response.send_message(embed=embed)
 
+
 async def manual_sweep(interaction, guild_id: int, sweep_limit, sweep_limited: bool, bot: discord.Client,
                        collection, reaction_threshold: int, post_due_date: int, target_channel_id: int,
                        allow_messages_in_hof_channel: bool):
@@ -84,6 +87,7 @@ async def manual_sweep(interaction, guild_id: int, sweep_limit, sweep_limited: b
     :return:
     """
     await utils.check_all_server_messages(int(guild_id), sweep_limit, sweep_limited, bot, collection, reaction_threshold, post_due_date, target_channel_id, allow_messages_in_hof_channel, interaction)
+
 
 async def set_reaction_threshold(interaction, reaction_threshold: int, db_client):
     """

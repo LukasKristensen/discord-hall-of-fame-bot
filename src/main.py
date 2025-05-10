@@ -32,7 +32,8 @@ server_classes = {}
 dev_user = 230698327589650432
 bot_stats = BotStats()
 
-#region Events
+
+# region Events
 @bot.event
 async def on_ready():
     global server_classes
@@ -52,6 +53,7 @@ async def on_ready():
     await events.post_wrapped()
 
     daily_task.start()
+
 
 @tasks.loop(hours=24)
 async def daily_task():
@@ -74,6 +76,7 @@ async def daily_task():
          "server_count": len(server_classes)})
     await post_topgg_stats()
 
+
 @bot.event
 async def on_raw_reaction_add(payload: discord.RawReactionActionEvent):
     server_class = server_classes[payload.guild_id]
@@ -89,6 +92,7 @@ async def on_raw_reaction_add(payload: discord.RawReactionActionEvent):
         await events.on_raw_reaction_add(payload, bot, collection, temp_reaction_threshold, post_due_date,
                                          target_channel_id, check_for_msg_in_hof, ignore_bot_messages)
         messages_processing.remove(payload.message_id)
+
 
 @bot.event
 async def on_raw_reaction_remove(payload: discord.RawReactionActionEvent):
@@ -106,6 +110,7 @@ async def on_raw_reaction_remove(payload: discord.RawReactionActionEvent):
                                             target_channel_id, check_for_msg_in_hof, ignore_bot_messages)
         messages_processing.remove(payload.message_id)
 
+
 @bot.event
 async def on_message(message: discord.Message):
     if message.author == bot.user:
@@ -115,6 +120,7 @@ async def on_message(message: discord.Message):
     allow_messages_in_hof = server_class.allow_messages_in_hof_channel
     await events.on_message(message, bot, target_channel_id, allow_messages_in_hof)
 
+
 @bot.event
 async def on_guild_join(server):
     new_server_class = await events.guild_join(server, db_client, bot)
@@ -122,12 +128,14 @@ async def on_guild_join(server):
     await utils.error_logging(bot, f"Joined server {server.name}", server.id)
     await post_topgg_stats()
 
+
 @bot.event
 async def on_guild_remove(server):
     await utils.error_logging(bot, f"Left server {server.name}", server.id)
     await events.guild_remove(server, db_client)
     server_classes.pop(server.id)
     await post_topgg_stats()
+
 
 @bot.command(name="restart")
 async def restart(payload):
@@ -137,6 +145,7 @@ async def restart(payload):
 
     await utils.error_logging(bot, "Restarting the bot")
     await bot.close()
+
 
 async def setup(interaction: discord.Interaction, reaction_threshold: int):
     if not await check_if_user_has_manage_server_permission(interaction): return
@@ -157,16 +166,19 @@ async def setup(interaction: discord.Interaction, reaction_threshold: int):
     server_classes[interaction.guild.id] = new_server_class
     await utils.error_logging(bot, f"Setup the bot for the server {interaction.guild.name}", interaction.guild.id)
 
+
 async def get_random_message(interaction: discord.Interaction):
     collection = db_client[str(interaction.guild_id)]["hall_of_fame_messages"]
     temp_reaction_threshold = server_classes[interaction.guild_id].reaction_threshold
     await commands.get_random_message(interaction, collection, bot, temp_reaction_threshold)
     await utils.error_logging(bot, f"Get random message command used by {interaction.user.name} in {interaction.guild.name}", interaction.guild.id)
 
+
 @tree.command(name="help", description="List of commands")
 async def get_help(interaction: discord.Interaction):
     await commands.get_help(interaction)
     await utils.error_logging(bot, f"Help command used by {interaction.user.name} in {interaction.guild.name}", interaction.guild.id)
+
 
 # Disabled for now
 async def manual_sweep(interaction: discord.Interaction):
@@ -180,6 +192,7 @@ async def manual_sweep(interaction: discord.Interaction):
     await commands.manual_sweep(interaction, interaction.guild_id, None, False, bot, collection,
                                 temp_reaction_threshold, 36500, target_channel_id, False)
 
+
 @tree.command(name="set_reaction_threshold", description="Configure the amount of reactions needed to post a message in the Hall of Fame")
 async def configure_bot(interaction: discord.Interaction, reaction_threshold: int):
     if not await check_if_user_has_manage_server_permission(interaction): return
@@ -189,9 +202,11 @@ async def configure_bot(interaction: discord.Interaction, reaction_threshold: in
         server_classes[interaction.guild_id].reaction_threshold = reaction_threshold
     await utils.error_logging(bot, f"Reaction threshold configure command used by {interaction.user.name} in {interaction.guild.name}", interaction.guild.id, reaction_threshold)
 
+
 @tree.command(name="feedback", description="Send feedback to the developer")
 async def send_feedback(interaction: discord.Interaction):
     await utils.create_feedback_form(interaction, bot)
+
 
 @tree.command(name="include_authors_reaction", description="Should the author's own reaction be included in the reaction threshold calculation?")
 async def include_author_own_reaction_in_threshold(interaction: discord.Interaction, include: bool):
@@ -206,6 +221,7 @@ async def include_author_own_reaction_in_threshold(interaction: discord.Interact
     await asyncio.sleep(5)
     await interaction.delete_original_response()
 
+
 @tree.command(name="allow_messages_in_hof_channel", description="Should people be allowed to send messages in the Hall of Fame channel?")
 async def allow_messages_in_hof_channel(interaction: discord.Interaction, allow: bool):
     if not await check_if_user_has_manage_server_permission(interaction): return
@@ -219,6 +235,7 @@ async def allow_messages_in_hof_channel(interaction: discord.Interaction, allow:
     await asyncio.sleep(5)
     await interaction.delete_original_response()
 
+
 @tree.command(name="vote", description="Vote for the bot on top.gg")
 async def vote(interaction: discord.Interaction):
     await interaction.response.send_message("Vote for the bot on top.gg: https://top.gg/bot/1177041673352663070/vote")
@@ -229,7 +246,7 @@ async def vote(interaction: discord.Interaction):
     # db = db_client[str(interaction.guild_id)]
     # server_config = db['server_config']
     # user_id = interaction.user.id
-    
+
 
 @tree.command(name="custom_emoji_check_logic", description="Here you can decide if it only should be whitelisted emojis or all emojis")
 @discord.app_commands.choices(
@@ -253,6 +270,7 @@ async def custom_emoji_check_logic(interaction: discord.Interaction, config_opti
         response += "\n\nYou can now use the commands </whitelist_emoji:1358208382473076849>, </unwhitelist_emoji:1358208382473076850> and </clear_whitelist:1358208382473076851> to manage the whitelist"
     await interaction.response.send_message(response)
     await utils.error_logging(bot, f"Custom emoji check logic command used by {interaction.user.name} in {interaction.guild.name}", interaction.guild.id, str(config_option.value))
+
 
 @tree.command(name="whitelist_emoji", description="Whitelist an emoji for the server if custom emoji check logic is enabled")
 async def whitelist_emoji(interaction: discord.Interaction, emoji: str):
@@ -299,6 +317,7 @@ async def unwhitelist_emoji(interaction: discord.Interaction, emoji: str):
         await interaction.response.send_message(f"Emoji {emoji} is not in the whitelist")
     await utils.error_logging(bot, f"Unwhitelist emoji command used by {interaction.user.name} in {interaction.guild.name}", interaction.guild.id, emoji)
 
+
 @tree.command(name="clear_whitelist", description="Clear the whitelist for the server if custom emoji check logic is enabled")
 async def clear_whitelist(interaction: discord.Interaction):
     if not await check_if_user_has_manage_server_permission(interaction): return
@@ -335,6 +354,7 @@ async def get_server_config(interaction: discord.Interaction):
     await interaction.response.send_message(config_message)
     await utils.error_logging(bot, f"Get server config command used by {interaction.user.name} in {interaction.guild.name}", interaction.guild.id)
 
+
 @tree.command(name="set_post_due_date", description="How many days ago should the post be to be considered old and not valid?")
 async def set_post_due_date(interaction: discord.Interaction, post_due_date: int):
     if not await check_if_user_has_manage_server_permission(interaction): return
@@ -346,10 +366,12 @@ async def set_post_due_date(interaction: discord.Interaction, post_due_date: int
     await interaction.response.send_message(f"Post due date set to {post_due_date} days")
     await utils.error_logging(bot, f"Set post due date command used by {interaction.user.name} in {interaction.guild.name}", interaction.guild.id, post_due_date)
 
+
 @tree.command(name="invite", description="Invite the bot to your server")
 async def invite(interaction: discord.Interaction):
     await interaction.response.send_message("Invite the bot to your server: <https://discord.com/oauth2/authorize?client_id=1177041673352663070>")
     await utils.error_logging(bot, f"Invite command used by {interaction.user.name} in {interaction.guild.name}", interaction.guild.id)
+
 
 @tree.command(name="ignore_bot_messages", description="Should the bot ignore messages from other bots?")
 async def ignore_bot_messages(interaction: discord.Interaction, should_ignore_bot_messages: bool):
@@ -360,6 +382,7 @@ async def ignore_bot_messages(interaction: discord.Interaction, should_ignore_bo
     server_classes[interaction.guild_id].ignore_bot_messages = should_ignore_bot_messages
     await interaction.response.send_message(f"Ignore bot messages set to {should_ignore_bot_messages}")
     await utils.error_logging(bot, f"Ignore bot messages command used by {interaction.user.name} in {interaction.guild.name}", interaction.guild.id, should_ignore_bot_messages)
+
 
 async def check_if_user_has_manage_server_permission(interaction: discord.Interaction):
     """
@@ -373,6 +396,7 @@ async def check_if_user_has_manage_server_permission(interaction: discord.Intera
         return False
     return True
 
+
 async def check_if_dev_user(interaction: discord.Interaction):
     """
     Check if the user is a developer
@@ -384,6 +408,7 @@ async def check_if_dev_user(interaction: discord.Interaction):
         await utils.error_logging(bot, f"User {interaction.user.name} is not a developer", interaction.guild_id)
         return False
     return True
+
 
 async def post_topgg_stats():
     """

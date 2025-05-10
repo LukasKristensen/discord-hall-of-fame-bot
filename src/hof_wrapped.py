@@ -8,19 +8,20 @@ total_hall_of_fame_posts = 0
 rankings = None
 reactionThreshold: int
 
+
 class User:
     def __init__(self, member: discord.Member):
         self.member = member
-        self.messageCount = 0 # Implemented
-        self.reactionCount = 0 # Implemented
-        self.reactionToNonHallOfFamePosts = 0 # Implemented
-        self.reactionToHallOfFamePosts = 0 # Implemented
-        self.hallOfFameMessagePosts = 0 # Implemented
-        self.fanOfUsers = {} # Implemented
-        self.usersFans = {} # Implemented
-        self.mostUsedChannels = {} # Implemented
-        self.mostReactedPost = {"post": None, "reaction_count": 0} # Implemented
-        self.mostUsedEmojis = {} # Implemented
+        self.messageCount = 0  # Implemented
+        self.reactionCount = 0  # Implemented
+        self.reactionToNonHallOfFamePosts = 0  # Implemented
+        self.reactionToHallOfFamePosts = 0  # Implemented
+        self.hallOfFameMessagePosts = 0  # Implemented
+        self.fanOfUsers = {}  # Implemented
+        self.usersFans = {}  # Implemented
+        self.mostUsedChannels = {}  # Implemented
+        self.mostReactedPost = {"post": None, "reaction_count": 0}  # Implemented
+        self.mostUsedEmojis = {}  # Implemented
         self.id = member.id
 
     def get_ratio_hall_of_fame_posts_to_normal_posts(self):
@@ -40,10 +41,10 @@ class User:
             return f"Hall of Fame Ghost: The Hall of Fame isn't your scene. (Ratio: {round(ratio * 100, 2)}%)"
 
 
-
 def initialize_users(guild: discord.Guild):
     for member in guild.members:
         users[member.id] = User(member)
+
 
 async def process_message_reactions(message: discord.Message):
     global total_hall_of_fame_posts
@@ -101,6 +102,7 @@ async def process_message_reactions(message: discord.Message):
         else:
             user_reactor.fanOfUsers[user_author.id] += 1
 
+
 async def process_all_server_messages(guild: discord.Guild):
     for channel in guild.channels:
         print(f"Processing channel: {channel.name}")
@@ -126,6 +128,7 @@ async def process_all_server_messages(guild: discord.Guild):
             else:
                 user.mostUsedChannels[channel.id] += 1
     return users
+
 
 def create_embed(user: User, guild: discord.Guild):
     if len(user.mostUsedChannels) < 3:
@@ -235,6 +238,7 @@ def create_embed(user: User, guild: discord.Guild):
 
     return embed
 
+
 def rank_stats(users: dict):
     rankings = {
         "messageCount": [],
@@ -262,12 +266,14 @@ def rank_stats(users: dict):
         rankings[key].sort(key=lambda x: x[1], reverse=True)
     return rankings
 
+
 def get_user_rank(rankings: dict, user: User):
     user_ranks = {}
     for stat, ranked_list in rankings.items():
         user_rank = next((i + 1 for i, (member, _) in enumerate(ranked_list) if member.id == user.member.id), None)
         user_ranks[stat] = user_rank
     return user_ranks
+
 
 def add_rankings(embed, user: User, rankings: dict):
     user_ranks = get_user_rank(rankings, user)

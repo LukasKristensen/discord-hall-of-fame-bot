@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 load_dotenv()
 auth_key = os.getenv('TOPGG_API_KEY')
 
+
 def get_top_1000_votes(api_key: str):
     """
     Get the top 1000 votes for the bot
@@ -18,6 +19,7 @@ def get_top_1000_votes(api_key: str):
     }
     response = requests.get(url, headers=headers)
     return response.json()
+
 
 def post_bot_stats(server_count: int, api_key: str, shards=None, shard_id=None, shard_count=None):
     """
@@ -50,6 +52,7 @@ def post_bot_stats(server_count: int, api_key: str, shards=None, shard_id=None, 
     except requests.exceptions.JSONDecodeError:
         return response.status_code, {"error": "Invalid JSON response from server"}
 
+
 def get_user_vote(api_key: str, user_id: int):
     """
     Check if a user has voted for the bot
@@ -68,6 +71,7 @@ def get_user_vote(api_key: str, user_id: int):
     }
     response = requests.get(url, headers=headers, params=payload)
     return response.json()
+
 
 if __name__ == "__main__":
     print(get_top_1000_votes(auth_key))

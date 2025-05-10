@@ -1,6 +1,7 @@
 import discord as discord
 import main
 
+
 def most_reactions(reactions: [discord.Reaction]) -> [discord.Reaction]:
     custom_emoji_check_logic = main.db_client[str(reactions[0].message.guild.id)]["server_config"].find_one({})["custom_emoji_check_logic"]
     whited_listed_emojis = main.db_client[str(reactions[0].message.guild.id)]["server_config"].find_one({})["whitelisted_emojis"]

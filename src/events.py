@@ -3,6 +3,7 @@ import asyncio
 import datetime
 import utils
 
+
 async def historical_sweep(bot: discord.Client, db_client, server_classes):
     """
     Event handler for when the bot is ready
@@ -71,7 +72,10 @@ async def check_for_new_server_classes(bot: discord.Client, db_client):
                 new_server_classes[guild.id] = new_server_class
         except Exception as e:
             print(f"Failed to create database context for guild {guild.name}: {e}")
-            await utils.send_server_owner_error_message(guild.owner, f"Failed to setup Hall Of Fame for server {guild.name}. This may be due to missing permissions, try re-inviting the bot with the correct permissions. If the problem persists, please contact support. https://discord.gg/awZ83mmGrJ")
+            error_message = (f"Failed to setup Hall Of Fame for server {guild.name}. This may be due to missing "
+                             f"permissions, try re-inviting the bot with the correct permissions. If the problem "
+                             f"persists, please contact support. https://discord.gg/awZ83mmGrJ")
+            await utils.send_server_owner_error_message(guild.owner, error_message)
             await utils.error_logging(bot, f"Sending error message to server owner: {e}", guild.id)
     return new_server_classes
 
@@ -86,8 +90,9 @@ async def bot_login(bot: discord.Client, tree):
     await utils.error_logging(bot, f"Total servers: {len(bot.guilds)}")
 
 
-async def on_raw_reaction_add(message: discord.RawReactionActionEvent, bot: discord.Client, collection, reaction_threshold: int,
-                              post_due_date: int, target_channel_id: int, allow_messages_in_hof_channel: bool, ignore_bot_messages: bool):
+async def on_raw_reaction_add(message: discord.RawReactionActionEvent, bot: discord.Client, collection,
+                              reaction_threshold: int, post_due_date: int, target_channel_id: int,
+                              allow_messages_in_hof_channel: bool, ignore_bot_messages: bool):
     """
     Event handler for when a reaction is added to a message
     :param message:
@@ -100,11 +105,14 @@ async def on_raw_reaction_add(message: discord.RawReactionActionEvent, bot: disc
     :param ignore_bot_messages:
     :return:
     """
-    await utils.validate_message(message, bot, collection, reaction_threshold, post_due_date, target_channel_id, allow_messages_in_hof_channel, ignore_bot_messages)
+    await utils.validate_message(message, bot, collection, reaction_threshold, post_due_date, target_channel_id,
+                                 allow_messages_in_hof_channel, ignore_bot_messages)
+
 
 async def on_raw_reaction_remove(message: discord.RawReactionActionEvent, bot: discord.Client, collection,
-                              reaction_threshold: int, post_due_date: int, target_channel_id: int, allow_messages_in_hof_channel: bool,
-                                ignore_bot_messages: bool = False):
+                                 reaction_threshold: int, post_due_date: int, target_channel_id: int,
+                                 allow_messages_in_hof_channel: bool,
+                                 ignore_bot_messages: bool = False):
     """
     Event handler for when a reaction is added to a message
     :param message: The message that the reaction was removed from
@@ -117,7 +125,9 @@ async def on_raw_reaction_remove(message: discord.RawReactionActionEvent, bot: d
     :param ignore_bot_messages: Whether to ignore bot messages
     :return: None
     """
-    await utils.validate_message(message, bot, collection, reaction_threshold, post_due_date, target_channel_id, allow_messages_in_hof_channel, ignore_bot_messages)
+    await utils.validate_message(message, bot, collection, reaction_threshold, post_due_date, target_channel_id,
+                                 allow_messages_in_hof_channel, ignore_bot_messages)
+
 
 async def on_message(message, bot: discord.Client, target_channel_id, allow_messages_in_hof_channel):
     """
@@ -133,29 +143,49 @@ async def on_message(message, bot: discord.Client, target_channel_id, allow_mess
 
     if message.channel.id == target_channel_id and not message.author.bot:
         await message.delete()
-        msg = await message.channel.send(f"Only Hall of Fame messages are allowed in this channel, {message.author.mention}. Can be disabled by </allow_messages_in_hof_channel:1348428694007316571>")
+        msg = await message.channel.send(
+            f"Only Hall of Fame messages are allowed in this channel, {message.author.mention}. Can be disabled by </allow_messages_in_hof_channel:1348428694007316571>")
         await asyncio.sleep(5)
         await msg.delete()
     await bot.process_commands(message)
 
+
 async def guild_join(server, db_client, bot, reaction_threshold: int = 7):
-    print(f"Joined server {server.name}")
+    """
+    Event handler for when the bot is added to a server
+    :param server:
+    :param db_client:
+    :param bot:
+    :param reaction_threshold:
+    :return:
+    """
     try:
         return await utils.create_database_context(server, db_client, reaction_threshold_default=reaction_threshold)
     except Exception as e:
         await utils.error_logging(bot, f"Failed to create database context for server {server.name}: {e}", server.id)
-        await utils.send_server_owner_error_message(server.owner,f"Failed to setup Hall Of Fame for server {server.name}. This may be due to missing permissions, try re-inviting the bot with the correct permissions. If the problem persists, please contact support. https://discord.gg/awZ83mmGrJ")
+        await utils.send_server_owner_error_message(server.owner,
+                                                    f"Failed to setup Hall Of Fame for server {server.name}. This may be due to missing permissions, try re-inviting the bot with the correct permissions. If the problem persists, please contact support. https://discord.gg/awZ83mmGrJ")
         try:
             channel = server.text_channels[0]
-            await channel.send(f"Failed to setup Hall Of Fame for server {server.name}. This may be due to missing permissions, try re-inviting the bot with the correct permissions. If the problem persists, please contact support. https://discord.gg/awZ83mmGrJ")
-            await utils.error_logging(bot, f"Sent an error message to the first text channel {channel.name} on server {server.name}", server.id)
+            await channel.send(
+                f"Failed to setup Hall Of Fame for server {server.name}. This may be due to missing permissions, try re-inviting the bot with the correct permissions. If the problem persists, please contact support. https://discord.gg/awZ83mmGrJ")
+            await utils.error_logging(bot,
+                                      f"Sent an error message to the first text channel {channel.name} on server {server.name}",
+                                      server.id)
         except Exception as e:
             print(f"Failed to send message to server owner: {e}")
         print(f"Failed to create database context for server {server.name}: {e}")
 
+
 async def guild_remove(server, db_client):
-    print(f"Left server {server.name}")
+    """
+    Event handler for when the bot is removed from a server
+    :param server:
+    :param db_client:
+    :return:
+    """
     utils.delete_database_context(server.id, db_client)
+
 
 async def daily_task(bot: discord.Client, db_client, server_classes, dev_testing):
     """
@@ -166,11 +196,11 @@ async def daily_task(bot: discord.Client, db_client, server_classes, dev_testing
     :param dev_testing:
     :return:
     """
-
     await utils.error_logging(bot, f"Starting daily task for {len(server_classes)} servers")
     for server_class in list(server_classes.values()):
         if not server_class.leaderboard_setup:
-            await utils.error_logging(bot, f"Server {server_class.guild_id} not setup for leaderboard", server_class.guild_id)
+            await utils.error_logging(bot, f"Server {server_class.guild_id} not setup for leaderboard",
+                                      server_class.guild_id)
             continue
         try:
             print(f"Checking server {server_class.guild_id}")
