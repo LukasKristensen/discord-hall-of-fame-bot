@@ -97,7 +97,8 @@ async def set_reaction_threshold(interaction, reaction_threshold: int, db_client
     :param db_client:
     :return:
     """
-    if not await main.check_if_user_has_manage_server_permission(interaction): return
+    if not await main.check_if_user_has_manage_server_permission(interaction):
+        return False
 
     db = db_client[str(interaction.guild_id)]
     server_config = db['server_config']
