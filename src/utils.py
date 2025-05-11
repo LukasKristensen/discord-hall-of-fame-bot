@@ -461,6 +461,10 @@ async def get_server_classes(db_client, bot):
         if database_name.isnumeric() and bot.get_guild(int(database_name)):
             db_clients.append(db_client[database_name])
             stats.total_messages += db_client[database_name]['hall_of_fame_messages'].count_documents({})
+            db = db_client[database_name]
+            db['server_config'].update_one(
+                {"guild_id": int(database_name)},
+                {"$set": {"server_member_count": bot.get_guild(int(database_name)).member_count}})
         else:
             await error_logging(bot, f"Database {database_name} does not exist or is not a server database")
 

@@ -9,7 +9,6 @@ from pymongo.mongo_client import MongoClient
 import commands
 import events
 import utils
-import asyncio
 import version
 from bot_stats import BotStats
 import topgg_api
