@@ -3,7 +3,6 @@ import discord
 from discord import app_commands
 from discord.ext import commands as discord_commands
 from discord.ext import tasks
-import os
 from dotenv import load_dotenv
 from pymongo.mongo_client import MongoClient
 import commands
@@ -12,7 +11,8 @@ import utils
 import version
 from bot_stats import BotStats
 import topgg_api
-import src.translations as messages
+import os
+from translations import messages
 
 dev_test = os.getenv('DEV_TEST') == "True"
 load_dotenv()

@@ -2,8 +2,7 @@ import discord
 import asyncio
 import datetime
 import utils
-import translations.messages as messages
-
+from translations import messages
 
 async def historical_sweep(bot: discord.Client, db_client, server_classes):
     """
