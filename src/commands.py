@@ -5,7 +5,7 @@ import version
 import main
 
 
-async def get_random_message(interaction, collection, bot, reaction_threshold):
+async def get_random_message(interaction: discord.Interaction, collection, bot, reaction_threshold):
     """
     Command to get a random message from the Hall of Fame database
     :param interaction:
@@ -38,7 +38,7 @@ async def get_random_message(interaction, collection, bot, reaction_threshold):
     await interaction.response.send_message(embed=embed)
 
 
-async def get_help(interaction):
+async def get_help(interaction: discord.Interaction):
     """
     Command to get a list of commands
     :param interaction:
@@ -69,7 +69,7 @@ async def get_help(interaction):
     await interaction.response.send_message(embed=embed)
 
 
-async def manual_sweep(interaction, guild_id: int, sweep_limit, sweep_limited: bool, bot: discord.Client,
+async def manual_sweep(interaction: discord.Interaction, guild_id: int, sweep_limit, sweep_limited: bool, bot: discord.Client,
                        collection, reaction_threshold: int, post_due_date: int, target_channel_id: int,
                        allow_messages_in_hof_channel: bool):
     """
@@ -89,7 +89,7 @@ async def manual_sweep(interaction, guild_id: int, sweep_limit, sweep_limited: b
     await utils.check_all_server_messages(int(guild_id), sweep_limit, sweep_limited, bot, collection, reaction_threshold, post_due_date, target_channel_id, allow_messages_in_hof_channel, interaction)
 
 
-async def set_reaction_threshold(interaction, reaction_threshold: int, db_client):
+async def set_reaction_threshold(interaction: discord.Interaction, reaction_threshold: int, db_client):
     """
     Command to set the reaction threshold for posting a message in the Hall of Fame
     :param interaction:
@@ -97,7 +97,8 @@ async def set_reaction_threshold(interaction, reaction_threshold: int, db_client
     :param db_client:
     :return:
     """
-    if not await main.check_if_user_has_manage_server_permission(interaction): return
+    if not await main.check_if_user_has_manage_server_permission(interaction):
+        return False
 
     db = db_client[str(interaction.guild_id)]
     server_config = db['server_config']
