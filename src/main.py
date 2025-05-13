@@ -12,7 +12,6 @@ import utils
 import version
 from bot_stats import BotStats
 import topgg_api
-import asyncio
 from src.translations import messages
 
 dev_test = os.getenv('DEV_TEST') == "True"
