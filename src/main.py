@@ -12,7 +12,7 @@ import utils
 import version
 from bot_stats import BotStats
 import topgg_api
-from src.translations import messages
+import src.translations as messages
 
 dev_test = os.getenv('DEV_TEST') == "True"
 load_dotenv()
