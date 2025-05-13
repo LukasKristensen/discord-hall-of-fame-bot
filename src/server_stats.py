@@ -78,6 +78,23 @@ def create_plot_where_msg_count_greater_than_zero(server_stats):
     create_plot(filtered_stats)
 
 
+def create_bot_stats_plot():
+    bot_stats = db_client['bot_stats']['total_messages']
+    timestamps = []
+    total_messages_list = []
+    for stat in bot_stats.find():
+        timestamps.append(stat['timestamp'])
+        total_messages_list.append(stat['total_messages'])
+    fig, ax = plt.subplots()
+    ax.plot(timestamps, total_messages_list, label='Total Messages')
+    ax.set_xlabel('Timestamp')
+    ax.set_ylabel('Total Messages')
+    ax.set_title('Total Messages Over Time')
+    ax.legend()
+    plt.show()
+
+
 # Call the updated plot function
+create_bot_stats_plot()
 create_plot(server_stats)
 create_plot_where_msg_count_greater_than_zero(server_stats)
