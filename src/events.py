@@ -2,6 +2,7 @@ import discord
 import asyncio
 import datetime
 import utils
+import translations.messages as messages
 
 
 async def historical_sweep(bot: discord.Client, db_client, server_classes):
@@ -16,7 +17,6 @@ async def historical_sweep(bot: discord.Client, db_client, server_classes):
 
     for server_class in list(server_classes.values()):
         try:
-            print(f"Checking server {server_class.guild_id}")
             server_collection = db_client[str(server_class.guild_id)]["hall_of_fame_messages"]
             server_config = db_client[str(server_class.guild_id)]["server_config"]
             hof_total_messages += server_collection.count_documents({})
@@ -37,7 +37,6 @@ async def historical_sweep(bot: discord.Client, db_client, server_classes):
                 server_class.hall_of_fame_channel_id,
                 server_class.reaction_threshold)
         except Exception as e:
-            print(f"Failed to check server {server_class.guild_id}: {e}")
             await utils.error_logging(bot, f"Failed to check server: {e}", server_class.guild_id)
     return hof_total_messages
 
@@ -64,35 +63,38 @@ async def check_for_new_server_classes(bot: discord.Client, db_client):
     new_server_classes = {}
     for guild in bot.guilds:
         try:
-            print(f"Checking guild {guild.name}")
             if not str(guild.id) in db_client.list_database_names():
-                print(f"Guild {guild.name} not found in database, creating...")
                 await utils.error_logging(bot, f"Guild {guild.name} not found in database, creating...", guild.id)
                 new_server_class = await utils.create_database_context(guild, db_client)
                 new_server_classes[guild.id] = new_server_class
         except Exception as e:
-            print(f"Failed to create database context for guild {guild.name}: {e}")
             error_message = (f"Failed to setup Hall Of Fame for server {guild.name}. This may be due to missing "
                              f"permissions, try re-inviting the bot with the correct permissions. If the problem "
                              f"persists, please contact support. https://discord.gg/awZ83mmGrJ")
-            await utils.send_server_owner_error_message(guild.owner, error_message)
+            await utils.send_server_owner_error_message(guild.owner, error_message, bot)
             await utils.error_logging(bot, f"Sending error message to server owner: {e}", guild.id)
     return new_server_classes
 
 
 async def bot_login(bot: discord.Client, tree):
+    """
+    Event handler for when the bot is ready
+    :param bot:
+    :param tree:
+    :return:
+    """
     try:
         await tree.sync()
-        print(f"Logged in as {bot.user}")
+        await utils.error_logging(bot, f"Logged in as {bot.user}")
     except discord.HTTPException as e:
-        print(f"Failed to sync commands: {e}")
+        await utils.error_logging(bot, f"Failed to sync commands: {e}")
     await bot.change_presence(activity=discord.CustomActivity(name="🔥 Sweeping for legendary moments!", type=5))
     await utils.error_logging(bot, f"Total servers: {len(bot.guilds)}")
 
 
 async def on_raw_reaction_add(message: discord.RawReactionActionEvent, bot: discord.Client, collection,
                               reaction_threshold: int, post_due_date: int, target_channel_id: int,
-                              allow_messages_in_hof_channel: bool, ignore_bot_messages: bool):
+                              ignore_bot_messages: bool):
     """
     Event handler for when a reaction is added to a message
     :param message:
@@ -101,17 +103,15 @@ async def on_raw_reaction_add(message: discord.RawReactionActionEvent, bot: disc
     :param reaction_threshold:
     :param post_due_date:
     :param target_channel_id:
-    :param allow_messages_in_hof_channel:
     :param ignore_bot_messages:
     :return:
     """
     await utils.validate_message(message, bot, collection, reaction_threshold, post_due_date, target_channel_id,
-                                 allow_messages_in_hof_channel, ignore_bot_messages)
+                                 ignore_bot_messages)
 
 
 async def on_raw_reaction_remove(message: discord.RawReactionActionEvent, bot: discord.Client, collection,
                                  reaction_threshold: int, post_due_date: int, target_channel_id: int,
-                                 allow_messages_in_hof_channel: bool,
                                  ignore_bot_messages: bool = False):
     """
     Event handler for when a reaction is added to a message
@@ -121,12 +121,11 @@ async def on_raw_reaction_remove(message: discord.RawReactionActionEvent, bot: d
     :param reaction_threshold: The threshold for reactions
     :param post_due_date: The due date for posting
     :param target_channel_id: The target channel id
-    :param allow_messages_in_hof_channel: Whether messages are allowed in the hall of fame channel
     :param ignore_bot_messages: Whether to ignore bot messages
     :return: None
     """
     await utils.validate_message(message, bot, collection, reaction_threshold, post_due_date, target_channel_id,
-                                 allow_messages_in_hof_channel, ignore_bot_messages)
+                                 ignore_bot_messages)
 
 
 async def on_message(message, bot: discord.Client, target_channel_id, allow_messages_in_hof_channel):
@@ -163,18 +162,13 @@ async def guild_join(server, db_client, bot, reaction_threshold: int = 7):
         return await utils.create_database_context(server, db_client, reaction_threshold_default=reaction_threshold)
     except Exception as e:
         await utils.error_logging(bot, f"Failed to create database context for server {server.name}: {e}", server.id)
-        await utils.send_server_owner_error_message(server.owner,
-                                                    f"Failed to setup Hall Of Fame for server {server.name}. This may be due to missing permissions, try re-inviting the bot with the correct permissions. If the problem persists, please contact support. https://discord.gg/awZ83mmGrJ")
+        await utils.send_server_owner_error_message(server.owner, messages.FAILED_SETUP_HOF.format(serverName=server.name), bot)
         try:
             channel = server.text_channels[0]
-            await channel.send(
-                f"Failed to setup Hall Of Fame for server {server.name}. This may be due to missing permissions, try re-inviting the bot with the correct permissions. If the problem persists, please contact support. https://discord.gg/awZ83mmGrJ")
-            await utils.error_logging(bot,
-                                      f"Sent an error message to the first text channel {channel.name} on server {server.name}",
-                                      server.id)
+            await channel.send(messages.FAILED_SETUP_HOF.format(serverName=server.name))
+            await utils.error_logging(bot,f"Sent an error message to the first text channel {channel.name} on server {server.name}", server.id)
         except Exception as e:
-            print(f"Failed to send message to server owner: {e}")
-        print(f"Failed to create database context for server {server.name}: {e}")
+            await utils.error_logging(bot, f"Failed to send message to server owner: {e}", server.id)
 
 
 async def guild_remove(server, db_client):
@@ -203,7 +197,6 @@ async def daily_task(bot: discord.Client, db_client, server_classes, dev_testing
                                       server_class.guild_id)
             continue
         try:
-            print(f"Checking server {server_class.guild_id}")
             server_collection = db_client[str(server_class.guild_id)]["hall_of_fame_messages"]
             server_config = db_client[str(server_class.guild_id)]["server_config"]
             await utils.update_leaderboard(
@@ -213,12 +206,10 @@ async def daily_task(bot: discord.Client, db_client, server_classes, dev_testing
                 server_class.hall_of_fame_channel_id,
                 server_class.reaction_threshold)
         except Exception as e:
-            print(f"Failed to update leaderboard for server {server_class.guild_id}: {e}")
             await utils.error_logging(bot, e, server_class.guild_id)
 
     await utils.error_logging(bot, f"Checking for db entries that are not in the guilds")
     for db_server in db_client.list_database_names():
         if db_server.isdigit() and not dev_testing and int(db_server) not in [guild.id for guild in bot.guilds]:
-            print(f"Server {db_server} not found in bot guilds, deleting from database")
             await utils.error_logging(bot, f"Could not find server {db_server} in bot guilds")
     await utils.error_logging(bot, f"Checked {len(server_classes)} servers for daily task")
