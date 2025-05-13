@@ -12,6 +12,7 @@ import utils
 import version
 from bot_stats import BotStats
 import topgg_api
+import asyncio
 
 dev_test = os.getenv('DEV_TEST') == "True"
 load_dotenv()
