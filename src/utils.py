@@ -10,7 +10,7 @@ from bot_stats import BotStats
 
 
 async def validate_message(message: discord.RawReactionActionEvent, bot: discord.Client, collection,
-                           reaction_threshold: int, post_due_date: int, target_channel_id: int, allow_messages_in_hof_channel: bool,
+                           reaction_threshold: int, post_due_date: int, target_channel_id: int,
                            ignore_bot_messages: bool = False):
     """
     Check if the message is valid for posting based on the reaction count, date and origin of the message
@@ -20,7 +20,6 @@ async def validate_message(message: discord.RawReactionActionEvent, bot: discord
     :param reaction_threshold: The minimum number of reactions for a message to be posted in the Hall of Fame
     :param post_due_date: The number of days after which a message is no longer eligible for the Hall of Fame
     :param target_channel_id: The ID of the Hall of Fame channel
-    :param allow_messages_in_hof_channel: Whether messages are allowed in the Hall of Fame channel
     :param ignore_bot_messages: Whether to ignore messages from bots
     :return: None
     """
@@ -60,7 +59,8 @@ async def validate_message(message: discord.RawReactionActionEvent, bot: discord
     await post_hall_of_fame_message(message, bot, collection, target_channel_id, reaction_threshold)
 
 
-async def update_reaction_counter(message: discord.Message, collection, bot: discord.Client, target_channel_id: int, reaction_threshold: int):
+async def update_reaction_counter(message: discord.Message, collection, bot: discord.Client, target_channel_id: int,
+                                  reaction_threshold: int):
     """
     Update the reaction counter of a message in the Hall of Fame
     :param message:
@@ -107,7 +107,8 @@ async def remove_embed(message_id: int, collection, bot: discord.Client, target_
     await hall_of_fame_message.edit(content="** **", embed=None)
 
 
-async def update_leaderboard(collection, bot: discord.Client, server_config, target_channel_id: int, reaction_threshold: int, leaderboard_length: int = 20):
+async def update_leaderboard(collection, bot: discord.Client, server_config, target_channel_id: int,
+                             reaction_threshold: int, leaderboard_length: int = 20):
     """
     Update the leaderboard of the Hall of Fame channel with the top 20 most reacted messages
     :param collection:
@@ -160,6 +161,7 @@ async def check_all_server_messages(guild_id: int, sweep_limit, sweep_limited: b
     :param post_due_date:
     :param target_channel_id:
     :param allow_messages_in_hof_channel:
+    :param interaction: The interaction object to respond to
     :return:
     """
     guild = bot.get_guild(guild_id)
@@ -202,16 +204,17 @@ async def check_all_server_messages(guild_id: int, sweep_limit, sweep_limited: b
                         if collection.find_one({"message_id": int(message.id)}):
                             await remove_embed(message.id, collection, bot, target_channel_id)
                 except Exception as e:
-                    print(f'An error occurred: {e}')
+                    await error_logging(bot, f"An error occurred: {e}", guild_id)
         except Exception as e:
-            print(f'An error occurred: {e}')
+            await error_logging(bot, f"An error occurred: {e}", guild_id)
 
     messages_to_post.sort(key=lambda msg: msg.created_at)
     for message in messages_to_post:
         await post_hall_of_fame_message(message, bot, collection, target_channel_id, reaction_threshold)
 
 
-async def post_hall_of_fame_message(message: discord.Message, bot: discord.Client, collection, target_channel_id: int, reaction_threshold: int):
+async def post_hall_of_fame_message(message: discord.Message, bot: discord.Client, collection, target_channel_id: int,
+                                    reaction_threshold: int):
     """
     Post a message in the Hall of Fame channel
     :param message:
@@ -247,7 +250,7 @@ async def set_footer(embed: discord.Embed):
     :param embed: The embed to set the footer for
     :return: None
     """
-    if random.random() > 0.15 or embed.image:
+    if random.random() > 0.2 or embed.image:
         return embed
 
     embed.add_field(name="Enjoying the bot? Vote for it on top.gg", value="https://top.gg/bot/1177041673352663070/vote", inline=True)
@@ -264,9 +267,6 @@ async def create_embed(message: discord.Message, reaction_threshold: int):
     # Check if the message is a reply to another message
     if message.reference and not message.attachments:
         reference_message = await message.channel.fetch_message(message.reference.message_id)
-
-
-        print("message.author:", message.author)
         embed = discord.Embed(
             title=f"{message.author.name} replied to {reference_message.author.name}'s message",
             color=message.author.color
@@ -364,12 +364,11 @@ def check_video_extension(message):
     return None
 
 
-async def create_database_context(server, db_client, leader_board_length: int = 10, reaction_threshold_default: int=7):
+async def create_database_context(server, db_client, reaction_threshold_default: int = 7):
     """
     Create a database context for the server
     :param server: The server object
     :param db_client: The MongoDB client
-    :param leader_board_length: The number of messages to display in the leaderboard
     :param reaction_threshold_default: The default reaction threshold for a message to be posted in the Hall of Fame
     :return: The database context
     """
@@ -408,7 +407,6 @@ async def create_database_context(server, db_client, leader_board_length: int = 
     })
     database.create_collection('hall_of_fame_messages')
 
-    print(f"Database context created for server {server.id}")
     await hall_of_fame_channel.send(
         f"🎉 **Welcome to the Hall of Fame!** 🎉\n"
         f"When a message receives **{reaction_threshold_default} or more** (default threshold) of the same reaction, it’s automatically **reposted here** to celebrate its popularity.\n\n"
@@ -442,7 +440,6 @@ def delete_database_context(server_id: int, db_client):
     :param db_client: The MongoDB client
     :return: None
     """
-    print(f"Deleting database context for server {server_id}")
     db_client.drop_database(str(server_id))
 
 
@@ -484,11 +481,12 @@ async def get_server_classes(db_client, bot):
     return server_classes
 
 
-async def send_server_owner_error_message(owner, e):
+async def send_server_owner_error_message(owner, e, bot):
     """
     Send an error message to the server owner
     :param owner: The owner of the server
     :param e: The error message
+    :param bot: The Discord bot
     :return: None
     """
     if owner:
@@ -500,12 +498,12 @@ async def send_server_owner_error_message(owner, e):
             # Check if the specific message has already been sent
             message_already_sent = any("Failed to setup" in msg.content for msg in messages)
             if not message_already_sent:
-                print(f"Sending error message to server owner {owner.name}")
+                await error_logging(bot, f"Sending error message {e} to server owner {owner.name}")
                 await owner.send(f"{e}")
             else:
-                print("Error message already sent to server owner")
+                await error_logging(bot, f"Error message already sent to server owner {owner.name}")
         except Exception as history_error:
-            print(f"Failed to fetch the message history of the server owner: {history_error}")
+            await error_logging(bot, f"Failed to send error message to server owner {owner.name}: {history_error}")
 
 
 async def error_logging(bot: discord.Client, message, server_id = None, new_value = None):
@@ -529,7 +527,7 @@ async def error_logging(bot: discord.Client, message, server_id = None, new_valu
     await target_channel.send(f"```diff\n{logging_message}\n```")
 
 
-async def create_feedback_form(interaction, bot):
+async def create_feedback_form(interaction: discord.Interaction, bot):
     """
     Create a feedback form for the user and send the feedback to the feedback channel
     :param interaction:

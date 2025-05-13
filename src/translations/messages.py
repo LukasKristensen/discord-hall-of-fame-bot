@@ -17,6 +17,7 @@ WHITELIST_ADDED = "Emoji {emoji} added to the whitelist"
 WHITELIST_ALREADY_EXISTS = "Emoji {emoji} is already in the whitelist"
 WHITELIST_REMOVED = "Emoji {emoji} removed from the whitelist"
 WHITELIST_NOT_FOUND = "Emoji {emoji} is not in the whitelist"
+ALLOW_POST_IN_HOF = "People are allowed to send messages in the Hall of Fame channel: {allow}"
 SERVER_CONFIG = (
     "**Server Configuration:**\n"
     "```"
@@ -27,3 +28,6 @@ SERVER_CONFIG = (
     "Post Validity (How many days back a post is considered valid): {post_due_date}\n"
     "Custom Emoji Check Logic: {custom_emoji_check_logic}\n"
 )
+FAILED_SETUP_HOF = ("Failed to setup Hall Of Fame for server {serverName}. This may be due to missing permissions, "
+                    "try re-inviting the bot with the correct permissions. "
+                    "If the problem persists, please contact support. https://discord.gg/awZ83mmGrJ")

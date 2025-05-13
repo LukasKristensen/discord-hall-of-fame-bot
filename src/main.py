@@ -9,7 +9,6 @@ from pymongo.mongo_client import MongoClient
 import commands
 import events
 import utils
-import asyncio
 import version
 from bot_stats import BotStats
 import topgg_api
@@ -52,7 +51,6 @@ async def on_ready():
     if bot_stats.total_messages > 0:
         await bot.change_presence(activity=discord.CustomActivity(name=f'{bot_stats.total_messages} Hall of Fame messages', type=5))
     await events.post_wrapped()
-
     daily_task.start()
 
 
@@ -60,11 +58,9 @@ async def on_ready():
 async def daily_task():
     await utils.error_logging(bot,"Running daily task")
     try:
-        print("Running daily task")
         await events.daily_task(bot, db_client, server_classes, dev_test)
         await utils.error_logging(bot, f"Daily task completed")
     except Exception as e:
-        print(f"Error in daily_task: {e}")
         await utils.error_logging(bot, f"Error in daily_task: {e}")
     await utils.error_logging(bot, f"Total messages in the database: {bot_stats.total_messages}")
 
@@ -82,16 +78,12 @@ async def daily_task():
 async def on_raw_reaction_add(payload: discord.RawReactionActionEvent):
     server_class = server_classes[payload.guild_id]
     collection = db_client[str(server_class.guild_id)]["hall_of_fame_messages"]
-    temp_reaction_threshold = server_class.reaction_threshold
-    post_due_date = server_class.post_due_date
-    target_channel_id = server_class.hall_of_fame_channel_id
-    check_for_msg_in_hof = server_class.allow_messages_in_hof_channel
-    ignore_bot_messages = server_class.ignore_bot_messages
 
-    if not payload.message_id in messages_processing:
+    if payload.message_id not in messages_processing:
         messages_processing.append(payload.message_id)
-        await events.on_raw_reaction_add(payload, bot, collection, temp_reaction_threshold, post_due_date,
-                                         target_channel_id, check_for_msg_in_hof, ignore_bot_messages)
+        await events.on_raw_reaction_remove(payload, bot, collection, server_class.reaction_threshold,
+                                            server_class.post_due_date, server_class.hall_of_fame_channel_id,
+                                            server_class.ignore_bot_messages)
         messages_processing.remove(payload.message_id)
 
 
@@ -99,16 +91,12 @@ async def on_raw_reaction_add(payload: discord.RawReactionActionEvent):
 async def on_raw_reaction_remove(payload: discord.RawReactionActionEvent):
     server_class = server_classes[payload.guild_id]
     collection = db_client[str(server_class.guild_id)]["hall_of_fame_messages"]
-    temp_reaction_threshold = server_class.reaction_threshold
-    post_due_date = server_class.post_due_date
-    target_channel_id = server_class.hall_of_fame_channel_id
-    check_for_msg_in_hof = server_class.allow_messages_in_hof_channel
-    ignore_bot_messages = server_class.ignore_bot_messages
 
-    if not payload.message_id in messages_processing:
+    if payload.message_id not in messages_processing:
         messages_processing.append(payload.message_id)
-        await events.on_raw_reaction_remove(payload, bot, collection, temp_reaction_threshold, post_due_date,
-                                            target_channel_id, check_for_msg_in_hof, ignore_bot_messages)
+        await events.on_raw_reaction_remove(payload, bot, collection, server_class.reaction_threshold,
+                                            server_class.post_due_date, server_class.hall_of_fame_channel_id,
+                                            server_class.ignore_bot_messages)
         messages_processing.remove(payload.message_id)
 
 
@@ -146,34 +134,6 @@ async def restart(payload):
 
     await utils.error_logging(bot, "Restarting the bot")
     await bot.close()
-
-
-async def setup(interaction: discord.Interaction, reaction_threshold: int):
-    if not await check_if_user_has_manage_server_permission(interaction):
-        return
-
-    if not interaction.guild.me.guild_permissions.manage_channels or not interaction.guild.me.guild_permissions.manage_messages:
-        await interaction.response.send_message(messages.BOT_PERMISSIONS_ERROR)
-        return
-
-    if str(interaction.guild_id) in db_client.list_database_names():
-        await interaction.response.send_message(messages.SERVER_ALREADY_SETUP)
-        return
-
-    try:
-        new_server_class = await events.guild_join(interaction.guild, db_client, bot, reaction_threshold)
-    except Exception as e:
-        await interaction.response.send_message(f"Failed to setup the bot for the server: {e}")
-
-    server_classes[interaction.guild.id] = new_server_class
-    await utils.error_logging(bot, f"Setup the bot for the server {interaction.guild.name}", interaction.guild.id)
-
-
-async def get_random_message(interaction: discord.Interaction):
-    collection = db_client[str(interaction.guild_id)]["hall_of_fame_messages"]
-    temp_reaction_threshold = server_classes[interaction.guild_id].reaction_threshold
-    await commands.get_random_message(interaction, collection, bot, temp_reaction_threshold)
-    await utils.error_logging(bot, f"Get random message command used by {interaction.user.name} in {interaction.guild.name}", interaction.guild.id)
 
 
 @tree.command(name="help", description="List of commands")
@@ -235,7 +195,7 @@ async def allow_messages_in_hof_channel(interaction: discord.Interaction, allow:
     server_config = db['server_config']
     server_config.update_one({"guild_id": interaction.guild_id}, {"$set": {"allow_messages_in_hof_channel": allow}})
     server_classes[interaction.guild_id].allow_messages_in_hof_channel = allow
-    await interaction.response.send_message(f"People are allowed to send messages in the Hall of Fame channel: {allow}")
+    await interaction.response.send_message(messages.ALLOW_POST_IN_HOF.format(allow=allow))
     await utils.error_logging(bot, f"Allow messages in Hall of Fame channel command used by {interaction.user.name} in {interaction.guild.name}", interaction.guild.id, allow)
 
 
@@ -289,13 +249,15 @@ async def whitelist_emoji(interaction: discord.Interaction, emoji: str):
         whitelist.append(emoji)
         server_config.update_one({"guild_id": interaction.guild_id}, {"$set": {"whitelisted_emojis": whitelist}})
         server_class.whitelisted_emojis = whitelist
-        await interaction.response.send_message(f"Emoji {emoji} added to the whitelist")
+        await interaction.response.send_message(messages.WHITELIST_ADDED.format(emoji=emoji))
     else:
-        await interaction.response.send_message(f"Emoji {emoji} is already in the whitelist")
+        await interaction.response.send_message(messages.WHITELIST_ALREADY_EXISTS.format(emoji=emoji))
     await utils.error_logging(bot, f"Whitelist emoji command used by {interaction.user.name} in {interaction.guild.name}", interaction.guild.id, emoji)
 
 
-@tree.command(name="unwhitelist_emoji", description="Unwhitelist an emoji for the server if custom emoji check logic is enabled")
+@tree.command(
+    name="unwhitelist_emoji",
+    description="Unwhitelist an emoji for the server if custom emoji check logic is enabled")
 async def unwhitelist_emoji(interaction: discord.Interaction, emoji: str):
     if not await check_if_user_has_manage_server_permission(interaction):
         return
@@ -355,7 +317,9 @@ async def get_server_config(interaction: discord.Interaction):
     await utils.error_logging(bot, f"Get server config command used by {interaction.user.name} in {interaction.guild.name}", interaction.guild.id)
 
 
-@tree.command(name="set_post_due_date", description="How many days ago should the post be to be considered old and not valid?")
+@tree.command(
+    name="set_post_due_date",
+    description="How many days ago should the post be to be considered old and not valid?")
 async def set_post_due_date(interaction: discord.Interaction, post_due_date: int):
     if not await check_if_user_has_manage_server_permission(interaction):
         return

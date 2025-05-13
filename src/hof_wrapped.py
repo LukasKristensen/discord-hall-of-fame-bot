@@ -105,7 +105,6 @@ async def process_message_reactions(message: discord.Message):
 
 async def process_all_server_messages(guild: discord.Guild):
     for channel in guild.channels:
-        print(f"Processing channel: {channel.name}")
         if not isinstance(channel, discord.TextChannel):
             continue
         async for message in channel.history(limit=None):
