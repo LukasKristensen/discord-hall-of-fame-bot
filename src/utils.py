@@ -478,7 +478,7 @@ async def get_server_classes(db_client, bot):
             post_due_date=server_config["post_due_date"],
             allow_messages_in_hof_channel=server_config["allow_messages_in_hof_channel"],
             include_author_in_reaction_calculation=server_config["include_author_in_reaction_calculation"],
-            custom_emoji_check_logic=server_config["include_author_in_reaction_calculation"],
+            custom_emoji_check_logic=server_config["custom_emoji_check_logic"],
             whitelisted_emojis=server_config["whitelisted_emojis"],
             leaderboard_setup=server_config["leaderboard_setup"],
             ignore_bot_messages=server_config["ignore_bot_messages"])

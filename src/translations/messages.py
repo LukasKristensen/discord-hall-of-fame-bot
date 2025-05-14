@@ -29,5 +29,10 @@ SERVER_CONFIG = (
     "Custom Emoji Check Logic: {custom_emoji_check_logic}\n"
 )
 FAILED_SETUP_HOF = ("Failed to setup Hall Of Fame for server {serverName}. This may be due to missing permissions, "
-                    "try re-inviting the bot with the correct permissions. "
+                    "try re-inviting the bot with the correct permissions. Giving the permissions after the bot has "
+                    "joined will not work. "
                     "If the problem persists, please contact support. https://discord.gg/awZ83mmGrJ")
+ERROR_SERVER_NOT_SETUP = ("The server is not set up yet. Try re-inviting the bot with the correct permissions it is "
+                          "asking for in the server join message. Giving the permissions after the bot has joined will "
+                          "not work.")
+BOT_LOADING = "Please wait while the bot is loading..."

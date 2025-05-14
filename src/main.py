@@ -136,20 +136,6 @@ async def restart(payload):
     await bot.close()
 
 
-@tree.command(name="manual_setup", description="Manual trigger the bot to setup")
-async def manual_setup(interaction: discord.Interaction):
-    if not await check_if_user_has_manage_server_permission(interaction):
-        return
-
-    await utils.error_logging(bot, f"Manual setup command used by {interaction.user.name} in {interaction.guild.name}", interaction.guild.id)
-    server = interaction.guild
-    if server.id in server_classes:
-        await interaction.response.send_message(messages.SERVER_ALREADY_SETUP)
-        return
-    new_server_class = await events.guild_join(server, db_client, bot)
-    server_classes[server.id] = new_server_class
-
-
 @tree.command(name="help", description="List of commands")
 async def get_help(interaction: discord.Interaction):
     await commands.get_help(interaction)
@@ -373,6 +359,12 @@ async def check_if_user_has_manage_server_permission(interaction: discord.Intera
     if not interaction.user.guild_permissions.manage_guild:
         await interaction.response.send_message(messages.NOT_AUTHORIZED)
         await utils.error_logging(bot, f"User {interaction.user.name} does not have manage server permission", interaction.guild_id)
+        return False
+    if interaction.guild_id not in server_classes and len(server_classes) > 1:
+        await interaction.response.send_message(messages.ERROR_SERVER_NOT_SETUP)
+        return False
+    if len(server_classes) == 0:
+        await interaction.response.send_message(messages.BOT_LOADING)
         return False
     return True
 
