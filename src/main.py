@@ -64,13 +64,13 @@ async def daily_task():
         await utils.error_logging(bot, f"Error in daily_task: {e}")
     await utils.error_logging(bot, f"Total messages in the database: {bot_stats.total_messages}")
 
-    # Update the db with bot stats for over time
-    db_client["bot_stats"]["total_messages"].insert_one(
-        {"timestamp": datetime.now(),
-         "total_messages": bot_stats.total_messages})
-    db_client["bot_stats"]["server_count"].insert_one(
-        {"timestamp": datetime.now(),
-         "server_count": len(server_classes)})
+    if not dev_test:
+        db_client["bot_stats"]["total_messages"].insert_one(
+            {"timestamp": datetime.now(),
+             "total_messages": bot_stats.total_messages})
+        db_client["bot_stats"]["server_count"].insert_one(
+            {"timestamp": datetime.now(),
+             "server_count": len(server_classes)})
     await post_topgg_stats()
 
 
