@@ -112,7 +112,7 @@ async def on_message(message: discord.Message):
 
 @bot.event
 async def on_guild_join(server):
-    new_server_class = await events.guild_join(server, db_client, bot)
+    new_server_class = await events.guild_join(server, db_client, bot, server_classes)
     server_classes[server.id] = new_server_class
     await utils.error_logging(bot, f"Joined server {server.name}", server.id)
     await post_topgg_stats()

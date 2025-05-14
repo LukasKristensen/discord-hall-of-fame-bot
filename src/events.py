@@ -4,6 +4,7 @@ import datetime
 import utils
 from translations import messages
 
+
 async def historical_sweep(bot: discord.Client, db_client, server_classes):
     """
     Event handler for when the bot is ready
@@ -148,20 +149,29 @@ async def on_message(message, bot: discord.Client, target_channel_id, allow_mess
     await bot.process_commands(message)
 
 
-async def guild_join(server, db_client, bot, reaction_threshold: int = 7):
+async def guild_join(server, db_client, bot, reaction_threshold: int = 7, server_classes=None):
     """
     Event handler for when the bot is added to a server
     :param server:
     :param db_client:
     :param bot:
     :param reaction_threshold:
+    :param server_classes:
     :return:
     """
+    if server_classes is None:
+        server_classes = {}
     try:
         return await utils.create_database_context(server, db_client, reaction_threshold_default=reaction_threshold)
     except Exception as e:
         await utils.error_logging(bot, f"Failed to create database context for server {server.name}: {e}", server.id)
         await utils.send_server_owner_error_message(server.owner, messages.FAILED_SETUP_HOF.format(serverName=server.name), bot)
+        if server.id in server_classes:
+            try:
+                server_classes.pop(server.id)
+                await utils.delete_database_context(server.id, db_client)
+            except Exception as error_delete:
+                await utils.error_logging(bot, f"Failed to delete database context for server {server.name}: {error_delete}", server.id)
         try:
             channel = server.text_channels[0]
             await channel.send(messages.FAILED_SETUP_HOF.format(serverName=server.name))
