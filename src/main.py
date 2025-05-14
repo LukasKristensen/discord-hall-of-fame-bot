@@ -136,6 +136,20 @@ async def restart(payload):
     await bot.close()
 
 
+@tree.command(name="manual_setup", description="Manual trigger the bot to setup")
+async def manual_setup(interaction: discord.Interaction):
+    if not await check_if_user_has_manage_server_permission(interaction):
+        return
+
+    await utils.error_logging(bot, f"Manual setup command used by {interaction.user.name} in {interaction.guild.name}", interaction.guild.id)
+    server = interaction.guild
+    if server.id in server_classes:
+        await interaction.response.send_message(messages.SERVER_ALREADY_SETUP)
+        return
+    new_server_class = await events.guild_join(server, db_client, bot)
+    server_classes[server.id] = new_server_class
+
+
 @tree.command(name="help", description="List of commands")
 async def get_help(interaction: discord.Interaction):
     await commands.get_help(interaction)
