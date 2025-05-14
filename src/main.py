@@ -81,9 +81,9 @@ async def on_raw_reaction_add(payload: discord.RawReactionActionEvent):
 
     if payload.message_id not in messages_processing:
         messages_processing.append(payload.message_id)
-        await events.on_raw_reaction_remove(payload, bot, collection, server_class.reaction_threshold,
-                                            server_class.post_due_date, server_class.hall_of_fame_channel_id,
-                                            server_class.ignore_bot_messages)
+        await events.on_raw_reaction(payload, bot, collection, server_class.reaction_threshold,
+                                     server_class.post_due_date, server_class.hall_of_fame_channel_id,
+                                     server_class.ignore_bot_messages)
         messages_processing.remove(payload.message_id)
 
 
@@ -94,9 +94,9 @@ async def on_raw_reaction_remove(payload: discord.RawReactionActionEvent):
 
     if payload.message_id not in messages_processing:
         messages_processing.append(payload.message_id)
-        await events.on_raw_reaction_remove(payload, bot, collection, server_class.reaction_threshold,
-                                            server_class.post_due_date, server_class.hall_of_fame_channel_id,
-                                            server_class.ignore_bot_messages)
+        await events.on_raw_reaction(payload, bot, collection, server_class.reaction_threshold,
+                                     server_class.post_due_date, server_class.hall_of_fame_channel_id,
+                                     server_class.ignore_bot_messages)
         messages_processing.remove(payload.message_id)
 
 

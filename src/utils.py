@@ -264,8 +264,46 @@ async def create_embed(message: discord.Message, reaction_threshold: int):
     :param reaction_threshold: The minimum number of reactions for a message to be posted in the Hall of Fame
     :return: The embed for the message
     """
+
+    # Check if the message is a sticker and has a reference
+    if message.reference and message.stickers:
+        reference_message = await message.channel.fetch_message(message.reference.message_id)
+        sticker = message.stickers[0]
+        embed = discord.Embed(
+            title=f"Sticker from {message.author.name} replying to {reference_message.author.name}'s message",
+            description=message.content,
+            color=message.author.color
+        )
+        embed.set_image(url=sticker.url)
+        embed.set_author(name=message.author.name, icon_url=message.author.avatar.url if message.author.avatar else None)
+
+        embed.add_field(name=f"{reference_message.author.name}'s message:", value=reference_message.content, inline=False)
+
+        corrected_reactions = await reaction_count_without_author(message)
+        embed.add_field(name=f"{corrected_reactions} Reactions ", value=most_reactions(message.reactions)[0].emoji, inline=True)
+        embed.add_field(name="Jump to Message", value=message.jump_url, inline=False)
+
+        embed = await set_footer(embed)
+        return embed
+    
+    # Check if the message is a sticker
+    elif message.stickers:
+        sticker = message.stickers[0]
+        embed = discord.Embed(
+            title=f"Sticker from {message.author.name}",
+            description=message.content,
+            color=message.author.color
+        )
+        embed.set_image(url=sticker.url)
+        embed.set_author(name=message.author.name, icon_url=message.author.avatar.url if message.author.avatar else None)
+        corrected_reactions = await reaction_count_without_author(message)
+        embed.add_field(name=f"{corrected_reactions} Reactions ", value=most_reactions(message.reactions)[0].emoji, inline=True)
+        embed.add_field(name="Jump to Message", value=message.jump_url, inline=False)
+        embed = await set_footer(embed)
+        return embed
+
     # Check if the message is a reply to another message
-    if message.reference and not message.attachments:
+    elif message.reference and not message.attachments:
         reference_message = await message.channel.fetch_message(message.reference.message_id)
         embed = discord.Embed(
             title=f"{message.author.name} replied to {reference_message.author.name}'s message",
@@ -326,7 +364,6 @@ async def create_embed(message: discord.Message, reaction_threshold: int):
 
         embed = await set_footer(embed)
         return embed
-
     else:
         embed = discord.Embed(
             title=f"Message in <#{message.channel.id}> has surpassed {reaction_threshold} reactions",

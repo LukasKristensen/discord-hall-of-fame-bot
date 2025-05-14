@@ -92,27 +92,9 @@ async def bot_login(bot: discord.Client, tree):
     await utils.error_logging(bot, f"Total servers: {len(bot.guilds)}")
 
 
-async def on_raw_reaction_add(message: discord.RawReactionActionEvent, bot: discord.Client, collection,
-                              reaction_threshold: int, post_due_date: int, target_channel_id: int,
-                              ignore_bot_messages: bool):
-    """
-    Event handler for when a reaction is added to a message
-    :param message:
-    :param bot:
-    :param collection:
-    :param reaction_threshold:
-    :param post_due_date:
-    :param target_channel_id:
-    :param ignore_bot_messages:
-    :return:
-    """
-    await utils.validate_message(message, bot, collection, reaction_threshold, post_due_date, target_channel_id,
-                                 ignore_bot_messages)
-
-
-async def on_raw_reaction_remove(message: discord.RawReactionActionEvent, bot: discord.Client, collection,
-                                 reaction_threshold: int, post_due_date: int, target_channel_id: int,
-                                 ignore_bot_messages: bool = False):
+async def on_raw_reaction(message: discord.RawReactionActionEvent, bot: discord.Client, collection,
+                          reaction_threshold: int, post_due_date: int, target_channel_id: int,
+                          ignore_bot_messages: bool = False):
     """
     Event handler for when a reaction is added to a message
     :param message: The message that the reaction was removed from
