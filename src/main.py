@@ -363,9 +363,6 @@ async def check_if_user_has_manage_server_permission(interaction: discord.Intera
     if interaction.guild_id not in server_classes and len(server_classes) > 1:
         await interaction.response.send_message(messages.ERROR_SERVER_NOT_SETUP)
         return False
-    if len(server_classes) == 0:
-        await interaction.response.send_message(messages.BOT_LOADING)
-        return False
     return True
 
 
