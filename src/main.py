@@ -112,7 +112,9 @@ async def on_message(message: discord.Message):
 
 @bot.event
 async def on_guild_join(server):
-    new_server_class = await events.guild_join(server, db_client, bot, server_classes)
+    new_server_class = await events.guild_join(server, db_client, bot)
+    if new_server_class is None:
+        return
     server_classes[server.id] = new_server_class
     await utils.error_logging(bot, f"Joined server {server.name}", server.id)
     await post_topgg_stats()
@@ -122,7 +124,8 @@ async def on_guild_join(server):
 async def on_guild_remove(server):
     await utils.error_logging(bot, f"Left server {server.name}", server.id)
     await events.guild_remove(server, db_client)
-    server_classes.pop(server.id)
+    if server.id in server_classes:
+        del server_classes[server.id]
     await post_topgg_stats()
 
 
@@ -360,7 +363,7 @@ async def check_if_user_has_manage_server_permission(interaction: discord.Intera
         await interaction.response.send_message(messages.NOT_AUTHORIZED)
         await utils.error_logging(bot, f"User {interaction.user.name} does not have manage server permission", interaction.guild_id)
         return False
-    if interaction.guild_id not in server_classes and len(server_classes) > 1:
+    if len(server_classes) > 1 and (interaction.guild_id not in server_classes or server_classes[interaction.guild_id] is None):
         await interaction.response.send_message(messages.ERROR_SERVER_NOT_SETUP)
         return False
     return True

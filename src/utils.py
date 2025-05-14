@@ -364,14 +364,19 @@ def check_video_extension(message):
     return None
 
 
-async def create_database_context(server, db_client, reaction_threshold_default: int = 7):
+async def create_database_context(bot, server, db_client, reaction_threshold_default: int = 7):
     """
     Create a database context for the server
+    :param bot: The Discord bot
     :param server: The server object
     :param db_client: The MongoDB client
     :param reaction_threshold_default: The default reaction threshold for a message to be posted in the Hall of Fame
     :return: The database context
     """
+    # Check if the server is already in the database, if so delete the database
+    if str(server.id) in db_client.list_database_names():
+        await error_logging(bot, f"Server {server.name} already exists in the database, dropping it to recreate", server.id)
+        delete_database_context(server.id, db_client)
 
     database = db_client[str(server.id)]
     new_server_config = database['server_config']
@@ -418,7 +423,7 @@ async def create_database_context(server, db_client, reaction_threshold_default:
     )
 
     new_server_class = server_class.Server(
-        hall_of_fame_channel_id= hall_of_fame_channel.id,
+        hall_of_fame_channel_id=hall_of_fame_channel.id,
         guild_id=server.id,
         reaction_threshold=reaction_threshold_default,
         sweep_limit=1000,

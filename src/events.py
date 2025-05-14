@@ -65,7 +65,7 @@ async def check_for_new_server_classes(bot: discord.Client, db_client):
         try:
             if not str(guild.id) in db_client.list_database_names():
                 await utils.error_logging(bot, f"Guild {guild.name} not found in database, creating...", guild.id)
-                new_server_class = await utils.create_database_context(guild, db_client)
+                new_server_class = await utils.create_database_context(bot, guild, db_client)
                 new_server_classes[guild.id] = new_server_class
         except Exception as e:
             error_message = (f"Failed to setup Hall Of Fame for server {guild.name}. This may be due to missing "
@@ -149,35 +149,26 @@ async def on_message(message, bot: discord.Client, target_channel_id, allow_mess
     await bot.process_commands(message)
 
 
-async def guild_join(server, db_client, bot, reaction_threshold: int = 7, server_classes=None):
+async def guild_join(server, db_client, bot):
     """
     Event handler for when the bot is added to a server
     :param server:
     :param db_client:
     :param bot:
-    :param reaction_threshold:
-    :param server_classes:
     :return:
     """
-    if server_classes is None:
-        server_classes = {}
     try:
-        return await utils.create_database_context(server, db_client, reaction_threshold_default=reaction_threshold)
+        return await utils.create_database_context(bot, server, db_client)
     except Exception as e:
         await utils.error_logging(bot, f"Failed to create database context for server {server.name}: {e}", server.id)
         await utils.send_server_owner_error_message(server.owner, messages.FAILED_SETUP_HOF.format(serverName=server.name), bot)
-        if server.id in server_classes:
-            try:
-                server_classes.pop(server.id)
-                await utils.delete_database_context(server.id, db_client)
-            except Exception as error_delete:
-                await utils.error_logging(bot, f"Failed to delete database context for server {server.name}: {error_delete}", server.id)
         try:
             channel = server.text_channels[0]
             await channel.send(messages.FAILED_SETUP_HOF.format(serverName=server.name))
             await utils.error_logging(bot,f"Sent an error message to the first text channel {channel.name} on server {server.name}", server.id)
         except Exception as e:
             await utils.error_logging(bot, f"Failed to send message to server owner: {e}", server.id)
+        return None
 
 
 async def guild_remove(server, db_client):
