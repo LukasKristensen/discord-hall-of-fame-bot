@@ -285,7 +285,7 @@ async def create_embed(message: discord.Message, reaction_threshold: int):
 
         embed = await set_footer(embed)
         return embed
-    
+
     # Check if the message is a sticker
     elif message.stickers:
         sticker = message.stickers[0]

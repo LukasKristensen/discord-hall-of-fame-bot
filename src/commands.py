@@ -104,5 +104,8 @@ async def set_reaction_threshold(interaction: discord.Interaction, reaction_thre
     server_config = db['server_config']
     server_config.update_one({"guild_id": interaction.guild_id}, {"$set": {"reaction_threshold": reaction_threshold}})
 
-    await interaction.response.send_message(f"Reaction threshold set to {reaction_threshold}")
+    # Note for user - remember that the reaction threshold is based on the highest reaction count of a single emoji for each message
+    await interaction.response.send_message(f"Reaction threshold set to {reaction_threshold}.\n"
+                                            f"Note: The reaction threshold is based on the highest reaction count"
+                                            f" of a single emoji per message.")
     return True
