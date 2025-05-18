@@ -42,12 +42,12 @@ async def validate_message(message: discord.RawReactionActionEvent, bot: discord
     if corrected_reactions < reaction_threshold:
         if collection.find_one({"message_id": int(message_id)}):
             await remove_embed(message_id, collection, bot, target_channel_id)
-        if "video_link_message_id" in collection.find_one({"message_id": int(message_id)}) and message.attachments:
-            video_link_message = collection.find_one({"message_id": int(message_id)})["video_link_message_id"]
-            if video_link_message is not None:
-                target_channel = bot.get_channel(target_channel_id)
-                video_link_message = await target_channel.fetch_message(int(video_link_message))
-                await video_link_message.edit(content="** **", embed=None)
+            if "video_link_message_id" in collection.find_one({"message_id": int(message_id)}) and message.attachments:
+                video_link_message = collection.find_one({"message_id": int(message_id)})["video_link_message_id"]
+                if video_link_message is not None:
+                    target_channel = bot.get_channel(target_channel_id)
+                    video_link_message = await target_channel.fetch_message(int(video_link_message))
+                    await video_link_message.edit(content="** **", embed=None)
         return
 
     if collection.find_one({"message_id": int(message.id)}):
