@@ -62,7 +62,7 @@ async def daily_task():
         await utils.error_logging(bot, f"Daily task completed")
     except Exception as e:
         await utils.error_logging(bot, f"Error in daily_task: {e}")
-    await utils.error_logging(bot, f"Total messages in the database: {bot_stats.total_messages}", log_type="system")
+    await utils.error_logging(bot, f"Total messages in the database: {bot_stats.total_messages}")
 
     if not dev_test:
         db_client["bot_stats"]["total_messages"].insert_one(
