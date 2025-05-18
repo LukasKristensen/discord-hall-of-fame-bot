@@ -587,7 +587,7 @@ async def error_logging(bot: discord.Client, message, server_id = None, new_valu
         logging_message += f"\n[New value: {new_value}]"
     if log_type == "error":
         await error_channel.send(f"```diff\n{logging_message}\n```")
-    elif log_type == "info":
+    elif log_type == "system":
         await system_channel.send(f"```diff\n{logging_message}\n```")
 
 
