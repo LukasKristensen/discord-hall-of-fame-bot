@@ -42,6 +42,12 @@ async def validate_message(message: discord.RawReactionActionEvent, bot: discord
     if corrected_reactions < reaction_threshold:
         if collection.find_one({"message_id": int(message_id)}):
             await remove_embed(message_id, collection, bot, target_channel_id)
+        if "video_link_message_id" in collection.find_one({"message_id": int(message_id)}) and message.attachments:
+            video_link_message = collection.find_one({"message_id": int(message_id)})["video_link_message_id"]
+            if video_link_message is not None:
+                target_channel = bot.get_channel(target_channel_id)
+                video_link_message = await target_channel.fetch_message(int(video_link_message))
+                await video_link_message.edit(content="** **", embed=None)
         return
 
     if collection.find_one({"message_id": int(message.id)}):
@@ -54,8 +60,13 @@ async def validate_message(message: discord.RawReactionActionEvent, bot: discord
             return
         else:
             await message_to_update.edit(embed=await create_embed(message, reaction_threshold))
+            if "video_link_message_id" in message_update and message.attachments:
+                message_attachment = message.attachments[0]
+                video_link_message = message_update["video_link_message_id"]
+                target_channel = bot.get_channel(target_channel_id)
+                video_link_message = await target_channel.fetch_message(video_link_message)
+                await video_link_message.edit(content=message_attachment.url, embed=None)
             return
-
     await post_hall_of_fame_message(message, bot, collection, target_channel_id, reaction_threshold)
 
 
@@ -226,9 +237,10 @@ async def post_hall_of_fame_message(message: discord.Message, bot: discord.Clien
     """
     target_channel = bot.get_channel(target_channel_id)
     video_link = check_video_extension(message)
+    video_message = None
 
     if video_link:
-        await target_channel.send(video_link)
+        video_message = await target_channel.send(video_link)
 
     embed = await create_embed(message, reaction_threshold)
     hall_of_fame_message = await target_channel.send(embed=embed)
@@ -237,7 +249,8 @@ async def post_hall_of_fame_message(message: discord.Message, bot: discord.Clien
                            "channel_id": int(message.channel.id),
                            "guild_id": int(message.guild.id),
                            "hall_of_fame_message_id": int(hall_of_fame_message.id),
-                           "reaction_count": int(await reaction_count_without_author(message))})
+                           "reaction_count": int(await reaction_count_without_author(message)),
+                           "video_link_message_id": int(video_message.id) if video_link else None})
     bot_stats = BotStats()
     if bot_stats.total_messages > 0:
         bot_stats.total_messages += 1
