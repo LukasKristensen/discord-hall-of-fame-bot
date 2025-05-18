@@ -56,10 +56,10 @@ async def on_ready():
 
 @tasks.loop(hours=24)
 async def daily_task():
-    await utils.error_logging(bot,"Running daily task", log_type="system")
+    await utils.error_logging(bot,"Running daily task")
     try:
         await events.daily_task(bot, db_client, server_classes, dev_test)
-        await utils.error_logging(bot, f"Daily task completed", log_type="system")
+        await utils.error_logging(bot, f"Daily task completed")
     except Exception as e:
         await utils.error_logging(bot, f"Error in daily_task: {e}")
     await utils.error_logging(bot, f"Total messages in the database: {bot_stats.total_messages}", log_type="system")
