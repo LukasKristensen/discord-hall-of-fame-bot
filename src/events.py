@@ -106,8 +106,11 @@ async def on_raw_reaction(message: discord.RawReactionActionEvent, bot: discord.
     :param ignore_bot_messages: Whether to ignore bot messages
     :return: None
     """
-    await utils.validate_message(message, bot, collection, reaction_threshold, post_due_date, target_channel_id,
-                                 ignore_bot_messages)
+    try:
+        await utils.validate_message(message, bot, collection, reaction_threshold, post_due_date, target_channel_id,
+                                     ignore_bot_messages)
+    except Exception as e:
+        await utils.error_logging(bot, f"Error in reaction event: {e}")
 
 
 async def on_message(message, bot: discord.Client, target_channel_id, allow_messages_in_hof_channel):
