@@ -565,17 +565,19 @@ async def send_server_owner_error_message(owner, e, bot):
             await error_logging(bot, f"Failed to send error message to server owner {owner.name}: {history_error}")
 
 
-async def error_logging(bot: discord.Client, message, server_id = None, new_value = None):
+async def error_logging(bot: discord.Client, message, server_id = None, new_value = None, log_type = "error"):
     """
     Log an error message to the error channel
     :param bot:
     :param message:
     :param server_id: The ID of the server
     :param new_value: The new value of the server configuration
+    :param log_type: The type of log (e.g. "error", "info")
     :return:
     """
     target_guild = bot.get_guild(1180006529575960616)
-    target_channel = target_guild.get_channel(1344070396575617085)
+    system_channel = bot.get_channel(1373699890718441482)
+    error_channel = target_guild.get_channel(1344070396575617085)
     logging_message = f"{datetime.datetime.now()}: {message}."
 
     if server_id:
@@ -583,7 +585,10 @@ async def error_logging(bot: discord.Client, message, server_id = None, new_valu
         logging_message += f"\n[Server ID: {server_id}] [Total Hall of Fame messages: {total_guild_hall_of_fame_messages}]"
     if new_value:
         logging_message += f"\n[New value: {new_value}]"
-    await target_channel.send(f"```diff\n{logging_message}\n```")
+    if log_type == "error":
+        await error_channel.send(f"```diff\n{logging_message}\n```")
+    elif log_type == "info":
+        await system_channel.send(f"```diff\n{logging_message}\n```")
 
 
 async def create_feedback_form(interaction: discord.Interaction, bot):

@@ -40,7 +40,7 @@ async def on_ready():
 
     version.DATE = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     await events.bot_login(bot, tree)
-    await utils.error_logging(bot, f"Logged in as {bot.user}")
+    await utils.error_logging(bot, f"Logged in as {bot.user}", log_type="system")
 
     server_classes = await utils.get_server_classes(db_client, bot)
     new_server_classes_dict = await events.check_for_new_server_classes(bot, db_client)
@@ -56,13 +56,13 @@ async def on_ready():
 
 @tasks.loop(hours=24)
 async def daily_task():
-    await utils.error_logging(bot,"Running daily task")
+    await utils.error_logging(bot,"Running daily task", log_type="system")
     try:
         await events.daily_task(bot, db_client, server_classes, dev_test)
-        await utils.error_logging(bot, f"Daily task completed")
+        await utils.error_logging(bot, f"Daily task completed", log_type="system")
     except Exception as e:
         await utils.error_logging(bot, f"Error in daily_task: {e}")
-    await utils.error_logging(bot, f"Total messages in the database: {bot_stats.total_messages}")
+    await utils.error_logging(bot, f"Total messages in the database: {bot_stats.total_messages}", log_type="system")
 
     if not dev_test:
         db_client["bot_stats"]["total_messages"].insert_one(
@@ -116,13 +116,13 @@ async def on_guild_join(server):
     if new_server_class is None:
         return
     server_classes[server.id] = new_server_class
-    await utils.error_logging(bot, f"Joined server {server.name}", server.id)
+    await utils.error_logging(bot, f"Joined server {server.name}", server.id, log_type="system")
     await post_topgg_stats()
 
 
 @bot.event
 async def on_guild_remove(server):
-    await utils.error_logging(bot, f"Left server {server.name}", server.id)
+    await utils.error_logging(bot, f"Left server {server.name}", server.id, log_type="system")
     await events.guild_remove(server, db_client)
     if server.id in server_classes:
         del server_classes[server.id]
