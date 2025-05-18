@@ -163,6 +163,8 @@ async def manual_sweep(interaction: discord.Interaction):
 async def configure_bot(interaction: discord.Interaction, reaction_threshold: int):
     if not await check_if_user_has_manage_server_permission(interaction):
         return
+    if reaction_threshold < 1:
+        reaction_threshold = 1
 
     completion = await commands.set_reaction_threshold(interaction, reaction_threshold, db_client)
     if completion:
