@@ -458,7 +458,8 @@ async def create_database_context(bot, server, db_client, reaction_threshold_def
         "whitelisted_emojis": [],
         "joined_date": datetime.datetime.now(timezone.utc),
         "leaderboard_setup": False,
-        "ignore_bot_messages": False
+        "ignore_bot_messages": False,
+        "member_count": server.member_count
     })
     database.create_collection('hall_of_fame_messages')
 
