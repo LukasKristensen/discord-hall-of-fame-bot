@@ -31,7 +31,7 @@ SERVER_CONFIG = (
 FAILED_SETUP_HOF = ("Failed to setup Hall Of Fame for server {serverName}. This may be due to missing permissions, "
                     "try re-inviting the bot with the correct permissions. Giving the permissions after the bot has "
                     "joined will not work. "
-                    "If the problem persists, please contact support. https://discord.gg/awZ83mmGrJ")
+                    "If the problem persists, please contact support. https://discord.gg/r98WC5GHcn")
 ERROR_SERVER_NOT_SETUP = ("The server is not set up yet. Try re-inviting the bot with the correct permissions it is "
                           "asking for in the server join message. Giving the permissions after the bot has joined will "
                           "not work.")
