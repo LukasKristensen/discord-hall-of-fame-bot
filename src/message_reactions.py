@@ -138,8 +138,8 @@ async def reaction_count(message) -> int:
     if calculation_method == "total_reactions":
         return await total_reaction_count(message.reactions)
     elif calculation_method == "unique_users":
-        return await unique_reactor_count(most_reacted_emoji(message.reactions)[0])
+        return await unique_reactor_count(message)
     elif calculation_method == "most_reactions_on_emoji":
-        return most_reacted_emoji_from_message(message)
+        return await most_reacted_emoji_from_message(message)
     else:
-        return most_reacted_emoji_from_message(message)
+        return await most_reacted_emoji_from_message(message)
