@@ -312,6 +312,7 @@ async def get_server_config(interaction: discord.Interaction):
         custom_emoji_check_logic=server_class.custom_emoji_check_logic,
         ignore_bot_messages=server_class.ignore_bot_messages,
         post_due_date=server_class.post_due_date,
+        calculation_method=server_class.reaction_count_calculation_method,
         whitelisted_emojis=', '.join(server_class.whitelisted_emojis) if server_class.custom_emoji_check_logic else ''
     )
     if server_class.custom_emoji_check_logic:
@@ -358,9 +359,9 @@ async def ignore_bot_messages(interaction: discord.Interaction, should_ignore_bo
 @tree.command(name="calculation_method", description="Set the calculation method for reactions")
 @discord.app_commands.choices(
     method=[
-        app_commands.Choice(name="Most reactions on an emoji (default, recommended)", value="most_reactions_on_emoji"),
-        app_commands.Choice(name="Total reactions", value="total_reactions"),
-        app_commands.Choice(name="How many users reacted", value="unique_users")
+        app_commands.Choice(name="reaction_count = Most reactions on an emoji (default, recommended)", value="most_reactions_on_emoji"),
+        app_commands.Choice(name="reaction_count = Total reactions", value="total_reactions"),
+        app_commands.Choice(name="reaction_count = How many users reacted", value="unique_users")
     ]
 )
 async def calculation_method(interaction: discord.Interaction, method: app_commands.Choice[str]):

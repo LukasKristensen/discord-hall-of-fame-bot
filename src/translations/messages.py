@@ -26,6 +26,7 @@ SERVER_CONFIG = (
     "Include Author in Reaction Calculation: {include_author_in_reaction_calculation}\n"
     "Ignore Bot Messages: {ignore_bot_messages}\n"
     "Post Validity (How many days back a post is considered valid): {post_due_date}\n"
+    "Calculation Method: {calculation_method}\n"
     "Custom Emoji Check Logic: {custom_emoji_check_logic}\n"
 )
 FAILED_SETUP_HOF = ("Failed to setup Hall Of Fame for server {serverName}. This may be due to missing permissions, "
