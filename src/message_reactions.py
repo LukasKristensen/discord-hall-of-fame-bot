@@ -130,16 +130,16 @@ async def reaction_count(message) -> int:
     :param message:
     :return:
     """
-    # Todo: Make a migration for all servers to set the reaction_count_calculation_method to "most_reacted"
-    # Todo: Make the default calculation method "most_reacted" for new servers
+    # Todo: Make a migration for all servers to set the reaction_count_calculation_method to "most_reactions_on_emoji"
+    # Todo: Make the default calculation method "most_reactions_on_emoji" for new servers
     # Todo: Add the new field to the server_config collection
     calculation_method = main.db_client[str(message.guild.id)]["server_config"].find_one({})["reaction_count_calculation_method"]
 
-    if calculation_method == "total":
+    if calculation_method == "total_reactions":
         return await total_reaction_count(message.reactions)
-    elif calculation_method == "unique":
+    elif calculation_method == "unique_users":
         return await unique_reactor_count(most_reacted_emoji(message.reactions)[0])
-    elif calculation_method == "most_reacted":
+    elif calculation_method == "most_reactions_on_emoji":
         return most_reacted_emoji_from_message(message)
     else:
         return most_reacted_emoji_from_message(message)

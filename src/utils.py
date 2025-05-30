@@ -459,7 +459,8 @@ async def create_database_context(bot, server, db_client, reaction_threshold_def
         "joined_date": datetime.datetime.now(timezone.utc),
         "leaderboard_setup": False,
         "ignore_bot_messages": False,
-        "server_member_count": server.member_count
+        "server_member_count": server.member_count,
+        "reaction_count_calculation_method": "most_reactions_on_emoji"
     })
     database.create_collection('hall_of_fame_messages')
 
@@ -490,7 +491,8 @@ async def create_database_context(bot, server, db_client, reaction_threshold_def
         custom_emoji_check_logic=False,
         whitelisted_emojis=[],
         leaderboard_setup=False,
-        ignore_bot_messages=False)
+        ignore_bot_messages=False,
+        reaction_count_calculation_method="most_reactions_on_emoji")
     return new_server_class
 
 
@@ -542,7 +544,8 @@ async def get_server_classes(db_client, bot):
             custom_emoji_check_logic=server_config["custom_emoji_check_logic"],
             whitelisted_emojis=server_config["whitelisted_emojis"],
             leaderboard_setup=server_config["leaderboard_setup"],
-            ignore_bot_messages=server_config["ignore_bot_messages"])
+            ignore_bot_messages=server_config["ignore_bot_messages"],
+            reaction_count_calculation_method=server_config["reaction_count_calculation_method"])
     return server_classes
 
 

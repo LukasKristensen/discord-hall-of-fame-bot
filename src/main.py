@@ -358,9 +358,9 @@ async def ignore_bot_messages(interaction: discord.Interaction, should_ignore_bo
 @tree.command(name="calculation_method", description="Set the calculation method for reactions")
 @discord.app_commands.choices(
     config_option=[
-        app_commands.Choice(name="Total Reactions", value="total"),
-        app_commands.Choice(name="Unique Users", value="unique"),
-        app_commands.Choice(name="Most Reacted Emoji", value="most_reacted")
+        app_commands.Choice(name="Most reactions on an emoji (default, recommended)", value="most_reactions_on_emoji"),
+        app_commands.Choice(name="Total reactions", value="total_reactions"),
+        app_commands.Choice(name="How many users reacted", value="unique_users")
     ]
 )
 async def calculation_method(interaction: discord.Interaction, method: app_commands.Choice[str]):
