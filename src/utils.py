@@ -476,7 +476,7 @@ async def create_database_context(bot, server, db_client, reaction_threshold_def
     )
 
     # Todo: Send the graphic of calculation methods for reaction count
-    # Todo: Send a message with the command with the update command id: /calculation_method
+    # Todo: Send a message with the command with the update command id: /calculation_method [NOT FROM DEV BOT]
 
     new_server_class = server_class.Server(
         hall_of_fame_channel_id=hall_of_fame_channel.id,
