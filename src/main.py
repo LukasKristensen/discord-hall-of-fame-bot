@@ -355,6 +355,25 @@ async def ignore_bot_messages(interaction: discord.Interaction, should_ignore_bo
     await utils.error_logging(bot, f"Ignore bot messages command used by {interaction.user.name} in {interaction.guild.name}", interaction.guild.id, should_ignore_bot_messages)
 
 
+@tree.command(name="calculation_method", description="Set the calculation method for reactions")
+@discord.app_commands.choices(
+    config_option=[
+        app_commands.Choice(name="Total Reactions", value="total"),
+        app_commands.Choice(name="Unique Users", value="unique"),
+        app_commands.Choice(name="Most Reacted Emoji", value="most_reacted")
+    ]
+)
+async def calculation_method(interaction: discord.Interaction, method: app_commands.Choice[str]):
+    if not await check_if_user_has_manage_server_permission(interaction):
+        return
+
+    db = db_client[str(interaction.guild_id)]
+    server_config = db['server_config']
+    server_config.update_one({"guild_id": interaction.guild_id}, {"$set": {"reaction_count_calculation_method": method.value}})
+    server_classes[interaction.guild_id].reaction_count_calculation_method = method.value
+    await interaction.response.send_message(f"Reaction count calculation method set to {method.name}")
+    await utils.error_logging(bot, f"Calculation method command used by {interaction.user.name} in {interaction.guild.name}", interaction.guild.id, method.value)
+
 async def check_if_user_has_manage_server_permission(interaction: discord.Interaction):
     """
     Check if the user has manage server permission

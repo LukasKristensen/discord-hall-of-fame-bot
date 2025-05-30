@@ -463,6 +463,8 @@ async def create_database_context(bot, server, db_client, reaction_threshold_def
     })
     database.create_collection('hall_of_fame_messages')
 
+    # Todo: Send a small cover image of the hall of fame bot
+
     await hall_of_fame_channel.send(
         f"🎉 **Welcome to the Hall of Fame!** 🎉\n"
         f"When a message receives **{reaction_threshold_default} or more (default threshold) of the same reaction**, it’s automatically **reposted here** to celebrate its popularity.\n\n"
@@ -472,6 +474,9 @@ async def create_database_context(bot, server, db_client, reaction_threshold_def
         f"✨ **Want to only track specific emojis?**\n"
         f"   Enable emoji filtering with </custom_emoji_check_logic:1358208382473076848>\n"
     )
+
+    # Todo: Send the graphic of calculation methods for reaction count
+    # Todo: Send a message with the command with the update command id: /calculation_method
 
     new_server_class = server_class.Server(
         hall_of_fame_channel_id=hall_of_fame_channel.id,
