@@ -374,6 +374,7 @@ async def calculation_method(interaction: discord.Interaction, method: app_comma
     await interaction.response.send_message(f"Reaction count calculation method set to {method.name}")
     await utils.error_logging(bot, f"Calculation method command used by {interaction.user.name} in {interaction.guild.name}", interaction.guild.id, method.value)
 
+
 async def check_if_user_has_manage_server_permission(interaction: discord.Interaction):
     """
     Check if the user has manage server permission

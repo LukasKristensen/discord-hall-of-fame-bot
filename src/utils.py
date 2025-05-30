@@ -464,8 +464,7 @@ async def create_database_context(bot, server, db_client, reaction_threshold_def
     })
     database.create_collection('hall_of_fame_messages')
 
-    # Todo: Send a small cover image of the hall of fame bot
-
+    await hall_of_fame_channel.send("https://raw.githubusercontent.com/LukasKristensen/discord-hall-of-fame-bot/refs/heads/main/Assets/hof_cover.jpg")
     await hall_of_fame_channel.send(
         f"🎉 **Welcome to the Hall of Fame!** 🎉\n"
         f"When a message receives **{reaction_threshold_default} or more (default threshold) of the same reaction**, it’s automatically **reposted here** to celebrate its popularity.\n\n"
