@@ -85,4 +85,5 @@ def most_reacted_emoji_from_message(message: discord.Message) -> [discord.Reacti
 
 
 async def reaction_count(message):
+    # Todo: check here which calculation method to use from the server config
     return most_reacted_emoji_from_message(message)
