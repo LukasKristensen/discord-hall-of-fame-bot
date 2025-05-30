@@ -44,6 +44,11 @@ A custom emoji filter can be applied to the bot, so that it will only look for e
 
 ## Development Log
 
+### 1.15
+- [x] /calculation_method command: Added support for custom calculation methods that determine how reaction counts are evaluated. This allows for more flexible and personalized Hall of Fame behavior per server.
+- [x] Sticker support in HOF: Messages featuring stickers can now be included in Hall of Fame posts, with proper rendering (not supported for all stickers).
+- [x] Improved setup reliability: The bot now handles failed or incomplete setup processes more gracefully, with clearer error messages.
+
 ### 1.14
 - [x] Refactored all the external command references to be interactive.
 - [x] Added command option /ignore_bot_messages for whether to ignore bot messages or not.
