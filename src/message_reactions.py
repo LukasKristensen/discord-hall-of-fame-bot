@@ -36,7 +36,7 @@ def most_reacted_emoji(reactions: [discord.Reaction]) -> [discord.Reaction]:
     return biggest
 
 
-def total_reaction_count(reactions: [discord.Reaction]) -> int:
+async def total_reaction_count(reactions: [discord.Reaction]) -> int:
     """
     Returns the total number of reactions, taking into account the custom emoji check logic and whitelisted emojis.
     :param reactions:
@@ -64,23 +64,34 @@ def total_reaction_count(reactions: [discord.Reaction]) -> int:
     return total_count
 
 
-def unique_reactor_count(reaction: discord.Reaction) -> int:
+async def unique_reactor_count(message: discord.Message) -> int:
     """
-    Returns the number of unique users who reacted to a message, excluding the author if configured.
-    :param reaction:
+    Returns the number of unique reactors for a message, excluding the author if configured.
+    :param message:
     :return:
     """
-    custom_emoji_check_logic = main.db_client[str(reaction.message.guild.id)]["server_config"].find_one({})["custom_emoji_check_logic"]
-    whited_listed_emojis = main.db_client[str(reaction.message.guild.id)]["server_config"].find_one({})["whitelisted_emojis"]
-    include_author_in_threshold = main.db_client[str(reaction.message.guild.id)]["server_config"].find_one({})["include_author_in_reaction_calculation"]
+    server_includes_author_in_threshold = main.db_client[str(message.guild.id)]["server_config"].find_one({})["include_author_in_reaction_calculation"]
+    custom_emoji_check_logic = main.db_client[str(message.guild.id)]["server_config"].find_one({})["custom_emoji_check_logic"]
+    whited_listed_emojis = main.db_client[str(message.guild.id)]["server_config"].find_one({})["whitelisted_emojis"]
+    reactions = message.reactions
 
     if custom_emoji_check_logic and len(whited_listed_emojis) > 0:
-        if str(reaction.emoji) not in str(whited_listed_emojis):
-            return 0
-    return len([user.id async for user in reaction.users() if user.id != reaction.message.author.id or include_author_in_threshold])
+        corrected_reactions = []
+        for reaction in reactions:
+            if str(reaction.emoji) in str(whited_listed_emojis):
+                corrected_reactions.append(reaction)
+        reactions = corrected_reactions
+
+    unique_users = set()
+    for reaction in reactions:
+        users_ids = [user.id async for user in reaction.users()]
+        if not server_includes_author_in_threshold and message.author.id in users_ids:
+            users_ids.remove(message.author.id)
+        unique_users.update(users_ids)
+    return len(unique_users)
 
 
-def most_reacted_emoji_from_message(message: discord.Message) -> [discord.Reaction]:
+async def most_reacted_emoji_from_message(message: discord.Message) -> [discord.Reaction]:
     """
     Returns the most reactions from the highest reacted emoji in a message.
     :param message:
@@ -113,11 +124,19 @@ def most_reacted_emoji_from_message(message: discord.Message) -> [discord.Reacti
     return max_reaction_count
 
 
-async def reaction_count(message):
+async def reaction_count(message) -> int:
     """
     Returns the reaction count of a message based on the server configuration.
-    :param message: 
+    :param message:
     :return:
     """
-    # Todo: check here which calculation method to use from the server config
-    return most_reacted_emoji_from_message(message)
+    calculation_method = main.db_client[str(message.guild.id)]["server_config"].find_one({})["reaction_count_calculation_method"]
+
+    if calculation_method == "total":
+        return await total_reaction_count(message.reactions)
+    elif calculation_method == "unique":
+        return await unique_reactor_count(most_reacted_emoji(message.reactions)[0])
+    elif calculation_method == "most_reacted":
+        return most_reacted_emoji_from_message(message)
+    else:
+        return most_reacted_emoji_from_message(message)
