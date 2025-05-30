@@ -130,6 +130,9 @@ async def reaction_count(message) -> int:
     :param message:
     :return:
     """
+    # Todo: Make a migration for all servers to set the reaction_count_calculation_method to "most_reacted"
+    # Todo: Make the default calculation method "most_reacted" for new servers
+    # Todo: Add the new field to the server_config collection
     calculation_method = main.db_client[str(message.guild.id)]["server_config"].find_one({})["reaction_count_calculation_method"]
 
     if calculation_method == "total":
