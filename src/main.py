@@ -312,6 +312,7 @@ async def get_server_config(interaction: discord.Interaction):
         custom_emoji_check_logic=server_class.custom_emoji_check_logic,
         ignore_bot_messages=server_class.ignore_bot_messages,
         post_due_date=server_class.post_due_date,
+        calculation_method=server_class.reaction_count_calculation_method,
         whitelisted_emojis=', '.join(server_class.whitelisted_emojis) if server_class.custom_emoji_check_logic else ''
     )
     if server_class.custom_emoji_check_logic:
@@ -353,6 +354,26 @@ async def ignore_bot_messages(interaction: discord.Interaction, should_ignore_bo
     server_classes[interaction.guild_id].ignore_bot_messages = should_ignore_bot_messages
     await interaction.response.send_message(messages.IGNORE_BOT_MESSAGES.format(should_ignore_bot_messages=should_ignore_bot_messages))
     await utils.error_logging(bot, f"Ignore bot messages command used by {interaction.user.name} in {interaction.guild.name}", interaction.guild.id, should_ignore_bot_messages)
+
+
+@tree.command(name="calculation_method", description="Set the calculation method for reactions")
+@discord.app_commands.choices(
+    method=[
+        app_commands.Choice(name="reaction_count = Most reactions on an emoji (default, recommended)", value="most_reactions_on_emoji"),
+        app_commands.Choice(name="reaction_count = Total reactions", value="total_reactions"),
+        app_commands.Choice(name="reaction_count = How many users reacted", value="unique_users")
+    ]
+)
+async def calculation_method(interaction: discord.Interaction, method: app_commands.Choice[str]):
+    if not await check_if_user_has_manage_server_permission(interaction):
+        return
+
+    db = db_client[str(interaction.guild_id)]
+    server_config = db['server_config']
+    server_config.update_one({"guild_id": interaction.guild_id}, {"$set": {"reaction_count_calculation_method": method.value}})
+    server_classes[interaction.guild_id].reaction_count_calculation_method = method.value
+    await interaction.response.send_message(f"Reaction count calculation method set to {method.name}")
+    await utils.error_logging(bot, f"Calculation method command used by {interaction.user.name} in {interaction.guild.name}", interaction.guild.id, method.value)
 
 
 async def check_if_user_has_manage_server_permission(interaction: discord.Interaction):

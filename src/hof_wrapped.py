@@ -53,7 +53,7 @@ async def process_message_reactions(message: discord.Message):
     hall_of_fame_post = False
     users_reacted = []
 
-    highest_reaction_count = await message_reactions.reaction_count_without_author(message)
+    highest_reaction_count = await message_reactions.reaction_count(message)
     if highest_reaction_count >= reactionThreshold:
         user_author.hallOfFameMessagePosts += 1
         hall_of_fame_post = True

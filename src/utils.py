@@ -3,7 +3,7 @@ import discord
 import datetime
 from datetime import timezone
 import asyncio
-from message_reactions import most_reactions, reaction_count_without_author
+from message_reactions import most_reacted_emoji, reaction_count
 import server_class
 import main
 from bot_stats import BotStats
@@ -38,7 +38,7 @@ async def validate_message(message: discord.RawReactionActionEvent, bot: discord
         return
 
     # Gets the adjusted reaction count corrected for not accounting the author
-    corrected_reactions = await reaction_count_without_author(message)
+    corrected_reactions = await reaction_count(message)
     if corrected_reactions < reaction_threshold:
         if collection.find_one({"message_id": int(message_id)}):
             await remove_embed(message_id, collection, bot, target_channel_id)
@@ -55,7 +55,7 @@ async def validate_message(message: discord.RawReactionActionEvent, bot: discord
         message_to_update = await bot.get_channel(target_channel_id).fetch_message(message_update["hall_of_fame_message_id"])
         if len(message_to_update.embeds) > 0:
             collection.update_one({"message_id": int(message.id)},
-                                  {"$set": {"reaction_count": await reaction_count_without_author(message)}})
+                                  {"$set": {"reaction_count": await reaction_count(message)}})
             await update_reaction_counter(message, collection, bot, target_channel_id, reaction_threshold)
             return
         else:
@@ -94,9 +94,9 @@ async def update_reaction_counter(message: discord.Message, collection, bot: dis
         return
 
     embed = hall_of_fame_message.embeds[0]
-    corrected_reactions = await reaction_count_without_author(message)
+    corrected_reactions = await reaction_count(message)
 
-    embed.set_field_at(index=0, name=f"{corrected_reactions} Reactions ", value=most_reactions(message.reactions)[0].emoji, inline=True)
+    embed.set_field_at(index=0, name=f"{corrected_reactions} Reactions ", value=most_reacted_emoji(message.reactions)[0].emoji, inline=True)
     await hall_of_fame_message.edit(embed=embed)
 
 
@@ -139,7 +139,7 @@ async def update_leaderboard(collection, bot: discord.Client, server_config, tar
         channel = bot.get_channel(message["channel_id"])
         message = await channel.fetch_message(message["message_id"])
         collection.update_one({"message_id": int(message.id)},
-                              {"$set": {"reaction_count": await reaction_count_without_author(message)}})
+                              {"$set": {"reaction_count": await reaction_count(message)}})
 
     # Updated all the reaction counts
     most_reacted_messages = list(collection.find().sort("reaction_count", -1).limit(20))
@@ -201,7 +201,7 @@ async def check_all_server_messages(guild_id: int, sweep_limit, sweep_limited: b
                         continue  # Ignore messages from bots
                     if (datetime.datetime.now(timezone.utc) - message.created_at).days > post_due_date and sweep_limit is not None:
                         break # If the message is older than the due date, no need to check further
-                    message_reactions = await reaction_count_without_author(message)
+                    message_reactions = await reaction_count(message)
 
                     if message_reactions >= reaction_threshold:
                         if collection.find_one({"message_id": int(message.id)}):
@@ -249,7 +249,7 @@ async def post_hall_of_fame_message(message: discord.Message, bot: discord.Clien
                            "channel_id": int(message.channel.id),
                            "guild_id": int(message.guild.id),
                            "hall_of_fame_message_id": int(hall_of_fame_message.id),
-                           "reaction_count": int(await reaction_count_without_author(message)),
+                           "reaction_count": int(await reaction_count(message)),
                            "video_link_message_id": int(video_message.id) if video_link else None})
     bot_stats = BotStats()
     if bot_stats.total_messages > 0:
@@ -292,8 +292,8 @@ async def create_embed(message: discord.Message, reaction_threshold: int):
 
         embed.add_field(name=f"{reference_message.author.name}'s message:", value=reference_message.content, inline=False)
 
-        corrected_reactions = await reaction_count_without_author(message)
-        embed.add_field(name=f"{corrected_reactions} Reactions ", value=most_reactions(message.reactions)[0].emoji, inline=True)
+        corrected_reactions = await reaction_count(message)
+        embed.add_field(name=f"{corrected_reactions} Reactions ", value=most_reacted_emoji(message.reactions)[0].emoji, inline=True)
         embed.add_field(name="Jump to Message", value=message.jump_url, inline=False)
 
         embed = await set_footer(embed)
@@ -309,8 +309,8 @@ async def create_embed(message: discord.Message, reaction_threshold: int):
         )
         embed.set_image(url=sticker.url)
         embed.set_author(name=message.author.name, icon_url=message.author.avatar.url if message.author.avatar else None)
-        corrected_reactions = await reaction_count_without_author(message)
-        embed.add_field(name=f"{corrected_reactions} Reactions ", value=most_reactions(message.reactions)[0].emoji, inline=True)
+        corrected_reactions = await reaction_count(message)
+        embed.add_field(name=f"{corrected_reactions} Reactions ", value=most_reacted_emoji(message.reactions)[0].emoji, inline=True)
         embed.add_field(name="Jump to Message", value=message.jump_url, inline=False)
         embed = await set_footer(embed)
         return embed
@@ -322,11 +322,11 @@ async def create_embed(message: discord.Message, reaction_threshold: int):
             title=f"{message.author.name} replied to {reference_message.author.name}'s message",
             color=message.author.color
         )
-        top_reaction = most_reactions(message.reactions)
+        top_reaction = most_reacted_emoji(message.reactions)
 
         embed.set_author(name=message.author.name, icon_url=message.author.avatar.url if message.author.avatar else None)
 
-        corrected_reactions = await reaction_count_without_author(message)
+        corrected_reactions = await reaction_count(message)
         embed.add_field(name=f"{corrected_reactions} Reactions ", value=top_reaction[0].emoji, inline=True)
         embed.add_field(name="Jump to Message", value=message.jump_url, inline=False)
 
@@ -355,10 +355,10 @@ async def create_embed(message: discord.Message, reaction_threshold: int):
             color=message.author.color
         )
 
-        top_reaction = most_reactions(message.reactions)
+        top_reaction = most_reacted_emoji(message.reactions)
         embed.set_author(name=message.author.name, icon_url=message.author.avatar.url if message.author.avatar else None)
 
-        corrected_reactions = await reaction_count_without_author(message)
+        corrected_reactions = await reaction_count(message)
 
         embed.add_field(name=f"{corrected_reactions} Reactions ", value=top_reaction[0].emoji, inline=True)
         embed.add_field(name="Jump to Message", value=message.jump_url, inline=False)
@@ -383,13 +383,13 @@ async def create_embed(message: discord.Message, reaction_threshold: int):
             description=message.content,
             color=message.author.color
         )
-        top_reaction = most_reactions(message.reactions)
+        top_reaction = most_reacted_emoji(message.reactions)
 
         embed.set_author(name=message.author.name, icon_url=message.author.avatar.url if message.author.avatar else None)
         if message.attachments:
             embed.set_image(url=message.attachments[0].url)
 
-        corrected_reactions = await reaction_count_without_author(message)
+        corrected_reactions = await reaction_count(message)
         embed.add_field(name=f"{corrected_reactions} Reactions ", value=top_reaction[0].emoji, inline=True)
         embed.add_field(name="Jump to Message", value=message.jump_url, inline=False)
 
@@ -459,19 +459,26 @@ async def create_database_context(bot, server, db_client, reaction_threshold_def
         "joined_date": datetime.datetime.now(timezone.utc),
         "leaderboard_setup": False,
         "ignore_bot_messages": False,
-        "member_count": server.member_count
+        "server_member_count": server.member_count,
+        "reaction_count_calculation_method": "most_reactions_on_emoji"
     })
     database.create_collection('hall_of_fame_messages')
 
+    await hall_of_fame_channel.send("https://raw.githubusercontent.com/LukasKristensen/discord-hall-of-fame-bot/refs/heads/main/Assets/hof_cover.jpg")
     await hall_of_fame_channel.send(
         f"🎉 **Welcome to the Hall of Fame!** 🎉\n"
-        f"When a message receives **{reaction_threshold_default} or more** (default threshold) of the same reaction, it’s automatically **reposted here** to celebrate its popularity.\n\n"
+        f"When a message receives **{reaction_threshold_default} or more (default threshold) of the same reaction**, it’s automatically **reposted here** to celebrate its popularity.\n\n"
         f"🔧 **Customize your setup:**\n"
         f"   • Change the reaction threshold with </set_reaction_threshold:1367582528675774595>\n"
         f"   • View your current settings with </get_server_config:1358208382473076852>\n\n"
         f"✨ **Want to only track specific emojis?**\n"
-        f"   Enable emoji filtering with </custom_emoji_check_logic:1358208382473076848>\n"
+        f"   Enable emoji filtering with </custom_emoji_check_logic:1358208382473076848>\n\n"
+        f"🧠 **Want to adjust how reactions are counted? (e.g. all votes on a message, not just the highest reaction)**\n"
+        f"   Use </calculation_method:1369721901726961687> to change the reaction count calculation method.\n\n"
     )
+
+    # Todo: Send the graphic of calculation methods for reaction count
+    # Todo: Send a message with the command with the update command id: /calculation_method [NOT FROM DEV BOT]
 
     new_server_class = server_class.Server(
         hall_of_fame_channel_id=hall_of_fame_channel.id,
@@ -485,7 +492,8 @@ async def create_database_context(bot, server, db_client, reaction_threshold_def
         custom_emoji_check_logic=False,
         whitelisted_emojis=[],
         leaderboard_setup=False,
-        ignore_bot_messages=False)
+        ignore_bot_messages=False,
+        reaction_count_calculation_method="most_reactions_on_emoji")
     return new_server_class
 
 
@@ -537,7 +545,8 @@ async def get_server_classes(db_client, bot):
             custom_emoji_check_logic=server_config["custom_emoji_check_logic"],
             whitelisted_emojis=server_config["whitelisted_emojis"],
             leaderboard_setup=server_config["leaderboard_setup"],
-            ignore_bot_messages=server_config["ignore_bot_messages"])
+            ignore_bot_messages=server_config["ignore_bot_messages"],
+            reaction_count_calculation_method=server_config["reaction_count_calculation_method"])
     return server_classes
 
 
