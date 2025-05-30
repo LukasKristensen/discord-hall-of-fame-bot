@@ -474,11 +474,8 @@ async def create_database_context(bot, server, db_client, reaction_threshold_def
         f"✨ **Want to only track specific emojis?**\n"
         f"   Enable emoji filtering with </custom_emoji_check_logic:1358208382473076848>\n\n"
         f"🧠 **Want to adjust how reactions are counted? (e.g. all votes on a message, not just the highest reaction)**\n"
-        f"   Use </calculation_method:1369721901726961687> to change the reaction count calculation method.\n\n"
+        f"   Use </calculation_method:1378150000600678440> to change the reaction count calculation method.\n\n"
     )
-
-    # Todo: Send the graphic of calculation methods for reaction count
-    # Todo: Send a message with the command with the update command id: /calculation_method [NOT FROM DEV BOT]
 
     new_server_class = server_class.Server(
         hall_of_fame_channel_id=hall_of_fame_channel.id,

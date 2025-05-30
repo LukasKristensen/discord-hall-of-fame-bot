@@ -60,7 +60,7 @@ async def get_help(interaction: discord.Interaction):
     embed.add_field(name="</ignore_bot_messages:1369721901726961686>", value="Should the bot ignore messages from other bots?", inline=False)
     embed.add_field(name="</feedback:1345567421834068060>", value="Got a feature request or bug report? Let us know!", inline=False)
     embed.add_field(name="</vote:1357399188526334074>", value="Support the bot by voting for it on top.gg: https://top.gg/bot/1177041673352663070/vote", inline=False)
-    embed.add_field(name="/calculation_method", value="Change the calculation method for reactions", inline=False) # TODO: Update with actual command id [NOT FROM DEV BOT]
+    embed.add_field(name="</calculation_method:1378150000600678440>", value="Change the calculation method for reactions", inline=False) # TODO: Update with actual command id [NOT FROM DEV BOT]
     embed.add_field(name="", value="", inline=True)
     embed.add_field(name="Having trouble setting up the bot?", value="Make sure the bot has the correct permissions in the server or try to re-invite it", inline=False)
     embed.add_field(name="Need help?", value="Join the community server: https://discord.gg/r98WC5GHcn", inline=False)
