@@ -285,7 +285,7 @@ async def create_embed(message: discord.Message, reaction_threshold: int):
         embed = discord.Embed(
             title=f"Sticker from {message.author.name} replying to {reference_message.author.name}'s message",
             description=message.content,
-            color=message.author.color
+            color=discord.Color.gold()
         )
         embed.set_image(url=sticker.url)
         embed.set_author(name=message.author.name, icon_url=message.author.avatar.url if message.author.avatar else None)
@@ -305,7 +305,7 @@ async def create_embed(message: discord.Message, reaction_threshold: int):
         embed = discord.Embed(
             title=f"Sticker from {message.author.name}",
             description=message.content,
-            color=message.author.color
+            color=discord.Color.gold()
         )
         embed.set_image(url=sticker.url)
         embed.set_author(name=message.author.name, icon_url=message.author.avatar.url if message.author.avatar else None)
@@ -320,7 +320,7 @@ async def create_embed(message: discord.Message, reaction_threshold: int):
         reference_message = await message.channel.fetch_message(message.reference.message_id)
         embed = discord.Embed(
             title=f"{message.author.name} replied to {reference_message.author.name}'s message",
-            color=message.author.color
+            color=discord.Color.gold()
         )
         top_reaction = most_reacted_emoji(message.reactions)
 
@@ -352,7 +352,7 @@ async def create_embed(message: discord.Message, reaction_threshold: int):
 
         embed = discord.Embed(
             title=f"{message.author.name} replied to {reference_message.author.name}'s message",
-            color=message.author.color
+            color=discord.Color.gold()
         )
 
         top_reaction = most_reacted_emoji(message.reactions)
@@ -381,7 +381,7 @@ async def create_embed(message: discord.Message, reaction_threshold: int):
         embed = discord.Embed(
             title=f"Message in <#{message.channel.id}> has surpassed {reaction_threshold} reactions",
             description=message.content,
-            color=message.author.color
+            color=discord.Color.gold()
         )
         top_reaction = most_reacted_emoji(message.reactions)
 
@@ -464,7 +464,6 @@ async def create_database_context(bot, server, db_client, reaction_threshold_def
     })
     database.create_collection('hall_of_fame_messages')
 
-    await hall_of_fame_channel.send("https://raw.githubusercontent.com/LukasKristensen/discord-hall-of-fame-bot/refs/heads/main/Assets/hof_cover.jpg")
     await hall_of_fame_channel.send(
         f"🎉 **Welcome to the Hall of Fame!** 🎉\n"
         f"When a message receives **{reaction_threshold_default} or more (default threshold) of the same reaction**, it’s automatically **reposted here** to celebrate its popularity.\n\n"
@@ -625,7 +624,7 @@ async def create_feedback_form(interaction: discord.Interaction, bot):
             target_channel = target_guild.get_channel(1345558910836412456)
             embed = discord.Embed(
                 title="New feedback",
-                color=discord.Color.yellow()
+                color=discord.Color.gold()
             )
             embed.add_field(name=self.fb_title.label, value=self.fb_title.value, inline=False)
             embed.add_field(name=self.message.label, value=self.message.value, inline=False)
