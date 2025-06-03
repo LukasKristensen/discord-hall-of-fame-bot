@@ -123,10 +123,7 @@ async def on_message(message, bot: discord.Client, target_channel_id, allow_mess
     :param allow_messages_in_hof_channel:
     :return:
     """
-    if message.channel.id != target_channel_id or message.author.bot:
-        return
-
-    if message.author.bot or allow_messages_in_hof_channel:
+    if message.channel.id != target_channel_id or message.author.bot or allow_messages_in_hof_channel:
         return
 
     await message.delete()
