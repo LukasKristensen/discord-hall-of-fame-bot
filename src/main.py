@@ -71,6 +71,9 @@ async def daily_task():
         db_client["bot_stats"]["server_count"].insert_one(
             {"timestamp": datetime.now(),
              "server_count": len(server_classes)})
+        db_client["bot_stats"]["total_users"].insert_one(
+            {"timestamp": datetime.now(),
+             "total_users": sum(server.member_count for server in bot.guilds)})
     await post_topgg_stats()
 
 
