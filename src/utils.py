@@ -254,7 +254,6 @@ async def post_hall_of_fame_message(message: discord.Message, bot: discord.Clien
     bot_stats = BotStats()
     if bot_stats.total_messages > 0:
         bot_stats.total_messages += 1
-        await bot.change_presence(activity=discord.CustomActivity(name=f'{bot_stats.total_messages} Hall of Fame messages', type=5))
 
 
 async def set_footer(embed: discord.Embed):

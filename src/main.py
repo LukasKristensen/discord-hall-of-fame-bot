@@ -48,8 +48,8 @@ async def on_ready():
         server_classes[key] = value
     await utils.error_logging(bot, f"Loaded a total of {len(server_classes)} servers")
     await utils.error_logging(bot,f"Loaded a total of {bot_stats.total_messages} hall of fame messages in the database")
-    if bot_stats.total_messages > 0:
-        await bot.change_presence(activity=discord.CustomActivity(name=f'{bot_stats.total_messages} Hall of Fame messages', type=5))
+    await bot.change_presence(activity=discord.CustomActivity(name=f'{sum(server.member_count for server in bot.guilds)} users using Hall Of Fame', type=5))
+
     await events.post_wrapped()
     daily_task.start()
 
