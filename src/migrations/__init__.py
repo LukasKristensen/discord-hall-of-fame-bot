@@ -10,7 +10,7 @@ db_client = MongoClient(mongo_uri)
 migration_collection = db_client["migrations"]["migration_status"]
 
 
-def run_migrations():
+def run_migrations(production: bool = True):
     migrations_folder = "migrations"
     completed_migrations = []
 
@@ -30,7 +30,7 @@ def run_migrations():
 
             migration_collection.update_one(
                 {"migration_name": migration_name},
-                {"$set": {"completed": True, "timestamp": datetime.utcnow()}},
+                {"$set": {"completed": production, "timestamp": datetime.utcnow()}},
                 upsert=True
             )
             print(f"Migration '{migration_name}' completed.")

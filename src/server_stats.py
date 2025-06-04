@@ -1,3 +1,4 @@
+import datetime
 import os
 from pymongo.mongo_client import MongoClient
 from dotenv import load_dotenv
@@ -94,7 +95,32 @@ def create_bot_stats_plot():
     plt.show()
 
 
-# Call the updated plot function
+def create_plot_server_count_and_total_members():
+    server_count_data = list(db_client['bot_stats']['server_count'].find())
+    total_users_data = list(db_client['bot_stats']['total_users'].find())
+
+    server_counts = [data['server_count'] for data in server_count_data]
+    timestamps = [data['timestamp'] for data in server_count_data]
+    fig, ax1 = plt.subplots()
+    ax1.plot(timestamps, server_counts, label='Server Count', color='blue')
+    ax1.set_xlabel('Timestamp')
+    ax1.set_ylabel('Server Count', color='blue')
+    ax1.tick_params(axis='y', labelcolor='blue')
+    ax1.set_title('Server Count Over Time')
+    ax1.legend(loc='upper left')
+    ax1.grid()
+
+    timestamps2 = [data['timestamp'] for data in total_users_data]
+    total_members = [data['total_users'] for data in total_users_data]
+    ax2 = ax1.twinx()
+    ax2.plot(timestamps2, total_members, label='Total Members', color='orange')
+    ax2.set_ylabel('Total Members', color='orange')
+    ax2.tick_params(axis='y', labelcolor='orange')
+    ax2.legend(loc='upper right')
+    plt.show()
+
+
+create_plot_server_count_and_total_members()
 create_bot_stats_plot()
 create_plot(server_stats)
 create_plot_where_msg_count_greater_than_zero(server_stats)
