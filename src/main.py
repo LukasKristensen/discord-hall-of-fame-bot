@@ -48,7 +48,7 @@ async def on_ready():
         server_classes[key] = value
     await utils.error_logging(bot, f"Loaded a total of {len(server_classes)} servers")
     await utils.error_logging(bot,f"Loaded a total of {bot_stats.total_messages} hall of fame messages in the database")
-    await bot.change_presence(activity=discord.CustomActivity(name=f'🏆 {sum(server.member_count for server in bot.guilds)} users using Hall Of Fame', type=5))
+    await bot.change_presence(activity=discord.CustomActivity(name=f'🏆 Hall of Fame — {sum(server.member_count for server in bot.guilds)} users', type=5))
 
     await events.post_wrapped()
     daily_task.start()
@@ -64,6 +64,7 @@ async def daily_task():
         await utils.error_logging(bot, f"Error in daily_task: {e}")
     await utils.error_logging(bot, f"Total messages in the database: {bot_stats.total_messages}")
 
+    total_server_members = sum(server.member_count for server in bot.guilds)
     if not dev_test:
         db_client["bot_stats"]["total_messages"].insert_one(
             {"timestamp": datetime.now(),
@@ -73,7 +74,9 @@ async def daily_task():
              "server_count": len(server_classes)})
         db_client["bot_stats"]["total_users"].insert_one(
             {"timestamp": datetime.now(),
-             "total_users": sum(server.member_count for server in bot.guilds)})
+             "total_users": total_server_members})
+
+    await bot.change_presence(activity=discord.CustomActivity(name=f'🏆 Hall of Fame — {total_server_members} users', type=5))
     await post_topgg_stats()
 
 
@@ -86,7 +89,7 @@ async def on_raw_reaction_add(payload: discord.RawReactionActionEvent):
         messages_processing.append(payload.message_id)
         await events.on_raw_reaction(payload, bot, collection, server_class.reaction_threshold,
                                      server_class.post_due_date, server_class.hall_of_fame_channel_id,
-                                     server_class.ignore_bot_messages)
+                                     server_class.ignore_bot_messages, server_class.hide_hof_post_below_threshold)
         messages_processing.remove(payload.message_id)
 
 
@@ -99,7 +102,7 @@ async def on_raw_reaction_remove(payload: discord.RawReactionActionEvent):
         messages_processing.append(payload.message_id)
         await events.on_raw_reaction(payload, bot, collection, server_class.reaction_threshold,
                                      server_class.post_due_date, server_class.hall_of_fame_channel_id,
-                                     server_class.ignore_bot_messages)
+                                     server_class.ignore_bot_messages, server_class.hide_hof_post_below_threshold)
         messages_processing.remove(payload.message_id)
 
 
@@ -316,6 +319,7 @@ async def get_server_config(interaction: discord.Interaction):
         ignore_bot_messages=server_class.ignore_bot_messages,
         post_due_date=server_class.post_due_date,
         calculation_method=server_class.reaction_count_calculation_method,
+        hide_hof_post_below_threshold=server_class.hide_hof_post_below_threshold,
         whitelisted_emojis=', '.join(server_class.whitelisted_emojis) if server_class.custom_emoji_check_logic else ''
     )
     if server_class.custom_emoji_check_logic:
@@ -377,6 +381,25 @@ async def calculation_method(interaction: discord.Interaction, method: app_comma
     server_classes[interaction.guild_id].reaction_count_calculation_method = method.value
     await interaction.response.send_message(f"Reaction count calculation method set to {method.name}")
     await utils.error_logging(bot, f"Calculation method command used by {interaction.user.name} in {interaction.guild.name}", interaction.guild.id, method.value)
+
+
+@tree.command(name="hide_hof_post_below_threshold", description="Should hall of fame posts be hidden when they go below the reaction threshold?")
+async def hide_hall_of_fame_posts_when_they_are_below_threshold(interaction: discord.Interaction, hide: bool):
+    """
+    Hide hall of fame posts when they are below the threshold
+    :param interaction:
+    :param hide: True to hide, False to not hide
+    :return:
+    """
+    if not await check_if_user_has_manage_server_permission(interaction):
+        return
+
+    db = db_client[str(interaction.guild_id)]
+    server_config = db['server_config']
+    server_config.update_one({"guild_id": interaction.guild_id}, {"$set": {"hide_hof_post_below_threshold": hide}})
+    server_classes[interaction.guild_id].hide_hof_post_below_threshold = hide
+    await interaction.response.send_message(f"Hide hall of fame posts when they are below the threshold set to {hide}")
+    await utils.error_logging(bot, f"Hide hall of fame posts command used by {interaction.user.name} in {interaction.guild.name}", interaction.guild.id, hide)
 
 
 async def check_if_user_has_manage_server_permission(interaction: discord.Interaction):
