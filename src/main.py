@@ -13,6 +13,7 @@ from bot_stats import BotStats
 import topgg_api
 import os
 from translations import messages
+import migrations
 
 dev_test = os.getenv('DEV_TEST') == "True"
 load_dotenv()
@@ -41,6 +42,8 @@ async def on_ready():
     version.DATE = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     await events.bot_login(bot, tree)
     await utils.error_logging(bot, f"Logged in as {bot.user}", log_type="system")
+    completed_migrations = migrations.run_migrations()
+    await utils.error_logging(bot, f"Completed migrations: {', '.join(completed_migrations)}", log_type="system")
 
     server_classes = await utils.get_server_classes(db_client, bot)
     new_server_classes_dict = await events.check_for_new_server_classes(bot, db_client)
