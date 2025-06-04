@@ -68,8 +68,7 @@ async def get_help(interaction: discord.Interaction):
     embed.add_field(name="Contribute on Github", value="https://github.com/LukasKristensen/discord-hall-of-fame-bot", inline=False)
     embed.add_field(name="Invite the bot", value="https://discord.com/oauth2/authorize?client_id=1177041673352663070", inline=False)
     embed.set_footer(text=f"Bot Version: {version.VERSION} - {version.DATE}")
-    embed.set_thumbnail(url="https://raw.githubusercontent.com/LukasKristensen/discord-hall-of-fame-bot/refs/heads/main/Assets/logo.jpg")
-    embed.set_image(url="https://cdn.discordapp.com/attachments/1344768491021930624/1379923091618271363/reaction_calculation_methods_wide.jpg?ex=68420106&is=6840af86&hm=206c1394962c37a0e36fc0cfa64111644a13e09d75b1d751fc2a55eabe1e6c90&")
+    embed.set_image(url="https://raw.githubusercontent.com/LukasKristensen/discord-hall-of-fame-bot/refs/heads/main/Assets/reaction_calculation_methods_wide.jpg")
     await interaction.response.send_message(embed=embed)
 
 
