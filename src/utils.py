@@ -11,7 +11,7 @@ from bot_stats import BotStats
 
 async def validate_message(message: discord.RawReactionActionEvent, bot: discord.Client, collection,
                            reaction_threshold: int, post_due_date: int, target_channel_id: int,
-                           ignore_bot_messages: bool = False):
+                           ignore_bot_messages: bool, hide_hof_post_below_threshold: bool):
     """
     Check if the message is valid for posting based on the reaction count, date and origin of the message
     :param message: The message to validate
@@ -21,6 +21,7 @@ async def validate_message(message: discord.RawReactionActionEvent, bot: discord
     :param post_due_date: The number of days after which a message is no longer eligible for the Hall of Fame
     :param target_channel_id: The ID of the Hall of Fame channel
     :param ignore_bot_messages: Whether to ignore messages from bots
+    :param hide_hof_post_below_threshold: Whether to hide the Hall of Fame post if the reaction count is below the threshold
     :return: None
     """
     channel_id: int = message.channel_id
@@ -40,7 +41,7 @@ async def validate_message(message: discord.RawReactionActionEvent, bot: discord
     # Gets the adjusted reaction count corrected for not accounting the author
     corrected_reactions = await reaction_count(message)
     if corrected_reactions < reaction_threshold:
-        if collection.find_one({"message_id": int(message_id)}):
+        if hide_hof_post_below_threshold and collection.find_one({"message_id": int(message_id)}):
             await remove_embed(message_id, collection, bot, target_channel_id)
             if "video_link_message_id" in collection.find_one({"message_id": int(message_id)}) and message.attachments:
                 video_link_message = collection.find_one({"message_id": int(message_id)})["video_link_message_id"]
@@ -459,7 +460,8 @@ async def create_database_context(bot, server, db_client, reaction_threshold_def
         "leaderboard_setup": False,
         "ignore_bot_messages": False,
         "server_member_count": server.member_count,
-        "reaction_count_calculation_method": "most_reactions_on_emoji"
+        "reaction_count_calculation_method": "most_reactions_on_emoji",
+        "hide_hof_post_below_threshold": True
     })
     database.create_collection('hall_of_fame_messages')
 
@@ -488,7 +490,8 @@ async def create_database_context(bot, server, db_client, reaction_threshold_def
         whitelisted_emojis=[],
         leaderboard_setup=False,
         ignore_bot_messages=False,
-        reaction_count_calculation_method="most_reactions_on_emoji")
+        reaction_count_calculation_method="most_reactions_on_emoji",
+        hide_hof_post_below_threshold=True)
     return new_server_class
 
 
@@ -541,7 +544,8 @@ async def get_server_classes(db_client, bot):
             whitelisted_emojis=server_config["whitelisted_emojis"],
             leaderboard_setup=server_config["leaderboard_setup"],
             ignore_bot_messages=server_config["ignore_bot_messages"],
-            reaction_count_calculation_method=server_config["reaction_count_calculation_method"])
+            reaction_count_calculation_method=server_config["reaction_count_calculation_method"],
+            hide_hof_post_below_threshold=server_config["hide_hof_post_below_threshold"])
     return server_classes
 
 

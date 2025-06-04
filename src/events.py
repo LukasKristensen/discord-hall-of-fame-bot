@@ -94,7 +94,7 @@ async def bot_login(bot: discord.Client, tree):
 
 async def on_raw_reaction(message: discord.RawReactionActionEvent, bot: discord.Client, collection,
                           reaction_threshold: int, post_due_date: int, target_channel_id: int,
-                          ignore_bot_messages: bool = False):
+                          ignore_bot_messages: bool, hide_hof_post_below_threshold: bool):
     """
     Event handler for when a reaction is added to a message
     :param message: The message that the reaction was removed from
@@ -104,11 +104,12 @@ async def on_raw_reaction(message: discord.RawReactionActionEvent, bot: discord.
     :param post_due_date: The due date for posting
     :param target_channel_id: The target channel id
     :param ignore_bot_messages: Whether to ignore bot messages
+    :param hide_hof_post_below_threshold: Whether to hide hall of fame posts below the threshold
     :return: None
     """
     try:
         await utils.validate_message(message, bot, collection, reaction_threshold, post_due_date, target_channel_id,
-                                     ignore_bot_messages)
+                                     ignore_bot_messages, hide_hof_post_below_threshold)
     except Exception as e:
         if collection.count_documents({}) > 0:
             await utils.error_logging(bot, f"Error in reaction event: {e}", message.guild_id)
