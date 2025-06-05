@@ -38,7 +38,15 @@ bot_stats = BotStats()
 @bot.event
 async def on_ready():
     global server_classes
-    await migrations.add_author_id_and_message_created_field_to_all_messages(bot)
+
+    total_servers_processed = 0
+    for guild_id in db_client.list_database_names():
+        total_servers_processed += 1
+        if not guild_id.isdigit():
+            continue
+        await utils.error_logging(bot, f"Migrating server {guild_id} to the new schema")
+        await migrations.add_author_id_and_message_created_field_to_all_messages(bot, guild_id)
+        await utils.error_logging(bot, f"Progress: {total_servers_processed} of {len(db_client.list_database_names())} servers processed")
 
     version.DATE = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     await events.bot_login(bot, tree)
