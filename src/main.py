@@ -455,7 +455,7 @@ async def get_user_server_profile(interaction: discord.Interaction, specific_use
     embed.set_thumbnail(url=user.display_avatar.url)
     embed.set_footer(text="Keep contributing to the Hall of Fame!")
     await interaction.response.send_message(embed=embed)
-    await utils.error_logging(bot, f"Get user server profile command used by {interaction.user.name} in {interaction.guild.name}", interaction.guild.id, str(interaction.user.id))
+    await utils.error_logging(bot, f"Get user server profile command used by {interaction.user.name} in {interaction.guild.name}", interaction.guild.id, str(user.id))
 
 
 async def check_if_user_has_manage_server_permission(interaction: discord.Interaction):
