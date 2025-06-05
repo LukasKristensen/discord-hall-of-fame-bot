@@ -420,41 +420,7 @@ async def get_user_server_profile(interaction: discord.Interaction, specific_use
     user = specific_user or interaction.user
     user_stats = db_client[str(interaction.guild_id)]['users'].find_one({"user_id": user.id})
 
-    user_has_most_this_month_hall_of_fame_messages = db_client[str(interaction.guild_id)]['users'].find_one(
-        {}, sort=[("this_month_hall_of_fame_messages", -1)])
-    user_with_most_all_time_hall_of_fame_messages = db_client[str(interaction.guild_id)]['users'].find_one(
-        {}, sort=[("total_hall_of_fame_messages", -1)])
-
-    embed = discord.Embed(
-        title=f"📊 {user.name}'s Server Profile",
-        description=f"Here are your stats for **{interaction.guild.name}**:",
-        color=discord.Color.gold()
-    )
-    if user.id == user_has_most_this_month_hall_of_fame_messages.get("user_id") and user_stats:
-        embed.add_field(name=f"{month_emoji} **Monthly Hall of Fame Champion**",
-                        value=f"**{user.name}** is the champion of this month's Hall of Fame with **{user_stats.get('this_month_hall_of_fame_messages', 0)}** messages!",
-                        inline=False)
-    if user.id == user_with_most_all_time_hall_of_fame_messages.get("user_id") and user_stats:
-        embed.add_field(name=f"{all_time_emoji} **All-Time Hall of Fame Champion**",
-                        value=f"**{user.name}** is the all-time champion with **{user_stats.get('total_hall_of_fame_messages', 0)}** messages!",
-                        inline=False)
-
-    embed.add_field(name="", value="", inline=False)
-
-    if user_stats:
-        embed.add_field(name="🏆 **This Month's Hall of Fame Messages**",
-                        value=f"**{user_stats.get('this_month_hall_of_fame_messages', 0)}**", inline=False)
-        embed.add_field(name="", value="", inline=False)
-        embed.add_field(name="🌟 **Total Hall of Fame Messages**",
-                        value=f"**{user_stats.get('total_hall_of_fame_messages', 0)}**", inline=False)
-    else:
-        embed.add_field(name="🏆 **This Month's Hall of Fame Messages**", value="**0**", inline=False)
-        embed.add_field(name="", value="", inline=False)
-        embed.add_field(name="🌟 **Total Hall of Fame Messages**", value="**0**", inline=False)
-
-    embed.set_thumbnail(url=user.display_avatar.url)
-    embed.set_footer(text="Keep contributing to the Hall of Fame!")
-    await interaction.response.send_message(embed=embed)
+    await commands.user_server_profile(interaction, user, user_stats, db_client, month_emoji, all_time_emoji)
     await utils.error_logging(bot, f"Get user server profile command used by {interaction.user.name} in {interaction.guild.name}", interaction.guild.id, str(user.id))
 
 
