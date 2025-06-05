@@ -46,7 +46,7 @@ async def on_ready():
     if len(completed_migrations) > 0:
         await utils.error_logging(bot, f"Completed migrations: {', '.join(completed_migrations)}", log_type="system")
 
-    server_classes = await utils.get_server_classes(db_client, bot)
+    server_classes = await utils.get_server_classes(db_client, bot, dev_test)
     new_server_classes_dict = await events.check_for_new_server_classes(bot, db_client)
     for key, value in new_server_classes_dict.items():
         server_classes[key] = value
