@@ -36,6 +36,7 @@ bot_stats = BotStats()
 month_emoji = "<:month_most_hof_messages:1380272332609683517>" if not dev_test else "<:month_most_hof_messages:1380272983368532160>"
 all_time_emoji = "<:all_time_most_hof_messages:1380272422842007622>" if not dev_test else "<:all_time_most_hof_messages:1380272953098244166>"
 
+
 # region Events
 @bot.event
 async def on_ready():
@@ -409,12 +410,14 @@ async def hide_hall_of_fame_posts_when_they_are_below_threshold(interaction: dis
 
 
 @tree.command(name="get_user_profile", description="Get the server profile of a user")
-async def get_user_server_profile(interaction: discord.Interaction, user: discord.User):
+async def get_user_server_profile(interaction: discord.Interaction, specific_user: discord.User = None):
     """
     Get the server profile of a user
     :param interaction: The interaction object
+    :param specific_user: The user to get the profile of, defaults to the interaction user
     :return: The server profile of the user
     """
+    user = specific_user or interaction.user
     user_stats = db_client[str(interaction.guild_id)]['users'].find_one({"user_id": user.id})
 
     user_has_most_this_month_hall_of_fame_messages = db_client[str(interaction.guild_id)]['users'].find_one(
