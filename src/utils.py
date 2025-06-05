@@ -507,11 +507,12 @@ def delete_database_context(server_id: int, db_client):
     db_client.drop_database(str(server_id))
 
 
-async def get_server_classes(db_client, bot):
+async def get_server_classes(db_client, bot, dev_test):
     """
     Get all server classes from the database
     :param db_client: The MongoDB client
     :param bot: The Discord bot
+    :param dev_test: Whether to run in development/test mode
     :return: A list of server classes
     """
     all_database_names = db_client.list_database_names()
@@ -527,7 +528,8 @@ async def get_server_classes(db_client, bot):
                 {"guild_id": int(database_name)},
                 {"$set": {"server_member_count": bot.get_guild(int(database_name)).member_count}})
         else:
-            await error_logging(bot, f"Database {database_name} does not exist or is not a server database")
+            if not dev_test:
+                await error_logging(bot, f"Database {database_name} does not exist or is not a server database")
 
     server_classes = {}
     for db in db_clients:
@@ -642,3 +644,47 @@ async def create_feedback_form(interaction: discord.Interaction, bot):
             await feedback_interaction.delete_original_response()
 
     await interaction.response.send_modal(FeedbackModal())
+
+
+async def update_user_database(bot: discord.Client, db_client):
+    """
+    Update the user database with the latest information
+    :param bot: The Discord bot
+    :param db_client: The MongoDB client
+    :return: None
+    """
+    for guild in bot.guilds:
+        if str(guild.id) not in db_client.list_database_names():
+            continue
+        server_db = db_client[str(guild.id)]
+        messages = server_db['hall_of_fame_messages'].find({})
+        users_collection = db_client[str(guild.id)]['users']
+        users_stats = {}
+
+        for message in messages:
+            try:
+                if not message.get('author_id') or not message.get('created_at'):
+                    continue
+                user_id = message['author_id']
+                if user_id not in users_stats:
+                    users_stats[user_id] = {
+                        "total_hall_of_fame_messages": 0,
+                        "this_month_hall_of_fame_messages": 0,
+                    }
+                users_stats[user_id]["total_hall_of_fame_messages"] += 1
+                if message['created_at'].replace(tzinfo=timezone.utc) >= (datetime.datetime.now(timezone.utc) - datetime.timedelta(days=30)):
+                    users_stats[user_id]["this_month_hall_of_fame_messages"] += 1
+            except KeyError as e:
+                await error_logging(bot, f"KeyError in message {message['message_id']} in guild {guild.id}: {e}", guild.id)
+
+        for user_id, stats in users_stats.items():
+            try:
+                users_collection.update_one(
+                    {"user_id": user_id},
+                    {"$set": {
+                        "total_hall_of_fame_messages": stats["total_hall_of_fame_messages"],
+                        "this_month_hall_of_fame_messages": stats["this_month_hall_of_fame_messages"]
+                    }},
+                    upsert=True)
+            except Exception as e:
+                await error_logging(bot, f"Failed to update user {user_id} in database: {e}", guild.id)

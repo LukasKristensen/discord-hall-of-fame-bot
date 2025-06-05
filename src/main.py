@@ -33,6 +33,8 @@ server_classes = {}
 dev_user = 230698327589650432
 bot_stats = BotStats()
 
+month_emoji = "<:month_most_hof_messages:1380272332609683517>" if not dev_test else "<:month_most_hof_messages:1380272983368532160>"
+all_time_emoji = "<:all_time_most_hof_messages:1380272422842007622>" if not dev_test else "<:all_time_most_hof_messages:1380272953098244166>"
 
 # region Events
 @bot.event
@@ -46,7 +48,7 @@ async def on_ready():
     if len(completed_migrations) > 0:
         await utils.error_logging(bot, f"Completed migrations: {', '.join(completed_migrations)}", log_type="system")
 
-    server_classes = await utils.get_server_classes(db_client, bot)
+    server_classes = await utils.get_server_classes(db_client, bot, dev_test)
     new_server_classes_dict = await events.check_for_new_server_classes(bot, db_client)
     for key, value in new_server_classes_dict.items():
         server_classes[key] = value
@@ -404,6 +406,53 @@ async def hide_hall_of_fame_posts_when_they_are_below_threshold(interaction: dis
     server_classes[interaction.guild_id].hide_hof_post_below_threshold = hide
     await interaction.response.send_message(f"Hide hall of fame posts when they are below the threshold set to {hide}")
     await utils.error_logging(bot, f"Hide hall of fame posts command used by {interaction.user.name} in {interaction.guild.name}", interaction.guild.id, str(hide))
+
+
+@tree.command(name="get_user_profile", description="Get the server profile of a user")
+async def get_user_server_profile(interaction: discord.Interaction, user: discord.User):
+    """
+    Get the server profile of a user
+    :param interaction: The interaction object
+    :return: The server profile of the user
+    """
+    user_stats = db_client[str(interaction.guild_id)]['users'].find_one({"user_id": user.id})
+
+    user_has_most_this_month_hall_of_fame_messages = db_client[str(interaction.guild_id)]['users'].find_one(
+        {}, sort=[("this_month_hall_of_fame_messages", -1)])
+    user_with_most_all_time_hall_of_fame_messages = db_client[str(interaction.guild_id)]['users'].find_one(
+        {}, sort=[("total_hall_of_fame_messages", -1)])
+
+    embed = discord.Embed(
+        title=f"📊 {user.name}'s Server Profile",
+        description=f"Here are your stats for **{interaction.guild.name}**:",
+        color=discord.Color.gold()
+    )
+    if user.id == user_has_most_this_month_hall_of_fame_messages.get("user_id") and user_stats:
+        embed.add_field(name=f"{month_emoji} **Monthly Hall of Fame Champion**",
+                        value=f"**{user.name}** is the champion of this month's Hall of Fame with **{user_stats.get('this_month_hall_of_fame_messages', 0)}** messages!",
+                        inline=False)
+    if user.id == user_with_most_all_time_hall_of_fame_messages.get("user_id") and user_stats:
+        embed.add_field(name=f"{all_time_emoji} **All-Time Hall of Fame Champion**",
+                        value=f"**{user.name}** is the all-time champion with **{user_stats.get('total_hall_of_fame_messages', 0)}** messages!",
+                        inline=False)
+
+    embed.add_field(name="", value="", inline=False)
+
+    if user_stats:
+        embed.add_field(name="🏆 **This Month's Hall of Fame Messages**",
+                        value=f"**{user_stats.get('this_month_hall_of_fame_messages', 0)}**", inline=False)
+        embed.add_field(name="", value="", inline=False)
+        embed.add_field(name="🌟 **Total Hall of Fame Messages**",
+                        value=f"**{user_stats.get('total_hall_of_fame_messages', 0)}**", inline=False)
+    else:
+        embed.add_field(name="🏆 **This Month's Hall of Fame Messages**", value="**0**", inline=False)
+        embed.add_field(name="", value="", inline=False)
+        embed.add_field(name="🌟 **Total Hall of Fame Messages**", value="**0**", inline=False)
+
+    embed.set_thumbnail(url=user.display_avatar.url)
+    embed.set_footer(text="Keep contributing to the Hall of Fame!")
+    await interaction.response.send_message(embed=embed)
+    await utils.error_logging(bot, f"Get user server profile command used by {interaction.user.name} in {interaction.guild.name}", interaction.guild.id, str(interaction.user.id))
 
 
 async def check_if_user_has_manage_server_permission(interaction: discord.Interaction):

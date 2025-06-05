@@ -198,3 +198,18 @@ async def daily_task(bot: discord.Client, db_client, server_classes, dev_testing
         if db_server.isdigit() and not dev_testing and int(db_server) not in [guild.id for guild in bot.guilds]:
             await utils.error_logging(bot, f"Could not find server {db_server} in bot guilds")
     await utils.error_logging(bot, f"Checked {len(server_classes)} servers for daily task")
+    await update_user_database(bot, db_client)
+
+
+async def update_user_database(bot: discord.Client, db_client):
+    """
+    Update the user database with the latest information
+    :param bot: The bot client
+    :param db_client: The database client
+    :return: None
+    """
+    try:
+        await utils.update_user_database(bot, db_client)
+        await utils.error_logging(bot, "User database updated successfully")
+    except Exception as e:
+        await utils.error_logging(bot, f"Failed to update user database: {e}")
