@@ -38,6 +38,7 @@ bot_stats = BotStats()
 @bot.event
 async def on_ready():
     global server_classes
+    await migrations.add_author_id_and_message_created_field_to_all_messages(bot)
 
     version.DATE = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     await events.bot_login(bot, tree)
@@ -403,7 +404,7 @@ async def hide_hall_of_fame_posts_when_they_are_below_threshold(interaction: dis
     server_config.update_one({"guild_id": interaction.guild_id}, {"$set": {"hide_hof_post_below_threshold": hide}})
     server_classes[interaction.guild_id].hide_hof_post_below_threshold = hide
     await interaction.response.send_message(f"Hide hall of fame posts when they are below the threshold set to {hide}")
-    await utils.error_logging(bot, f"Hide hall of fame posts command used by {interaction.user.name} in {interaction.guild.name}", interaction.guild.id, hide)
+    await utils.error_logging(bot, f"Hide hall of fame posts command used by {interaction.user.name} in {interaction.guild.name}", interaction.guild.id, str(hide))
 
 
 async def check_if_user_has_manage_server_permission(interaction: discord.Interaction):

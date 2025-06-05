@@ -1,8 +1,10 @@
 import os
 import importlib
+import discord
 from pymongo.mongo_client import MongoClient
 from dotenv import load_dotenv
 from datetime import datetime
+from src import utils
 
 load_dotenv('../.env')
 mongo_uri = os.getenv('MONGO_URI')
@@ -36,3 +38,36 @@ def run_migrations(production: bool = True):
             print(f"Migration '{migration_name}' completed.")
             completed_migrations.append(migration_name)
     return completed_migrations
+
+
+async def add_author_id_and_message_created_field_to_all_messages(bot: discord.Client):
+    """
+    Add author_id and message_created fields to all messages in the hall_of_fame_messages collection.
+    :param bot: Discord client instance
+    :param db_client: MongoDB client instance
+    """
+    print("Starting migration to add author_id and message_created fields to all messages...")
+    await utils.error_logging(bot, "Starting migration to add author_id and message_created fields to all messages...")
+
+    for guild_id in db_client.list_database_names():
+        if not guild_id.isdigit():
+            continue
+        await utils.error_logging(bot, f"Processing guild {guild_id} for migration.")
+        server_collection = db_client[guild_id]["hall_of_fame_messages"]
+        for message in server_collection.find():
+            try:
+                if "author_id" not in message:
+                    channel_id = message.get("channel_id")
+                    message_id = message.get("message_id")
+                    discord_message = await bot.get_channel(channel_id).fetch_message(message_id)
+                    author_id = discord_message.author.id if discord_message.author else None
+                    created_at = discord_message.created_at if discord_message else None
+
+                    print(f"Updating message {message_id} in channel {channel_id} with author_id {author_id} and message_created: {created_at}")
+                    server_collection.update_one(
+                        {"_id": message["_id"]},
+                        {"$set": {"author_id": author_id, "created_at": discord_message.created_at}}
+                    )
+                    print(f"Updated message {message_id} in channel {channel_id} with author_id and message_created.")
+            except Exception as e:
+                await utils.error_logging(bot, f"Failed to update message {message['_id']} in guild {guild_id}: {e}")
