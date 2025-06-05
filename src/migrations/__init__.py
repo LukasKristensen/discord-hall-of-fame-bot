@@ -4,7 +4,6 @@ import discord
 from pymongo.mongo_client import MongoClient
 from dotenv import load_dotenv
 from datetime import datetime
-from src import utils
 
 load_dotenv('../.env')
 mongo_uri = os.getenv('MONGO_URI')
@@ -47,12 +46,10 @@ async def add_author_id_and_message_created_field_to_all_messages(bot: discord.C
     :param db_client: MongoDB client instance
     """
     print("Starting migration to add author_id and message_created fields to all messages...")
-    await utils.error_logging(bot, "Starting migration to add author_id and message_created fields to all messages...")
 
     for guild_id in db_client.list_database_names():
         if not guild_id.isdigit():
             continue
-        await utils.error_logging(bot, f"Processing guild {guild_id} for migration.")
         server_collection = db_client[guild_id]["hall_of_fame_messages"]
         for message in server_collection.find():
             try:
@@ -70,4 +67,4 @@ async def add_author_id_and_message_created_field_to_all_messages(bot: discord.C
                     )
                     print(f"Updated message {message_id} in channel {channel_id} with author_id and message_created.")
             except Exception as e:
-                await utils.error_logging(bot, f"Failed to update message {message['_id']} in guild {guild_id}: {e}")
+                print(f"Failed to update message {message['_id']} in guild {guild_id}: {e}")
