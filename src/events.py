@@ -178,8 +178,6 @@ async def daily_task(bot: discord.Client, db_client, server_classes, dev_testing
     await utils.error_logging(bot, f"Starting daily task for {len(server_classes)} servers")
     for server_class in list(server_classes.values()):
         if not server_class.leaderboard_setup:
-            await utils.error_logging(bot, f"Server {server_class.guild_id} not setup for leaderboard",
-                                      server_class.guild_id)
             continue
         try:
             server_collection = db_client[str(server_class.guild_id)]["hall_of_fame_messages"]
