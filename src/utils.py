@@ -251,7 +251,9 @@ async def post_hall_of_fame_message(message: discord.Message, bot: discord.Clien
                            "guild_id": int(message.guild.id),
                            "hall_of_fame_message_id": int(hall_of_fame_message.id),
                            "reaction_count": int(await reaction_count(message)),
-                           "video_link_message_id": int(video_message.id) if video_link else None})
+                           "video_link_message_id": int(video_message.id) if video_link else None,
+                           "created_at": datetime.datetime.now(timezone.utc),
+                           "author_id": int(message.author.id)})
     bot_stats = BotStats()
     if bot_stats.total_messages > 0:
         bot_stats.total_messages += 1
