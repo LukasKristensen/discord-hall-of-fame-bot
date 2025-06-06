@@ -44,8 +44,6 @@ all_time_emoji = "<:all_time_most_hof_messages:1380272422842007622>" if not dev_
 async def on_ready():
     global server_classes
 
-    await fix_write_hall_of_fame_channel_permissions()
-
     version.DATE = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     await events.bot_login(bot, tree)
     await utils.error_logging(bot, f"Logged in as {bot.user}", log_type="system")
@@ -53,6 +51,7 @@ async def on_ready():
     if len(completed_migrations) > 0:
         await utils.error_logging(bot, f"Completed migrations: {', '.join(completed_migrations)}", log_type="system")
 
+    await fix_write_hall_of_fame_channel_permissions()
     server_classes = await utils.get_server_classes(db_client, bot, dev_test)
     new_server_classes_dict = await events.check_for_new_server_classes(bot, db_client)
     for key, value in new_server_classes_dict.items():
