@@ -467,15 +467,19 @@ async def post_topgg_stats():
 
 async def fix_write_hall_of_fame_channel_permissions():
     for guild in bot.guilds:
-        if str(guild.id) not in db_client.list_database_names():
+        try:
+            if str(guild.id) not in db_client.list_database_names():
+                continue
+            server_db = db_client[str(guild.id)]
+            hall_of_fame_channel_id = server_db["server_config"].find_one({"guild_id": guild.id})["hall_of_fame_channel_id"]
+            hall_of_fame_channel = bot.get_channel(hall_of_fame_channel_id)
+            if hall_of_fame_channel is None:
+                await utils.error_logging(bot, f"Hall of Fame channel not found in guild {guild.name}, skipping...", guild.id)
+                continue
+            await hall_of_fame_channel.set_permissions(guild.me, read_messages=True, send_messages=True)
+        except Exception as e:
+            await utils.error_logging(bot, f"Error fixing Hall of Fame channel permissions in guild {guild.name}: {e}", guild.id)
             continue
-        server_db = db_client[str(guild.id)]
-        hall_of_fame_channel_id = server_db["server_config"].find_one({"guild_id": guild.id})["hall_of_fame_channel_id"]
-        hall_of_fame_channel = bot.get_channel(hall_of_fame_channel_id)
-        if hall_of_fame_channel is None:
-            await utils.error_logging(bot, f"Hall of Fame channel not found in guild {guild.name}, skipping...", guild.id)
-            continue
-        await hall_of_fame_channel.set_permissions(guild.me, read_messages=True, send_messages=True)
 
 
 if __name__ == "__main__":
