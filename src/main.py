@@ -27,7 +27,9 @@ topgg_api_key = os.getenv('TOPGG_API_KEY')
 db_client = MongoClient(mongo_uri)
 messages_processing = []
 
-bot = discord_commands.Bot(command_prefix="!", intents=discord.Intents.default())
+intents = discord.Intents.default()
+intents.message_content = True
+bot = discord_commands.Bot(command_prefix="/", intents=intents)
 tree = bot.tree
 server_classes = {}
 dev_user = 230698327589650432
