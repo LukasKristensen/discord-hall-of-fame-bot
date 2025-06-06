@@ -44,6 +44,8 @@ all_time_emoji = "<:all_time_most_hof_messages:1380272422842007622>" if not dev_
 async def on_ready():
     global server_classes
 
+    await fix_write_hall_of_fame_channel_permissions()
+
     version.DATE = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     await events.bot_login(bot, tree)
     await utils.error_logging(bot, f"Logged in as {bot.user}", log_type="system")
@@ -462,6 +464,20 @@ async def post_topgg_stats():
     if not dev_test:
         topgg_response = topgg_api.post_bot_stats(len(bot.guilds), topgg_api_key)
         await utils.error_logging(bot, f"Posted bot stats to top.gg: {topgg_response[0]} - {topgg_response[1]}")
+
+
+async def fix_write_hall_of_fame_channel_permissions():
+    for guild in bot.guilds:
+        if guild.id not in db_client.list_database_names():
+            await utils.error_logging(bot, f"Guild {guild.name} not found in database, creating...", guild.id)
+        server_db = db_client[str(guild.id)]
+        hall_of_fame_channel_id = server_db["server_config"].find_one({"guild_id": guild.id})["hall_of_fame_channel_id"]
+        hall_of_fame_channel = bot.get_channel(hall_of_fame_channel_id)
+        if hall_of_fame_channel is None:
+            await utils.error_logging(bot, f"Hall of Fame channel not found in guild {guild.name}, skipping...", guild.id)
+            continue
+        await hall_of_fame_channel.set_permissions(guild.me, read_messages=True, send_messages=True)
+
 
 if __name__ == "__main__":
     # Check if the TOKEN variable is set
