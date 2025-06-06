@@ -305,7 +305,7 @@ async def create_embed(message: discord.Message, reaction_threshold: int):
     elif message.stickers:
         sticker = message.stickers[0]
         embed = discord.Embed(
-            title=f"Sticker from {message.author.name}",
+            title=f"Sticker from {message.author.name} has surpassed {reaction_threshold} reactions",
             description=message.content,
             color=discord.Color.gold()
         )
