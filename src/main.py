@@ -92,6 +92,8 @@ async def daily_task():
 
 @bot.event
 async def on_raw_reaction_add(payload: discord.RawReactionActionEvent):
+    if payload.guild_id not in server_classes:
+        return
     server_class = server_classes[payload.guild_id]
     collection = db_client[str(server_class.guild_id)]["hall_of_fame_messages"]
 
@@ -105,6 +107,8 @@ async def on_raw_reaction_add(payload: discord.RawReactionActionEvent):
 
 @bot.event
 async def on_raw_reaction_remove(payload: discord.RawReactionActionEvent):
+    if payload.guild_id not in server_classes:
+        return
     server_class = server_classes[payload.guild_id]
     collection = db_client[str(server_class.guild_id)]["hall_of_fame_messages"]
 
@@ -118,7 +122,7 @@ async def on_raw_reaction_remove(payload: discord.RawReactionActionEvent):
 
 @bot.event
 async def on_message(message: discord.Message):
-    if message.author == bot.user:
+    if message.author == bot.user or message.guild.id not in server_classes:
         return
     server_class = server_classes[message.guild.id]
     target_channel_id = server_class.hall_of_fame_channel_id
