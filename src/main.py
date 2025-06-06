@@ -466,9 +466,14 @@ async def post_topgg_stats():
 
 
 async def fix_write_hall_of_fame_channel_permissions():
+    """
+    Fix the permissions for the Hall of Fame channel in all servers
+    :return:
+    """
     for guild in bot.guilds:
         try:
             if str(guild.id) not in db_client.list_database_names():
+                await utils.error_logging(bot, f"[fix_write_hall_of_fame_channel_permissions] Guild {guild.name} not found in database, skipping...", guild.id)
                 continue
             server_db = db_client[str(guild.id)]
             hall_of_fame_channel_id = server_db["server_config"].find_one({"guild_id": guild.id})["hall_of_fame_channel_id"]
