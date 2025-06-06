@@ -469,7 +469,7 @@ async def post_topgg_stats():
 async def fix_write_hall_of_fame_channel_permissions():
     for guild in bot.guilds:
         if guild.id not in db_client.list_database_names():
-            await utils.error_logging(bot, f"Guild {guild.name} not found in database, creating...", guild.id)
+            continue
         server_db = db_client[str(guild.id)]
         hall_of_fame_channel_id = server_db["server_config"].find_one({"guild_id": guild.id})["hall_of_fame_channel_id"]
         hall_of_fame_channel = bot.get_channel(hall_of_fame_channel_id)
