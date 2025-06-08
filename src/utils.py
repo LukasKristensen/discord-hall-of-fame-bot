@@ -442,8 +442,8 @@ async def create_database_context(bot, server, db_client, reaction_threshold_def
 
     # Set the permissions for the Hall of Fame channel to only allow the bot to write messages
     if server.me.guild_permissions.manage_channels:
-        await hall_of_fame_channel.set_permissions(server.default_role, read_messages=True, send_messages=False)
         await hall_of_fame_channel.set_permissions(server.me, read_messages=True, send_messages=True)
+        await hall_of_fame_channel.set_permissions(server.default_role, read_messages=True, send_messages=False)
 
     leader_board_messages = []
 
