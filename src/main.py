@@ -9,8 +9,8 @@ import commands
 import events
 import utils
 import version
-from bot_stats import BotStats
-import topgg_api
+from src.classes.bot_stats import BotStats
+from src.api_services import topgg_api
 import os
 from translations import messages
 import migrations
