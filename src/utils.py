@@ -258,8 +258,6 @@ async def post_hall_of_fame_message(message: discord.Message, bot: discord.Clien
                            "created_at": datetime.datetime.now(timezone.utc),
                            "author_id": int(message.author.id)})
     bot_stats = BotStats()
-    if bot_stats.total_messages > 0:
-        bot_stats.total_messages += 1
 
 
 async def set_footer(embed: discord.Embed):

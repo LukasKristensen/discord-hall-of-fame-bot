@@ -57,7 +57,6 @@ async def on_ready():
     for key, value in new_server_classes_dict.items():
         server_classes[key] = value
     await utils.error_logging(bot, f"Loaded a total of {len(server_classes)} servers")
-    await utils.error_logging(bot, f"Loaded a total of {bot_stats.total_messages} hall of fame messages in the database")
     await bot.change_presence(activity=discord.CustomActivity(name=f'🏆 Hall of Fame - {sum(server.member_count for server in bot.guilds)} users', type=5))
 
     await events.post_wrapped()
@@ -72,13 +71,12 @@ async def daily_task():
         await utils.error_logging(bot, f"Daily task completed")
     except Exception as e:
         await utils.error_logging(bot, f"Error in daily_task: {e}")
-    await utils.error_logging(bot, f"Total messages in the database: {bot_stats.total_messages}")
 
     total_server_members = sum(server.member_count for server in bot.guilds)
     if not dev_test:
         db_client["bot_stats"]["total_messages"].insert_one(
             {"timestamp": datetime.now(),
-             "total_messages": bot_stats.total_messages})
+             "total_messages": db_client["production"]["hall_of_fame_messages"].count_documents({})})
         db_client["bot_stats"]["server_count"].insert_one(
             {"timestamp": datetime.now(),
              "server_count": len(server_classes)})
