@@ -101,18 +101,12 @@ async def set_reaction_threshold(interaction: discord.Interaction, reaction_thre
     :param db_client:
     :return:
     """
-    if not await main.check_if_user_has_manage_server_permission(interaction):
-        return False
+    server_config = db_client['server_configs']
+    server_config.update_one({"guild_id": int(interaction.guild_id)}, {"$set": {"reaction_threshold": reaction_threshold}})
 
-    db = db_client[str(interaction.guild_id)]
-    server_config = db['server_config']
-    server_config.update_one({"guild_id": interaction.guild_id}, {"$set": {"reaction_threshold": reaction_threshold}})
-
-    # Note for user - remember that the reaction threshold is based on the highest reaction count of a single emoji for each message
     await interaction.response.send_message(f"Reaction threshold set to {reaction_threshold}.\n"
                                             f"Note: The reaction threshold is based on the highest reaction count"
                                             f" of a single emoji per message.")
-    return True
 
 
 async def user_server_profile(interaction, user, user_stats, db_client, month_emoji: str, all_time_emoji: str):
@@ -126,20 +120,20 @@ async def user_server_profile(interaction, user, user_stats, db_client, month_em
     :param all_time_emoji:
     :return:
     """
-    user_has_most_this_month_hall_of_fame_messages = db_client[str(interaction.guild_id)]['users'].find_one(
-        {}, sort=[("this_month_hall_of_fame_messages", -1)])
-    user_with_most_all_time_hall_of_fame_messages = db_client[str(interaction.guild_id)]['users'].find_one(
-        {}, sort=[("total_hall_of_fame_messages", -1)])
+    user_has_most_this_month_hall_of_fame_messages = db_client['server_users'].find_one(
+        {"guild_id": interaction.guild_id}, sort=[("this_month_hall_of_fame_messages", -1)])
+    user_with_most_all_time_hall_of_fame_messages = db_client['server_users'].find_one(
+        {"guild_id": interaction.guild_id}, sort=[("total_hall_of_fame_messages", -1)])
     embed = discord.Embed(
         title=f"📊 {user.name}'s Server Profile",
         description=f"Here are your stats for **{interaction.guild.name}**:",
         color=discord.Color.gold()
     )
-    if user.id == user_has_most_this_month_hall_of_fame_messages.get("user_id") and user_stats:
+    if user_has_most_this_month_hall_of_fame_messages and user.id == user_has_most_this_month_hall_of_fame_messages.get("user_id") and user_stats:
         embed.add_field(name=f"{month_emoji} **Monthly Hall of Fame Champion**",
                         value=f"**{user.name}** is the champion of this month's Hall of Fame with **{user_stats.get('this_month_hall_of_fame_messages', 0)}** messages!",
                         inline=False)
-    if user.id == user_with_most_all_time_hall_of_fame_messages.get("user_id") and user_stats:
+    if user_with_most_all_time_hall_of_fame_messages and user.id == user_with_most_all_time_hall_of_fame_messages.get("user_id") and user_stats:
         embed.add_field(name=f"{all_time_emoji} **All-Time Hall of Fame Champion**",
                         value=f"**{user.name}** is the all-time champion with **{user_stats.get('total_hall_of_fame_messages', 0)}** messages!",
                         inline=False)

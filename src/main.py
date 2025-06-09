@@ -19,12 +19,12 @@ dev_test = os.getenv('DEV_TEST') == "True"
 load_dotenv()
 if dev_test:
     TOKEN = os.getenv('DEV_KEY')
-    # mongo_uri = os.getenv('DEV_MONGO_URI')
 else:
     TOKEN = os.getenv('KEY')
 mongo_uri = os.getenv('MONGO_URI')
 topgg_api_key = os.getenv('TOPGG_API_KEY')
 db_client = MongoClient(mongo_uri)
+production_db = db_client["production"]
 messages_processing = []
 
 intents = discord.Intents.default()
@@ -47,17 +47,18 @@ async def on_ready():
     version.DATE = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     await events.bot_login(bot, tree)
     await utils.error_logging(bot, f"Logged in as {bot.user}", log_type="system")
+
     completed_migrations = migrations.run_migrations(not dev_test)
     if len(completed_migrations) > 0:
         await utils.error_logging(bot, f"Completed migrations: {', '.join(completed_migrations)}", log_type="system")
 
-    server_classes = await utils.get_server_classes(db_client, bot, dev_test)
-    new_server_classes_dict = await events.check_for_new_server_classes(bot, db_client)
+    server_classes = await utils.get_server_classes(production_db)
+    new_server_classes_dict = await events.check_for_new_server_classes(bot, production_db)
     for key, value in new_server_classes_dict.items():
         server_classes[key] = value
     await utils.error_logging(bot, f"Loaded a total of {len(server_classes)} servers")
-    await utils.error_logging(bot,f"Loaded a total of {bot_stats.total_messages} hall of fame messages in the database")
-    await bot.change_presence(activity=discord.CustomActivity(name=f'🏆 Hall of Fame — {sum(server.member_count for server in bot.guilds)} users', type=5))
+    await utils.error_logging(bot, f"Loaded a total of {bot_stats.total_messages} hall of fame messages in the database")
+    await bot.change_presence(activity=discord.CustomActivity(name=f'🏆 Hall of Fame - {sum(server.member_count for server in bot.guilds)} users', type=5))
 
     await events.post_wrapped()
     daily_task.start()
@@ -67,8 +68,7 @@ async def on_ready():
 async def daily_task():
     await utils.error_logging(bot,"Running daily task")
     try:
-        await events.daily_task(bot, db_client, server_classes, dev_test)
-        await fix_write_hall_of_fame_channel_permissions()
+        await events.daily_task(bot, production_db, server_classes, dev_test)
         await utils.error_logging(bot, f"Daily task completed")
     except Exception as e:
         await utils.error_logging(bot, f"Error in daily_task: {e}")
@@ -86,7 +86,7 @@ async def daily_task():
             {"timestamp": datetime.now(),
              "total_users": total_server_members})
 
-    await bot.change_presence(activity=discord.CustomActivity(name=f'🏆 Hall of Fame — {total_server_members} users', type=5))
+    await bot.change_presence(activity=discord.CustomActivity(name=f'🏆 Hall of Fame - {total_server_members} users', type=5))
     await post_topgg_stats()
 
 
@@ -95,7 +95,7 @@ async def on_raw_reaction_add(payload: discord.RawReactionActionEvent):
     if payload.guild_id not in server_classes:
         return
     server_class = server_classes[payload.guild_id]
-    collection = db_client[str(server_class.guild_id)]["hall_of_fame_messages"]
+    collection = production_db["hall_of_fame_messages"]
 
     if payload.message_id not in messages_processing:
         messages_processing.append(payload.message_id)
@@ -110,7 +110,7 @@ async def on_raw_reaction_remove(payload: discord.RawReactionActionEvent):
     if payload.guild_id not in server_classes:
         return
     server_class = server_classes[payload.guild_id]
-    collection = db_client[str(server_class.guild_id)]["hall_of_fame_messages"]
+    collection = production_db["hall_of_fame_messages"]
 
     if payload.message_id not in messages_processing:
         messages_processing.append(payload.message_id)
@@ -132,7 +132,7 @@ async def on_message(message: discord.Message):
 
 @bot.event
 async def on_guild_join(server):
-    new_server_class = await events.guild_join(server, db_client, bot)
+    new_server_class = await events.guild_join(server, production_db, bot)
     if new_server_class is None:
         return
     server_classes[server.id] = new_server_class
@@ -143,7 +143,7 @@ async def on_guild_join(server):
 @bot.event
 async def on_guild_remove(server):
     await utils.error_logging(bot, f"Left server {server.name}", server.id, log_type="system")
-    await events.guild_remove(server, db_client)
+    await events.guild_remove(server, production_db)
     if server.id in server_classes:
         del server_classes[server.id]
     await post_topgg_stats()
@@ -165,30 +165,14 @@ async def get_help(interaction: discord.Interaction):
     await utils.error_logging(bot, f"Help command used by {interaction.user.name} in {interaction.guild.name}", interaction.guild.id)
 
 
-# Disabled for now
-async def manual_sweep(interaction: discord.Interaction):
-    if not await check_if_user_has_manage_server_permission(interaction):
-        return
-    if interaction.guild_id == 1180006529575960616: return
-    collection = db_client[str(interaction.guild_id)]["hall_of_fame_messages"]
-    temp_reaction_threshold = server_classes[interaction.guild_id].reaction_threshold
-    target_channel_id = server_classes[interaction.guild_id].hall_of_fame_channel_id
-
-    await utils.error_logging(bot, f"Manual sweep command used by {interaction.user.name} in {interaction.guild.name}", interaction.guild.id)
-    await commands.manual_sweep(interaction, interaction.guild_id, None, False, bot, collection,
-                                temp_reaction_threshold, 36500, target_channel_id, False)
-
-
 @tree.command(name="set_reaction_threshold", description="Configure the amount of reactions needed to post a message in the Hall of Fame")
 async def configure_bot(interaction: discord.Interaction, reaction_threshold: int):
     if not await check_if_user_has_manage_server_permission(interaction):
         return
-    if reaction_threshold < 1:
-        reaction_threshold = 1
+    reaction_threshold = reaction_threshold if reaction_threshold > 0 else 1
 
-    completion = await commands.set_reaction_threshold(interaction, reaction_threshold, db_client)
-    if completion:
-        server_classes[interaction.guild_id].reaction_threshold = reaction_threshold
+    await commands.set_reaction_threshold(interaction, reaction_threshold, production_db)
+    server_classes[interaction.guild_id].reaction_threshold = reaction_threshold
     await utils.error_logging(bot, f"Reaction threshold configure command used by {interaction.user.name} in {interaction.guild.name}", interaction.guild.id, reaction_threshold)
 
 
@@ -202,9 +186,8 @@ async def include_author_own_reaction_in_threshold(interaction: discord.Interact
     if not await check_if_user_has_manage_server_permission(interaction):
         return
 
-    db = db_client[str(interaction.guild_id)]
-    server_config = db['server_config']
-    server_config.update_one({"guild_id": interaction.guild_id},
+    server_config = production_db['server_configs']
+    server_config.update_one({"guild_id": int(interaction.guild_id)},
                              {"$set": {"include_author_in_reaction_calculation": include}})
     server_classes[interaction.guild_id].include_author_in_reaction_calculation = include
     await interaction.response.send_message(messages.AUTHOR_REACTION_INCLUDED.format(include=include))
@@ -216,9 +199,8 @@ async def allow_messages_in_hof_channel(interaction: discord.Interaction, allow:
     if not await check_if_user_has_manage_server_permission(interaction):
         return
 
-    db = db_client[str(interaction.guild_id)]
-    server_config = db['server_config']
-    server_config.update_one({"guild_id": interaction.guild_id}, {"$set": {"allow_messages_in_hof_channel": allow}})
+    server_config = production_db['server_configs']
+    server_config.update_one({"guild_id": int(interaction.guild_id)}, {"$set": {"allow_messages_in_hof_channel": allow}})
     server_classes[interaction.guild_id].allow_messages_in_hof_channel = allow
     await interaction.response.send_message(messages.ALLOW_POST_IN_HOF.format(allow=allow))
     await utils.error_logging(bot, f"Allow messages in Hall of Fame channel command used by {interaction.user.name} in {interaction.guild.name}", interaction.guild.id, allow)
@@ -245,9 +227,8 @@ async def custom_emoji_check_logic(interaction: discord.Interaction, config_opti
     if config_option.value == "whitelisted_emojis":
         custom_emoji_check = True
 
-    db = db_client[str(interaction.guild_id)]
-    server_config = db['server_config']
-    server_config.update_one({"guild_id": interaction.guild_id}, {"$set": {"custom_emoji_check_logic": custom_emoji_check}})
+    server_config = production_db['server_configs']
+    server_config.update_one({"guild_id": int(interaction.guild_id)}, {"$set": {"custom_emoji_check_logic": custom_emoji_check}})
     server_classes[interaction.guild_id].custom_emoji_check_logic = custom_emoji_check
     response = f"Custom emoji check logic set to {config_option.name}"
     if config_option.value == "whitelisted_emojis":
@@ -266,13 +247,12 @@ async def whitelist_emoji(interaction: discord.Interaction, emoji: str):
         await interaction.response.send_message(messages.CUSTOM_EMOJI_CHECK_DISABLED)
         return
 
-    db = db_client[str(interaction.guild_id)]
-    server_config = db['server_config']
-    whitelist = db['server_config'].find_one({"guild_id": interaction.guild_id})["whitelisted_emojis"]
+    server_config = production_db['server_configs']
+    whitelist = server_config.find_one({"guild_id": int(interaction.guild_id)})["whitelisted_emojis"]
 
     if emoji not in whitelist:
         whitelist.append(emoji)
-        server_config.update_one({"guild_id": interaction.guild_id}, {"$set": {"whitelisted_emojis": whitelist}})
+        server_config.update_one({"guild_id": int(interaction.guild_id)}, {"$set": {"whitelisted_emojis": whitelist}})
         server_class.whitelisted_emojis = whitelist
         await interaction.response.send_message(messages.WHITELIST_ADDED.format(emoji=emoji))
     else:
@@ -292,13 +272,12 @@ async def unwhitelist_emoji(interaction: discord.Interaction, emoji: str):
         await interaction.response.send_message(messages.CUSTOM_EMOJI_CHECK_DISABLED)
         return
 
-    db = db_client[str(interaction.guild_id)]
-    server_config = db['server_config']
-    whitelist = db['server_config'].find_one({"guild_id": interaction.guild_id})["whitelisted_emojis"]
+    server_config = production_db['server_config']
+    whitelist = server_config.find_one({"guild_id": int(interaction.guild_id)})["whitelisted_emojis"]
 
     if emoji in whitelist:
         whitelist.remove(emoji)
-        server_config.update_one({"guild_id": interaction.guild_id}, {"$set": {"whitelisted_emojis": whitelist}})
+        server_config.update_one({"guild_id": int(interaction.guild_id)}, {"$set": {"whitelisted_emojis": whitelist}})
         server_class.whitelisted_emojis = whitelist
         await interaction.response.send_message(messages.WHITELIST_REMOVED.format(emoji=emoji))
     else:
@@ -314,9 +293,9 @@ async def clear_whitelist(interaction: discord.Interaction):
     if not server_class.custom_emoji_check_logic:
         await interaction.response.send_message(messages.CUSTOM_EMOJI_CHECK_DISABLED)
         return
-    db = db_client[str(interaction.guild_id)]
-    server_config = db['server_config']
-    server_config.update_one({"guild_id": interaction.guild_id}, {"$set": {"whitelisted_emojis": []}})
+
+    server_config = production_db['server_configs']
+    server_config.update_one({"guild_id": int(interaction.guild_id)}, {"$set": {"whitelisted_emojis": []}})
     server_class.whitelisted_emojis = []
     await interaction.response.send_message(messages.WHITELIST_CLEARED)
     await utils.error_logging(bot, f"Clear whitelist command used by {interaction.user.name} in {interaction.guild.name}", interaction.guild.id)
@@ -351,9 +330,8 @@ async def set_post_due_date(interaction: discord.Interaction, post_due_date: int
     if not await check_if_user_has_manage_server_permission(interaction):
         return
 
-    db = db_client[str(interaction.guild_id)]
-    server_config = db['server_config']
-    server_config.update_one({"guild_id": interaction.guild_id}, {"$set": {"post_due_date": post_due_date}})
+    server_config = production_db['server_configs']
+    server_config.update_one({"guild_id": int(interaction.guild_id)}, {"$set": {"post_due_date": post_due_date}})
     server_classes[interaction.guild_id].post_due_date = post_due_date
     await interaction.response.send_message(messages.POST_DUE_DATE_SET.format(post_due_date=post_due_date))
     await utils.error_logging(bot, f"Set post due date command used by {interaction.user.name} in {interaction.guild.name}", interaction.guild.id, post_due_date)
@@ -369,9 +347,9 @@ async def invite(interaction: discord.Interaction):
 async def ignore_bot_messages(interaction: discord.Interaction, should_ignore_bot_messages: bool):
     if not await check_if_user_has_manage_server_permission(interaction):
         return
-    db = db_client[str(interaction.guild_id)]
-    server_config = db['server_config']
-    server_config.update_one({"guild_id": interaction.guild_id}, {"$set": {"ignore_bot_messages": should_ignore_bot_messages}})
+
+    server_config_collection = production_db['server_configs']
+    server_config_collection.update_one({"guild_id": int(interaction.guild_id)}, {"$set": {"ignore_bot_messages": should_ignore_bot_messages}})
     server_classes[interaction.guild_id].ignore_bot_messages = should_ignore_bot_messages
     await interaction.response.send_message(messages.IGNORE_BOT_MESSAGES.format(should_ignore_bot_messages=should_ignore_bot_messages))
     await utils.error_logging(bot, f"Ignore bot messages command used by {interaction.user.name} in {interaction.guild.name}", interaction.guild.id, should_ignore_bot_messages)
@@ -389,9 +367,8 @@ async def calculation_method(interaction: discord.Interaction, method: app_comma
     if not await check_if_user_has_manage_server_permission(interaction):
         return
 
-    db = db_client[str(interaction.guild_id)]
-    server_config = db['server_config']
-    server_config.update_one({"guild_id": interaction.guild_id}, {"$set": {"reaction_count_calculation_method": method.value}})
+    server_config_collection = production_db['server_configs']
+    server_config_collection.update_one({"guild_id": int(interaction.guild_id)}, {"$set": {"reaction_count_calculation_method": method.value}})
     server_classes[interaction.guild_id].reaction_count_calculation_method = method.value
     await interaction.response.send_message(f"Reaction count calculation method set to {method.name}")
     await utils.error_logging(bot, f"Calculation method command used by {interaction.user.name} in {interaction.guild.name}", interaction.guild.id, method.value)
@@ -408,9 +385,8 @@ async def hide_hall_of_fame_posts_when_they_are_below_threshold(interaction: dis
     if not await check_if_user_has_manage_server_permission(interaction):
         return
 
-    db = db_client[str(interaction.guild_id)]
-    server_config = db['server_config']
-    server_config.update_one({"guild_id": interaction.guild_id}, {"$set": {"hide_hof_post_below_threshold": hide}})
+    server_config_collection = production_db['server_configs']
+    server_config_collection.update_one({"guild_id": int(interaction.guild_id)}, {"$set": {"hide_hof_post_below_threshold": hide}})
     server_classes[interaction.guild_id].hide_hof_post_below_threshold = hide
     await interaction.response.send_message(f"Hide hall of fame posts when they are below the threshold set to {hide}")
     await utils.error_logging(bot, f"Hide hall of fame posts command used by {interaction.user.name} in {interaction.guild.name}", interaction.guild.id, str(hide))
@@ -425,9 +401,9 @@ async def get_user_server_profile(interaction: discord.Interaction, specific_use
     :return: The server profile of the user
     """
     user = specific_user or interaction.user
-    user_stats = db_client[str(interaction.guild_id)]['users'].find_one({"user_id": user.id})
+    user_stats = production_db['server_users'].find_one({"user_id": user.id, "guild_id": interaction.guild_id})
 
-    await commands.user_server_profile(interaction, user, user_stats, db_client, month_emoji, all_time_emoji)
+    await commands.user_server_profile(interaction, user, user_stats, production_db, month_emoji, all_time_emoji)
     await utils.error_logging(bot, f"Get user server profile command used by {interaction.user.name} in {interaction.guild.name}", interaction.guild.id, str(user.id))
 
 

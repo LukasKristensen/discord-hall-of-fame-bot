@@ -1,4 +1,3 @@
-import datetime
 import os
 from pymongo.mongo_client import MongoClient
 from dotenv import load_dotenv
@@ -8,25 +7,21 @@ import numpy as np
 # Load the .env file from the parent directory
 load_dotenv('../.env')
 mongo_uri = os.getenv('MONGO_URI_TEST_DEV')
-db_client = MongoClient(mongo_uri)
+db_client = MongoClient(mongo_uri)['production']
 
-# Get all the servers
-servers = list(db_client.list_database_names())
 server_stats = []
+servers = db_client['server_configs'].distinct('guild_id')
 
 print("db client: ", db_client)
 print("servers: ", servers)
-# Update server_stats to include server_member_count
 for server in servers:
     if not server.isdigit():
         continue
 
-    db = db_client[server]
-    server_config = db['server_config']
+    server_config = db_client['server_configs'].find_one({'guild_id': server})
     config = server_config.find_one()
     if config:
-        hall_of_fame_messages = db['hall_of_fame_messages']
-        message_count = hall_of_fame_messages.count_documents({})
+        message_count = db_client['hall_of_fame_messages'].count_documents({'guild_id': server})
         server_stats.append({
             'server': server,
             'reaction_threshold': config.get('reaction_threshold', 'N/A'),
