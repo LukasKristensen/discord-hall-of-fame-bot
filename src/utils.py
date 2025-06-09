@@ -143,8 +143,7 @@ async def update_leaderboard(message_collection, bot: discord.Client, server_con
         message = most_reacted_messages[i]
         channel = bot.get_channel(message["channel_id"])
         message = await channel.fetch_message(message["message_id"])
-        server_message_collection.update_one({"message_id": int(message.id)},
-                                      {"$set": {"reaction_count": await reaction_count(message)}})
+        server_message_collection.update_one({"message_id": int(message.id)}, {"$set": {"reaction_count": await reaction_count(message)}})
 
     # Updated all the reaction counts
     most_reacted_messages = list(server_message_collection.sort("reaction_count", -1).limit(20))
@@ -673,7 +672,7 @@ async def update_user_database(bot: discord.Client, db_client):
         for user_id, stats in users_stats.items():
             try:
                 users_collection.update_one(
-                    {"user_id": user_id},
+                    {"user_id": user_id, "guild_id": int(guild.id)},
                     {"$set": {
                         "user_id": user_id,
                         "guild_id": int(guild.id),

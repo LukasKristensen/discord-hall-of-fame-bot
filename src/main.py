@@ -57,8 +57,8 @@ async def on_ready():
     for key, value in new_server_classes_dict.items():
         server_classes[key] = value
     await utils.error_logging(bot, f"Loaded a total of {len(server_classes)} servers")
-    await utils.error_logging(bot,f"Loaded a total of {bot_stats.total_messages} hall of fame messages in the database")
-    await bot.change_presence(activity=discord.CustomActivity(name=f'🏆 Hall of Fame — {sum(server.member_count for server in bot.guilds)} users', type=5))
+    await utils.error_logging(bot, f"Loaded a total of {bot_stats.total_messages} hall of fame messages in the database")
+    await bot.change_presence(activity=discord.CustomActivity(name=f'🏆 Hall of Fame - {sum(server.member_count for server in bot.guilds)} users', type=5))
 
     await events.post_wrapped()
     daily_task.start()
@@ -86,7 +86,7 @@ async def daily_task():
             {"timestamp": datetime.now(),
              "total_users": total_server_members})
 
-    await bot.change_presence(activity=discord.CustomActivity(name=f'🏆 Hall of Fame — {total_server_members} users', type=5))
+    await bot.change_presence(activity=discord.CustomActivity(name=f'🏆 Hall of Fame - {total_server_members} users', type=5))
     await post_topgg_stats()
 
 
@@ -397,7 +397,7 @@ async def get_user_server_profile(interaction: discord.Interaction, specific_use
     :return: The server profile of the user
     """
     user = specific_user or interaction.user
-    user_stats = production_db['server_users'].find_one({"user_id": user.id})
+    user_stats = production_db['server_users'].find_one({"user_id": user.id, "guild_id": interaction.guild_id})
 
     await commands.user_server_profile(interaction, user, user_stats, production_db, month_emoji, all_time_emoji)
     await utils.error_logging(bot, f"Get user server profile command used by {interaction.user.name} in {interaction.guild.name}", interaction.guild.id, str(user.id))
