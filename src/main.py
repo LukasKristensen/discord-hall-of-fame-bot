@@ -92,6 +92,8 @@ async def daily_task():
 
 @bot.event
 async def on_raw_reaction_add(payload: discord.RawReactionActionEvent):
+    if payload.guild_id not in server_classes:
+        return
     server_class = server_classes[payload.guild_id]
     collection = production_db["hall_of_fame_messages"]
 
@@ -105,6 +107,8 @@ async def on_raw_reaction_add(payload: discord.RawReactionActionEvent):
 
 @bot.event
 async def on_raw_reaction_remove(payload: discord.RawReactionActionEvent):
+    if payload.guild_id not in server_classes:
+        return
     server_class = server_classes[payload.guild_id]
     collection = production_db["hall_of_fame_messages"]
 
@@ -118,7 +122,7 @@ async def on_raw_reaction_remove(payload: discord.RawReactionActionEvent):
 
 @bot.event
 async def on_message(message: discord.Message):
-    if message.author == bot.user:
+    if message.author == bot.user or message.guild.id not in server_classes:
         return
     server_class = server_classes[message.guild.id]
     target_channel_id = server_class.hall_of_fame_channel_id
@@ -439,6 +443,26 @@ async def post_topgg_stats():
     if not dev_test:
         topgg_response = topgg_api.post_bot_stats(len(bot.guilds), topgg_api_key)
         await utils.error_logging(bot, f"Posted bot stats to top.gg: {topgg_response[0]} - {topgg_response[1]}")
+
+
+async def fix_write_hall_of_fame_channel_permissions():
+    """
+    Fix the permissions for the Hall of Fame channel in all servers
+    :return:
+    """
+    for guild in bot.guilds:
+        try:
+            if str(guild.id) not in db_client.list_database_names():
+                continue
+            server_db = db_client[str(guild.id)]
+            hall_of_fame_channel_id = server_db["server_config"].find_one({"guild_id": guild.id})["hall_of_fame_channel_id"]
+            hall_of_fame_channel = bot.get_channel(hall_of_fame_channel_id)
+            if hall_of_fame_channel is None:
+                continue
+            await hall_of_fame_channel.set_permissions(guild.me, read_messages=True, send_messages=True)
+        except Exception as e:
+            continue
+
 
 if __name__ == "__main__":
     # Check if the TOKEN variable is set
