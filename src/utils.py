@@ -4,8 +4,8 @@ import datetime
 from datetime import timezone
 import asyncio
 from message_reactions import most_reacted_emoji, reaction_count
-import server_class
-from bot_stats import BotStats
+from src.classes import server_class
+from src.classes.bot_stats import BotStats
 
 
 async def validate_message(message: discord.RawReactionActionEvent, bot: discord.Client, message_collection,
@@ -31,7 +31,8 @@ async def validate_message(message: discord.RawReactionActionEvent, bot: discord
 
     # Checks if the post is older than the due date and has not been added to the database
     if ((datetime.datetime.now(timezone.utc) - message.created_at).days > post_due_date
-            and not message_collection.find_one({"guild_id": int(message.guild.id), "message_id": int(message.id)})):
+            and not message_collection.find_one({"guild_id": int(message.guild.id), "channel_id": int(channel_id),
+                                                 "message_id": int(message.id)})):
         return
 
     # Checks if the message is from a bot
@@ -41,10 +42,10 @@ async def validate_message(message: discord.RawReactionActionEvent, bot: discord
     # Gets the adjusted reaction count corrected for not accounting the author
     corrected_reactions = await reaction_count(message)
     if corrected_reactions < reaction_threshold:
-        if hide_hof_post_below_threshold and message_collection.find_one({"guild_id": int(message.guild.id),
+        if hide_hof_post_below_threshold and message_collection.find_one({"guild_id": int(message.guild.id), "channel_id": int(channel_id),
                                                                           "message_id": int(message_id)}):
-            await remove_embed(message_id, message_collection, bot, target_channel_id)
-            if ("video_link_message_id" in message_collection.find_one({"guild_id": int(message.guild.id),
+            await remove_embed(message_id, message_collection, bot, target_channel_id, message.guild.id, channel_id)
+            if ("video_link_message_id" in message_collection.find_one({"guild_id": int(message.guild.id), "channel_id": int(channel_id),
                                                                        "message_id": int(message_id)})
                                                                         and message.attachments):
                 video_link_message = message_collection.find_one({"message_id": int(message_id)})["video_link_message_id"]
@@ -55,10 +56,10 @@ async def validate_message(message: discord.RawReactionActionEvent, bot: discord
         return
 
     if message_collection.find_one({"guild_id": int(message.guild.id), "message_id": int(message.id)}):
-        message_update = message_collection.find_one({"guild_id": int(message.guild.id), "message_id": int(message.id)})
+        message_update = message_collection.find_one({"guild_id": int(message.guild.id), "channel_id": int(channel_id), "message_id": int(message.id)})
         message_to_update = await bot.get_channel(target_channel_id).fetch_message(message_update["hall_of_fame_message_id"])
         if len(message_to_update.embeds) > 0:
-            message_collection.update_one({"guild_id": int(message.guild.id), "message_id": int(message.id)},
+            message_collection.update_one({"guild_id": int(message.guild.id), "channel_id": int(channel_id), "message_id": int(message.id)},
                                           {"$set": {"reaction_count": await reaction_count(message)}})
             await update_reaction_counter(message, message_collection, bot, target_channel_id, reaction_threshold)
             return
@@ -85,7 +86,7 @@ async def update_reaction_counter(message: discord.Message, collection, bot: dis
     :param reaction_threshold:
     :return:
     """
-    message_sent = collection.find_one({"guild_id": int(message.guild.id), "message_id": int(message.id)})
+    message_sent = collection.find_one({"guild_id": int(message.guild.id), "channel_id": int(message.channel.id), "message_id": int(message.id)})
     if not message_sent["hall_of_fame_message_id"]:
         return
     hall_of_fame_message_id = message_sent["hall_of_fame_message_id"]
@@ -104,16 +105,18 @@ async def update_reaction_counter(message: discord.Message, collection, bot: dis
     await hall_of_fame_message.edit(embed=embed)
 
 
-async def remove_embed(message_id: int, collection, bot: discord.Client, target_channel_id: int):
+async def remove_embed(message_id: int, collection, bot: discord.Client, target_channel_id: int, guild_id: int, channel_id: int):
     """
     Remove the embed of a message in the Hall of Fame
     :param message_id:
     :param collection:
     :param bot:
     :param target_channel_id:
+    :param guild_id:
+    :param channel_id:
     :return:
     """
-    message = collection.find_one({"message_id": int(message_id)})
+    message = collection.find_one({"guild_id": int(guild_id), "channel_id": int(channel_id), "message_id": int(message_id)})
     if "hall_of_fame_message_id" not in message:
         return
     hall_of_fame_message_id = message["hall_of_fame_message_id"]
@@ -143,7 +146,9 @@ async def update_leaderboard(message_collection, bot: discord.Client, server_con
         message = most_reacted_messages[i]
         channel = bot.get_channel(message["channel_id"])
         message = await channel.fetch_message(message["message_id"])
-        server_message_collection.update_one({"message_id": int(message.id)}, {"$set": {"reaction_count": await reaction_count(message)}})
+        server_message_collection.update_one({"message_id": int(message.id), "guild_id": int(server_config['guild_id']),
+                                              "channel_id": int(message.channel.id)},
+                                             {"$set": {"reaction_count": await reaction_count(message)}})
 
     # Updated all the reaction counts
     most_reacted_messages = list(server_message_collection.sort("reaction_count", -1).limit(20))
@@ -217,7 +222,7 @@ async def check_all_server_messages(guild_id: int, sweep_limit, sweep_limited: b
                         messages_to_post.append(message)
                     elif message_reactions >= reaction_threshold-3:
                         if collection.find_one({"message_id": int(message.id)}):
-                            await remove_embed(message.id, collection, bot, target_channel_id)
+                            await remove_embed(message.id, collection, bot, target_channel_id, guild_id, channel.id)
                 except Exception as e:
                     await error_logging(bot, f"An error occurred: {e}", guild_id)
         except Exception as e:
@@ -508,7 +513,7 @@ def delete_database_context(server_id: int, db_client):
 
     db_hof_messages = db_client["hall_of_fame_messages"].find({"guild_id": int(server_id)})
     for message in db_hof_messages:
-        db_client["hall_of_fame_messages"].delete_one({"message_id": message["message_id"]})
+        db_client["hall_of_fame_messages"].delete_one({"message_id": message["message_id"], "guild_id": int(server_id)})
 
     db_server_users = db_client["server_users"].find({"guild_id": int(server_id)})
     for user in db_server_users:
@@ -645,7 +650,7 @@ async def update_user_database(bot: discord.Client, db_client):
     for guild in bot.guilds:
         if not db_client['server_configs'].find_one({"guild_id": int(guild.id)}):
             continue
-        hall_of_fame_messages_document = db_client['hall_of_fame_messages']
+        hall_of_fame_messages_document = db_client["hall_of_fame_messages"]
         messages = list(hall_of_fame_messages_document.find({"guild_id": int(guild.id)}))
 
         users_collection = db_client['server_users']

@@ -31,8 +31,8 @@ async def check_for_new_server_classes(bot: discord.Client, db_client):
             # check if there are not any documents in the collection for this guild
             if server_classes_collection.count_documents({"guild_id": int(guild.id)}) == 0:
                 await utils.error_logging(bot, f"Guild {guild.name} not found in database, creating...", guild.id)
-                # new_server_class = await utils.create_database_context(bot, guild, db_client)
-                # new_server_classes[guild.id] = new_server_class
+                new_server_class = await utils.create_database_context(bot, guild, db_client)
+                new_server_classes[guild.id] = new_server_class
         except Exception as e:
             error_message = (f"Failed to setup Hall Of Fame for server {guild.name}. This may be due to missing "
                              f"permissions, try re-inviting the bot with the correct permissions. If the problem "

@@ -9,8 +9,8 @@ import commands
 import events
 import utils
 import version
-from bot_stats import BotStats
-import topgg_api
+from src.classes.bot_stats import BotStats
+from src.api_services import topgg_api, discordbotlist_api
 import os
 from translations import messages
 import migrations
@@ -438,9 +438,20 @@ async def post_topgg_stats():
     """
     Post the bot stats to top.gg
     """
-    if not dev_test:
+    if dev_test:
+        return
+
+    try:
         topgg_response = topgg_api.post_bot_stats(len(bot.guilds), topgg_api_key)
         await utils.error_logging(bot, f"Posted bot stats to top.gg: {topgg_response[0]} - {topgg_response[1]}")
+    except Exception as e:
+        await utils.error_logging(bot, f"Failed to post bot stats to top.gg: {e}")
+
+    try:
+        discordbotlist_response = discordbotlist_api.post_bot_stats(len(bot.guilds))
+        await utils.error_logging(bot, f"Posted bot stats to discordbotlist.com: {discordbotlist_response[0]} - {discordbotlist_response[1]}")
+    except Exception as e:
+        await utils.error_logging(bot, f"Failed to post bot stats to discordbotlist.com: {e}")
 
 
 async def fix_write_hall_of_fame_channel_permissions():
