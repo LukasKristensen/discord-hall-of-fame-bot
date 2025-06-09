@@ -9,11 +9,11 @@ db_client = MongoClient(mongo_uri)
 
 def run():
     print("Starting migration for global hall_of_fame_messages collection...")
-    hall_of_fame_messages()
+    # hall_of_fame_messages()
     print("Starting migration for global server_configs collection...")
-    server_configs()
+    # server_configs()
     print("Starting migration for global server_users collection...")
-    server_users()
+    # server_users()
     print("Migration completed for global collections.")
 
 
