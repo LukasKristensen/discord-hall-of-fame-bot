@@ -97,6 +97,29 @@ def post_command_list():
         return req_response.status_code, {"error": "Invalid JSON response from server"}
 
 
+def post_bot_stats(server_count: int):
+    """
+    Post the bot stats to discordbotlist.com
+    :param server_count:
+    :return:
+    """
+
+    url = "https://discordbotlist.com/api/v1/bots/1177041673352663070/stats"
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": auth_key
+    }
+    payload = {
+        "guilds": server_count
+    }
+
+    req_response = requests.post(url, headers=headers, json=payload)
+    try:
+        return req_response.status_code, req_response.json()
+    except requests.exceptions.JSONDecodeError:
+        return req_response.status_code, {"error": "Invalid JSON response from server"}
+
+
 if __name__ == "__main__":
     status_code, response = post_command_list()
     print(f"Status Code: {status_code}")

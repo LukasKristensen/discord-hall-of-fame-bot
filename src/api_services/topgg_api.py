@@ -75,5 +75,4 @@ def get_user_vote(api_key: str, user_id: int):
 
 if __name__ == "__main__":
     print(get_top_1000_votes(auth_key))
-    print(post_bot_stats(50, auth_key))
     print(get_user_vote(auth_key, 230698327589650432))
