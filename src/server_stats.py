@@ -7,21 +7,18 @@ import numpy as np
 # Load the .env file from the parent directory
 load_dotenv('../.env')
 mongo_uri = os.getenv('MONGO_URI_TEST_DEV')
-db_client = MongoClient(mongo_uri)['production']
+db_client = MongoClient(mongo_uri)
+production_db = db_client['production']
 
 server_stats = []
-servers = db_client['server_configs'].distinct('guild_id')
+servers = production_db['server_configs'].distinct('guild_id')
 
-print("db client: ", db_client)
+print("db client: ", production_db)
 print("servers: ", servers)
 for server in servers:
-    if not server.isdigit():
-        continue
-
-    server_config = db_client['server_configs'].find_one({'guild_id': server})
-    config = server_config.find_one()
+    config = production_db['server_configs'].find_one({'guild_id': server})
     if config:
-        message_count = db_client['hall_of_fame_messages'].count_documents({'guild_id': server})
+        message_count = production_db['hall_of_fame_messages'].count_documents({'guild_id': server})
         server_stats.append({
             'server': server,
             'reaction_threshold': config.get('reaction_threshold', 'N/A'),
