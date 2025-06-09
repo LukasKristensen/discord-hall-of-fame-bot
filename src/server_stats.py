@@ -18,7 +18,7 @@ print("servers: ", servers)
 for server in servers:
     config = production_db['server_configs'].find_one({'guild_id': server})
     if config:
-        message_count = production_db['hall_of_fame_messages'].count_documents({'guild_id': server})
+        message_count = production_db["hall_of_fame_messages"].count_documents({'guild_id': server})
         server_stats.append({
             'server': server,
             'reaction_threshold': config.get('reaction_threshold', 'N/A'),
