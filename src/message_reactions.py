@@ -8,8 +8,9 @@ def most_reacted_emoji(reactions: [discord.Reaction]) -> [discord.Reaction]:
     :param reactions:
     :return:
     """
-    custom_emoji_check_logic = main.db_client[str(reactions[0].message.guild.id)]["server_config"].find_one({})["custom_emoji_check_logic"]
-    whited_listed_emojis = main.db_client[str(reactions[0].message.guild.id)]["server_config"].find_one({})["whitelisted_emojis"]
+    server_config = main.production_db["server_configs"].find_one({"guild_id": int(reactions[0].message.guild.id)})
+    custom_emoji_check_logic = server_config["custom_emoji_check_logic"]
+    whited_listed_emojis = server_config["whitelisted_emojis"]
 
     if custom_emoji_check_logic and len(whited_listed_emojis) > 0:
         corrected_reactions = []
@@ -42,9 +43,11 @@ async def total_reaction_count(reactions: [discord.Reaction]) -> int:
     :param reactions:
     :return:
     """
-    custom_emoji_check_logic = main.db_client[str(reactions[0].message.guild.id)]["server_config"].find_one({})["custom_emoji_check_logic"]
-    whited_listed_emojis = main.db_client[str(reactions[0].message.guild.id)]["server_config"].find_one({})["whitelisted_emojis"]
-    include_author_in_threshold = main.db_client[str(reactions[0].message.guild.id)]["server_config"].find_one({})["include_author_in_reaction_calculation"]
+    server_config = main.production_db["server_configs"].find_one({"guild_id": int(reactions[0].message.guild.id)})
+
+    custom_emoji_check_logic = server_config["custom_emoji_check_logic"]
+    whited_listed_emojis = server_config["whitelisted_emojis"]
+    include_author_in_threshold = server_config["include_author_in_reaction_calculation"]
 
     if custom_emoji_check_logic and len(whited_listed_emojis) > 0:
         corrected_reactions = []
@@ -70,9 +73,11 @@ async def unique_reactor_count(message: discord.Message) -> int:
     :param message:
     :return:
     """
-    server_includes_author_in_threshold = main.db_client[str(message.guild.id)]["server_config"].find_one({})["include_author_in_reaction_calculation"]
-    custom_emoji_check_logic = main.db_client[str(message.guild.id)]["server_config"].find_one({})["custom_emoji_check_logic"]
-    whited_listed_emojis = main.db_client[str(message.guild.id)]["server_config"].find_one({})["whitelisted_emojis"]
+    server_config = main.production_db["server_configs"].find_one({"guild_id": int(message.guild.id)})
+
+    server_includes_author_in_threshold = server_config["include_author_in_reaction_calculation"]
+    custom_emoji_check_logic = server_config["custom_emoji_check_logic"]
+    whited_listed_emojis = server_config["whitelisted_emojis"]
     reactions = message.reactions
 
     if custom_emoji_check_logic and len(whited_listed_emojis) > 0:
@@ -97,10 +102,12 @@ async def most_reacted_emoji_from_message(message: discord.Message) -> [discord.
     :param message:
     :return:
     """
+    server_config = main.production_db["server_configs"].find_one({"guild_id": int(message.guild.id)})
     max_reaction_count = 0
-    server_includes_author_in_threshold = main.db_client[str(message.guild.id)]["server_config"].find_one({})["include_author_in_reaction_calculation"]
-    custom_emoji_check_logic = main.db_client[str(message.guild.id)]["server_config"].find_one({})["custom_emoji_check_logic"]
-    whited_listed_emojis = main.db_client[str(message.guild.id)]["server_config"].find_one({})["whitelisted_emojis"]
+
+    server_includes_author_in_threshold = server_config["include_author_in_reaction_calculation"]
+    custom_emoji_check_logic = server_config["custom_emoji_check_logic"]
+    whited_listed_emojis = server_config["whitelisted_emojis"]
     reactions = message.reactions
 
     if custom_emoji_check_logic and len(whited_listed_emojis) > 0:
@@ -130,7 +137,8 @@ async def reaction_count(message) -> int:
     :param message:
     :return:
     """
-    calculation_method = main.db_client[str(message.guild.id)]["server_config"].find_one({})["reaction_count_calculation_method"]
+    server_config = main.production_db["server_configs"].find_one({"guild_id": int(message.guild.id)})
+    calculation_method = server_config["reaction_count_calculation_method"]
 
     if calculation_method == "total_reactions":
         return await total_reaction_count(message.reactions)

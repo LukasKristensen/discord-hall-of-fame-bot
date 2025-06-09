@@ -5,42 +5,6 @@ import utils
 from translations import messages
 
 
-async def historical_sweep(bot: discord.Client, db_client, server_classes):
-    """
-    Event handler for when the bot is ready
-    :param bot:
-    :param db_client:
-    :param server_classes:
-    :return:
-    """
-    hof_total_messages = 0
-
-    for server_class in list(server_classes.values()):
-        try:
-            server_collection = db_client[str(server_class.guild_id)]["hall_of_fame_messages"]
-            server_config = db_client[str(server_class.guild_id)]["server_config"]
-            hof_total_messages += server_collection.count_documents({})
-            await utils.check_all_server_messages(
-                server_class.guild_id,
-                server_class.sweep_limit,
-                server_class.sweep_limited,
-                bot,
-                server_collection,
-                server_class.reaction_threshold,
-                server_class.post_due_date,
-                server_class.hall_of_fame_channel_id,
-                server_class.allow_messages_in_hof_channel)
-            await utils.update_leaderboard(
-                server_collection,
-                bot,
-                server_config,
-                server_class.hall_of_fame_channel_id,
-                server_class.reaction_threshold)
-        except Exception as e:
-            await utils.error_logging(bot, f"Failed to check server: {e}", server_class.guild_id)
-    return hof_total_messages
-
-
 async def post_wrapped():
     """
     Compute and post the hall of fame wrapped for individual servers
@@ -60,13 +24,15 @@ async def check_for_new_server_classes(bot: discord.Client, db_client):
     :param db_client:
     :return:
     """
+    server_classes_collection = db_client["server_configs"]
     new_server_classes = {}
     for guild in bot.guilds:
         try:
-            if not str(guild.id) in db_client.list_database_names():
+            # check if there are not any documents in the collection for this guild
+            if server_classes_collection.count_documents({"guild_id": int(guild.id)}) == 0:
                 await utils.error_logging(bot, f"Guild {guild.name} not found in database, creating...", guild.id)
-                new_server_class = await utils.create_database_context(bot, guild, db_client)
-                new_server_classes[guild.id] = new_server_class
+                # new_server_class = await utils.create_database_context(bot, guild, db_client)
+                # new_server_classes[guild.id] = new_server_class
         except Exception as e:
             error_message = (f"Failed to setup Hall Of Fame for server {guild.name}. This may be due to missing "
                              f"permissions, try re-inviting the bot with the correct permissions. If the problem "
@@ -92,14 +58,14 @@ async def bot_login(bot: discord.Client, tree):
     await utils.error_logging(bot, f"Total servers: {len(bot.guilds)}")
 
 
-async def on_raw_reaction(message: discord.RawReactionActionEvent, bot: discord.Client, collection,
+async def on_raw_reaction(message: discord.RawReactionActionEvent, bot: discord.Client, message_collection,
                           reaction_threshold: int, post_due_date: int, target_channel_id: int,
                           ignore_bot_messages: bool, hide_hof_post_below_threshold: bool):
     """
     Event handler for when a reaction is added to a message
     :param message: The message that the reaction was removed from
     :param bot: The bot client
-    :param collection: The collection of messages
+    :param message_collection: The collection of messages
     :param reaction_threshold: The threshold for reactions
     :param post_due_date: The due date for posting
     :param target_channel_id: The target channel id
@@ -108,10 +74,10 @@ async def on_raw_reaction(message: discord.RawReactionActionEvent, bot: discord.
     :return: None
     """
     try:
-        await utils.validate_message(message, bot, collection, reaction_threshold, post_due_date, target_channel_id,
-                                     ignore_bot_messages, hide_hof_post_below_threshold)
+        await utils.validate_message(message, bot, message_collection, reaction_threshold, post_due_date,
+                                     target_channel_id, ignore_bot_messages, hide_hof_post_below_threshold)
     except Exception as e:
-        if collection.count_documents({}) > 0:
+        if message_collection.find_one({"guild_id": int(message.guild_id)}):
             await utils.error_logging(bot, f"Error in reaction event: {e}", message.guild_id)
 
 
@@ -177,13 +143,14 @@ async def daily_task(bot: discord.Client, db_client, server_classes, dev_testing
     """
     await utils.error_logging(bot, f"Starting daily task for {len(server_classes)} servers")
     for server_class in list(server_classes.values()):
-        if not server_class.leaderboard_setup:
+        if not server_class.leaderboard_setup or server_class.guild_id not in bot.guilds:
             continue
         try:
-            server_collection = db_client[str(server_class.guild_id)]["hall_of_fame_messages"]
-            server_config = db_client[str(server_class.guild_id)]["server_config"]
+            # get all entities where guild_id is the same as the server_class.guild_id
+            message_collection = db_client["hall_of_fame_messages"]
+            server_config = db_client["server_configs"].find_one({"guild_id": int(server_class.guild_id)})
             await utils.update_leaderboard(
-                server_collection,
+                message_collection,
                 bot,
                 server_config,
                 server_class.hall_of_fame_channel_id,
@@ -192,9 +159,9 @@ async def daily_task(bot: discord.Client, db_client, server_classes, dev_testing
             await utils.error_logging(bot, e, server_class.guild_id)
 
     await utils.error_logging(bot, f"Checking for db entries that are not in the guilds")
-    for db_server in db_client.list_database_names():
-        if db_server.isdigit() and not dev_testing and int(db_server) not in [guild.id for guild in bot.guilds]:
-            await utils.error_logging(bot, f"Could not find server {db_server} in bot guilds")
+    for server in db_client["server_configs"].find():
+        if server and not dev_testing and int(server.guild_id) not in [guild.id for guild in bot.guilds]:
+            await utils.error_logging(bot, f"Could not find server {server} in bot guilds")
     await utils.error_logging(bot, f"Checked {len(server_classes)} servers for daily task")
     await update_user_database(bot, db_client)
 
