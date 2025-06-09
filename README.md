@@ -47,6 +47,16 @@ A custom emoji filter can be applied to the bot, so that it will only look for e
 
 ## Development Log
 
+### 1.16
+- [x] </get_user_profile> command: You can now view both your own and others' Hall of Fame stats.
+  - Displays all-time and monthly Hall of Fame post counts.
+  - Highlights top users per server – great for competition and recognition.
+  - Automatically updated daily via a recurring job.
+- [x] Per-server user tracking: The bot now tracks individual user stats (e.g., HOF posts, reaction counts) per server.
+- [x] Wide-format calculation method preview: Added to the </help> embed to visually explain the 3 different reaction calculation strategies.
+- [x] Improved message metadata: All message entries now store `author_id` and `created_at` for better historical insight and debugging.
+- [x] Migration system: Implemented automated data migration to ensure smoother updates and future rollouts.
+
 ### 1.15
 - [x] /calculation_method command: Added support for custom calculation methods that determine how reaction counts are evaluated. This allows for more flexible and personalized Hall of Fame behavior per server.
 - [x] Sticker support in HOF: Messages featuring stickers can now be included in Hall of Fame posts, with proper rendering (not supported for all stickers).
