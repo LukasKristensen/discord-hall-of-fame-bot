@@ -685,3 +685,21 @@ async def update_user_database(bot: discord.Client, db_client):
                     upsert=True)
             except Exception as e:
                 await error_logging(bot, f"Failed to update user {user_id} in database: {e}", guild.id)
+
+
+async def fix_write_hall_of_fame_channel_permissions(bot, db_client):
+    """
+    Fix the permissions for the Hall of Fame channel in all servers
+    :return:
+    """
+    for guild in bot.guilds:
+        try:
+            if str(guild.id) not in db_client.list_database_names():
+                continue
+            server_db = db_client[str(guild.id)]
+            hall_of_fame_channel_id = server_db["server_config"].find_one({"guild_id": guild.id})["hall_of_fame_channel_id"]
+            hall_of_fame_channel = bot.get_channel(hall_of_fame_channel_id)
+                continue
+            await hall_of_fame_channel.set_permissions(guild.me, read_messages=True, send_messages=True)
+        except Exception as e:
+            continue
