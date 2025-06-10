@@ -146,17 +146,6 @@ async def on_guild_remove(server):
         del server_classes[server.id]
     await post_topgg_stats()
 
-
-@bot.command(name="restart")
-async def restart(payload):
-    if payload.message.author.id != dev_user:
-        await payload.message.channel.send(messages.NOT_AUTHORIZED)
-        return
-
-    await utils.error_logging(bot, "Restarting the bot")
-    await bot.close()
-
-
 @tree.command(name="help", description="List of commands")
 async def get_help(interaction: discord.Interaction):
     await commands.get_help(interaction)
