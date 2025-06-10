@@ -4,8 +4,8 @@ import datetime
 from datetime import timezone
 import asyncio
 from message_reactions import most_reacted_emoji, reaction_count
-from src.classes import server_class
-from src.classes.bot_stats import BotStats
+from classes import server_class
+from classes.bot_stats import BotStats
 
 
 async def validate_message(message: discord.RawReactionActionEvent, bot: discord.Client, message_collection,
