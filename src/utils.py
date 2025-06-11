@@ -699,7 +699,6 @@ async def fix_write_hall_of_fame_channel_permissions(bot, db_client):
             server_db = db_client[str(guild.id)]
             hall_of_fame_channel_id = server_db["server_config"].find_one({"guild_id": guild.id})["hall_of_fame_channel_id"]
             hall_of_fame_channel = bot.get_channel(hall_of_fame_channel_id)
-                continue
             await hall_of_fame_channel.set_permissions(guild.me, read_messages=True, send_messages=True)
         except Exception as e:
-            continue
+            await error_logging(bot, f"Failed to fix permissions for Hall of Fame channel in guild {guild.id}: {e}", guild.id)
