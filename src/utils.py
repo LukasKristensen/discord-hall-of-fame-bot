@@ -441,7 +441,7 @@ async def create_database_context(bot, server, db_client, reaction_threshold_def
     # Create a new channel for the Hall of Fame
     hall_of_fame_channel = await server.create_text_channel("hall-of-fame")
     await hall_of_fame_channel.edit(
-        topic="Patch notes: https://discord.gg/GmFtfySetp",
+        topic="Patch notes for the bot development: https://discord.gg/GmFtfySetp",
         reason="Creating Hall of Fame channel"
     )
 
