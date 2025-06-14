@@ -111,7 +111,7 @@ async def guild_join(server, db_client, bot):
     :return:
     """
     try:
-        await utils.create_database_context(bot, server, db_client)
+        return await utils.create_database_context(bot, server, db_client)
     except Exception as e:
         await utils.error_logging(bot, f"Failed to create database context for server {server.name}: {e}", server.id)
         await utils.send_server_owner_error_message(server.owner, messages.FAILED_SETUP_HOF.format(serverName=server.name), bot)
