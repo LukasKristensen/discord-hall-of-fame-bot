@@ -234,6 +234,10 @@ async def whitelist_emoji(interaction: discord.Interaction, emoji: str):
         await interaction.response.send_message(messages.CUSTOM_EMOJI_CHECK_DISABLED)
         return
 
+    if not emoji.startswith('<') and len(emoji) > 1:
+        await interaction.response.send_message(messages.INVALID_EMOJI_FORMAT)
+        return
+
     server_config = production_db['server_configs']
     whitelist = server_config.find_one({"guild_id": int(interaction.guild_id)})["whitelisted_emojis"]
 
