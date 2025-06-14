@@ -586,7 +586,7 @@ async def error_logging(bot: discord.Client, message, server_id=None, new_value=
     target_guild = bot.get_guild(1180006529575960616)
     system_channel = bot.get_channel(1373699890718441482)
     error_channel = target_guild.get_channel(1344070396575617085)
-    logging_message = f"{datetime.datetime.now()}: {message}."
+    logging_message = f"{datetime.datetime.now()}: {message}"
 
     if server_id:
         logging_message += f"\n[Server ID: {server_id}]"
@@ -721,4 +721,5 @@ async def post_server_perms(bot, server):
                              f"Can attach files: {server.me.guild_permissions.attach_files}\n"
                              f"Can read message history: {server.me.guild_permissions.read_message_history}\n"
                              f"Can add reactions: {server.me.guild_permissions.add_reactions}\n"
-                             f"Can use external emojis: {server.me.guild_permissions.use_external_emojis}")
+                             f"Can use external emojis: {server.me.guild_permissions.use_external_emojis}\n"
+                             f"Server member count: {server.member_count}")
