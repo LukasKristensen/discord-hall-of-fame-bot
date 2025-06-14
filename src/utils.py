@@ -441,7 +441,7 @@ async def create_database_context(bot, server, db_client, reaction_threshold_def
     # Create a new channel for the Hall of Fame
     hall_of_fame_channel = await server.create_text_channel("hall-of-fame")
     await hall_of_fame_channel.edit(
-        topic="Patch notes: https://discord.gg/GmFtfySetp",
+        topic="Patch notes for Hall Of Fame: https://discord.gg/GmFtfySetp",
         reason="Creating Hall of Fame channel"
     )
 
@@ -573,7 +573,7 @@ async def send_server_owner_error_message(owner, e, bot):
             await error_logging(bot, f"Failed to send error message to server owner {owner.name}: {history_error}")
 
 
-async def error_logging(bot: discord.Client, message, server_id = None, new_value = None, log_type = "error"):
+async def error_logging(bot: discord.Client, message, server_id=None, new_value=None, log_type="error"):
     """
     Log an error message to the error channel
     :param bot:
@@ -685,3 +685,20 @@ async def update_user_database(bot: discord.Client, db_client):
                     upsert=True)
             except Exception as e:
                 await error_logging(bot, f"Failed to update user {user_id} in database: {e}", guild.id)
+
+
+async def fix_write_hall_of_fame_channel_permissions(bot, db_client):
+    """
+    Fix the permissions for the Hall of Fame channel in all servers
+    :return:
+    """
+    for guild in bot.guilds:
+        try:
+            if str(guild.id) not in db_client.list_database_names():
+                continue
+            server_db = db_client[str(guild.id)]
+            hall_of_fame_channel_id = server_db["server_config"].find_one({"guild_id": guild.id})["hall_of_fame_channel_id"]
+            hall_of_fame_channel = bot.get_channel(hall_of_fame_channel_id)
+            await hall_of_fame_channel.set_permissions(guild.me, read_messages=True, send_messages=True)
+        except Exception as e:
+            await error_logging(bot, f"Failed to fix permissions for Hall of Fame channel in guild {guild.id}: {e}", guild.id)

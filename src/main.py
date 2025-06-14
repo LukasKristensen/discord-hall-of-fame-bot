@@ -146,17 +146,6 @@ async def on_guild_remove(server):
         del server_classes[server.id]
     await post_topgg_stats()
 
-
-@bot.command(name="restart")
-async def restart(payload):
-    if payload.message.author.id != dev_user:
-        await payload.message.channel.send(messages.NOT_AUTHORIZED)
-        return
-
-    await utils.error_logging(bot, "Restarting the bot")
-    await bot.close()
-
-
 @tree.command(name="help", description="List of commands")
 async def get_help(interaction: discord.Interaction):
     await commands.get_help(interaction)
@@ -243,6 +232,10 @@ async def whitelist_emoji(interaction: discord.Interaction, emoji: str):
     server_class = server_classes[interaction.guild_id]
     if not server_class.custom_emoji_check_logic:
         await interaction.response.send_message(messages.CUSTOM_EMOJI_CHECK_DISABLED)
+        return
+
+    if not emoji.startswith('<') and len(emoji) > 1:
+        await interaction.response.send_message(messages.INVALID_EMOJI_FORMAT)
         return
 
     server_config = production_db['server_configs']
@@ -452,25 +445,6 @@ async def post_topgg_stats():
         await utils.error_logging(bot, f"Posted bot stats to discordbotlist.com: {discordbotlist_response[0]} - {discordbotlist_response[1]}")
     except Exception as e:
         await utils.error_logging(bot, f"Failed to post bot stats to discordbotlist.com: {e}")
-
-
-async def fix_write_hall_of_fame_channel_permissions():
-    """
-    Fix the permissions for the Hall of Fame channel in all servers
-    :return:
-    """
-    for guild in bot.guilds:
-        try:
-            if str(guild.id) not in db_client.list_database_names():
-                continue
-            server_db = db_client[str(guild.id)]
-            hall_of_fame_channel_id = server_db["server_config"].find_one({"guild_id": guild.id})["hall_of_fame_channel_id"]
-            hall_of_fame_channel = bot.get_channel(hall_of_fame_channel_id)
-            if hall_of_fame_channel is None:
-                continue
-            await hall_of_fame_channel.set_permissions(guild.me, read_messages=True, send_messages=True)
-        except Exception as e:
-            continue
 
 
 if __name__ == "__main__":
