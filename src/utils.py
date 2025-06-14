@@ -702,3 +702,23 @@ async def fix_write_hall_of_fame_channel_permissions(bot, db_client):
             await hall_of_fame_channel.set_permissions(guild.me, read_messages=True, send_messages=True)
         except Exception as e:
             await error_logging(bot, f"Failed to fix permissions for Hall of Fame channel in guild {guild.id}: {e}", guild.id)
+
+
+async def post_server_perms(bot, server):
+    """
+    Log the permissions of the bot in the server when it joins
+    :param bot:
+    :param server:
+    :return:
+    """
+    await error_logging(bot, f"Joined server {server.name} (ID {server.id}) with permissions:\n"
+                             f"Can manage roles: {server.me.guild_permissions.manage_roles}\n"
+                             f"Can manage channels: {server.me.guild_permissions.manage_channels}\n"
+                             f"Can send messages: {server.me.guild_permissions.send_messages}\n"
+                             f"Can send messages in threads: {server.me.guild_permissions.send_messages_in_threads},\n"
+                             f"Can manage messages: {server.me.guild_permissions.manage_messages}\n"
+                             f"Can embed links: {server.me.guild_permissions.embed_links}\n"
+                             f"Can attach files: {server.me.guild_permissions.attach_files}\n"
+                             f"Can read message history: {server.me.guild_permissions.read_message_history}\n"
+                             f"Can add reactions: {server.me.guild_permissions.add_reactions}\n"
+                             f"Can use external emojis: {server.me.guild_permissions.use_external_emojis}")

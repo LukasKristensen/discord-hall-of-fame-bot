@@ -136,6 +136,7 @@ async def on_guild_join(server):
     server_classes[server.id] = new_server_class
     await utils.error_logging(bot, f"Joined server {server.name}", server.id, log_type="system")
     await post_topgg_stats()
+    await utils.post_server_perms(bot, server)
 
 
 @bot.event
@@ -145,6 +146,7 @@ async def on_guild_remove(server):
     if server.id in server_classes:
         del server_classes[server.id]
     await post_topgg_stats()
+
 
 @tree.command(name="help", description="List of commands")
 async def get_help(interaction: discord.Interaction):

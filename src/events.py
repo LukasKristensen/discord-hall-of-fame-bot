@@ -112,17 +112,6 @@ async def guild_join(server, db_client, bot):
     """
     try:
         await utils.create_database_context(bot, server, db_client)
-        await utils.error_logging(bot, f"Joined server {server.name} (ID {server.id}) with permissions:\n"
-                                       f"Can manage roles: {server.me.guild_permissions.manage_roles}\n"
-                                       f"Can manage channels: {server.me.guild_permissions.manage_channels}\n"
-                                       f"Can send messages: {server.me.guild_permissions.send_messages}\n"
-                                       f"Can send messages in threads: {server.me.guild_permissions.send_messages_in_threads},\n"
-                                       f"Can manage messages: {server.me.guild_permissions.manage_messages}\n"
-                                       f"Can embed links: {server.me.guild_permissions.embed_links}\n"
-                                       f"Can attach files: {server.me.guild_permissions.attach_files}\n"
-                                       f"Can read message history: {server.me.guild_permissions.read_message_history}\n"
-                                       f"Can add reactions: {server.me.guild_permissions.add_reactions}\n"
-                                       f"Can use external emojis: {server.me.guild_permissions.use_external_emojis}")
     except Exception as e:
         await utils.error_logging(bot, f"Failed to create database context for server {server.name}: {e}", server.id)
         await utils.send_server_owner_error_message(server.owner, messages.FAILED_SETUP_HOF.format(serverName=server.name), bot)
