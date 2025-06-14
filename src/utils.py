@@ -573,7 +573,7 @@ async def send_server_owner_error_message(owner, e, bot):
             await error_logging(bot, f"Failed to send error message to server owner {owner.name}: {history_error}")
 
 
-async def error_logging(bot: discord.Client, message, server_id = None, new_value = None, log_type = "error"):
+async def error_logging(bot: discord.Client, message, server_id=None, new_value=None, log_type="error"):
     """
     Log an error message to the error channel
     :param bot:
