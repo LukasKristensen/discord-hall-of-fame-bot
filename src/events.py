@@ -155,8 +155,10 @@ async def daily_task(bot: discord.Client, db_client, server_classes, dev_testing
     :return:
     """
     await utils.error_logging(bot, f"Starting daily task for {len(server_classes)} servers")
+
+    bot_guild_ids = [guild.id for guild in bot.guilds]
     for server_class in list(server_classes.values()):
-        if not server_class.leaderboard_setup or server_class.guild_id not in bot.guilds:
+        if not server_class.leaderboard_setup or server_class.guild_id not in bot_guild_ids:
             continue
         try:
             # get all entities where guild_id is the same as the server_class.guild_id

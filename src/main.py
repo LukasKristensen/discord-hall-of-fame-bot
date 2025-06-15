@@ -65,7 +65,7 @@ async def on_ready():
 
 @tasks.loop(hours=24)
 async def daily_task():
-    await utils.error_logging(bot,"Running daily task")
+    await utils.error_logging(bot, "Running daily task")
     try:
         await events.daily_task(bot, production_db, server_classes, dev_test)
         await utils.error_logging(bot, f"Daily task completed")
@@ -140,11 +140,15 @@ async def on_guild_join(server):
 
 @bot.event
 async def on_guild_remove(server):
+    # Case where discord sends a guild remove event for a server which has already been removed
+    if server_classes is None or server.id not in server_classes:
+        return
     await utils.error_logging(bot, f"Left server {server.name}", server.id, log_type="system")
     await events.guild_remove(server, production_db)
     if server.id in server_classes:
         del server_classes[server.id]
     await post_topgg_stats()
+
 
 @tree.command(name="help", description="List of commands")
 async def get_help(interaction: discord.Interaction):
