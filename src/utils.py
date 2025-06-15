@@ -137,8 +137,10 @@ async def update_leaderboard(message_collection, bot: discord.Client, server_con
     :param leaderboard_length:
     :return:
     """
-    server_message_collection = message_collection.find({"guild_id": int(server_config['guild_id'])})
-    most_reacted_messages = list(server_message_collection.sort("reaction_count", -1).limit(30))
+    server_message_collection = message_collection.find({"guild_id": int(server_config['guild_id'])}).sort(
+        "reaction_count", -1).limit(30)
+    most_reacted_messages = list(server_message_collection)
+
     msg_id_array = server_config.get("leaderboard_message_ids", [])
 
     # Update the reaction count of the top 30 most reacted messages
@@ -146,18 +148,17 @@ async def update_leaderboard(message_collection, bot: discord.Client, server_con
         message = most_reacted_messages[i]
         channel = bot.get_channel(message["channel_id"])
         message = await channel.fetch_message(message["message_id"])
-        server_message_collection.update_one({"message_id": int(message.id), "guild_id": int(server_config['guild_id']),
-                                              "channel_id": int(message.channel.id)},
-                                             {"$set": {"reaction_count": await reaction_count(message)}})
+        message_collection.update_one({"message_id": int(message.id), "guild_id": int(server_config['guild_id']),
+                                       "channel_id": int(message.channel.id)},
+                                      {"$set": {"reaction_count": await reaction_count(message)}})
 
-    # Updated all the reaction counts
-    most_reacted_messages = list(server_message_collection.sort("reaction_count", -1).limit(20))
+    total_documents = message_collection.count_documents({"guild_id": int(server_config['guild_id'])})
 
     # Update the embeds of the top 20 most reacted messages
     if msg_id_array:
-        for i in range(min(leaderboard_length, server_message_collection.count_documents({}) - 1)):
+        for i in range(min(leaderboard_length, total_documents - 1)):
             hall_of_fame_channel = bot.get_channel(target_channel_id)
-            hall_of_fame_message = await hall_of_fame_channel.fetch_message(msg_id_array["leaderboard_message_ids"][i])
+            hall_of_fame_message = await hall_of_fame_channel.fetch_message(msg_id_array[i])
             original_channel = bot.get_channel(most_reacted_messages[i]["channel_id"])
             original_message = await original_channel.fetch_message(most_reacted_messages[i]["message_id"])
 
