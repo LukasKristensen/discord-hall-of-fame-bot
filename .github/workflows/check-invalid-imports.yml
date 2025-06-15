@@ -1,0 +1,38 @@
+name: Check for Invalid Imports
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  check-invalid-imports:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Check for invalid imports
+        run: |
+          invalid_imports=("from src" "import src")
+
+          # Skip workflow files and hidden folders like .git
+          files=$(find . -type f ! -path "./.git/*" ! -path "./.github/workflows/*")
+
+          failed=0
+
+          for file in $files; do
+            for phrase in "${invalid_imports[@]}"; do
+              if grep -q -F "$phrase" "$file"; then
+                echo "❌ Invalid import '$phrase' found in file: $file"
+                failed=1
+              fi
+            done
+          done
+
+          if [[ "$failed" -eq 1 ]]; then
+            echo "❌ Push or PR blocked due to invalid import usage."
+            exit 1
+          else
+            echo "✅ No invalid imports found."
+          fi
