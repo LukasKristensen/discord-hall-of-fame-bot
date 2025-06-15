@@ -584,9 +584,12 @@ async def error_logging(bot: discord.Client, message, server_id=None, new_value=
     :param log_type: The type of log (e.g. "error", "info")
     :return:
     """
+    system_channel_id = 1373699890718441482 if bot.application_id == 1177041673352663070 else 1383834858870145214
+    error_channel = 1373699890718441482 if bot.application_id == 1177041673352663070 else 1383834395726577765
+
     target_guild = bot.get_guild(1180006529575960616)
-    system_channel = bot.get_channel(1373699890718441482)
-    error_channel = target_guild.get_channel(1344070396575617085)
+    system_channel = bot.get_channel(system_channel_id)
+    error_channel = target_guild.get_channel(error_channel)
     logging_message = f"{datetime.datetime.now()}: {message}"
 
     if server_id:
