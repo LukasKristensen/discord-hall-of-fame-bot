@@ -1,7 +1,6 @@
 name: Check for Invalid Imports
 
 on:
-  push:
   pull_request:
 
 jobs:
