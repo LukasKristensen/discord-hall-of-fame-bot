@@ -6,6 +6,7 @@ on:
 
 jobs:
   check-invalid-imports:
+    name: Check Invalid Imports
     runs-on: ubuntu-latest
 
     steps:
