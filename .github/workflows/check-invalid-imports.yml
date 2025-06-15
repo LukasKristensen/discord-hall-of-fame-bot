@@ -15,7 +15,9 @@ jobs:
       - name: Check for invalid imports
         run: |
           invalid_imports=("from src" "import src")
-          files=$(find . -type f)
+
+          # Skip workflow files and hidden folders like .git
+          files=$(find . -type f ! -path "./.git/*" ! -path "./.github/workflows/*")
 
           failed=0
 
