@@ -13,7 +13,7 @@ from classes.bot_stats import BotStats
 from api_services import topgg_api, discordbotlist_api
 import os
 from translations import messages
-import migrations
+from src import migrations
 
 dev_test = os.getenv('DEV_TEST') == "True"
 load_dotenv()
