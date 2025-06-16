@@ -120,7 +120,7 @@ async def on_raw_reaction_remove(payload: discord.RawReactionActionEvent):
 
 @bot.event
 async def on_message(message: discord.Message):
-    if message.author == bot.user or message.guild.id not in server_classes:
+    if message.author == bot.user or message.guild is None or message.guild.id not in server_classes:
         return
     server_class = server_classes[message.guild.id]
     target_channel_id = server_class.hall_of_fame_channel_id
@@ -130,13 +130,14 @@ async def on_message(message: discord.Message):
 
 @bot.event
 async def on_guild_join(server):
+    await utils.error_logging(bot, f"Joined server {server.name}", server.id, log_type="system")
+    await utils.post_server_perms(bot, server)
+
     new_server_class = await events.guild_join(server, production_db, bot)
     if new_server_class is None:
         return
     server_classes[server.id] = new_server_class
-    await utils.error_logging(bot, f"Joined server {server.name}", server.id, log_type="system")
     await post_topgg_stats()
-    await utils.post_server_perms(bot, server)
 
 
 @bot.event
