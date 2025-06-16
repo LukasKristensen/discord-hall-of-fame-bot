@@ -114,13 +114,15 @@ async def guild_join(server, db_client, bot):
         return await utils.create_database_context(bot, server, db_client)
     except Exception as e:
         await utils.error_logging(bot, f"Failed to create database context for server {server.name}: {e}", server.id)
-        await utils.send_server_owner_error_message(server.owner, messages.FAILED_SETUP_HOF.format(serverName=server.name), bot)
         try:
-            channel = server.text_channels[0]
-            await channel.send(messages.FAILED_SETUP_HOF.format(serverName=server.name))
-            await utils.error_logging(bot,f"Sent an error message to the first text channel {channel.name} on server {server.name}", server.id)
+            for channel in server.text_channels:
+                if not channel.permissions_for(server.me).send_messages:
+                    continue
+                await channel.send(messages.FAILED_SETUP_HOF.format(serverName=server.name))
+                await utils.error_logging(bot, f"Sent an error message to {channel.name} on server {server.name}", server.id)
+                break
         except Exception as e:
-            await utils.error_logging(bot, f"Failed to send message to server owner: {e}", server.id)
+            await utils.error_logging(bot, f"Failed to send error message to server {server.name}: {e}", server.id)
         return None
 
 
