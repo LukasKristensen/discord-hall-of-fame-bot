@@ -121,8 +121,8 @@ async def guild_join(server, db_client, bot):
                 await channel.send(messages.FAILED_SETUP_HOF.format(serverName=server.name))
                 await utils.error_logging(bot, f"Sent an error message to {channel.name} on server {server.name}", server.id)
                 break
-        except Exception as e:
-            await utils.error_logging(bot, f"Failed to send error message to server {server.name}: {e}", server.id)
+        except Exception as exception:
+            await utils.error_logging(bot, f"Failed to send error message to server {server.name}: {exception}", server.id)
         return None
 
 

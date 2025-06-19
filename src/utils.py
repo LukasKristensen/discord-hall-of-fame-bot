@@ -726,4 +726,5 @@ async def post_server_perms(bot, server):
                              f"Can read message history: {server.me.guild_permissions.read_message_history}\n"
                              f"Can add reactions: {server.me.guild_permissions.add_reactions}\n"
                              f"Can use external emojis: {server.me.guild_permissions.use_external_emojis}\n"
+                             f"Can view channels: {server.me.guild_permissions.view_channel}\n"
                              f"Server member count: {server.member_count}")
