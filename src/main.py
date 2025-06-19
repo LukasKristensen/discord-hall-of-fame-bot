@@ -92,40 +92,53 @@ async def daily_task():
 async def on_raw_reaction_add(payload: discord.RawReactionActionEvent):
     if payload.guild_id not in server_classes:
         return
-    server_class = server_classes[payload.guild_id]
-    collection = production_db["hall_of_fame_messages"]
+    try:
+        server_class = server_classes[payload.guild_id]
+        collection = production_db["hall_of_fame_messages"]
 
-    if payload.message_id not in messages_processing:
-        messages_processing.append(payload.message_id)
-        await events.on_raw_reaction(payload, bot, collection, server_class.reaction_threshold,
-                                     server_class.post_due_date, server_class.hall_of_fame_channel_id,
-                                     server_class.ignore_bot_messages, server_class.hide_hof_post_below_threshold)
-        messages_processing.remove(payload.message_id)
+        if payload.message_id not in messages_processing:
+            messages_processing.append(payload.message_id)
+            await events.on_raw_reaction(payload, bot, collection, server_class.reaction_threshold,
+                                         server_class.post_due_date, server_class.hall_of_fame_channel_id,
+                                         server_class.ignore_bot_messages, server_class.hide_hof_post_below_threshold)
+            messages_processing.remove(payload.message_id)
+    except Exception as e:
+        await utils.error_logging(bot, f"Error in on_raw_reaction_add: {e}", payload.guild_id)
+        if payload.message_id in messages_processing:
+            messages_processing.remove(payload.message_id)
 
 
 @bot.event
 async def on_raw_reaction_remove(payload: discord.RawReactionActionEvent):
     if payload.guild_id not in server_classes:
         return
-    server_class = server_classes[payload.guild_id]
-    collection = production_db["hall_of_fame_messages"]
+    try:
+        server_class = server_classes[payload.guild_id]
+        collection = production_db["hall_of_fame_messages"]
 
-    if payload.message_id not in messages_processing:
-        messages_processing.append(payload.message_id)
-        await events.on_raw_reaction(payload, bot, collection, server_class.reaction_threshold,
-                                     server_class.post_due_date, server_class.hall_of_fame_channel_id,
-                                     server_class.ignore_bot_messages, server_class.hide_hof_post_below_threshold)
-        messages_processing.remove(payload.message_id)
+        if payload.message_id not in messages_processing:
+            messages_processing.append(payload.message_id)
+            await events.on_raw_reaction(payload, bot, collection, server_class.reaction_threshold,
+                                         server_class.post_due_date, server_class.hall_of_fame_channel_id,
+                                         server_class.ignore_bot_messages, server_class.hide_hof_post_below_threshold)
+            messages_processing.remove(payload.message_id)
+    except Exception as e:
+        await utils.error_logging(bot, f"Error in on_raw_reaction_remove: {e}", payload.guild_id)
+        if payload.message_id in messages_processing:
+            messages_processing.remove(payload.message_id)
 
 
 @bot.event
 async def on_message(message: discord.Message):
     if message.author == bot.user or message.guild is None or message.guild.id not in server_classes:
         return
-    server_class = server_classes[message.guild.id]
-    target_channel_id = server_class.hall_of_fame_channel_id
-    allow_messages_in_hof = server_class.allow_messages_in_hof_channel
-    await events.on_message(message, bot, target_channel_id, allow_messages_in_hof)
+    try:
+        server_class = server_classes[message.guild.id]
+        target_channel_id = server_class.hall_of_fame_channel_id
+        allow_messages_in_hof = server_class.allow_messages_in_hof_channel
+        await events.on_message(message, bot, target_channel_id, allow_messages_in_hof)
+    except Exception as e:
+        await utils.error_logging(bot, f"Error in on_message: {e}", message.guild.id)
 
 
 @bot.event
