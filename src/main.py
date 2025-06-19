@@ -404,7 +404,7 @@ async def get_user_server_profile(interaction: discord.Interaction, specific_use
     await utils.error_logging(bot, f"Get user server profile command used by {interaction.user.name} in {interaction.guild.name}", interaction.guild.id, str(user.id))
 
 
-@tree.command(name="get_server_stats", description="Get the server stats")
+# disabled until members intent is enabled
 async def get_server_stats(interaction: discord.Interaction):
     """
     Get the server stats
@@ -416,7 +416,7 @@ async def get_server_stats(interaction: discord.Interaction):
         return
 
     server_class = server_classes[interaction.guild_id]
-    await commands.get_server_stats(interaction, server_class, production_db, month_emoji, all_time_emoji)
+    await commands.get_server_stats(interaction, server_class, production_db, month_emoji, all_time_emoji, interaction.guild)
     await utils.error_logging(bot, f"Get server stats command used by {interaction.user.name} in {interaction.guild.name}", interaction.guild.id)
 
 
