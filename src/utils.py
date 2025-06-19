@@ -434,6 +434,21 @@ async def create_database_context(bot, server, db_client, reaction_threshold_def
     """
     db_server_configs = db_client["server_configs"]
 
+    if server.member_count < 3:
+        reaction_threshold_default = 1
+    elif server.member_count < 5:
+        reaction_threshold_default = 2
+    elif server.member_count < 10:
+        reaction_threshold_default = 3
+    elif server.member_count < 20:
+        reaction_threshold_default = 4
+    elif server.member_count < 40:
+        reaction_threshold_default = 5
+    elif server.member_count < 50:
+        reaction_threshold_default = 6
+    else:
+        reaction_threshold_default = 7
+
     # Check if the server is already in the database, if so delete the database
     if db_server_configs.find_one({"guild_id": int(server.id)}):
         await error_logging(bot, f"Server {server.name} already exists in the database, dropping it to recreate", server.id)
