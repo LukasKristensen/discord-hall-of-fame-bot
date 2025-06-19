@@ -263,7 +263,6 @@ async def post_hall_of_fame_message(message: discord.Message, bot: discord.Clien
                            "video_link_message_id": int(video_message.id) if video_link else None,
                            "created_at": datetime.datetime.now(timezone.utc),
                            "author_id": int(message.author.id)})
-    bot_stats = BotStats()
 
 
 async def set_footer(embed: discord.Embed):
@@ -336,10 +335,10 @@ async def create_embed(message: discord.Message, reaction_threshold: int):
         embed.set_author(name=message.author.name, icon_url=message.author.avatar.url if message.author.avatar else None)
 
         corrected_reactions = await reaction_count(message)
-        embed.add_field(name=f"{corrected_reactions} Reactions ", value=top_reaction[0].emoji, inline=True)
-        embed.add_field(name="Jump to Message", value=message.jump_url, inline=False)
-
         if reference_message.attachments:
+            embed.add_field(name=f"{corrected_reactions} Reactions ", value=top_reaction[0].emoji, inline=True)
+            embed.add_field(name="Jump to Message", value=message.jump_url, inline=False)
+
             # Author of the original message
             embed.add_field(name=f"{message.author.name}'s reply:", value=message.content, inline=False)
 
@@ -352,6 +351,8 @@ async def create_embed(message: discord.Message, reaction_threshold: int):
             # Author of the original message
             embed.add_field(name=f"{message.author.name}'s reply:", value=message.content, inline=False)
 
+            embed.add_field(name=f"{corrected_reactions} Reactions ", value=top_reaction[0].emoji, inline=True)
+            embed.add_field(name="Jump to Message", value=message.jump_url, inline=False)
         embed = await set_footer(embed)
         return embed
 
@@ -434,20 +435,15 @@ async def create_database_context(bot, server, db_client, reaction_threshold_def
     """
     db_server_configs = db_client["server_configs"]
 
-    if server.member_count < 3:
-        reaction_threshold_default = 1
-    elif server.member_count < 5:
-        reaction_threshold_default = 2
-    elif server.member_count < 10:
-        reaction_threshold_default = 3
-    elif server.member_count < 20:
-        reaction_threshold_default = 4
-    elif server.member_count < 40:
-        reaction_threshold_default = 5
-    elif server.member_count < 50:
-        reaction_threshold_default = 6
-    else:
-        reaction_threshold_default = 7
+    reaction_threshold_default = (
+        1 if server.member_count < 3 else
+        2 if server.member_count < 5 else
+        3 if server.member_count < 10 else
+        4 if server.member_count < 20 else
+        5 if server.member_count < 40 else
+        6 if server.member_count < 50 else
+        7
+    )
 
     # Check if the server is already in the database, if so delete the database
     if db_server_configs.find_one({"guild_id": int(server.id)}):
