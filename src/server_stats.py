@@ -31,13 +31,18 @@ for server in servers:
 
 # Update the plot function to include server_member_count
 def create_plot(server_stats):
-    servers = [stat['server'] for stat in server_stats]
-    reaction_thresholds = [stat['reaction_threshold'] for stat in server_stats]
-    message_counts = [stat['message_count'] for stat in server_stats]
-    # Convert non-numeric member counts to 0
+    filtered_stats = [
+        stat for stat in server_stats
+        if isinstance(stat['reaction_threshold'], (int, float)) and isinstance(stat['server_member_count'], (int, float))
+        and stat['reaction_threshold'] <= stat['server_member_count']
+    ]
+
+    servers = [stat['server'] for stat in filtered_stats]
+    reaction_thresholds = [stat['reaction_threshold'] for stat in filtered_stats]
+    message_counts = [stat['message_count'] for stat in filtered_stats]
     member_counts = [
         int(stat['server_member_count']) if str(stat['server_member_count']).isdigit() else 0
-        for stat in server_stats
+        for stat in filtered_stats
     ]
 
     x = np.arange(len(servers))
