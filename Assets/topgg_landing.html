@@ -1,0 +1,42 @@
+<h2>Hall of Fame Bot 🏆✨</h2>
+<p><strong>Capture legendary moments in your Discord server!</strong></p>
+
+<p>Hall of Fame Bot automatically tracks the most reacted messages and immortalizes them on a special board once they surpass a set reaction threshold. Unlike traditional starboard bots, this bot works with all emojis, making every reaction count!</p>
+
+![test](https://raw.githubusercontent.com/LukasKristensen/discord-hall-of-fame-bot/refs/heads/main/Assets/main_context_2.png)
+
+<h3>🌟 Features</h3>
+<ul>
+<li><strong>✅ Multi-Emoji Support</strong> – Not limited to one emoji like starboard bots.</li>
+<li><strong>✅ Includes images/videos from messages.</li>
+<li><strong>✅ Includes replies to conversation for full context.</li>
+<li><strong>✅ Custom Reaction Thresholds</strong> – Set the number of reactions needed for a post to be featured.</li>
+<li><strong>✅ Hall of Fame Board</strong> – Messages are automatically reposted once they reach the threshold.</li>
+</ul>
+
+<h3>How to Configure</h3>
+<p>By default, the reaction threshold is set to <strong>7 reactions</strong> for a post to reach the Hall of Fame.</p>
+<p>Use the command <code>/reaction_threshold_configure</code> to set a custom threshold for your server.</p>
+
+<h3>🔒 Custom Emoji Whitelist</h3>
+<p>
+  By default all emojis count, but a custom emoji filter can be applied to the bot so that it will only look for emojis configured to the server.
+</p>
+<ul>
+  <li>To enable it: <code>/custom_emoji_check_logic</code></li>
+  <li>Adding emojis to the whitelist: <code>/whitelist_emoji</code></li>
+  <li>Removing emojis from the whitelist: <code>/unwhitelist_emoji</code> or <code>/clear_whitelist</code></li>
+</ul>
+
+<h3>💬 Command List</h3>
+<ul>
+  <li><code>/help</code> – List of available commands and their descriptions.</li>
+  <li><code>/set_reaction_threshold &lt;reaction_threshold:int&gt;</code> – Set the amount of reactions needed for a post to reach the Hall of Fame.</li>
+  <li><code>/include_authors_reaction</code> – Should the author of a message be included in the reaction count?</li>
+  <li><code>/allow_messages_in_hof_channel</code> – Allow anyone to type in the Hall of Fame channel.</li>
+  <li><code>/custom_emoji_check_logic &lt;All emojis | Only whitelisted emojis&gt;</code> – Use only whitelisted emojis for the reaction count.</li>
+  <li><code>/whitelist_emoji &lt;emoji&gt;</code> – Add a whitelisted emoji to the list <em>(used with <code>/custom_emoji_check_logic</code>)</em>.</li>
+  <li><code>/unwhitelist_emoji &lt;emoji&gt;</code> – Remove a whitelisted emoji from the list <em>(used with <code>/custom_emoji_check_logic</code>)</em>.</li>
+  <li><code>/clear_whitelist</code> – Clear the whitelist of emojis <em>(used with <code>/custom_emoji_check_logic</code>)</em>.</li>
+  <li><code>/get_server_config</code> – Get the current bot configuration for the server.</li>
+</ul>

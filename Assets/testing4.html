@@ -1,0 +1,210 @@
+<style>
+  /* Fonts */
+  @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;700&family=Fredoka+One&display=swap');
+
+  :root {
+    --gold-light: #f5d06e;
+    --gold-dark: #b28511;
+    --bg-gradient-start: #3a2c0f;
+    --bg-gradient-end: #1f1507;
+    --overlay-gradient-start: #4b3b11cc;
+    --overlay-gradient-end: #241b07cc;
+    --text-primary: #f0e5c9;
+    --text-secondary: #d2cba0;
+    --shadow-glow: rgba(247, 208, 70, 0.6);
+    --border-radius: 16px;
+    --max-width: 900px;
+  }
+
+  body {
+    margin: 0;
+    background: linear-gradient(135deg, var(--bg-gradient-start), var(--bg-gradient-end));
+    background-attachment: fixed;
+    font-family: 'Poppins', sans-serif;
+    color: var(--text-primary);
+    overflow-x: hidden;
+    min-height: 100vh;
+  }
+
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    background: linear-gradient(135deg, var(--overlay-gradient-start), var(--overlay-gradient-end));
+    z-index: -1;
+    pointer-events: none;
+  }
+
+  .container {
+    max-width: var(--max-width);
+    margin: 3rem auto 5rem;
+    margin-top: 0 !important;
+    padding: 0 2rem;
+  }
+
+  h2 {
+    font-family: 'Fredoka One', cursive;
+    font-size: 1.5rem;
+    color: var(--gold-light);
+    text-shadow: 0 0 10px var(--shadow-glow);
+    margin-bottom: 0.5rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    text-align: center;
+  }
+
+  p.lead {
+    text-align: center;
+    font-size: 1.3rem;
+    color: var(--text-secondary);
+    margin-top: 0;
+    margin-bottom: 3rem;
+    max-width: 700px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  img.promo-image {
+    display: block;
+    max-width: 80%;
+    margin: 0 auto 3rem;
+    border-radius: var(--border-radius);
+    box-shadow: 0 0 20px var(--shadow-glow);
+    border: 3px solid var(--gold-dark);
+  }
+
+  section {
+    background: rgba(66, 52, 12, 0.6);
+    border-radius: var(--border-radius);
+    padding: 2.5rem 3rem;
+    margin-bottom: 2.5rem;
+    box-shadow: 0 0 15px #b28511aa;
+  }
+
+  section h3 {
+    font-family: 'Fredoka One', cursive;
+    color: var(--gold-light);
+    font-size: 2rem;
+    margin-top: 0;
+    margin-bottom: 1rem;
+    text-shadow: 0 0 8px var(--shadow-glow);
+  }
+
+  ul {
+    list-style-type: none;
+    padding-left: 0;
+    margin: 0;
+  }
+
+  ul li {
+    position: relative;
+    padding-left: 2rem;
+    margin-bottom: 1rem;
+    color: var(--text-primary);
+    font-weight: 600;
+    font-size: 1.1rem;
+  }
+
+  ul li::before {
+    content: "⭐";
+    position: absolute;
+    left: 0;
+    top: 0;
+    font-size: 1.3rem;
+    color: var(--gold-light);
+    text-shadow: 0 0 5px var(--shadow-glow);
+  }
+
+  code {
+    background: #2f2300cc;
+    color: var(--gold-light);
+    padding: 0.3em 0.5em;
+    border-radius: 8px;
+    font-family: 'Courier New', Courier, monospace;
+    font-weight: 700;
+    font-size: 0.95rem;
+    box-shadow: 0 0 8px var(--shadow-glow);
+  }
+
+  a.button {
+    display: inline-block;
+    background: var(--gold-dark);
+    color: var(--text-primary);
+    font-weight: 700;
+    padding: 0.7em 2.2em;
+    border-radius: var(--border-radius);
+    text-decoration: none;
+    box-shadow: 0 0 15px var(--shadow-glow);
+    transition: all 0.3s ease;
+    margin-top: 1.5rem;
+    letter-spacing: 0.05em;
+  }
+
+  a.button:hover {
+    background: var(--gold-light);
+    color: #3a2c0f;
+    box-shadow: 0 0 25px var(--shadow-glow);
+  }
+
+  /* Responsive */
+  @media (max-width: 720px) {
+    h2 {
+      font-size: 2.2rem;
+    }
+    section {
+      padding: 1.5rem 1.5rem;
+    }
+    ul li {
+      font-size: 1rem;
+      padding-left: 1.5rem;
+    }
+  }
+</style>
+
+<div class="container">
+  <h2>🏆 Hall of Fame Bot ✨</h2>
+  <p class="lead">Capture legendary moments in your Discord server with style and magic.</p>
+
+  <img class="promo-image" src="https://raw.githubusercontent.com/LukasKristensen/discord-hall-of-fame-bot/refs/heads/main/Assets/main_context_2.png" alt="Hall of Fame Bot Preview" />
+
+  <section>
+    <h3>🌟 Features that Shine</h3>
+    <ul>
+      <li><strong>Multi-Emoji Magic</strong> – No more limits, react with any emoji to immortalize messages.</li>
+      <li><strong>Media Included</strong> – Images and videos travel with your cherished posts.</li>
+      <li><strong>Full Conversation Context</strong> – Replies stay visible for clarity and nostalgia.</li>
+      <li><strong>Custom Reaction Goals</strong> – You decide how many reactions earn the spotlight.</li>
+      <li><strong>Auto-Reposting</strong> – Your Hall of Fame fills itself without lifting a finger.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h3>⚙️ Configure Your Fame</h3>
+    <p>
+      The default reaction threshold is set based on the server size, but can be updated by using the command below.
+    </p>
+    <code>/reaction_threshold_configure</code>
+  </section>
+
+  <section>
+    <h3>🔒 Emoji Whitelist (Optional)</h3>
+    <p>Prefer to limit which emojis count? Just enable and customize with these commands:</p>
+    <ul>
+      <li><code>/custom_emoji_check_logic</code> – Turn on emoji filtering</li>
+      <li><code>/whitelist_emoji</code> – Add approved emojis</li>
+      <li><code>/unwhitelist_emoji</code> – Remove an emoji</li>
+      <li><code>/clear_whitelist</code> – Reset your whitelist</li>
+    </ul>
+  </section>
+
+  <section>
+    <h3>💬 Command Lineup</h3>
+    <ul>
+      <li><code>/help</code> – Your command cheat sheet</li>
+      <li><code>/set_reaction_threshold &lt;int&gt;</code> – Adjust reaction goal</li>
+      <li><code>/include_authors_reaction</code> – Include or exclude author's reaction</li>
+      <li><code>/allow_messages_in_hof_channel</code> – Control channel posting</li>
+      <li><code>/get_server_config</code> – View current settings</li>
+    </ul>
+  </section>
+</div>
