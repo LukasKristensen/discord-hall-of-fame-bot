@@ -14,6 +14,10 @@
     --shadow-glow: rgba(247, 208, 70, 0.6);
     --border-radius: 16px;
     --max-width: 900px;
+
+    --top-gg-colors-current: #f5d06e !important;    /* gold-light */
+    --top-gg-colors-brand-100: #b28511 !important; /* gold-dark */
+    --top-gg-colors-brand-60: #d9b84c !important;  /* medium gold */
   }
 
   body {
@@ -52,125 +56,176 @@ h2 {
 }
 
 
-  p.lead {
-    text-align: center;
-    font-size: 1.3rem;
-    color: var(--text-secondary);
-    margin-top: 0;
-    margin-bottom: 3rem;
-    max-width: 700px;
-    margin-left: auto;
-    margin-right: auto;
-  }
+p.lead {
+  text-align: center;
+  font-size: 1.3rem;
+  color: var(--text-secondary);
+  margin-top: 0;
+  margin-bottom: 3rem;
+  max-width: 700px;
+  margin-left: auto;
+  margin-right: auto;
+}
 
-  img.promo-image {
-    display: block;
-    max-width: 80%;
-    margin: 0 auto 3rem;
-    border-radius: var(--border-radius);
-    box-shadow: 0 0 20px var(--shadow-glow);
-    border: 3px solid var(--gold-dark);
-  }
+img.promo-image {
+  display: block;
+  max-width: 80%;
+  margin: 0 auto 3rem;
+  border-radius: var(--border-radius);
+  box-shadow: 0 0 20px var(--shadow-glow);
+  border: 3px solid var(--gold-dark);
+}
 
-  section {
-    background: rgba(66, 52, 12, 0.6);
-    border-radius: var(--border-radius);
-    padding: 2.5rem 3rem;
-    margin-bottom: 2.5rem;
-    box-shadow: 0 0 15px #b28511aa;
-  }
+section {
+  background: rgba(66, 52, 12, 0.6);
+  border-radius: var(--border-radius);
+  padding: 2.5rem 3rem;
+  margin-bottom: 2.5rem;
+  box-shadow: 0 0 15px #b28511aa;
+}
 
-  section h3 {
-    font-family: 'Fredoka One', cursive;
-    color: var(--gold-light);
-    font-size: 2rem;
-    margin-top: 0;
-    margin-bottom: 1rem;
-    text-shadow: 0 0 8px var(--shadow-glow);
-  }
+section h3 {
+  font-family: 'Fredoka One', cursive;
+  color: var(--gold-light);
+  font-size: 2rem;
+  margin-top: 0;
+  margin-bottom: 1rem;
+  text-shadow: 0 0 8px var(--shadow-glow);
+}
 
-  ul {
-    list-style-type: none;
-    padding-left: 0;
-    margin: 0;
-  }
+ul {
+  list-style-type: none;
+  padding-left: 0;
+  margin: 0;
+}
 
-  ul li {
-    position: relative;
-    padding-left: 2rem;
-    margin-bottom: 1rem;
-    color: var(--text-primary);
-    font-weight: 600;
-    font-size: 1.1rem;
-  }
+ul li {
+  position: relative;
+  padding-left: 2rem;
+  margin-bottom: 1rem;
+  color: var(--text-primary);
+  font-weight: 600;
+  font-size: 1.1rem;
+}
 
-  ul li::before {
-    content: "⭐";
-    position: absolute;
-    left: 0;
-    top: 0;
-    font-size: 1.3rem;
-    color: var(--gold-light);
-    text-shadow: 0 0 5px var(--shadow-glow);
-  }
+ul li::before {
+  content: "⭐";
+  position: absolute;
+  left: 0;
+  top: 0;
+  font-size: 1.3rem;
+  color: var(--gold-light);
+  text-shadow: 0 0 5px var(--shadow-glow);
+}
 
-  code {
-    background: #2f2300cc;
-    color: var(--gold-light);
-    padding: 0.3em 0.5em;
-    border-radius: 8px;
-    font-family: 'Courier New', Courier, monospace;
-    font-weight: 700;
-    font-size: 0.95rem;
-    box-shadow: 0 0 8px var(--shadow-glow);
-  }
+code {
+  background: #2f2300cc;
+  color: var(--gold-light);
+  padding: 0.3em 0.5em;
+  border-radius: 8px;
+  font-family: 'Courier New', Courier, monospace;
+  font-weight: 700;
+  font-size: 0.95rem;
+  box-shadow: 0 0 8px var(--shadow-glow);
+}
 
-  a.button {
-    display: inline-block;
-    background: var(--gold-dark);
-    color: var(--text-primary);
-    font-weight: 700;
-    padding: 0.7em 2.2em;
-    border-radius: var(--border-radius);
-    text-decoration: none;
-    box-shadow: 0 0 15px var(--shadow-glow);
-    transition: all 0.3s ease;
-    margin-top: 1.5rem;
-    letter-spacing: 0.05em;
-  }
+a.button {
+  display: inline-block;
+  background: var(--gold-dark);
+  color: var(--text-primary);
+  font-weight: 700;
+  padding: 0.7em 2.2em;
+  border-radius: var(--border-radius);
+  text-decoration: none;
+  box-shadow: 0 0 15px var(--shadow-glow);
+  transition: all 0.3s ease;
+  margin-top: 1.5rem;
+  letter-spacing: 0.05em;
+}
 
-  a.button:hover {
-    background: var(--gold-light);
-    color: #3a2c0f;
-    box-shadow: 0 0 25px var(--shadow-glow);
-  }
+a.button:hover {
+  background: var(--gold-light);
+  color: #3a2c0f;
+  box-shadow: 0 0 25px var(--shadow-glow);
+}
 
-  .css-1vcqbmk {
-    position: relative;
-    overflow: hidden;
+.css-13pd2m2 {
+    background-color: rgba(82, 70, 50, 0.7);
     border-radius: var(--top-gg-radii-md);
-    background-color: var(--top-gg-color-bg);
-  }
+}
 
-  .css-1vcqbmk:before {
-      content: '';
-      position: absolute;
-      width: 100px;
-      height: 100%;
-      background-image: linear-gradient(120deg, rgba(255, 255, 255, 0) 30%, rgba(255, 255, 255, .8), rgba(255, 255, 255, 0) 70%);
-      top: 0;
-      left: -100px;
-      animation: shine 3s infinite linear;
-      z-index: 1;
-      opacity: .55;
-      pointer-events: none;
-  }
+.css-1vcqbmk {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--top-gg-radii-md);
+}
 
-  @keyframes shine {
-      0% {left: -100px}
-      20% {left: 100%}
-      100% {left: 100%}
+.css-1vcqbmk:before {
+  content: '';
+  position: absolute;
+  width: 100px;
+  height: 100%;
+  background-image: linear-gradient(120deg, rgba(255, 255, 255, 0) 30%, rgba(255, 255, 255, .8), rgba(255, 255, 255, 0) 70%);
+  top: 0;
+  left: -100px;
+  animation: shine 3s infinite linear;
+  z-index: 1;
+  opacity: .55;
+  pointer-events: none;
+}
+
+@keyframes shine {
+  0% {left: -100px}
+  20% {left: 100%}
+  100% {left: 100%}
+}
+
+.css-a1ui79 {
+  position: relative;
+  overflow: visible;
+}
+
+.css-a1ui79::before, .css-a1ui79::after {
+  content: '✨';
+  position: absolute;
+  font-size: 1.2rem;
+  color: var(--gold-light);
+  opacity: 0.7;
+  filter: drop-shadow(0 0 5px var(--gold-light));
+  animation: sparkleGlow 3.5s infinite alternate ease-in-out;
+  pointer-events: none;
+  user-select: none;
+}
+
+.css-a1ui79::before {
+  top: 5%;
+  left: 5%;
+  animation-delay: 0s;
+}
+
+.css-a1ui79::after {
+  bottom: 5%;
+  right: 5%;
+  animation-delay: 1.7s;
+}
+
+@keyframes sparkleGlow {
+  0% {
+    opacity: 0.7;
+    transform: scale(1) translateY(0);
+    filter: drop-shadow(0 0 5px var(--gold-light));
   }
+  50% {
+    opacity: 1;
+    transform: scale(1.4) translateY(-3px);
+    filter: drop-shadow(0 0 12px var(--gold-light));
+  }
+  100% {
+    opacity: 0.7;
+    transform: scale(1) translateY(0);
+    filter: drop-shadow(0 0 5px var(--gold-light));
+  }
+}
 
 </style>
 
