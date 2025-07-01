@@ -254,12 +254,26 @@ a.button:hover {
   </section>
 
   <section>
-    <h3>⚙️ Configure Your Fame</h3>
+    <h3>⚙️ Customize Your Hall of Fame</h3>
     <p>
-      The default reaction threshold is set based on the server size, but can be updated by using the command below.
+      By default, the reaction threshold adjusts automatically based on your server size.
+      Want to set your own goal? Easily update it anytime with the command below:
     </p>
-    <code>/reaction_threshold_configure</code>
+    <code>/reaction_threshold_configure &lt;number&gt;</code>
   </section>
+
+  <section>
+  <h3>⚙️ Configure Calculation Method</h3>
+  <p>
+    Choose how reaction counts are calculated for Hall of Fame qualification. Use the command below followed by one of the options:
+  </p>
+  <code>/calculation_method &lt;method&gt;</code>
+  <ul>
+    <li><code>most_reactions_on_emoji</code> – Counts the emoji with the highest reactions, each user counts once per emoji.</li>
+    <li><code>total_reactions</code> – Counts every reaction on the message; users reacting multiple times with different emojis count multiple times.</li>
+    <li><code>unique_users</code> – Counts the total number of unique users who reacted, regardless of emoji.</li>
+  </ul>
+</section>
 
   <section>
     <h3>🔒 Emoji Whitelist (Optional)</h3>
