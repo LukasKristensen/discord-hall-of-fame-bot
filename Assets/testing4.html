@@ -42,16 +42,15 @@
     padding: 0 2rem;
   }
 
-  h2 {
-    font-family: 'Fredoka One', cursive;
-    font-size: 1.5rem;
-    color: var(--gold-light);
-    text-shadow: 0 0 10px var(--shadow-glow);
-    margin-bottom: 0.5rem;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-    text-align: center;
-  }
+h2 {
+  font-family: 'Fredoka One', cursive;
+  font-size: clamp(0.3rem, 2.5vw, 1.8rem); /* Responsive scaling */
+  color: var(--gold-light);
+  text-shadow: 0 0 10px var(--shadow-glow);
+  text-transform: uppercase;
+  text-align: center;
+}
+
 
   p.lead {
     text-align: center;
@@ -146,19 +145,33 @@
     box-shadow: 0 0 25px var(--shadow-glow);
   }
 
-  /* Responsive */
-  @media (max-width: 720px) {
-    h2 {
-      font-size: 2.2rem;
-    }
-    section {
-      padding: 1.5rem 1.5rem;
-    }
-    ul li {
-      font-size: 1rem;
-      padding-left: 1.5rem;
-    }
+  .css-1vcqbmk {
+    position: relative;
+    overflow: hidden;
+    border-radius: var(--top-gg-radii-md);
+    background-color: var(--top-gg-color-bg);
   }
+
+  .css-1vcqbmk:before {
+      content: '';
+      position: absolute;
+      width: 100px;
+      height: 100%;
+      background-image: linear-gradient(120deg, rgba(255, 255, 255, 0) 30%, rgba(255, 255, 255, .8), rgba(255, 255, 255, 0) 70%);
+      top: 0;
+      left: -100px;
+      animation: shine 3s infinite linear;
+      z-index: 1;
+      opacity: .55;
+      pointer-events: none;
+  }
+
+  @keyframes shine {
+      0% {left: -100px}
+      20% {left: 100%}
+      100% {left: 100%}
+  }
+
 </style>
 
 <div class="container">
