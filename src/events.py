@@ -77,7 +77,7 @@ async def on_raw_reaction(message: discord.RawReactionActionEvent, bot: discord.
         await utils.validate_message(message, bot, message_collection, reaction_threshold, post_due_date,
                                      target_channel_id, ignore_bot_messages, hide_hof_post_below_threshold)
     except Exception as e:
-        if "Unknown Message" in str(e):
+        if "Unknown Message" in str(e) or "object has no attribute" in str(e):
             return
         if message_collection.find_one({"guild_id": int(message.guild_id)}):
             await utils.error_logging(bot, f"Error in reaction event: {e}", message.guild_id)
