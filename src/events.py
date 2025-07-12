@@ -77,7 +77,7 @@ async def on_raw_reaction(message: discord.RawReactionActionEvent, bot: discord.
         await utils.validate_message(message, bot, message_collection, reaction_threshold, post_due_date,
                                      target_channel_id, ignore_bot_messages, hide_hof_post_below_threshold)
     except Exception as e:
-        if "Unknown Message" in str(e):
+        if "Unknown Message" in str(e) or "object has no attribute" in str(e):
             return
         if message_collection.find_one({"guild_id": int(message.guild_id)}):
             await utils.error_logging(bot, f"Error in reaction event: {e}", message.guild_id)
@@ -102,16 +102,17 @@ async def on_message(message, bot: discord.Client, target_channel_id, allow_mess
     await msg.delete()
 
 
-async def guild_join(server, db_client, bot):
+async def guild_join(server, db_client, bot, custom_channel: discord.TextChannel = None):
     """
     Event handler for when the bot is added to a server
     :param server:
     :param db_client:
     :param bot:
+    :param custom_channel: Optional custom channel ID for the Hall of Fame channel
     :return:
     """
     try:
-        return await utils.create_database_context(bot, server, db_client)
+        return await utils.create_database_context(bot, server, db_client, custom_channel)
     except Exception as e:
         await utils.error_logging(bot, f"Failed to create database context for server {server.name}: {e}", server.id)
         try:

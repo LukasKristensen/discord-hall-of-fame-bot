@@ -424,13 +424,13 @@ def check_video_extension(message):
     return None
 
 
-async def create_database_context(bot, server, db_client, reaction_threshold_default: int = 7):
+async def create_database_context(bot, server, db_client, custom_channel: discord.TextChannel = None):
     """
     Create a database context for the server
     :param bot: The Discord bot
     :param server: The server object
     :param db_client: The MongoDB client
-    :param reaction_threshold_default: The default reaction threshold for a message to be posted in the Hall of Fame
+    :param custom_channel: Optional custom channel for the Hall of Fame channel
     :return: The database context
     """
     db_server_configs = db_client["server_configs"]
@@ -450,15 +450,13 @@ async def create_database_context(bot, server, db_client, reaction_threshold_def
         await error_logging(bot, f"Server {server.name} already exists in the database, dropping it to recreate", server.id)
         delete_database_context(server.id, db_client)
 
-    # Create a new channel for the Hall of Fame
-    hall_of_fame_channel = await server.create_text_channel("hall-of-fame")
-    await hall_of_fame_channel.edit(
-        topic="Patch notes for Hall Of Fame: https://discord.gg/GmFtfySetp",
-        reason="Creating Hall of Fame channel"
-    )
+    hall_of_fame_channel = custom_channel or await server.create_text_channel("hall-of-fame")
 
-    # Set the permissions for the Hall of Fame channel to only allow the bot to write messages
     if server.me.guild_permissions.manage_channels:
+        await hall_of_fame_channel.edit(
+            topic="Patch notes for Hall Of Fame: https://discord.gg/GmFtfySetp",
+            reason="Creating Hall of Fame channel"
+        )
         await hall_of_fame_channel.set_permissions(server.me, read_messages=True, send_messages=True)
         await hall_of_fame_channel.set_permissions(server.default_role, read_messages=True, send_messages=False)
 
