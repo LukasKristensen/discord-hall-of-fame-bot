@@ -433,17 +433,48 @@ async def get_server_stats(interaction: discord.Interaction):
     await utils.error_logging(bot, f"Get server stats command used by {interaction.user.name} in {interaction.guild.name}", interaction.guild.id)
 
 
-async def check_if_user_has_manage_server_permission(interaction: discord.Interaction):
+@tree.command(name="set_hall_of_fame_channel", description="Manually set the Hall of Fame channel for the server")
+async def set_hall_of_fame_channel(interaction: discord.Interaction, channel: discord.TextChannel):
+    """
+    Set the Hall of Fame channel for the server
+    :param interaction: The interaction object
+    :param channel: The channel to set as the Hall of Fame channel
+    """
+    if not await check_if_user_has_manage_server_permission(interaction, False):
+        return
+
+    if not channel.permissions_for(interaction.guild.me).send_messages:
+        await interaction.response.send_message("I do not have permission to send messages in this channel.")
+        await utils.error_logging(bot, f"User {interaction.user.name} tried to set Hall of Fame channel without write permissions in {interaction.guild.name}", interaction.guild.id, str(channel.id))
+        return
+
+    if interaction.guild_id not in server_classes or server_classes[interaction.guild_id] is None:
+        new_server_class = await events.guild_join(interaction.guild, production_db, bot, channel)
+        if new_server_class is None:
+            return
+        server_classes[interaction.guild_id] = new_server_class
+    else:
+        server_class = server_classes[interaction.guild_id]
+        server_class.hall_of_fame_channel_id = channel.id
+
+    server_config = production_db['server_configs']
+    server_config.update_one({"guild_id": int(interaction.guild_id)}, {"$set": {"hall_of_fame_channel_id": channel.id}})
+    await interaction.response.send_message(f"Hall of Fame channel set to {channel.mention}")
+    await utils.error_logging(bot, f"Set Hall of Fame channel command used by {interaction.user.name} in {interaction.guild.name}", interaction.guild.id, str(channel.id))
+
+
+async def check_if_user_has_manage_server_permission(interaction: discord.Interaction, check_server_set_up: bool = True):
     """
     Check if the user has manage server permission
     :param interaction:
+    :param check_server_set_up: Whether to check if the server is set up
     :return: True if the user has manage server permission
     """
     if not interaction.user.guild_permissions.manage_guild:
         await interaction.response.send_message(messages.NOT_AUTHORIZED)
         await utils.error_logging(bot, f"User {interaction.user.name} does not have manage server permission", interaction.guild_id)
         return False
-    if len(server_classes) > 1 and (interaction.guild_id not in server_classes or server_classes[interaction.guild_id] is None):
+    if check_server_set_up and len(server_classes) > 1 and (interaction.guild_id not in server_classes or server_classes[interaction.guild_id] is None):
         await interaction.response.send_message(messages.ERROR_SERVER_NOT_SETUP)
         return False
     return True

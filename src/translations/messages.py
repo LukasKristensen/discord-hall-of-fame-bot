@@ -31,10 +31,10 @@ SERVER_CONFIG = (
     "Hide hall of fame posts when they are below the threshold: {hide_hof_post_below_threshold}\n"
     "Custom Emoji Check Logic: {custom_emoji_check_logic}\n"
 )
-FAILED_SETUP_HOF = ("Failed to setup Hall Of Fame for server {serverName}. This may be due to missing permissions, "
-                    "try re-inviting the bot with the correct permissions. Giving the permissions after the bot has "
-                    "joined will not work. "
-                    "If the problem persists, please contact support. https://discord.gg/r98WC5GHcn")
+FAILED_SETUP_HOF = ("Failed to setup Hall Of Fame for server {serverName}.\n"
+                    "This may be due to missing permissions, try re-inviting the bot with the correct permissions.\n"
+                    "If the problem persists, please contact support. https://discord.gg/r98WC5GHcn\n"
+                    "Want to setup the Hall Of Fame manually? Use the /set_hall_of_fame_channel command.")
 ERROR_SERVER_NOT_SETUP = ("The server is not set up yet. Try re-inviting the bot with the correct permissions it is "
                           "asking for in the server join message. Giving the permissions after the bot has joined will "
                           "not work.")

@@ -102,16 +102,17 @@ async def on_message(message, bot: discord.Client, target_channel_id, allow_mess
     await msg.delete()
 
 
-async def guild_join(server, db_client, bot):
+async def guild_join(server, db_client, bot, custom_channel: discord.TextChannel = None):
     """
     Event handler for when the bot is added to a server
     :param server:
     :param db_client:
     :param bot:
+    :param custom_channel: Optional custom channel ID for the Hall of Fame channel
     :return:
     """
     try:
-        return await utils.create_database_context(bot, server, db_client)
+        return await utils.create_database_context(bot, server, db_client, custom_channel)
     except Exception as e:
         await utils.error_logging(bot, f"Failed to create database context for server {server.name}: {e}", server.id)
         try:
