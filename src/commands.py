@@ -61,7 +61,7 @@ async def get_help(interaction: discord.Interaction):
     embed.add_field(name="</hide_hof_post_below_threshold:1379918311197769800>", value="Should hall of fame posts be hidden when they go below the reaction threshold? (Will be visible again when they reach the threshold again)", inline=False)
     embed.add_field(name="</calculation_method:1378150000600678440>", value="Change the calculation method for reactions", inline=False)
     embed.add_field(name="</get_user_profile:1380288217432985781>", value="Get the Hall of Fame profile for a user", inline=False)
-    embed.add_field(name="<set_hall_of_fame_channel:1393576242237804768>", value="Manually set the Hall of Fame channel for the server", inline=False)
+    embed.add_field(name="</set_hall_of_fame_channel:1393576242237804768>", value="Manually set the Hall of Fame channel for the server", inline=False)
     embed.add_field(name="</feedback:1345567421834068060>", value="Got a feature request or bug report? Let us know!", inline=False)
     embed.add_field(name="</vote:1357399188526334074>", value="Support the bot by voting for it on top.gg: https://top.gg/bot/1177041673352663070/vote", inline=False)
     embed.add_field(name="", value="", inline=True)
