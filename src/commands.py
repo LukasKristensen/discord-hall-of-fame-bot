@@ -150,15 +150,14 @@ async def user_server_profile(interaction, user, user_stats, db_client, month_em
         embed.add_field(name="", value="", inline=False)
         embed.add_field(name="🌟 **Total Hall of Fame Messages**", value="**0**", inline=False)
     embed.set_thumbnail(url=user.display_avatar.url)
-    embed.set_footer(text="Keep contributing to the Hall of Fame!")
+    embed.set_footer(text="Note that this is calculated every 24 hours, so it may not be up to date.")
     await interaction.response.send_message(embed=embed)
 
 
-async def get_server_stats(interaction: discord.Interaction, server_class, db_client, month_emoji: str, all_time_emoji: str, guild):
+async def get_server_stats(interaction: discord.Interaction, db_client, month_emoji: str, all_time_emoji: str, guild):
     """
     Command to get the Hall of Fame statistics for the server
     :param interaction:
-    :param server_class:
     :param db_client:
     :param month_emoji:
     :param all_time_emoji:
