@@ -85,7 +85,7 @@ async def daily_task():
              "total_users": total_server_members})
 
     await bot.change_presence(activity=discord.CustomActivity(name=f'🏆 Hall of Fame - {total_server_members} users', type=5))
-    await post_topgg_stats()
+    await post_api_bot_stats()
 
 
 @bot.event
@@ -150,7 +150,7 @@ async def on_guild_join(server):
     if new_server_class is None:
         return
     server_classes[server.id] = new_server_class
-    await post_topgg_stats()
+    await post_api_bot_stats()
 
 
 @bot.event
@@ -162,7 +162,7 @@ async def on_guild_remove(server):
     await events.guild_remove(server, production_db)
     if server.id in server_classes:
         del server_classes[server.id]
-    await post_topgg_stats()
+    await post_api_bot_stats()
 
 
 @tree.command(name="help", description="List of commands")
@@ -428,8 +428,7 @@ async def get_server_stats(interaction: discord.Interaction):
         await interaction.response.send_message(messages.ERROR_SERVER_NOT_SETUP)
         return
 
-    server_class = server_classes[interaction.guild_id]
-    await commands.get_server_stats(interaction, server_class, production_db, month_emoji, all_time_emoji, interaction.guild)
+    await commands.get_server_stats(interaction, production_db, month_emoji, all_time_emoji, interaction.guild)
     await utils.error_logging(bot, f"Get server stats command used by {interaction.user.name} in {interaction.guild.name}", interaction.guild.id)
 
 
@@ -493,9 +492,9 @@ async def check_if_dev_user(interaction: discord.Interaction):
     return True
 
 
-async def post_topgg_stats():
+async def post_api_bot_stats():
     """
-    Post the bot stats to top.gg
+    Post the bot stats to the API services
     """
     if dev_test:
         return
