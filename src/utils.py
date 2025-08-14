@@ -101,7 +101,17 @@ async def update_reaction_counter(message: discord.Message, collection, bot: dis
     embed = hall_of_fame_message.embeds[0]
     corrected_reactions = await reaction_count(message)
 
-    embed.set_field_at(index=0, name=f"{corrected_reactions} Reactions ", value=most_reacted_emoji(message.reactions)[0].emoji, inline=True)
+    # embed.set_field_at(index=0, name=f"{corrected_reactions} Reactions ", value=most_reacted_emoji(message.reactions)[0].emoji, inline=True)
+    for i, field in enumerate(embed.fields):
+        if field.name.endswith("Reactions"):
+            embed.set_field_at(
+                index=i,
+                name=f"{corrected_reactions} Reactions ",
+                value=most_reacted_emoji(message.reactions)[0].emoji,
+                inline=True
+            )
+            break
+
     await hall_of_fame_message.edit(embed=embed)
 
 
@@ -301,7 +311,7 @@ async def create_embed(message: discord.Message, reaction_threshold: int):
         embed.add_field(name=f"{reference_message.author.name}'s message:", value=reference_message.content, inline=False)
 
         corrected_reactions = await reaction_count(message)
-        embed.add_field(name=f"{corrected_reactions} Reactions ", value=most_reacted_emoji(message.reactions)[0].emoji, inline=True)
+        embed.add_field(name=f"{corrected_reactions} Reactions", value=most_reacted_emoji(message.reactions)[0].emoji, inline=True)
         embed.add_field(name="Jump to Message", value=message.jump_url, inline=False)
 
         embed = await set_footer(embed)
@@ -318,7 +328,7 @@ async def create_embed(message: discord.Message, reaction_threshold: int):
         embed.set_image(url=sticker.url)
         embed.set_author(name=message.author.name, icon_url=message.author.avatar.url if message.author.avatar else None)
         corrected_reactions = await reaction_count(message)
-        embed.add_field(name=f"{corrected_reactions} Reactions ", value=most_reacted_emoji(message.reactions)[0].emoji, inline=True)
+        embed.add_field(name=f"{corrected_reactions} Reactions", value=most_reacted_emoji(message.reactions)[0].emoji, inline=True)
         embed.add_field(name="Jump to Message", value=message.jump_url, inline=False)
         embed = await set_footer(embed)
         return embed
@@ -336,7 +346,7 @@ async def create_embed(message: discord.Message, reaction_threshold: int):
 
         corrected_reactions = await reaction_count(message)
         if reference_message.attachments:
-            embed.add_field(name=f"{corrected_reactions} Reactions ", value=top_reaction[0].emoji, inline=True)
+            embed.add_field(name=f"{corrected_reactions} Reactions", value=top_reaction[0].emoji, inline=True)
             embed.add_field(name="Jump to Message", value=message.jump_url, inline=False)
 
             # Author of the original message
@@ -351,7 +361,7 @@ async def create_embed(message: discord.Message, reaction_threshold: int):
             # Author of the original message
             embed.add_field(name=f"{message.author.name}'s reply:", value=message.content, inline=False)
 
-            embed.add_field(name=f"{corrected_reactions} Reactions ", value=top_reaction[0].emoji, inline=True)
+            embed.add_field(name=f"{corrected_reactions} Reactions", value=top_reaction[0].emoji, inline=True)
             embed.add_field(name="Jump to Message", value=message.jump_url, inline=False)
         embed = await set_footer(embed)
         return embed
@@ -370,7 +380,7 @@ async def create_embed(message: discord.Message, reaction_threshold: int):
 
         corrected_reactions = await reaction_count(message)
 
-        embed.add_field(name=f"{corrected_reactions} Reactions ", value=top_reaction[0].emoji, inline=True)
+        embed.add_field(name=f"{corrected_reactions} Reactions", value=top_reaction[0].emoji, inline=True)
         embed.add_field(name="Jump to Message", value=message.jump_url, inline=False)
 
         # Original message
@@ -400,7 +410,7 @@ async def create_embed(message: discord.Message, reaction_threshold: int):
             embed.set_image(url=message.attachments[0].url)
 
         corrected_reactions = await reaction_count(message)
-        embed.add_field(name=f"{corrected_reactions} Reactions ", value=top_reaction[0].emoji, inline=True)
+        embed.add_field(name=f"{corrected_reactions} Reactions", value=top_reaction[0].emoji, inline=True)
         embed.add_field(name="Jump to Message", value=message.jump_url, inline=False)
 
         embed = await set_footer(embed)
