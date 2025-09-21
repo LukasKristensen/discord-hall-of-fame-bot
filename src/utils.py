@@ -267,13 +267,13 @@ async def post_hall_of_fame_message(message: discord.Message, bot: discord.Clien
 
     try:
         result = collection.insert_one({"message_id": int(message.id),
-                               "channel_id": int(message.channel.id),
-                               "guild_id": int(message.guild.id),
-                               "hall_of_fame_message_id": int(hall_of_fame_message.id),
-                               "reaction_count": int(await reaction_count(message)),
-                               "video_link_message_id": int(video_message.id) if video_link else None,
-                               "created_at": datetime.datetime.now(timezone.utc),
-                               "author_id": int(message.author.id)})
+                                        "channel_id": int(message.channel.id),
+                                        "guild_id": int(message.guild.id),
+                                        "hall_of_fame_message_id": int(hall_of_fame_message.id),
+                                        "reaction_count": int(await reaction_count(message)),
+                                        "video_link_message_id": int(video_message.id) if video_link else None,
+                                        "created_at": datetime.datetime.now(timezone.utc),
+                                        "author_id": int(message.author.id)})
         if not result.acknowledged:
             raise Exception(f"Failed to insert message {message.id} into database")
     except Exception as e:
@@ -303,10 +303,15 @@ async def create_embed(message: discord.Message, reaction_threshold: int):
     :param reaction_threshold: The minimum number of reactions for a message to be posted in the Hall of Fame
     :return: The embed for the message
     """
+    # handle 1024 character limit on embed description
+    message.content = message.content[:1021] + "..." if len(message.content) > 1024 else message.content
+    reference_message = None
+    if message.reference:
+        reference_message = await message.channel.fetch_message(message.reference.message_id)
+        reference_message.content = reference_message.content[:1021] + "..." if len(reference_message.content) > 1024 else reference_message.content
 
     # Check if the message is a sticker and has a reference
     if message.reference and message.stickers:
-        reference_message = await message.channel.fetch_message(message.reference.message_id)
         sticker = message.stickers[0]
         embed = discord.Embed(
             title=f"Sticker from {message.author.name} replying to {reference_message.author.name}'s message",
@@ -343,7 +348,6 @@ async def create_embed(message: discord.Message, reaction_threshold: int):
 
     # Check if the message is a reply to another message
     elif message.reference and not message.attachments:
-        reference_message = await message.channel.fetch_message(message.reference.message_id)
         embed = discord.Embed(
             title=f"{message.author.name} replied to {reference_message.author.name}'s message",
             color=discord.Color.gold()
@@ -376,8 +380,6 @@ async def create_embed(message: discord.Message, reaction_threshold: int):
 
     # Include the reference message in the embed if the message has both a reference and attachments
     elif message.reference and message.attachments:
-        reference_message = await message.channel.fetch_message(message.reference.message_id)
-
         embed = discord.Embed(
             title=f"{message.author.name} replied to {reference_message.author.name}'s message",
             color=discord.Color.gold()
