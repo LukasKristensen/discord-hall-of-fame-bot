@@ -265,14 +265,22 @@ async def post_hall_of_fame_message(message: discord.Message, bot: discord.Clien
     embed = await create_embed(message, reaction_threshold)
     hall_of_fame_message = await target_channel.send(embed=embed)
 
-    collection.insert_one({"message_id": int(message.id),
-                           "channel_id": int(message.channel.id),
-                           "guild_id": int(message.guild.id),
-                           "hall_of_fame_message_id": int(hall_of_fame_message.id),
-                           "reaction_count": int(await reaction_count(message)),
-                           "video_link_message_id": int(video_message.id) if video_link else None,
-                           "created_at": datetime.datetime.now(timezone.utc),
-                           "author_id": int(message.author.id)})
+    try:
+        result = collection.insert_one({"message_id": int(message.id),
+                                        "channel_id": int(message.channel.id),
+                                        "guild_id": int(message.guild.id),
+                                        "hall_of_fame_message_id": int(hall_of_fame_message.id),
+                                        "reaction_count": int(await reaction_count(message)),
+                                        "video_link_message_id": int(video_message.id) if video_link else None,
+                                        "created_at": datetime.datetime.now(timezone.utc),
+                                        "author_id": int(message.author.id)})
+        if not result.acknowledged:
+            raise Exception(f"Failed to insert message {message.id} into database")
+    except Exception as e:
+        await hall_of_fame_message.delete()
+        if video_message:
+            await video_message.delete()
+        await error_logging(bot, e, message.guild.id, ping_developer=True)
 
 
 async def set_footer(embed: discord.Embed):
@@ -295,10 +303,15 @@ async def create_embed(message: discord.Message, reaction_threshold: int):
     :param reaction_threshold: The minimum number of reactions for a message to be posted in the Hall of Fame
     :return: The embed for the message
     """
+    # handle 1024 character limit on embed description
+    message.content = message.content[:1021] + "..." if len(message.content) > 1024 else message.content
+    reference_message = None
+    if message.reference:
+        reference_message = await message.channel.fetch_message(message.reference.message_id)
+        reference_message.content = reference_message.content[:1021] + "..." if len(reference_message.content) > 1024 else reference_message.content
 
     # Check if the message is a sticker and has a reference
     if message.reference and message.stickers:
-        reference_message = await message.channel.fetch_message(message.reference.message_id)
         sticker = message.stickers[0]
         embed = discord.Embed(
             title=f"Sticker from {message.author.name} replying to {reference_message.author.name}'s message",
@@ -335,7 +348,6 @@ async def create_embed(message: discord.Message, reaction_threshold: int):
 
     # Check if the message is a reply to another message
     elif message.reference and not message.attachments:
-        reference_message = await message.channel.fetch_message(message.reference.message_id)
         embed = discord.Embed(
             title=f"{message.author.name} replied to {reference_message.author.name}'s message",
             color=discord.Color.gold()
@@ -368,8 +380,6 @@ async def create_embed(message: discord.Message, reaction_threshold: int):
 
     # Include the reference message in the embed if the message has both a reference and attachments
     elif message.reference and message.attachments:
-        reference_message = await message.channel.fetch_message(message.reference.message_id)
-
         embed = discord.Embed(
             title=f"{message.author.name} replied to {reference_message.author.name}'s message",
             color=discord.Color.gold()
@@ -593,7 +603,7 @@ async def send_server_owner_error_message(owner, e, bot):
             await error_logging(bot, f"Failed to send error message to server owner {owner.name}: {history_error}")
 
 
-async def error_logging(bot: discord.Client, message, server_id=None, new_value=None, log_type="error"):
+async def error_logging(bot: discord.Client, message, server_id=None, new_value=None, log_type="error", ping_developer=False):
     """
     Log an error message to the error channel
     :param bot:
@@ -601,6 +611,7 @@ async def error_logging(bot: discord.Client, message, server_id=None, new_value=
     :param server_id: The ID of the server
     :param new_value: The new value of the server configuration
     :param log_type: The type of log (e.g. "error", "info")
+    :param ping_developer: Whether to ping the developer
     :return:
     """
     system_channel_id = 1373699890718441482 if bot.application_id == 1177041673352663070 else 1383834858870145214
@@ -609,16 +620,17 @@ async def error_logging(bot: discord.Client, message, server_id=None, new_value=
     target_guild = bot.get_guild(1180006529575960616)
     system_channel = bot.get_channel(system_channel_id)
     error_channel = target_guild.get_channel(error_channel)
-    logging_message = f"{datetime.datetime.now()}: {message}"
+    date_formatted_message = f"{datetime.datetime.now()}: {message}"
+    error_logging_message = "<@230698327589650432> " if ping_developer else ""
 
     if server_id:
-        logging_message += f"\n[Server ID: {server_id}]"
+        date_formatted_message += f"\n[Server ID: {server_id}]"
     if new_value:
-        logging_message += f"\n[New value: {new_value}]"
+        date_formatted_message += f"\n[New value: {new_value}]"
     if log_type == "error":
-        await error_channel.send(f"```diff\n{logging_message}\n```")
+        await error_channel.send(error_logging_message + f"```diff\n{date_formatted_message}\n```")
     elif log_type == "system":
-        await system_channel.send(f"```diff\n{logging_message}\n```")
+        await system_channel.send(error_logging_message + f"```diff\n{date_formatted_message}\n```")
 
 
 async def create_feedback_form(interaction: discord.Interaction, bot):

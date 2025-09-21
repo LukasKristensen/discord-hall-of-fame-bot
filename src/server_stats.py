@@ -117,7 +117,32 @@ def create_plot_server_count_and_total_members():
     plt.show()
 
 
+def create_bubble_chart(server_stats):
+    filtered_stats = [
+        stat for stat in server_stats
+        if isinstance(stat['reaction_threshold'], (int, float)) and isinstance(stat['server_member_count'], (int, float))
+        and stat['reaction_threshold'] <= stat['server_member_count']
+    ]
+
+    reaction_thresholds = [stat['reaction_threshold'] for stat in filtered_stats]
+    member_counts = [
+        int(stat['server_member_count']) if str(stat['server_member_count']).isdigit() else 0
+        for stat in filtered_stats
+    ]
+    message_counts = [stat['message_count'] for stat in filtered_stats]
+
+    plt.figure(figsize=(10, 6))
+    scatter = plt.scatter(reaction_thresholds, member_counts, s=[count * 3 for count in message_counts], alpha=0.5)
+    plt.xlabel('Reaction Thresholds')
+    plt.legend(*scatter.legend_elements(), title="Message Count")
+    plt.ylabel('Member Counts')
+    plt.title('Bubble Chart of Reaction Thresholds vs Member Counts (Bubble Size = Message Count)')
+    plt.grid(True)
+    plt.show()
+
+
 create_plot_server_count_and_total_members()
 create_bot_stats_plot()
 create_plot(server_stats)
 create_plot_where_msg_count_greater_than_zero(server_stats)
+create_bubble_chart(server_stats)
