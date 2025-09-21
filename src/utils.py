@@ -265,14 +265,22 @@ async def post_hall_of_fame_message(message: discord.Message, bot: discord.Clien
     embed = await create_embed(message, reaction_threshold)
     hall_of_fame_message = await target_channel.send(embed=embed)
 
-    collection.insert_one({"message_id": int(message.id),
-                           "channel_id": int(message.channel.id),
-                           "guild_id": int(message.guild.id),
-                           "hall_of_fame_message_id": int(hall_of_fame_message.id),
-                           "reaction_count": int(await reaction_count(message)),
-                           "video_link_message_id": int(video_message.id) if video_link else None,
-                           "created_at": datetime.datetime.now(timezone.utc),
-                           "author_id": int(message.author.id)})
+    try:
+        result = collection.insert_one({"message_id": int(message.id),
+                               "channel_id": int(message.channel.id),
+                               "guild_id": int(message.guild.id),
+                               "hall_of_fame_message_id": int(hall_of_fame_message.id),
+                               "reaction_count": int(await reaction_count(message)),
+                               "video_link_message_id": int(video_message.id) if video_link else None,
+                               "created_at": datetime.datetime.now(timezone.utc),
+                               "author_id": int(message.author.id)})
+        if not result.acknowledged:
+            raise Exception(f"Failed to insert message {message.id} into database")
+    except Exception as e:
+        await hall_of_fame_message.delete()
+        if video_message:
+            await video_message.delete()
+        await error_logging(bot, e, message.guild.id, ping_developer=True)
 
 
 async def set_footer(embed: discord.Embed):
@@ -593,7 +601,7 @@ async def send_server_owner_error_message(owner, e, bot):
             await error_logging(bot, f"Failed to send error message to server owner {owner.name}: {history_error}")
 
 
-async def error_logging(bot: discord.Client, message, server_id=None, new_value=None, log_type="error"):
+async def error_logging(bot: discord.Client, message, server_id=None, new_value=None, log_type="error", ping_developer=False):
     """
     Log an error message to the error channel
     :param bot:
@@ -601,6 +609,7 @@ async def error_logging(bot: discord.Client, message, server_id=None, new_value=
     :param server_id: The ID of the server
     :param new_value: The new value of the server configuration
     :param log_type: The type of log (e.g. "error", "info")
+    :param ping_developer: Whether to ping the developer
     :return:
     """
     system_channel_id = 1373699890718441482 if bot.application_id == 1177041673352663070 else 1383834858870145214
@@ -609,16 +618,17 @@ async def error_logging(bot: discord.Client, message, server_id=None, new_value=
     target_guild = bot.get_guild(1180006529575960616)
     system_channel = bot.get_channel(system_channel_id)
     error_channel = target_guild.get_channel(error_channel)
-    logging_message = f"{datetime.datetime.now()}: {message}"
+    date_formatted_message = f"{datetime.datetime.now()}: {message}"
+    error_logging_message = "<@230698327589650432> " if ping_developer else ""
 
     if server_id:
-        logging_message += f"\n[Server ID: {server_id}]"
+        date_formatted_message += f"\n[Server ID: {server_id}]"
     if new_value:
-        logging_message += f"\n[New value: {new_value}]"
+        date_formatted_message += f"\n[New value: {new_value}]"
     if log_type == "error":
-        await error_channel.send(f"```diff\n{logging_message}\n```")
+        await error_channel.send(error_logging_message + f"```diff\n{date_formatted_message}\n```")
     elif log_type == "system":
-        await system_channel.send(f"```diff\n{logging_message}\n```")
+        await system_channel.send(error_logging_message + f"```diff\n{date_formatted_message}\n```")
 
 
 async def create_feedback_form(interaction: discord.Interaction, bot):
