@@ -615,11 +615,10 @@ async def error_logging(bot: discord.Client, message, server_id=None, new_value=
     :return:
     """
     system_channel_id = 1373699890718441482 if bot.application_id == 1177041673352663070 else 1383834858870145214
-    error_channel = 1344070396575617085 if bot.application_id == 1177041673352663070 else 1383834395726577765
+    error_channel_id = 1344070396575617085 if bot.application_id == 1177041673352663070 else 1383834395726577765
+    command_channel_id = 1436699144163954759 if bot.application_id == 1177041673352663070 else 1436699968571183106
 
     target_guild = bot.get_guild(1180006529575960616)
-    system_channel = bot.get_channel(system_channel_id)
-    error_channel = target_guild.get_channel(error_channel)
     date_formatted_message = f"{datetime.datetime.now()}: {message}"
     error_logging_message = "<@230698327589650432> " if ping_developer else ""
 
@@ -628,9 +627,14 @@ async def error_logging(bot: discord.Client, message, server_id=None, new_value=
     if new_value:
         date_formatted_message += f"\n[New value: {new_value}]"
     if log_type == "error":
-        await error_channel.send(error_logging_message + f"```diff\n{date_formatted_message}\n```")
+        error_channel_id = target_guild.get_channel(error_channel_id)
+        await error_channel_id.send(error_logging_message + f"```diff\n{date_formatted_message}\n```")
     elif log_type == "system":
+        system_channel = bot.get_channel(system_channel_id)
         await system_channel.send(error_logging_message + f"```diff\n{date_formatted_message}\n```")
+    elif log_type == "command":
+        command_channel = target_guild.get_channel(command_channel_id)
+        await command_channel.send(error_logging_message + f"```diff\n{date_formatted_message}\n```")
 
 
 async def create_feedback_form(interaction: discord.Interaction, bot):
