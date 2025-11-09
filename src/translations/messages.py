@@ -39,3 +39,4 @@ ERROR_SERVER_NOT_SETUP = ("The server is not set up yet. Try re-inviting the bot
                           "asking for in the server join message. Giving the permissions after the bot has joined will "
                           "not work.")
 BOT_LOADING = "Please wait while the bot is loading..."
+COMMAND_ON_COOLDOWN = "This command is on a daily cooldown. Please try again later."

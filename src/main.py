@@ -26,6 +26,7 @@ topgg_api_key = os.getenv('TOPGG_API_KEY')
 db_client = MongoClient(mongo_uri)
 production_db = db_client["production"]
 messages_processing = []
+daily_command_cooldowns = {}
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -73,6 +74,7 @@ async def daily_task():
     except Exception as e:
         await utils.logging(bot, f"Error in daily_task: {e}")
 
+    daily_command_cooldowns.clear()
     total_server_members = sum(server.member_count for server in bot.guilds)
     if not dev_test:
         db_client["bot_stats"]["total_messages"].insert_one(
@@ -444,6 +446,14 @@ async def leaderboard(interaction: discord.Interaction):
     if interaction.guild_id not in server_classes:
         await interaction.response.send_message(messages.ERROR_SERVER_NOT_SETUP)
         return
+
+    if interaction.guild_id in daily_command_cooldowns and "leaderboard" in daily_command_cooldowns[interaction.guild_id]:
+        await interaction.response.send_message(messages.COMMAND_ON_COOLDOWN)
+        return
+
+    if interaction.guild_id not in daily_command_cooldowns:
+        daily_command_cooldowns[interaction.guild_id] = []
+    daily_command_cooldowns[interaction.guild_id].append("leaderboard")
 
     try:
         await commands.server_leaderboard(interaction, production_db, month_emoji, all_time_emoji)
