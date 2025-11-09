@@ -445,7 +445,12 @@ async def server_leaderboard(interaction: discord.Interaction):
         await interaction.response.send_message(messages.ERROR_SERVER_NOT_SETUP)
         return
 
-    await commands.server_leaderboard(interaction, production_db, month_emoji, all_time_emoji)
+    try:
+        await commands.server_leaderboard(interaction, production_db, month_emoji, all_time_emoji)
+    except Exception as e:
+        await utils.logging(bot, f"Error in server_leaderboard command: {e}", interaction.guild_id)
+        return
+    
     await utils.logging(bot, f"Get server stats command used by {interaction.user.name} in {interaction.guild.name}",
                         interaction.guild.id, log_type=Log_type.COMMAND)
 
