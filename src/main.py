@@ -449,6 +449,8 @@ async def leaderboard(interaction: discord.Interaction):
 
     if interaction.guild_id in daily_command_cooldowns and "leaderboard" in daily_command_cooldowns[interaction.guild_id]:
         await interaction.response.send_message(messages.COMMAND_ON_COOLDOWN)
+        await utils.logging(bot, f"Leaderboard command on cooldown for {interaction.user.name} in {interaction.guild.name}",
+                            interaction.guild.id, log_type=Log_type.COMMAND)
         return
 
     if interaction.guild_id not in daily_command_cooldowns:
