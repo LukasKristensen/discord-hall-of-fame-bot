@@ -463,7 +463,7 @@ async def leaderboard(interaction: discord.Interaction):
         await utils.logging(bot, f"Error in leaderboard command: {e}", interaction.guild_id)
         return
     
-    await utils.logging(bot, f"Get server stats command used by {interaction.user.name} in {interaction.guild.name}",
+    await utils.logging(bot, f"Leaderboard command used by {interaction.user.name} in {interaction.guild.name}",
                         interaction.guild.id, log_type=Log_type.COMMAND)
 
 
