@@ -16,9 +16,9 @@ def run_migrations(production: bool = True):
     completed_migrations = []
 
     for file_name in os.listdir(migrations_folder):
-        print(f"Processing migration file: {file_name}")
         if not file_name.endswith(".py") or file_name == "__init__.py":
             continue
+        print(f"Processing migration file: {file_name}")
 
         module_name = f"{migrations_folder}.{file_name[:-3]}"
         migration_name = file_name[:-3]

@@ -163,7 +163,8 @@ async def daily_task(bot: discord.Client, db_client, server_classes, dev_testing
                 server_class.hall_of_fame_channel_id,
                 server_class.reaction_threshold)
         except Exception as e:
-            await utils.logging(bot, e, server_class.guild_id)
+            await utils.logging(bot, f"Error updating leaderboard for server {server_class.guild_id}: {e}",
+                                server_class.guild_id)
 
     await utils.logging(bot, f"Checking for db entries that are not in the guilds")
     for server in db_client["server_configs"].find():
