@@ -83,6 +83,11 @@ def post_command_list():
             "type": 1
         },
         {
+            "name": "leaderboard",
+            "description": "Get the Hall of Fame leaderboard for the server",
+            "type": 1
+        },
+        {
             "name": "feedback",
             "description": "Got a feature request or bug report? Let us know!",
             "type": 1

@@ -434,8 +434,8 @@ async def user_server_profile(interaction: discord.Interaction, specific_user: d
                         interaction.guild.id, str(user.id), log_type=Log_type.COMMAND)
 
 
-@tree.command(name="server_leaderboard", description="Get the server leaderboard")
-async def server_leaderboard(interaction: discord.Interaction):
+@tree.command(name="leaderboard", description="Get the server leaderboard")
+async def leaderboard(interaction: discord.Interaction):
     """
     Get the server leaderboard
     :param interaction: The interaction object
@@ -448,7 +448,7 @@ async def server_leaderboard(interaction: discord.Interaction):
     try:
         await commands.server_leaderboard(interaction, production_db, month_emoji, all_time_emoji)
     except Exception as e:
-        await utils.logging(bot, f"Error in server_leaderboard command: {e}", interaction.guild_id)
+        await utils.logging(bot, f"Error in leaderboard command: {e}", interaction.guild_id)
         return
     
     await utils.logging(bot, f"Get server stats command used by {interaction.user.name} in {interaction.guild.name}",
