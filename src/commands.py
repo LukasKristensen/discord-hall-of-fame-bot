@@ -160,43 +160,60 @@ async def user_server_profile(interaction, user, user_stats, db_client, month_em
     await interaction.response.send_message(embed=embed)
 
 
-async def get_server_stats(interaction: discord.Interaction, db_client, month_emoji: str, all_time_emoji: str, guild):
+async def server_leaderboard(interaction, db_client, month_emoji: str, all_time_emoji: str):
     """
-    Command to get the Hall of Fame statistics for the server
+    Command to get the Hall of Fame leaderboard for a server
     :param interaction:
     :param db_client:
     :param month_emoji:
     :param all_time_emoji:
-    :param guild:
     :return:
     """
-    server_users = db_client['server_users']
-    all_users = server_users.find({"guild_id": interaction.guild_id})
-    top_5_users_month = sorted(all_users, key=lambda x: x.get("this_month_hall_of_fame_messages", 0), reverse=True)[:5]
-    top_5_users_all_time = sorted(all_users, key=lambda x: x.get("total_hall_of_fame_messages", 0), reverse=True)[:5]
-    total_hall_of_fame_messages = sum(user.get("total_hall_of_fame_messages", 0) for user in all_users)
-    monthly_hall_of_fame_messages = sum(user.get("this_month_hall_of_fame_messages", 0) for user in all_users)
     embed = discord.Embed(
-        title=f"📊 {interaction.guild.name} Hall of Fame Statistics",
-        description="Here are the stats for the Hall of Fame in this server:",
-        color=discord.Color.gold()
+        title=f"📊 {interaction.guild.name} Hall of Fame Leaderboard",
+        description="Here are the top users in this server:",
+        color=discord.Color.blue()
     )
-    embed.add_field(name="🌟 **Total Hall of Fame Messages**",
-                    value=f"**{total_hall_of_fame_messages}**", inline=False)
-    embed.add_field(name="🏆 **This Month's Hall of Fame Messages**",
-                    value=f"**{monthly_hall_of_fame_messages}**", inline=False)
-    embed.add_field(name="", value="", inline=False)
-    embed.add_field(name=f"{month_emoji} **Top 5 Monthly Hall of Fame Users**", value="", inline=False)
-    for user in top_5_users_month:
-        user_info = guild.get_member(user["user_id"])
-        if user_info:
-            embed.add_field(name=f"{user_info.name}", value=f"**{user.get('this_month_hall_of_fame_messages', 0)}** messages", inline=True)
-    embed.add_field(name="", value="", inline=False)
-    embed.add_field(name=f"{all_time_emoji} **Top 5 All-Time Hall of Fame Users**", value="", inline=False)
-    for user in top_5_users_all_time:
-        user_info = guild.get_member(user["user_id"])
-        if user_info:
-            embed.add_field(name=f"{user_info.name}", value=f"**{user.get('total_hall_of_fame_messages', 0)}** messages", inline=True)
-    embed.set_thumbnail(url=interaction.guild.icon.url if interaction.guild.icon else "")
-    embed.set_footer(text="Enjoying the bot? Consider voting for it on top.gg! (https://top.gg/bot/1177041673352663070/vote)")
+
+    # Consolidated Leaderboard
+    leaderboard = ""
+
+    # Top 5 This Month's Hall of Fame Messages
+    top_monthly = db_client['server_users'].find({"guild_id": interaction.guild_id}).sort(
+        "this_month_hall_of_fame_messages", -1).limit(5)
+    leaderboard += f"{month_emoji} **Top 5 This Month's Hall of Fame Messages**\n"
+    for rank, user in enumerate(top_monthly, start=1):
+        member = await interaction.guild.fetch_member(int(user["user_id"]))
+        if member:
+            leaderboard += f"{rank}. {member.name}: {user.get('this_month_hall_of_fame_messages', 0)} messages\n"
+
+    # Top 5 All-Time Hall of Fame Messages
+    top_all_time = db_client['server_users'].find({"guild_id": interaction.guild_id}).sort(
+        "total_hall_of_fame_messages", -1).limit(5)
+    leaderboard += f"\n{all_time_emoji} **Top 5 All-Time Hall of Fame Messages**\n"
+    for rank, user in enumerate(top_all_time, start=1):
+        member = await interaction.guild.fetch_member(int(user["user_id"]))
+        if member:
+            leaderboard += f"{rank}. {member.name}: {user.get('total_hall_of_fame_messages', 0)} messages\n"
+
+    # Top 5 This Month's Reactions
+    top_monthly_reactions = db_client['server_users'].find({"guild_id": interaction.guild_id}).sort(
+        "this_month_hall_of_fame_message_reactions", -1).limit(5)
+    leaderboard += f"\n💬 **Top 5 This Month's Reactions**\n"
+    for rank, user in enumerate(top_monthly_reactions, start=1):
+        member = await interaction.guild.fetch_member(int(user["user_id"]))
+        if member:
+            leaderboard += f"{rank}. {member.name}: {user.get('this_month_hall_of_fame_message_reactions', 0)} reactions\n"
+
+    # Top 5 All-Time Reactions
+    top_all_time_reactions = db_client['server_users'].find({"guild_id": interaction.guild_id}).sort(
+        "total_hall_of_fame_message_reactions", -1).limit(5)
+    leaderboard += f"\n💬 **Top 5 All-Time Reactions**\n"
+    for rank, user in enumerate(top_all_time_reactions, start=1):
+        member = await interaction.guild.fetch_member(int(user["user_id"]))
+        if member:
+            leaderboard += f"{rank}. {member.name}: {user.get('total_hall_of_fame_message_reactions', 0)} reactions\n"
+
+    embed.add_field(name="Leaderboard", value=leaderboard, inline=False)
+    embed.set_footer(text="Note that this is calculated every 24 hours, so it may not be up to date.")
     await interaction.response.send_message(embed=embed)

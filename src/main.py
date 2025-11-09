@@ -434,10 +434,10 @@ async def user_server_profile(interaction: discord.Interaction, specific_user: d
                         interaction.guild.id, str(user.id), log_type=Log_type.COMMAND)
 
 
-# disabled until members intent is enabled
-async def get_server_stats(interaction: discord.Interaction):
+@tree.command(name="server_leaderboard", description="Get the server leaderboard")
+async def server_leaderboard(interaction: discord.Interaction):
     """
-    Get the server stats
+    Get the server leaderboard
     :param interaction: The interaction object
     :return: The server stats
     """
@@ -445,7 +445,7 @@ async def get_server_stats(interaction: discord.Interaction):
         await interaction.response.send_message(messages.ERROR_SERVER_NOT_SETUP)
         return
 
-    await commands.get_server_stats(interaction, production_db, month_emoji, all_time_emoji, interaction.guild)
+    await commands.server_leaderboard(interaction, production_db, month_emoji, all_time_emoji)
     await utils.logging(bot, f"Get server stats command used by {interaction.user.name} in {interaction.guild.name}",
                         interaction.guild.id, log_type=Log_type.COMMAND)
 
