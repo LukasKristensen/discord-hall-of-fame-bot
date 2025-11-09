@@ -186,37 +186,45 @@ async def server_leaderboard(interaction, db_client, month_emoji: str, all_time_
         "this_month_hall_of_fame_messages", -1).limit(5)
     leaderboard += f"{month_emoji} **Top 5 This Month's Hall of Fame Messages**\n"
     for rank, user in enumerate(top_monthly, start=1):
-        member = await interaction.guild.fetch_member(int(user["user_id"]))
-        if member:
+        try:
+            member = await interaction.guild.fetch_member(int(user["user_id"]))
             leaderboard += f"{rank}. {member.name}: {user.get('this_month_hall_of_fame_messages', 0)} messages\n"
+        except discord.NotFound:
+            leaderboard += f"{rank}. Unknown Member: {user.get('this_month_hall_of_fame_messages', 0)} messages\n"
 
     # Top 5 All-Time Hall of Fame Messages
     top_all_time = db_client['server_users'].find({"guild_id": interaction.guild_id}).sort(
         "total_hall_of_fame_messages", -1).limit(5)
     leaderboard += f"\n{all_time_emoji} **Top 5 All-Time Hall of Fame Messages**\n"
     for rank, user in enumerate(top_all_time, start=1):
-        member = await interaction.guild.fetch_member(int(user["user_id"]))
-        if member:
+        try:
+            member = await interaction.guild.fetch_member(int(user["user_id"]))
             leaderboard += f"{rank}. {member.name}: {user.get('total_hall_of_fame_messages', 0)} messages\n"
+        except discord.NotFound:
+            leaderboard += f"{rank}. Unknown Member: {user.get('total_hall_of_fame_messages', 0)} messages\n"
 
     # Top 5 This Month's Reactions
     top_monthly_reactions = db_client['server_users'].find({"guild_id": interaction.guild_id}).sort(
         "this_month_hall_of_fame_message_reactions", -1).limit(5)
     leaderboard += f"\n💬 **Top 5 This Month's Reactions**\n"
     for rank, user in enumerate(top_monthly_reactions, start=1):
-        member = await interaction.guild.fetch_member(int(user["user_id"]))
-        if member:
+        try:
+            member = await interaction.guild.fetch_member(int(user["user_id"]))
             leaderboard += f"{rank}. {member.name}: {user.get('this_month_hall_of_fame_message_reactions', 0)} reactions\n"
+        except discord.NotFound:
+            leaderboard += f"{rank}. Unknown Member: {user.get('this_month_hall_of_fame_message_reactions', 0)} reactions\n"
 
     # Top 5 All-Time Reactions
     top_all_time_reactions = db_client['server_users'].find({"guild_id": interaction.guild_id}).sort(
         "total_hall_of_fame_message_reactions", -1).limit(5)
     leaderboard += f"\n💬 **Top 5 All-Time Reactions**\n"
     for rank, user in enumerate(top_all_time_reactions, start=1):
-        member = await interaction.guild.fetch_member(int(user["user_id"]))
-        if member:
+        try:
+            member = await interaction.guild.fetch_member(int(user["user_id"]))
             leaderboard += f"{rank}. {member.name}: {user.get('total_hall_of_fame_message_reactions', 0)} reactions\n"
+        except discord.NotFound:
+            leaderboard += f"{rank}. Unknown Member: {user.get('total_hall_of_fame_message_reactions', 0)} reactions\n"
 
     embed.add_field(name="Leaderboard", value=leaderboard, inline=False)
     embed.set_footer(text="Note that this is calculated every 24 hours, so it may not be up to date.")
-    await interaction.followup.send_message(embed=embed)
+    await interaction.followup.send(embed=embed)
