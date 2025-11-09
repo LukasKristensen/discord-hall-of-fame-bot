@@ -4,8 +4,8 @@ import datetime
 from datetime import timezone
 import asyncio
 from message_reactions import most_reacted_emoji, reaction_count
-from classes import server_class
-from classes.bot_stats import BotStats
+from classes import Server_class
+from classes import Log_type
 
 
 async def validate_message(message: discord.RawReactionActionEvent, bot: discord.Client, message_collection,
@@ -235,9 +235,9 @@ async def check_all_server_messages(guild_id: int, sweep_limit, sweep_limited: b
                         if collection.find_one({"message_id": int(message.id)}):
                             await remove_embed(message.id, collection, bot, target_channel_id, guild_id, channel.id)
                 except Exception as e:
-                    await error_logging(bot, f"An error occurred: {e}", guild_id)
+                    await logging(bot, f"An error occurred: {e}", guild_id)
         except Exception as e:
-            await error_logging(bot, f"An error occurred: {e}", guild_id)
+            await logging(bot, f"An error occurred: {e}", guild_id)
 
     messages_to_post.sort(key=lambda msg: msg.created_at)
     for message in messages_to_post:
@@ -280,7 +280,7 @@ async def post_hall_of_fame_message(message: discord.Message, bot: discord.Clien
         await hall_of_fame_message.delete()
         if video_message:
             await video_message.delete()
-        await error_logging(bot, e, message.guild.id, ping_developer=True)
+        await logging(bot, e, message.guild.id, ping_developer=True)
 
 
 async def set_footer(embed: discord.Embed):
@@ -467,7 +467,7 @@ async def create_database_context(bot, server, db_client, custom_channel: discor
 
     # Check if the server is already in the database, if so delete the database
     if db_server_configs.find_one({"guild_id": int(server.id)}):
-        await error_logging(bot, f"Server {server.name} already exists in the database, dropping it to recreate", server.id)
+        await logging(bot, f"Server {server.name} already exists in the database, dropping it to recreate", server.id)
         delete_database_context(server.id, db_client)
 
     hall_of_fame_channel = custom_channel or await server.create_text_channel("hall-of-fame")
@@ -514,7 +514,7 @@ async def create_database_context(bot, server, db_client, custom_channel: discor
         f"   Use </calculation_method:1378150000600678440> to change the reaction count calculation method.\n\n"
     )
 
-    new_server_class = server_class.Server(
+    new_server_class = Server_class.Server(
         hall_of_fame_channel_id=hall_of_fame_channel.id,
         guild_id=server.id,
         reaction_threshold=reaction_threshold_default,
@@ -560,7 +560,7 @@ async def get_server_classes(db_client):
     server_classes = {}
 
     for document in client_documents.find():
-        server_classes[document["guild_id"]] = server_class.Server(
+        server_classes[document["guild_id"]] = Server_class.Server(
             hall_of_fame_channel_id=document["hall_of_fame_channel_id"],
             guild_id=document["guild_id"],
             reaction_threshold=document["reaction_threshold"],
@@ -595,31 +595,30 @@ async def send_server_owner_error_message(owner, e, bot):
             # Check if the specific message has already been sent
             message_already_sent = any("Failed to setup" in msg.content for msg in messages)
             if not message_already_sent:
-                await error_logging(bot, f"Sending error message {e} to server owner {owner.name}")
+                await logging(bot, f"Sending error message {e} to server owner {owner.name}")
                 await owner.send(f"{e}")
             else:
-                await error_logging(bot, f"Error message already sent to server owner {owner.name}")
+                await logging(bot, f"Error message already sent to server owner {owner.name}")
         except Exception as history_error:
-            await error_logging(bot, f"Failed to send error message to server owner {owner.name}: {history_error}")
+            await logging(bot, f"Failed to send error message to server owner {owner.name}: {history_error}")
 
 
-async def error_logging(bot: discord.Client, message, server_id=None, new_value=None, log_type="error", ping_developer=False):
+async def logging(bot: discord.Client, message, server_id=None, new_value=None, log_type=Log_type.ERROR, ping_developer=False):
     """
     Log an error message to the error channel
     :param bot:
     :param message:
     :param server_id: The ID of the server
     :param new_value: The new value of the server configuration
-    :param log_type: The type of log (e.g. "error", "info")
+    :param log_type: The type of log message
     :param ping_developer: Whether to ping the developer
     :return:
     """
     system_channel_id = 1373699890718441482 if bot.application_id == 1177041673352663070 else 1383834858870145214
-    error_channel = 1344070396575617085 if bot.application_id == 1177041673352663070 else 1383834395726577765
+    error_channel_id = 1344070396575617085 if bot.application_id == 1177041673352663070 else 1383834395726577765
+    command_channel_id = 1436699144163954759 if bot.application_id == 1177041673352663070 else 1436699968571183106
 
     target_guild = bot.get_guild(1180006529575960616)
-    system_channel = bot.get_channel(system_channel_id)
-    error_channel = target_guild.get_channel(error_channel)
     date_formatted_message = f"{datetime.datetime.now()}: {message}"
     error_logging_message = "<@230698327589650432> " if ping_developer else ""
 
@@ -627,10 +626,15 @@ async def error_logging(bot: discord.Client, message, server_id=None, new_value=
         date_formatted_message += f"\n[Server ID: {server_id}]"
     if new_value:
         date_formatted_message += f"\n[New value: {new_value}]"
-    if log_type == "error":
-        await error_channel.send(error_logging_message + f"```diff\n{date_formatted_message}\n```")
-    elif log_type == "system":
+    if log_type == Log_type.ERROR:
+        error_channel_id = target_guild.get_channel(error_channel_id)
+        await error_channel_id.send(error_logging_message + f"```diff\n{date_formatted_message}\n```")
+    elif log_type == Log_type.SYSTEM:
+        system_channel = bot.get_channel(system_channel_id)
         await system_channel.send(error_logging_message + f"```diff\n{date_formatted_message}\n```")
+    elif log_type == Log_type.COMMAND:
+        command_channel = target_guild.get_channel(command_channel_id)
+        await command_channel.send(error_logging_message + f"```diff\n{date_formatted_message}\n```")
 
 
 async def create_feedback_form(interaction: discord.Interaction, bot):
@@ -700,12 +704,37 @@ async def update_user_database(bot: discord.Client, db_client):
                     users_stats[user_id] = {
                         "total_hall_of_fame_messages": 0,
                         "this_month_hall_of_fame_messages": 0,
+                        "total_hall_of_fame_message_reactions": 0,
+                        "this_month_hall_of_fame_message_reactions": 0
                     }
                 users_stats[user_id]["total_hall_of_fame_messages"] += 1
+                users_stats[user_id]["total_hall_of_fame_message_reactions"] += message.get('reaction_count', 0)
                 if message['created_at'].replace(tzinfo=timezone.utc) >= (datetime.datetime.now(timezone.utc) - datetime.timedelta(days=30)):
                     users_stats[user_id]["this_month_hall_of_fame_messages"] += 1
+                    users_stats[user_id]["this_month_hall_of_fame_message_reactions"] += message.get('reaction_count', 0)
             except KeyError as e:
-                await error_logging(bot, f"KeyError in message {message['message_id']} in guild {guild.id}: {e}", guild.id)
+                await logging(bot, f"KeyError in message {message['message_id']} in guild {guild.id}: {e}", guild.id)
+
+        # create a rank for each user based on total and monthly for each field
+        for user in users_stats:
+            users_stats[user]["total_message_rank"] = 0
+            users_stats[user]["monthly_message_rank"] = 0
+            users_stats[user]["total_reaction_rank"] = 0
+            users_stats[user]["monthly_reaction_rank"] = 0
+
+        sorted_total_messages = sorted(users_stats.items(), key=lambda x: x[1]["total_hall_of_fame_messages"], reverse=True)
+        sorted_monthly_messages = sorted(users_stats.items(), key=lambda x: x[1]["this_month_hall_of_fame_messages"], reverse=True)
+        sorted_total_reactions = sorted(users_stats.items(), key=lambda x: x[1]["total_hall_of_fame_message_reactions"], reverse=True)
+        sorted_monthly_reactions = sorted(users_stats.items(), key=lambda x: x[1]["this_month_hall_of_fame_message_reactions"], reverse=True)
+
+        for rank, (user_id, stats) in enumerate(sorted_total_messages, start=1):
+            users_stats[user_id]["total_message_rank"] = rank
+        for rank, (user_id, stats) in enumerate(sorted_monthly_messages, start=1):
+            users_stats[user_id]["monthly_message_rank"] = rank
+        for rank, (user_id, stats) in enumerate(sorted_total_reactions, start=1):
+            users_stats[user_id]["total_reaction_rank"] += rank
+        for rank, (user_id, stats) in enumerate(sorted_monthly_reactions, start=1):
+            users_stats[user_id]["monthly_reaction_rank"] += rank
 
         for user_id, stats in users_stats.items():
             try:
@@ -715,11 +744,18 @@ async def update_user_database(bot: discord.Client, db_client):
                         "user_id": user_id,
                         "guild_id": int(guild.id),
                         "total_hall_of_fame_messages": stats["total_hall_of_fame_messages"],
-                        "this_month_hall_of_fame_messages": stats["this_month_hall_of_fame_messages"]
+                        "this_month_hall_of_fame_messages": stats["this_month_hall_of_fame_messages"],
+                        "total_hall_of_fame_message_reactions": stats["total_hall_of_fame_message_reactions"],
+                        "this_month_hall_of_fame_message_reactions": stats["this_month_hall_of_fame_message_reactions"],
+                        "total_message_rank": stats["total_message_rank"],
+                        "monthly_message_rank": stats["monthly_message_rank"],
+                        "total_reaction_rank": stats["total_reaction_rank"],
+                        "monthly_reaction_rank": stats["monthly_reaction_rank"]
                     }},
                     upsert=True)
             except Exception as e:
-                await error_logging(bot, f"Failed to update user {user_id} in database: {e}", guild.id)
+                await logging(bot, f"Failed to update user {user_id} in database: {e}", guild.id)
+
 
 
 async def fix_write_hall_of_fame_channel_permissions(bot, db_client):
@@ -736,7 +772,7 @@ async def fix_write_hall_of_fame_channel_permissions(bot, db_client):
             hall_of_fame_channel = bot.get_channel(hall_of_fame_channel_id)
             await hall_of_fame_channel.set_permissions(guild.me, read_messages=True, send_messages=True)
         except Exception as e:
-            await error_logging(bot, f"Failed to fix permissions for Hall of Fame channel in guild {guild.id}: {e}", guild.id)
+            await logging(bot, f"Failed to fix permissions for Hall of Fame channel in guild {guild.id}: {e}", guild.id)
 
 
 async def post_server_perms(bot, server):
@@ -746,7 +782,7 @@ async def post_server_perms(bot, server):
     :param server:
     :return:
     """
-    await error_logging(bot, f"Joined server {server.name} (ID {server.id}) with permissions:\n"
+    await logging(bot, f"Joined server {server.name} (ID {server.id}) with permissions:\n"
                              f"Can manage roles: {server.me.guild_permissions.manage_roles}\n"
                              f"Can manage channels: {server.me.guild_permissions.manage_channels}\n"
                              f"Can send messages: {server.me.guild_permissions.send_messages}\n"

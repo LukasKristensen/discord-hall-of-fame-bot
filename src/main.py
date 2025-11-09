@@ -8,8 +8,8 @@ from pymongo.mongo_client import MongoClient
 import commands
 import events
 import utils
-import version
-from classes.bot_stats import BotStats
+from classes import version, Log_type
+from classes.Bot_stats import BotStats
 from api_services import topgg_api, discordbotlist_api
 import os
 from translations import messages
@@ -46,17 +46,18 @@ async def on_ready():
 
     version.DATE = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     await events.bot_login(bot, tree)
-    await utils.error_logging(bot, f"Logged in as {bot.user}", log_type="system")
+    await utils.logging(bot, f"Logged in as {bot.user}", log_type=Log_type.SYSTEM)
 
     completed_migrations = migrations.run_migrations(not dev_test)
     if len(completed_migrations) > 0:
-        await utils.error_logging(bot, f"Completed migrations: {', '.join(completed_migrations)}", log_type="system")
+        await utils.logging(bot, f"Completed migrations: {', '.join(completed_migrations)}",
+                            log_type=Log_type.SYSTEM)
 
     server_classes = await utils.get_server_classes(production_db)
     new_server_classes_dict = await events.check_for_new_server_classes(bot, production_db)
     for key, value in new_server_classes_dict.items():
         server_classes[key] = value
-    await utils.error_logging(bot, f"Loaded a total of {len(server_classes)} servers")
+    await utils.logging(bot, f"Loaded a total of {len(server_classes)} servers")
     await bot.change_presence(activity=discord.CustomActivity(name=f'🏆 Hall of Fame - {sum(server.member_count for server in bot.guilds)} users', type=5))
 
     await events.post_wrapped()
@@ -65,12 +66,12 @@ async def on_ready():
 
 @tasks.loop(hours=24)
 async def daily_task():
-    await utils.error_logging(bot, "Running daily task")
+    await utils.logging(bot, "Running daily task")
     try:
         await events.daily_task(bot, production_db, server_classes, dev_test)
-        await utils.error_logging(bot, f"Daily task completed")
+        await utils.logging(bot, f"Daily task completed")
     except Exception as e:
-        await utils.error_logging(bot, f"Error in daily_task: {e}")
+        await utils.logging(bot, f"Error in daily_task: {e}")
 
     total_server_members = sum(server.member_count for server in bot.guilds)
     if not dev_test:
@@ -103,7 +104,7 @@ async def on_raw_reaction_add(payload: discord.RawReactionActionEvent):
                                          server_class.ignore_bot_messages, server_class.hide_hof_post_below_threshold)
             messages_processing.remove(payload.message_id)
     except Exception as e:
-        await utils.error_logging(bot, f"Error in on_raw_reaction_add: {e}", payload.guild_id)
+        await utils.logging(bot, f"Error in on_raw_reaction_add: {e}", payload.guild_id)
         if payload.message_id in messages_processing:
             messages_processing.remove(payload.message_id)
 
@@ -123,7 +124,7 @@ async def on_raw_reaction_remove(payload: discord.RawReactionActionEvent):
                                          server_class.ignore_bot_messages, server_class.hide_hof_post_below_threshold)
             messages_processing.remove(payload.message_id)
     except Exception as e:
-        await utils.error_logging(bot, f"Error in on_raw_reaction_remove: {e}", payload.guild_id)
+        await utils.logging(bot, f"Error in on_raw_reaction_remove: {e}", payload.guild_id)
         if payload.message_id in messages_processing:
             messages_processing.remove(payload.message_id)
 
@@ -138,12 +139,12 @@ async def on_message(message: discord.Message):
         allow_messages_in_hof = server_class.allow_messages_in_hof_channel
         await events.on_message(message, bot, target_channel_id, allow_messages_in_hof)
     except Exception as e:
-        await utils.error_logging(bot, f"Error in on_message: {e}", message.guild.id)
+        await utils.logging(bot, f"Error in on_message: {e}", message.guild.id)
 
 
 @bot.event
 async def on_guild_join(server):
-    await utils.error_logging(bot, f"Joined server {server.name}", server.id, log_type="system")
+    await utils.logging(bot, f"Joined server {server.name}", server.id, log_type=Log_type.SYSTEM)
     await utils.post_server_perms(bot, server)
 
     new_server_class = await events.guild_join(server, production_db, bot)
@@ -158,7 +159,7 @@ async def on_guild_remove(server):
     # Case where discord sends a guild remove event for a server which has already been removed
     if server_classes is None or server.id not in server_classes:
         return
-    await utils.error_logging(bot, f"Left server {server.name}", server.id, log_type="system")
+    await utils.logging(bot, f"Left server {server.name}", server.id, log_type=Log_type.SYSTEM)
     await events.guild_remove(server, production_db)
     if server.id in server_classes:
         del server_classes[server.id]
@@ -168,7 +169,8 @@ async def on_guild_remove(server):
 @tree.command(name="help", description="List of commands")
 async def get_help(interaction: discord.Interaction):
     await commands.get_help(interaction)
-    await utils.error_logging(bot, f"Help command used by {interaction.user.name} in {interaction.guild.name}", interaction.guild.id)
+    await utils.logging(bot, f"Help command used by {interaction.user.name} in {interaction.guild.name}",
+                        interaction.guild.id, log_type=Log_type.COMMAND)
 
 
 @tree.command(name="set_reaction_threshold", description="Configure the amount of reactions needed to post a message in the Hall of Fame")
@@ -179,7 +181,8 @@ async def configure_bot(interaction: discord.Interaction, reaction_threshold: in
 
     await commands.set_reaction_threshold(interaction, reaction_threshold, production_db)
     server_classes[interaction.guild_id].reaction_threshold = reaction_threshold
-    await utils.error_logging(bot, f"Reaction threshold configure command used by {interaction.user.name} in {interaction.guild.name}", interaction.guild.id, reaction_threshold)
+    await utils.logging(bot, f"Reaction threshold configure command used by {interaction.user.name} in {interaction.guild.name}",
+                        interaction.guild.id, reaction_threshold, log_type=Log_type.COMMAND)
 
 
 @tree.command(name="feedback", description="Send feedback to the developer")
@@ -197,7 +200,8 @@ async def include_author_own_reaction_in_threshold(interaction: discord.Interact
                              {"$set": {"include_author_in_reaction_calculation": include}})
     server_classes[interaction.guild_id].include_author_in_reaction_calculation = include
     await interaction.response.send_message(messages.AUTHOR_REACTION_INCLUDED.format(include=include))
-    await utils.error_logging(bot, f"Include author's own reaction in threshold command used by {interaction.user.name} in {interaction.guild.name}", interaction.guild.id, include)
+    await utils.logging(bot, f"Include author's own reaction in threshold command used by {interaction.user.name} in {interaction.guild.name}",
+                        interaction.guild.id, include, log_type=Log_type.COMMAND)
 
 
 @tree.command(name="allow_messages_in_hof_channel", description="Should people be allowed to send messages in the Hall of Fame channel?")
@@ -209,13 +213,15 @@ async def allow_messages_in_hof_channel(interaction: discord.Interaction, allow:
     server_config.update_one({"guild_id": int(interaction.guild_id)}, {"$set": {"allow_messages_in_hof_channel": allow}})
     server_classes[interaction.guild_id].allow_messages_in_hof_channel = allow
     await interaction.response.send_message(messages.ALLOW_POST_IN_HOF.format(allow=allow))
-    await utils.error_logging(bot, f"Allow messages in Hall of Fame channel command used by {interaction.user.name} in {interaction.guild.name}", interaction.guild.id, allow)
+    await utils.logging(bot, f"Allow messages in Hall of Fame channel command used by {interaction.user.name} in {interaction.guild.name}",
+                        interaction.guild.id, allow, log_type=Log_type.COMMAND)
 
 
 @tree.command(name="vote", description="Vote for the bot on top.gg")
 async def vote(interaction: discord.Interaction):
     await interaction.response.send_message(messages.VOTE_MESSAGE)
-    await utils.error_logging(bot, f"Vote command used by {interaction.user.name} in {interaction.guild.name}", interaction.guild.id)
+    await utils.logging(bot, f"Vote command used by {interaction.user.name} in {interaction.guild.name}",
+                        interaction.guild.id, log_type=Log_type.COMMAND)
 
 
 @tree.command(name="custom_emoji_check_logic",
@@ -240,7 +246,8 @@ async def custom_emoji_check_logic(interaction: discord.Interaction, config_opti
     if config_option.value == "whitelisted_emojis":
         response += "\n\nYou can now use the commands </whitelist_emoji:1358208382473076849>, </unwhitelist_emoji:1358208382473076850> and </clear_whitelist:1358208382473076851> to manage the whitelist"
     await interaction.response.send_message(response)
-    await utils.error_logging(bot, f"Custom emoji check logic command used by {interaction.user.name} in {interaction.guild.name}", interaction.guild.id, str(config_option.value))
+    await utils.logging(bot, f"Custom emoji check logic command used by {interaction.user.name} in {interaction.guild.name}",
+                        interaction.guild.id, str(config_option.value), log_type=Log_type.COMMAND)
 
 
 @tree.command(name="whitelist_emoji", description="Whitelist an emoji for the server if custom emoji check logic is enabled")
@@ -267,7 +274,8 @@ async def whitelist_emoji(interaction: discord.Interaction, emoji: str):
         await interaction.response.send_message(messages.WHITELIST_ADDED.format(emoji=emoji))
     else:
         await interaction.response.send_message(messages.WHITELIST_ALREADY_EXISTS.format(emoji=emoji))
-    await utils.error_logging(bot, f"Whitelist emoji command used by {interaction.user.name} in {interaction.guild.name}", interaction.guild.id, emoji)
+    await utils.logging(bot, f"Whitelist emoji command used by {interaction.user.name} in {interaction.guild.name}",
+                        interaction.guild.id, emoji, log_type=Log_type.COMMAND)
 
 
 @tree.command(
@@ -292,7 +300,8 @@ async def unwhitelist_emoji(interaction: discord.Interaction, emoji: str):
         await interaction.response.send_message(messages.WHITELIST_REMOVED.format(emoji=emoji))
     else:
         await interaction.response.send_message(messages.WHITELIST_NOT_FOUND.format(emoji=emoji))
-    await utils.error_logging(bot, f"Unwhitelist emoji command used by {interaction.user.name} in {interaction.guild.name}", interaction.guild.id, emoji)
+    await utils.logging(bot, f"Unwhitelist emoji command used by {interaction.user.name} in {interaction.guild.name}",
+                        interaction.guild.id, emoji, log_type=Log_type.COMMAND)
 
 
 @tree.command(name="clear_whitelist", description="Clear the whitelist for the server if custom emoji check logic is enabled")
@@ -308,7 +317,8 @@ async def clear_whitelist(interaction: discord.Interaction):
     server_config.update_one({"guild_id": int(interaction.guild_id)}, {"$set": {"whitelisted_emojis": []}})
     server_class.whitelisted_emojis = []
     await interaction.response.send_message(messages.WHITELIST_CLEARED)
-    await utils.error_logging(bot, f"Clear whitelist command used by {interaction.user.name} in {interaction.guild.name}", interaction.guild.id)
+    await utils.logging(bot, f"Clear whitelist command used by {interaction.user.name} in {interaction.guild.name}",
+                        interaction.guild.id, log_type=Log_type.COMMAND)
 
 
 @tree.command(name="get_server_config", description="Get the server config")
@@ -330,7 +340,8 @@ async def get_server_config(interaction: discord.Interaction):
     config_message += f"```"
 
     await interaction.response.send_message(config_message)
-    await utils.error_logging(bot, f"Get server config command used by {interaction.user.name} in {interaction.guild.name}", interaction.guild.id)
+    await utils.logging(bot, f"Get server config command used by {interaction.user.name} in {interaction.guild.name}",
+                        interaction.guild.id, log_type=Log_type.COMMAND)
 
 
 @tree.command(
@@ -344,13 +355,15 @@ async def set_post_due_date(interaction: discord.Interaction, post_due_date: int
     server_config.update_one({"guild_id": int(interaction.guild_id)}, {"$set": {"post_due_date": post_due_date}})
     server_classes[interaction.guild_id].post_due_date = post_due_date
     await interaction.response.send_message(messages.POST_DUE_DATE_SET.format(post_due_date=post_due_date))
-    await utils.error_logging(bot, f"Set post due date command used by {interaction.user.name} in {interaction.guild.name}", interaction.guild.id, post_due_date)
+    await utils.logging(bot, f"Set post due date command used by {interaction.user.name} in {interaction.guild.name}",
+                        interaction.guild.id, post_due_date, log_type=Log_type.COMMAND)
 
 
 @tree.command(name="invite", description="Invite the bot to your server")
 async def invite(interaction: discord.Interaction):
     await interaction.response.send_message(messages.INVITE_MESSAGE)
-    await utils.error_logging(bot, f"Invite command used by {interaction.user.name} in {interaction.guild.name}", interaction.guild.id)
+    await utils.logging(bot, f"Invite command used by {interaction.user.name} in {interaction.guild.name}",
+                        interaction.guild.id, log_type=Log_type.COMMAND)
 
 
 @tree.command(name="ignore_bot_messages", description="Should the bot ignore messages from other bots?")
@@ -362,7 +375,8 @@ async def ignore_bot_messages(interaction: discord.Interaction, should_ignore_bo
     server_config_collection.update_one({"guild_id": int(interaction.guild_id)}, {"$set": {"ignore_bot_messages": should_ignore_bot_messages}})
     server_classes[interaction.guild_id].ignore_bot_messages = should_ignore_bot_messages
     await interaction.response.send_message(messages.IGNORE_BOT_MESSAGES.format(should_ignore_bot_messages=should_ignore_bot_messages))
-    await utils.error_logging(bot, f"Ignore bot messages command used by {interaction.user.name} in {interaction.guild.name}", interaction.guild.id, should_ignore_bot_messages)
+    await utils.logging(bot, f"Ignore bot messages command used by {interaction.user.name} in {interaction.guild.name}",
+                        interaction.guild.id, should_ignore_bot_messages, log_type=Log_type.COMMAND)
 
 
 @tree.command(name="calculation_method", description="Set the calculation method for reactions")
@@ -381,7 +395,8 @@ async def calculation_method(interaction: discord.Interaction, method: app_comma
     server_config_collection.update_one({"guild_id": int(interaction.guild_id)}, {"$set": {"reaction_count_calculation_method": method.value}})
     server_classes[interaction.guild_id].reaction_count_calculation_method = method.value
     await interaction.response.send_message(f"Reaction count calculation method set to {method.name}")
-    await utils.error_logging(bot, f"Calculation method command used by {interaction.user.name} in {interaction.guild.name}", interaction.guild.id, method.value)
+    await utils.logging(bot, f"Calculation method command used by {interaction.user.name} in {interaction.guild.name}",
+                        interaction.guild.id, method.value, log_type=Log_type.COMMAND)
 
 
 @tree.command(name="hide_hof_post_below_threshold", description="Should hall of fame posts be hidden when they go below the reaction threshold?")
@@ -399,11 +414,12 @@ async def hide_hall_of_fame_posts_when_they_are_below_threshold(interaction: dis
     server_config_collection.update_one({"guild_id": int(interaction.guild_id)}, {"$set": {"hide_hof_post_below_threshold": hide}})
     server_classes[interaction.guild_id].hide_hof_post_below_threshold = hide
     await interaction.response.send_message(f"Hide hall of fame posts when they are below the threshold set to {hide}")
-    await utils.error_logging(bot, f"Hide hall of fame posts command used by {interaction.user.name} in {interaction.guild.name}", interaction.guild.id, str(hide))
+    await utils.logging(bot, f"Hide hall of fame posts command used by {interaction.user.name} in {interaction.guild.name}",
+                        interaction.guild.id, str(hide), log_type=Log_type.COMMAND)
 
 
-@tree.command(name="get_user_profile", description="Get the server profile of a user")
-async def get_user_server_profile(interaction: discord.Interaction, specific_user: discord.User = None):
+@tree.command(name="user_profile", description="Get the server profile of a user")
+async def user_server_profile(interaction: discord.Interaction, specific_user: discord.User = None):
     """
     Get the server profile of a user
     :param interaction: The interaction object
@@ -414,7 +430,8 @@ async def get_user_server_profile(interaction: discord.Interaction, specific_use
     user_stats = production_db['server_users'].find_one({"user_id": user.id, "guild_id": interaction.guild_id})
 
     await commands.user_server_profile(interaction, user, user_stats, production_db, month_emoji, all_time_emoji)
-    await utils.error_logging(bot, f"Get user server profile command used by {interaction.user.name} in {interaction.guild.name}", interaction.guild.id, str(user.id))
+    await utils.logging(bot, f"Get user server profile command used by {interaction.user.name} in {interaction.guild.name}",
+                        interaction.guild.id, str(user.id), log_type=Log_type.COMMAND)
 
 
 # disabled until members intent is enabled
@@ -429,7 +446,8 @@ async def get_server_stats(interaction: discord.Interaction):
         return
 
     await commands.get_server_stats(interaction, production_db, month_emoji, all_time_emoji, interaction.guild)
-    await utils.error_logging(bot, f"Get server stats command used by {interaction.user.name} in {interaction.guild.name}", interaction.guild.id)
+    await utils.logging(bot, f"Get server stats command used by {interaction.user.name} in {interaction.guild.name}",
+                        interaction.guild.id, log_type=Log_type.COMMAND)
 
 
 @tree.command(name="set_hall_of_fame_channel", description="Manually set the Hall of Fame channel for the server")
@@ -444,7 +462,7 @@ async def set_hall_of_fame_channel(interaction: discord.Interaction, channel: di
 
     if not channel.permissions_for(interaction.guild.me).send_messages:
         await interaction.response.send_message("I do not have permission to send messages in this channel.")
-        await utils.error_logging(bot, f"User {interaction.user.name} tried to set Hall of Fame channel without write permissions in {interaction.guild.name}", interaction.guild.id, str(channel.id))
+        await utils.logging(bot, f"User {interaction.user.name} tried to set Hall of Fame channel without write permissions in {interaction.guild.name}", interaction.guild.id, str(channel.id))
         return
 
     if interaction.guild_id not in server_classes or server_classes[interaction.guild_id] is None:
@@ -459,7 +477,8 @@ async def set_hall_of_fame_channel(interaction: discord.Interaction, channel: di
     server_config = production_db['server_configs']
     server_config.update_one({"guild_id": int(interaction.guild_id)}, {"$set": {"hall_of_fame_channel_id": channel.id}})
     await interaction.response.send_message(f"Hall of Fame channel set to {channel.mention}")
-    await utils.error_logging(bot, f"Set Hall of Fame channel command used by {interaction.user.name} in {interaction.guild.name}", interaction.guild.id, str(channel.id))
+    await utils.logging(bot, f"Set Hall of Fame channel command used by {interaction.user.name} in {interaction.guild.name}",
+                        interaction.guild.id, str(channel.id), log_type=Log_type.COMMAND)
 
 
 async def check_if_user_has_manage_server_permission(interaction: discord.Interaction, check_server_set_up: bool = True):
@@ -471,7 +490,8 @@ async def check_if_user_has_manage_server_permission(interaction: discord.Intera
     """
     if not interaction.user.guild_permissions.manage_guild:
         await interaction.response.send_message(messages.NOT_AUTHORIZED)
-        await utils.error_logging(bot, f"User {interaction.user.name} does not have manage server permission", interaction.guild_id)
+        await utils.logging(bot, f"User {interaction.user.name} does not have manage server permission",
+                            interaction.guild_id, log_type=Log_type.COMMAND)
         return False
     if check_server_set_up and len(server_classes) > 1 and (interaction.guild_id not in server_classes or server_classes[interaction.guild_id] is None):
         await interaction.response.send_message(messages.ERROR_SERVER_NOT_SETUP)
@@ -487,7 +507,8 @@ async def check_if_dev_user(interaction: discord.Interaction):
     """
     if interaction.user.id != dev_user:
         await interaction.response.send_message(messages.DEV_NOT_AUTHORIZED)
-        await utils.error_logging(bot, f"User {interaction.user.name} is not a developer", interaction.guild_id)
+        await utils.logging(bot, f"User {interaction.user.name} is not a developer", interaction.guild_id,
+                            log_type=Log_type.COMMAND)
         return False
     return True
 
@@ -501,19 +522,18 @@ async def post_api_bot_stats():
 
     try:
         topgg_response = topgg_api.post_bot_stats(len(bot.guilds), topgg_api_key)
-        await utils.error_logging(bot, f"Posted bot stats to top.gg: {topgg_response[0]} - {topgg_response[1]}")
+        await utils.logging(bot, f"Posted bot stats to top.gg: {topgg_response[0]} - {topgg_response[1]}")
     except Exception as e:
-        await utils.error_logging(bot, f"Failed to post bot stats to top.gg: {e}")
+        await utils.logging(bot, f"Failed to post bot stats to top.gg: {e}")
 
     try:
         discordbotlist_response = discordbotlist_api.post_bot_stats(len(bot.guilds))
-        await utils.error_logging(bot, f"Posted bot stats to discordbotlist.com: {discordbotlist_response[0]} - {discordbotlist_response[1]}")
+        await utils.logging(bot, f"Posted bot stats to discordbotlist.com: {discordbotlist_response[0]} - {discordbotlist_response[1]}")
     except Exception as e:
-        await utils.error_logging(bot, f"Failed to post bot stats to discordbotlist.com: {e}")
+        await utils.logging(bot, f"Failed to post bot stats to discordbotlist.com: {e}")
 
 
 if __name__ == "__main__":
-    # Check if the TOKEN variable is set
     if TOKEN is None or mongo_uri is None:
         raise ValueError("TOKEN environment variable is not set in the .env file")
     bot.run(TOKEN)

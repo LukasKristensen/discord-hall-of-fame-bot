@@ -17,25 +17,27 @@ def run_migrations(production: bool = True):
 
     for file_name in os.listdir(migrations_folder):
         print(f"Processing migration file: {file_name}")
-        if file_name.endswith(".py") and file_name != "__init__.py":
-            module_name = f"{migrations_folder}.{file_name[:-3]}"
-            migration_name = file_name[:-3]
+        if not file_name.endswith(".py") or file_name == "__init__.py":
+            continue
 
-            migration_status = migration_collection.find_one({"migration_name": migration_name})
-            if migration_status and migration_status.get("completed", False):
-                print(f"Migration '{migration_name}' has already been run. Skipping...")
-                continue
+        module_name = f"{migrations_folder}.{file_name[:-3]}"
+        migration_name = file_name[:-3]
 
-            # Dynamically import and execute migration
-            importlib.import_module(module_name).run()
+        migration_status = migration_collection.find_one({"migration_name": migration_name})
+        if migration_status and migration_status.get("completed", False):
+            print(f"Migration '{migration_name}' has already been run. Skipping...")
+            continue
 
-            migration_collection.update_one(
-                {"migration_name": migration_name},
-                {"$set": {"completed": production, "timestamp": datetime.utcnow()}},
-                upsert=True
-            )
-            print(f"Migration '{migration_name}' completed.")
-            completed_migrations.append(migration_name)
+        # Dynamically import and execute migration
+        importlib.import_module(module_name).run()
+
+        migration_collection.update_one(
+            {"migration_name": migration_name},
+            {"$set": {"completed": production, "timestamp": datetime.utcnow()}},
+            upsert=True
+        )
+        print(f"Migration '{migration_name}' completed.")
+        completed_migrations.append(migration_name)
     return completed_migrations
 
 

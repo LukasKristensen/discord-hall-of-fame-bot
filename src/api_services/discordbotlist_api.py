@@ -9,7 +9,6 @@ auth_key = os.getenv('DISCORD_BOT_LIST_API_KEY')
 def post_command_list():
     """
     Post the list of commands to discordbotlist.com
-    :param commands: A list of command objects
     :return: Response status code and JSON response
     """
     url = "https://discordbotlist.com/api/v1/bots/1177041673352663070/commands"
@@ -79,7 +78,7 @@ def post_command_list():
             "type": 1
         },
         {
-            "name": "get_user_profile",
+            "name": "user_profile",
             "description": "Get the Hall of Fame profile for a user",
             "type": 1
         },

@@ -30,7 +30,7 @@ async def check_for_new_server_classes(bot: discord.Client, db_client):
         try:
             # check if there are not any documents in the collection for this guild
             if server_classes_collection.count_documents({"guild_id": int(guild.id)}) == 0:
-                await utils.error_logging(bot, f"Guild {guild.name} not found in database, creating...", guild.id)
+                await utils.logging(bot, f"Guild {guild.name} not found in database, creating...", guild.id)
                 new_server_class = await utils.create_database_context(bot, guild, db_client)
                 new_server_classes[guild.id] = new_server_class
         except Exception as e:
@@ -38,7 +38,7 @@ async def check_for_new_server_classes(bot: discord.Client, db_client):
                              f"permissions, try re-inviting the bot with the correct permissions. If the problem "
                              f"persists, please contact support. https://discord.gg/awZ83mmGrJ")
             await utils.send_server_owner_error_message(guild.owner, error_message, bot)
-            await utils.error_logging(bot, f"Sending error message to server owner: {e}", guild.id)
+            await utils.logging(bot, f"Sending error message to server owner: {e}", guild.id)
     return new_server_classes
 
 
@@ -51,11 +51,11 @@ async def bot_login(bot: discord.Client, tree):
     """
     try:
         await tree.sync()
-        await utils.error_logging(bot, f"Logged in as {bot.user}")
+        await utils.logging(bot, f"Logged in as {bot.user}")
     except discord.HTTPException as e:
-        await utils.error_logging(bot, f"Failed to sync commands: {e}")
+        await utils.logging(bot, f"Failed to sync commands: {e}")
     await bot.change_presence(activity=discord.CustomActivity(name="🔥 Sweeping for legendary moments!", type=5))
-    await utils.error_logging(bot, f"Total servers: {len(bot.guilds)}")
+    await utils.logging(bot, f"Total servers: {len(bot.guilds)}")
 
 
 async def on_raw_reaction(message: discord.RawReactionActionEvent, bot: discord.Client, message_collection,
@@ -80,7 +80,7 @@ async def on_raw_reaction(message: discord.RawReactionActionEvent, bot: discord.
         if "Unknown Message" in str(e) or "object has no attribute" in str(e):
             return
         if message_collection.find_one({"guild_id": int(message.guild_id)}):
-            await utils.error_logging(bot, f"Error in reaction event: {e}", message.guild_id)
+            await utils.logging(bot, f"Error in reaction event: {e}", message.guild_id)
 
 
 async def on_message(message, bot: discord.Client, target_channel_id, allow_messages_in_hof_channel):
@@ -114,16 +114,16 @@ async def guild_join(server, db_client, bot, custom_channel: discord.TextChannel
     try:
         return await utils.create_database_context(bot, server, db_client, custom_channel)
     except Exception as e:
-        await utils.error_logging(bot, f"Failed to create database context for server {server.name}: {e}", server.id)
+        await utils.logging(bot, f"Failed to create database context for server {server.name}: {e}", server.id)
         try:
             for channel in server.text_channels:
                 if not channel.permissions_for(server.me).send_messages:
                     continue
                 await channel.send(messages.FAILED_SETUP_HOF.format(serverName=server.name))
-                await utils.error_logging(bot, f"Sent an error message to {channel.name} on server {server.name}", server.id)
+                await utils.logging(bot, f"Sent an error message to {channel.name} on server {server.name}", server.id)
                 break
         except Exception as exception:
-            await utils.error_logging(bot, f"Failed to send error message to server {server.name}: {exception}", server.id)
+            await utils.logging(bot, f"Failed to send error message to server {server.name}: {exception}", server.id)
         return None
 
 
@@ -146,7 +146,7 @@ async def daily_task(bot: discord.Client, db_client, server_classes, dev_testing
     :param dev_testing:
     :return:
     """
-    await utils.error_logging(bot, f"Starting daily task for {len(server_classes)} servers")
+    await utils.logging(bot, f"Starting daily task for {len(server_classes)} servers")
 
     bot_guild_ids = [guild.id for guild in bot.guilds]
     for server_class in list(server_classes.values()):
@@ -163,13 +163,13 @@ async def daily_task(bot: discord.Client, db_client, server_classes, dev_testing
                 server_class.hall_of_fame_channel_id,
                 server_class.reaction_threshold)
         except Exception as e:
-            await utils.error_logging(bot, e, server_class.guild_id)
+            await utils.logging(bot, e, server_class.guild_id)
 
-    await utils.error_logging(bot, f"Checking for db entries that are not in the guilds")
+    await utils.logging(bot, f"Checking for db entries that are not in the guilds")
     for server in db_client["server_configs"].find():
         if server and not dev_testing and int(server.guild_id) not in [guild.id for guild in bot.guilds]:
-            await utils.error_logging(bot, f"Could not find server {server} in bot guilds")
-    await utils.error_logging(bot, f"Checked {len(server_classes)} servers for daily task")
+            await utils.logging(bot, f"Could not find server {server} in bot guilds")
+    await utils.logging(bot, f"Checked {len(server_classes)} servers for daily task")
     await update_user_database(bot, db_client)
 
 
@@ -182,6 +182,6 @@ async def update_user_database(bot: discord.Client, db_client):
     """
     try:
         await utils.update_user_database(bot, db_client)
-        await utils.error_logging(bot, "User database updated successfully")
+        await utils.logging(bot, "User database updated successfully")
     except Exception as e:
-        await utils.error_logging(bot, f"Failed to update user database: {e}")
+        await utils.logging(bot, f"Failed to update user database: {e}")
