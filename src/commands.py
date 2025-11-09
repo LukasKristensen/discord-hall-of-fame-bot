@@ -145,10 +145,10 @@ async def user_server_profile(interaction, user, user_stats, db_client, month_em
         embed.add_field(name="🌟 **Total Hall of Fame Messages**",
                         value=f"**{user_stats.get('total_hall_of_fame_messages', 0)}** "
                               f"(Rank: {user_stats.get('total_message_rank', 'N/A')})", inline=False)
-        embed.add_field(name="💬 **This Month's Reactions on Hall of Fame Messages**",
+        embed.add_field(name="💬 **Reactions Received This Month on Hall of Fame Messages**",
                         value=f"**{user_stats.get('this_month_hall_of_fame_message_reactions', 0)}** "
                               f"(Rank: {user_stats.get('monthly_reaction_rank', 'N/A')})", inline=False)
-        embed.add_field(name="💬 **Total Reactions on Hall of Fame Messages**",
+        embed.add_field(name="💬 **Total Reactions Received on Hall of Fame Messages**",
                         value=f"**{user_stats.get('total_hall_of_fame_message_reactions', 0)}** "
                               f"(Rank: {user_stats.get('total_reaction_rank', 'N/A')})", inline=False)
     else:
