@@ -1,239 +1,15 @@
 <style>
-  /* Fonts */
-  @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;700&family=Fredoka+One&display=swap');
-
-  :root {
-    --gold-light: #f5d06e;
-    --gold-dark: #b28511;
-    --bg-gradient-start: #3a2c0f;
-    --bg-gradient-end: #1f1507;
-    --overlay-gradient-start: #4b3b11cc;
-    --overlay-gradient-end: #241b07cc;
-    --text-primary: #f0e5c9;
-    --text-secondary: #d2cba0;
-    --shadow-glow: rgba(247, 208, 70, 0.6);
-    --border-radius: 16px;
-    --max-width: 900px;
-
-  --top-gg-colors-brand-20:  #fff8d1 !important;  /* very light gold */
-  --top-gg-colors-brand-30:  #fff0a3 !important;  /* lighter gold */
-  --top-gg-colors-brand-40:  #fbe87a !important;  /* light gold */
-  --top-gg-colors-brand-50:  #f7d84f !important;  /* golden yellow */
-  --top-gg-colors-brand-60:  #d9b84c !important;  /* medium gold */
-  --top-gg-colors-brand-70:  #c3992e !important;  /* rich gold */
-  --top-gg-colors-brand-80:  #ad7f11 !important;  /* deeper gold */
-  --top-gg-colors-brand-90:  #9a7008 !important;  /* dark gold */
-  --top-gg-colors-brand-100: #b28511 !important;  /* gold-dark (main) */
-
-  --top-gg-colors-current: #f5d06e !important;    /* gold-light */
+  section {
+    margin-top: 10px; /* Reduce space above the section */
+    margin-bottom: 10px; /* Reduce space below the section */
+    padding: 5px 0; /* Adjust padding inside the section */
   }
 
-  body {
-    margin: 0;
-    background: linear-gradient(135deg, var(--bg-gradient-start), var(--bg-gradient-end));
-    background-attachment: fixed;
-    font-family: 'Poppins', sans-serif;
-    color: var(--text-primary);
-    overflow-x: hidden;
-    min-height: 100vh;
+  div.container ul {
+    overflow-wrap: break-word !important;
+    white-space: normal !important;
+    text-wrap: balance !important;
   }
-
-  body::before {
-    content: "";
-    position: fixed;
-    inset: 0;
-    background: linear-gradient(135deg, var(--overlay-gradient-start), var(--overlay-gradient-end));
-    z-index: -1;
-    pointer-events: none;
-  }
-
-  .container {
-    max-width: var(--max-width);
-    margin: 3rem auto 5rem;
-    margin-top: 0 !important;
-    padding: 0 2rem;
-  }
-
-h2 {
-  font-family: 'Fredoka One', cursive;
-  font-size: clamp(0.3rem, 2.5vw, 1.8rem); /* Responsive scaling */
-  color: var(--gold-light);
-  text-shadow: 0 0 10px var(--shadow-glow);
-  text-transform: uppercase;
-  text-align: center;
-}
-
-
-p.lead {
-  text-align: center;
-  font-size: 1.3rem;
-  color: var(--text-secondary);
-  margin-top: 0;
-  margin-bottom: 3rem;
-  max-width: 700px;
-  margin-left: auto;
-  margin-right: auto;
-}
-
-img.promo-image {
-  display: block;
-  max-width: 80%;
-  margin: 0 auto 3rem;
-  border-radius: var(--border-radius);
-  box-shadow: 0 0 20px var(--shadow-glow);
-  border: 3px solid var(--gold-dark);
-}
-
-section {
-  background: rgba(66, 52, 12, 0.6);
-  border-radius: var(--border-radius);
-  padding: 2.5rem 3rem;
-  margin-bottom: 2.5rem;
-  box-shadow: 0 0 15px #b28511aa;
-}
-
-section h3 {
-  font-family: 'Fredoka One', cursive;
-  color: var(--gold-light);
-  font-size: 2rem;
-  margin-top: 0;
-  margin-bottom: 1rem;
-  text-shadow: 0 0 8px var(--shadow-glow);
-}
-
-ul {
-  list-style-type: none;
-  padding-left: 0;
-  margin: 0;
-}
-
-ul li {
-  position: relative;
-  padding-left: 2rem;
-  margin-bottom: 1rem;
-  color: var(--text-primary);
-  font-weight: 600;
-  font-size: 1.1rem;
-}
-
-ul li::before {
-  content: "⭐";
-  position: absolute;
-  left: 0;
-  top: 0;
-  font-size: 1.3rem;
-  color: var(--gold-light);
-  text-shadow: 0 0 5px var(--shadow-glow);
-}
-
-code {
-  background: #2f2300cc;
-  color: var(--gold-light);
-  padding: 0.3em 0.5em;
-  border-radius: 8px;
-  font-family: 'Courier New', Courier, monospace;
-  font-weight: 700;
-  font-size: 0.95rem;
-  box-shadow: 0 0 8px var(--shadow-glow);
-}
-
-a.button {
-  display: inline-block;
-  background: var(--gold-dark);
-  color: var(--text-primary);
-  font-weight: 700;
-  padding: 0.7em 2.2em;
-  border-radius: var(--border-radius);
-  text-decoration: none;
-  box-shadow: 0 0 15px var(--shadow-glow);
-  transition: all 0.3s ease;
-  margin-top: 1.5rem;
-  letter-spacing: 0.05em;
-}
-
-a.button:hover {
-  background: var(--gold-light);
-  color: #3a2c0f;
-  box-shadow: 0 0 25px var(--shadow-glow);
-}
-
-.css-13pd2m2 {
-    border-radius: var(--top-gg-radii-md);
-}
-
-.css-1vcqbmk {
-  position: relative;
-  overflow: hidden;
-  border-radius: var(--top-gg-radii-md);
-}
-
-.css-1vcqbmk:before {
-  content: '';
-  position: absolute;
-  width: 100px;
-  height: 100%;
-  background-image: linear-gradient(120deg, rgba(255, 255, 255, 0) 30%, rgba(255, 255, 255, .8), rgba(255, 255, 255, 0) 70%);
-  top: 0;
-  left: -100px;
-  animation: shine 3s infinite linear;
-  z-index: 1;
-  opacity: .55;
-  pointer-events: none;
-}
-
-@keyframes shine {
-  0% {left: -100px}
-  20% {left: 100%}
-  100% {left: 100%}
-}
-
-.css-a1ui79 {
-  position: relative;
-  overflow: visible;
-}
-
-.css-a1ui79::before, .css-a1ui79::after {
-  content: '✨';
-  position: absolute;
-  font-size: 1.2rem;
-  color: var(--gold-light);
-  opacity: 0.7;
-  filter: drop-shadow(0 0 5px var(--gold-light));
-  animation: sparkleGlow 3.5s infinite alternate ease-in-out;
-  pointer-events: none;
-  user-select: none;
-}
-
-.css-a1ui79::before {
-  top: 5%;
-  left: 5%;
-  animation-delay: 0s;
-}
-
-.css-a1ui79::after {
-  bottom: 5%;
-  right: 5%;
-  animation-delay: 1.7s;
-}
-
-@keyframes sparkleGlow {
-  0% {
-    opacity: 0.7;
-    transform: scale(1) translateY(0);
-    filter: drop-shadow(0 0 5px var(--gold-light));
-  }
-  50% {
-    opacity: 1;
-    transform: scale(1.4) translateY(-3px);
-    filter: drop-shadow(0 0 12px var(--gold-light));
-  }
-  100% {
-    opacity: 0.7;
-    transform: scale(1) translateY(0);
-    filter: drop-shadow(0 0 5px var(--gold-light));
-  }
-}
-
 </style>
 
 <div class="container">
@@ -263,17 +39,17 @@ a.button:hover {
   </section>
 
   <section>
-  <h3>⚙️ Configure Calculation Method</h3>
-  <p>
-    Choose how reaction counts are calculated for Hall of Fame qualification. Use the command below followed by one of the options:
-  </p>
-  <code>/calculation_method &lt;method&gt;</code>
-  <ul>
-    <li><code>most_reactions_on_emoji</code> – Counts the emoji with the highest reactions, each user counts once per emoji.</li>
-    <li><code>total_reactions</code> – Counts every reaction on the message; users reacting multiple times with different emojis count multiple times.</li>
-    <li><code>unique_users</code> – Counts the total number of unique users who reacted, regardless of emoji.</li>
-  </ul>
-</section>
+    <h3>⚙️ Configure Calculation Method</h3>
+    <p>
+      Choose how reaction counts are calculated for Hall of Fame qualification. Use the command below followed by one of the options:
+    </p>
+    <code>/calculation_method &lt;method&gt;</code>
+    <ul>
+      <li><code>most_reactions_on_emoji</code> – Counts the emoji with the highest reactions, each user counts once per emoji.</li>
+      <li><code>total_reactions</code> – Counts every reaction on the message; users reacting multiple times with different emojis count multiple times.</li>
+      <li><code>unique_users</code> – Counts the total number of unique users who reacted, regardless of emoji.</li>
+    </ul>
+  </section>
 
   <section>
     <h3>🔒 Emoji Whitelist (Optional)</h3>
