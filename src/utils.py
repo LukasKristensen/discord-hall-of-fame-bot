@@ -686,10 +686,10 @@ async def update_user_database(bot: discord.Client, db_client):
     :param db_client: The MongoDB client
     :return: None
     """
+    await logging(bot, f"Updating user database...")
     for guild in bot.guilds:
         if not db_client['server_configs'].find_one({"guild_id": int(guild.id)}):
             continue
-        await logging(bot, f"Updating user database for guild {guild.id}", guild.id)
         hall_of_fame_messages_document = db_client["hall_of_fame_messages"]
         messages = list(hall_of_fame_messages_document.find({"guild_id": int(guild.id)}))
 
@@ -756,7 +756,7 @@ async def update_user_database(bot: discord.Client, db_client):
                     upsert=True)
             except Exception as e:
                 await logging(bot, f"Failed to update user {user_id} in database: {e}", guild.id)
-
+    await logging(bot, f"Finished updating user database...")
 
 
 async def fix_write_hall_of_fame_channel_permissions(bot, db_client):
