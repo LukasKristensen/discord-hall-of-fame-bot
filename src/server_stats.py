@@ -141,6 +141,12 @@ def create_bubble_chart(server_stats):
     plt.show()
 
 
+# Create a distribution of how many messages are sent (histogram) the first day, then the second day, etc. until 7 days
+
+# Create a plot of the average messages sent per day for each server and compare it to the server member count
+
+# Create a histogram of the amount of messages sent per day across all servers
+
 create_plot_server_count_and_total_members()
 create_bot_stats_plot()
 create_plot(server_stats)

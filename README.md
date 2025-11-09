@@ -28,7 +28,7 @@ Join the Hall of Fame community server: https://discord.gg/r98WC5GHcn
 | /calculation_method            | :string ["most_reactions_on_emoji", "total_reactions", "unique_users"] | Change the calculation method for reactions                                                       | /calculation_method                     |
 | /hide_hof_post_below_threshold | :bool                                                                  | Should hall of fame posts be hidden when they go below the reaction threshold? (Will be visible again when they reach the threshold again) | /hide_hof_post_below_threshold          |
 | /ignore_bot_messages           | :bool                                                                  | Should the bot ignore messages from other bots?                                                                            | /get_server_config                      |
-| /get_user_profile              | :user                                                                  | Get the Hall of Fame profile for a user                                                                            | /get_user_profile @HallOfFame           |
+| /user_profile                  | :user                                                                  | Get the Hall of Fame profile for a user                                                                            | /user_profile @HallOfFame               |
 | /set_hall_of_fame_channel      | :channel                                                               | Manually set the Hall of Fame channel for the server                                                               | /set_hall_of_fame_channel #hall-of-fame |
 | /feedback                      | :forms                                                                 | Got a feature request or bug report? Let us know!                                                  | /feedback                               |
 | /vote                          |                                                                        | Support the bot by voting for it on top.gg: https://top.gg/bot/1177041673352663070/vote            | /vote                                   |
@@ -49,7 +49,7 @@ A custom emoji filter can be applied to the bot, so that it will only look for e
 ## Development Log
 
 ### 1.16
-- [x] </get_user_profile> command: You can now view both your own and others' Hall of Fame stats.
+- [x] </user_profile> command: You can now view both your own and others' Hall of Fame stats.
   - Displays all-time and monthly Hall of Fame post counts.
   - Highlights top users per server – great for competition and recognition.
   - Automatically updated daily via a recurring job.
