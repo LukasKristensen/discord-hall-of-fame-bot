@@ -304,6 +304,9 @@ async def main(guild_id: int, bot: commands.Bot, get_reaction_threshold: int, ha
     #           - If it exists, return and do not create a new wrapped
     #           - It should be an integer, 0 for not created, 1 for created, 2 for posted
 
+    # Todo:
+    #   - Check if possible to run with same approach as used in /leaderboard to retrieve members
+
     guild = bot.get_guild(guild_id)
 
     hall_of_fame_channel = bot.get_channel(hall_of_fame_channel_id)
