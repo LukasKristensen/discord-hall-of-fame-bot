@@ -627,8 +627,8 @@ async def logging(bot: discord.Client, message, server_id=None, new_value=None, 
     if new_value:
         date_formatted_message += f"\n[New value: {new_value}]"
     if log_type == Log_type.ERROR:
-        error_channel_id = target_guild.get_channel(error_channel_id)
-        await error_channel_id.send(error_logging_message + f"```diff\n{date_formatted_message}\n```")
+        error_channel = target_guild.get_channel(error_channel_id)
+        await error_channel.send(error_logging_message + f"```diff\n{date_formatted_message}\n```")
     elif log_type == Log_type.SYSTEM:
         system_channel = bot.get_channel(system_channel_id)
         await system_channel.send(error_logging_message + f"```diff\n{date_formatted_message}\n```")

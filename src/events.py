@@ -163,12 +163,11 @@ async def daily_task(bot: discord.Client, db_client, server_classes, dev_testing
                 server_class.hall_of_fame_channel_id,
                 server_class.reaction_threshold)
         except Exception as e:
-            await utils.logging(bot, f"Error updating leaderboard for server {server_class.guild_id}: {e}",
-                                server_class.guild_id)
+            await utils.logging(bot, f"Error updating leaderboard for server {server_class.guild_id}: {e}")
 
     await utils.logging(bot, f"Checking for db entries that are not in the guilds")
     for server in db_client["server_configs"].find():
-        if server and not dev_testing and int(server.guild_id) not in [guild.id for guild in bot.guilds]:
+        if server and not dev_testing and int(server["guild_id"]) not in [guild.id for guild in bot.guilds]:
             await utils.logging(bot, f"Could not find server {server} in bot guilds")
     await utils.logging(bot, f"Checked {len(server_classes)} servers for daily task")
     await update_user_database(bot, db_client)
