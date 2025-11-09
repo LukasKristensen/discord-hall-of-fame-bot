@@ -120,9 +120,6 @@ async def user_server_profile(interaction, user, user_stats, db_client, month_em
     :param all_time_emoji:
     :return:
     """
-    # Defer the interaction response to prevent timeout
-    await interaction.response.defer()
-
     user_has_most_this_month_hall_of_fame_messages = db_client['server_users'].find_one(
         {"guild_id": interaction.guild_id}, sort=[("this_month_hall_of_fame_messages", -1)])
     user_with_most_all_time_hall_of_fame_messages = db_client['server_users'].find_one(
@@ -172,6 +169,9 @@ async def server_leaderboard(interaction, db_client, month_emoji: str, all_time_
     :param all_time_emoji:
     :return:
     """
+    # Defer the interaction response to prevent timeout
+    await interaction.response.defer()
+    
     embed = discord.Embed(
         title=f"📊 {interaction.guild.name} Hall of Fame Leaderboard",
         description="Here are the top users in this server:",
