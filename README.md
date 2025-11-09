@@ -49,6 +49,21 @@ A custom emoji filter can be applied to the bot, so that it will only look for e
 
 ## Development Log
 
+### 1.17
+- [x] </get_user_profile:1380288217432985781> updated to clarify the 24h calculation window.
+  - Added attachment preview for better visual explanation of the time-based stats.
+- [x] </set_hall_of_fame_channel:1393576242237804768> command added to manually set the Hall of Fame channel, providing more flexibility for server admins.
+- [x] Adaptive threshold: On server join, the default reaction threshold now scales automatically based on member count for a more balanced experience.
+- [x] Fixed design issues on Hall of Fame posts when replying to messages (caused by a recent Discord library update).
+- [x] Added automatic permission validation for the Hall of Fame channel, ensuring the bot has proper write access, along with better debugging feedback.
+- [x] Fixed the 1024-character limit issue on messages and referenced messages (long text is now truncated to 1021 characters followed by “...”).
+- [x] Reduced the likelihood of voting messages being shown on embeds due to limited interactions.
+- [x] Fixed context reply issues inside embeds for improved clarity.
+- [x] Improved database exception handling with more detailed logging.
+- [x] Added developer ping notifications for critical runtime errors.
+- [x] Split production and testing logging environments for safer debugging.
+- [x] General backend optimizations, code cleanup, and error log decluttering.
+
 ### 1.16
 - [x] </user_profile> command: You can now view both your own and others' Hall of Fame stats.
   - Displays all-time and monthly Hall of Fame post counts.
