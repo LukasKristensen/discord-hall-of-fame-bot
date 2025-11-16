@@ -40,3 +40,5 @@ ERROR_SERVER_NOT_SETUP = ("The server is not set up yet. Try re-inviting the bot
                           "not work.")
 BOT_LOADING = "Please wait while the bot is loading..."
 COMMAND_ON_COOLDOWN = "This command is on a daily cooldown. Please try again later."
+LEADERBOARD_NO_DATA = "No data available for the leaderboard. Data is calculated every 24 hours."
+PROFILE_NO_DATA = "No data available for this user. Data is calculated every 24 hours."

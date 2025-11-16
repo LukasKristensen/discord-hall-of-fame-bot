@@ -431,6 +431,10 @@ async def user_server_profile(interaction: discord.Interaction, specific_user: d
     user = specific_user or interaction.user
     user_stats = production_db['server_users'].find_one({"user_id": user.id, "guild_id": interaction.guild_id})
 
+    if user_stats is None:
+        await interaction.response.send_message(messages.PROFILE_NO_DATA)
+        return
+
     await commands.user_server_profile(interaction, user, user_stats, production_db, month_emoji, all_time_emoji)
     await utils.logging(bot, f"Get user server profile command used by {interaction.user.name} in {interaction.guild.name}",
                         interaction.guild.id, str(user.id), log_type=Log_type.COMMAND)
@@ -445,6 +449,10 @@ async def leaderboard(interaction: discord.Interaction):
     """
     if interaction.guild_id not in server_classes:
         await interaction.response.send_message(messages.ERROR_SERVER_NOT_SETUP)
+        return
+
+    if production_db['server_users'].count_documents({"guild_id": interaction.guild_id}) == 0:
+        await interaction.response.send_message(messages.LEADERBOARD_NO_DATA)
         return
 
     if interaction.guild_id in daily_command_cooldowns and "leaderboard" in daily_command_cooldowns[interaction.guild_id]:
