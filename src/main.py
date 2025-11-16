@@ -33,7 +33,7 @@ intents.message_content = True
 bot = discord_commands.Bot(command_prefix="/", intents=intents)
 tree = bot.tree
 server_classes = {}
-dev_user = 230698327589650432
+dev_user = 230698327589650432  # todo: put in env variable
 bot_stats = BotStats()
 
 month_emoji = "<:month_most_hof_messages:1380272332609683517>" if not dev_test else "<:month_most_hof_messages:1380272983368532160>"
@@ -508,6 +508,11 @@ async def set_hall_of_fame_channel(interaction: discord.Interaction, channel: di
     await interaction.response.send_message(f"Hall of Fame channel set to {channel.mention}")
     await utils.logging(bot, f"Set Hall of Fame channel command used by {interaction.user.name} in {interaction.guild.name}",
                         interaction.guild.id, str(channel.id), log_type=Log_type.COMMAND)
+
+
+@tree.command(name="request_to_set_bot_profile", description="Request to set a custom bot profile picture and cover")
+async def set_bot_profile_picture(interaction: discord.Interaction, image_url: str = None, cover_url: str = None):
+    await utils.create_custom_profile_picture_and_cover_form(interaction, bot, image_url, cover_url)
 
 
 async def check_if_user_has_manage_server_permission(interaction: discord.Interaction, check_server_set_up: bool = True):

@@ -696,6 +696,49 @@ async def create_feedback_form(interaction: discord.Interaction, bot):
     await interaction.response.send_modal(FeedbackModal())
 
 
+async def create_custom_profile_picture_and_cover_form(interaction: discord.Interaction, bot, default_profile_url="", default_cover_url=""):
+    """
+    Create a custom profile picture and cover form for the user and send the feedback to the feedback channel
+    :param interaction:
+    :param bot:
+    :param default_profile_url: The default profile picture URL
+    :param default_cover_url: The default cover image URL
+    :return:
+    """
+    class CustomProfilePictureAndCoverModal(discord.ui.Modal, title="Custom Bot Profile For Server"):
+        profile_picture_url_input = discord.ui.TextInput(
+            style=discord.TextStyle.short,
+            placeholder="Enter the URL of the profile picture for the bot",
+            required=False,
+            label="Custom Profile Picture URL",
+            default=default_profile_url
+        )
+        cover_url_input = discord.ui.TextInput(
+            style=discord.TextStyle.short,
+            placeholder="Enter the URL of the cover image for the bot",
+            required=False,
+            label="Custom Cover Image URL",
+            default=default_cover_url
+        )
+
+        async def on_submit(self, custom_profile_interaction) -> None:
+            target_guild = bot.get_guild(1180006529575960616)
+            target_channel = target_guild.get_channel(1439704492928012360)
+            embed = discord.Embed(
+                title="New Custom Profile Picture and Cover Request",
+                color=discord.Color.gold()
+            )
+            embed.add_field(name=self.profile_picture_url_input.label, value=self.profile_picture_url_input.value, inline=False)
+            embed.add_field(name=self.cover_url_input.label, value=self.cover_url_input.value, inline=False)
+            embed.set_author(name=custom_profile_interaction.user.name, icon_url=custom_profile_interaction.user.avatar.url if custom_profile_interaction.user.avatar else None)
+            embed.add_field(name="Guild", value=custom_profile_interaction.guild.id, inline=True)
+            embed.add_field(name="UserId", value=custom_profile_interaction.user.id, inline=True)
+            await target_channel.send(embed=embed)
+            await custom_profile_interaction.response.send_message(f"Your request has been sent, {custom_profile_interaction.user.mention}. "
+                                                                   f"Processing times can vary and it may not be possible to fulfill all requests.")
+    await interaction.response.send_modal(CustomProfilePictureAndCoverModal())
+
+
 async def update_user_database(bot: discord.Client, db_client):
     """
     Update the user database with the latest information
