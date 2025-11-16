@@ -1,2 +1,2 @@
-VERSION = "1.17.3"
+VERSION = "1.18.0"
 DATE = None
