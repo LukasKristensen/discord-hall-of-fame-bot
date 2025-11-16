@@ -512,6 +512,8 @@ async def set_hall_of_fame_channel(interaction: discord.Interaction, channel: di
 
 @tree.command(name="request_to_set_bot_profile", description="Request to set a custom bot profile picture and cover")
 async def set_bot_profile_picture(interaction: discord.Interaction, image_url: str = None, cover_url: str = None):
+    if not await check_if_user_has_manage_server_permission(interaction):
+        return
     await utils.create_custom_profile_picture_and_cover_form(interaction, bot, image_url, cover_url)
 
 
