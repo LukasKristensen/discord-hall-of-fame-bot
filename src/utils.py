@@ -628,30 +628,26 @@ async def logging(bot: discord.Client, message, server_id=None, new_value=None, 
     :param log_type: The type of log message
     :return:
     """
-    system_channel_id = 1373699890718441482 if bot.application_id == 1177041673352663070 else 1383834858870145214
-    error_channel_id = 1344070396575617085 if bot.application_id == 1177041673352663070 else 1383834395726577765
-    command_channel_id = 1436699144163954759 if bot.application_id == 1177041673352663070 else 1436699968571183106
-    critical_channel_id = 1439692415454675045 if bot.application_id == 1177041673352663070 else 1439692461176787074
+    log_channels = {
+        Log_type.ERROR: 1344070396575617085 if bot.application_id == 1177041673352663070 else 1383834395726577765,
+        Log_type.SYSTEM: 1373699890718441482 if bot.application_id == 1177041673352663070 else 1383834858870145214,
+        Log_type.COMMAND: 1436699144163954759 if bot.application_id == 1177041673352663070 else 1436699968571183106,
+        Log_type.CRITICAL: 1439692415454675045 if bot.application_id == 1177041673352663070 else 1439692461176787074
+    }
 
     target_guild = bot.get_guild(1180006529575960616)
     date_formatted_message = f"{datetime.datetime.now()}: {message}"
 
-    if server_id:
-        date_formatted_message += f"\n[Server ID: {server_id}]"
     if new_value:
         date_formatted_message += f"\n[Value: {new_value}]"
-    if log_type == Log_type.ERROR:
-        critical_channel = target_guild.get_channel(error_channel_id)
-        await critical_channel.send(f"```diff\n{date_formatted_message}\n```")
-    elif log_type == Log_type.SYSTEM:
-        system_channel = bot.get_channel(system_channel_id)
-        await system_channel.send(f"```diff\n{date_formatted_message}\n```")
-    elif log_type == Log_type.COMMAND:
-        command_channel = target_guild.get_channel(command_channel_id)
-        await command_channel.send(f"```diff\n{date_formatted_message}\n```")
-    elif log_type == Log_type.CRITICAL:
-        critical_channel = target_guild.get_channel(critical_channel_id)
-        await critical_channel.send("<@230698327589650432> " + f"```diff\n{date_formatted_message}\n```")
+    if server_id:
+        date_formatted_message += f"\n[Server ID: {server_id}]"
+
+    channel_id = log_channels.get(log_type)
+    if channel_id:
+        channel = target_guild.get_channel(channel_id)
+        message_prefix = "<@230698327589650432> " if log_type == Log_type.CRITICAL else ""
+        await channel.send(f"{message_prefix}```diff\n{date_formatted_message}\n```")
 
 
 async def create_feedback_form(interaction: discord.Interaction, bot):
