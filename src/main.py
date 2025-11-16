@@ -33,7 +33,7 @@ intents.message_content = True
 bot = discord_commands.Bot(command_prefix="/", intents=intents)
 tree = bot.tree
 server_classes = {}
-dev_user = 230698327589650432
+dev_user = 230698327589650432  # todo: put in env variable
 bot_stats = BotStats()
 
 month_emoji = "<:month_most_hof_messages:1380272332609683517>" if not dev_test else "<:month_most_hof_messages:1380272983368532160>"
@@ -431,6 +431,12 @@ async def user_server_profile(interaction: discord.Interaction, specific_user: d
     user = specific_user or interaction.user
     user_stats = production_db['server_users'].find_one({"user_id": user.id, "guild_id": interaction.guild_id})
 
+    if user_stats is None:
+        await interaction.response.send_message(messages.PROFILE_NO_DATA)
+        await utils.logging(bot, f"User server profile command used by {interaction.user.name} in {interaction.guild.name} but no data available for user {user.name}",
+                            interaction.guild.id, str(user.id), log_type=Log_type.COMMAND)
+        return
+
     await commands.user_server_profile(interaction, user, user_stats, production_db, month_emoji, all_time_emoji)
     await utils.logging(bot, f"Get user server profile command used by {interaction.user.name} in {interaction.guild.name}",
                         interaction.guild.id, str(user.id), log_type=Log_type.COMMAND)
@@ -445,6 +451,12 @@ async def leaderboard(interaction: discord.Interaction):
     """
     if interaction.guild_id not in server_classes:
         await interaction.response.send_message(messages.ERROR_SERVER_NOT_SETUP)
+        return
+
+    if production_db['server_users'].count_documents({"guild_id": interaction.guild_id}) == 0:
+        await interaction.response.send_message(messages.LEADERBOARD_NO_DATA)
+        await utils.logging(bot, f"Leaderboard command used by {interaction.user.name} in {interaction.guild.name} but no data available",
+                            interaction.guild.id, log_type=Log_type.COMMAND)
         return
 
     if interaction.guild_id in daily_command_cooldowns and "leaderboard" in daily_command_cooldowns[interaction.guild_id]:
@@ -463,7 +475,7 @@ async def leaderboard(interaction: discord.Interaction):
         await utils.logging(bot, f"Error in leaderboard command: {e}", interaction.guild_id)
         return
     
-    await utils.logging(bot, f"Get server stats command used by {interaction.user.name} in {interaction.guild.name}",
+    await utils.logging(bot, f"Leaderboard command used by {interaction.user.name} in {interaction.guild.name}",
                         interaction.guild.id, log_type=Log_type.COMMAND)
 
 
@@ -496,6 +508,11 @@ async def set_hall_of_fame_channel(interaction: discord.Interaction, channel: di
     await interaction.response.send_message(f"Hall of Fame channel set to {channel.mention}")
     await utils.logging(bot, f"Set Hall of Fame channel command used by {interaction.user.name} in {interaction.guild.name}",
                         interaction.guild.id, str(channel.id), log_type=Log_type.COMMAND)
+
+
+@tree.command(name="request_to_set_bot_profile", description="Request to set a custom bot profile picture and cover")
+async def set_bot_profile_picture(interaction: discord.Interaction, image_url: str = None, cover_url: str = None):
+    await utils.create_custom_profile_picture_and_cover_form(interaction, bot, image_url, cover_url)
 
 
 async def check_if_user_has_manage_server_permission(interaction: discord.Interaction, check_server_set_up: bool = True):
