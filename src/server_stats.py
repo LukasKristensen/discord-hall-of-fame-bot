@@ -3,12 +3,14 @@ from pymongo.mongo_client import MongoClient
 from dotenv import load_dotenv
 import matplotlib.pyplot as plt
 import numpy as np
+from datetime import datetime
 
-# Load the .env file from the parent directory
 load_dotenv('../.env')
 mongo_uri = os.getenv('MONGO_URI_TEST_DEV')
 db_client = MongoClient(mongo_uri)
 production_db = db_client['production']
+server_graph_folder = 'graphs'
+show_plots = False
 
 server_stats = []
 servers = production_db['server_configs'].distinct('guild_id')
@@ -30,7 +32,7 @@ for server in servers:
 
 
 # Update the plot function to include server_member_count
-def create_plot(server_stats):
+def create_plot(file_name):
     filtered_stats = [
         stat for stat in server_stats
         if isinstance(stat['reaction_threshold'], (int, float)) and isinstance(stat['server_member_count'], (int, float))
@@ -53,9 +55,7 @@ def create_plot(server_stats):
     ax1.bar(x - width, reaction_thresholds, width, label='Reaction Thresholds')
     ax1.set_xlabel('Servers')
     ax1.set_ylabel('Reaction Thresholds')
-    ax1.set_title('Reaction Thresholds, Message Counts, and Member Counts Across Servers')
-    ax1.set_xticks(x)
-    ax1.set_xticklabels(servers, rotation='vertical')
+    ax1.set_title('Reaction Thresholds, Message Counts, and Member Counts')
 
     ax2 = ax1.twinx()
     ax2.bar(x, message_counts, width, label='Message Counts', color='orange')
@@ -68,12 +68,14 @@ def create_plot(server_stats):
 
     fig.tight_layout()
     fig.legend(loc='upper left', bbox_to_anchor=(0.1, 0.9))
-    plt.show()
+    plt.savefig(os.path.join(folder_path, file_name))
+    if show_plots:
+        plt.show()
 
 
-def create_plot_where_msg_count_greater_than_zero(server_stats):
+def create_plot_where_msg_count_greater_than_zero():
     filtered_stats = [stat for stat in server_stats if stat['message_count'] > 0]
-    create_plot(filtered_stats)
+    create_plot(filtered_stats, 'server_stats_msg_count_gt_zero.png')
 
 
 def create_bot_stats_plot():
@@ -87,9 +89,14 @@ def create_bot_stats_plot():
     ax.plot(timestamps, total_messages_list, label='Total Messages')
     ax.set_xlabel('Timestamp')
     ax.set_ylabel('Total Messages')
+    ax.yaxis.set_major_locator(plt.MaxNLocator(integer=True))
+    ax.plot(timestamps[-1], total_messages_list[-1], 'ro')
+    ax.text(timestamps[-1], total_messages_list[-1], f' {total_messages_list[-1]}', color='red', va='bottom')
     ax.set_title('Total Messages Over Time')
     ax.legend()
-    plt.show()
+    plt.savefig(os.path.join(folder_path, 'bot_total_messages.png'))
+    if show_plots:
+        plt.show()
 
 
 def create_plot_server_count_and_total_members():
@@ -114,10 +121,12 @@ def create_plot_server_count_and_total_members():
     ax2.set_ylabel('Total Members', color='orange')
     ax2.tick_params(axis='y', labelcolor='orange')
     ax2.legend(loc='upper right')
-    plt.show()
+    plt.savefig(os.path.join(folder_path, 'server_count_and_total_members.png'))
+    if show_plots:
+        plt.show()
 
 
-def create_bubble_chart(server_stats):
+def create_bubble_chart():
     filtered_stats = [
         stat for stat in server_stats
         if isinstance(stat['reaction_threshold'], (int, float)) and isinstance(stat['server_member_count'], (int, float))
@@ -133,22 +142,141 @@ def create_bubble_chart(server_stats):
 
     plt.figure(figsize=(10, 6))
     scatter = plt.scatter(reaction_thresholds, member_counts, s=[count * 3 for count in message_counts], alpha=0.5)
+    for i, count in enumerate(message_counts):
+        overlap = False
+        for j in range(i):
+            if abs(reaction_thresholds[i] - reaction_thresholds[j]) < 5 and abs(
+                    member_counts[i] - member_counts[j]) < 5:
+                overlap = True
+                break
+        if not overlap:
+            plt.text(reaction_thresholds[i], member_counts[i], str(count), fontsize=8, ha='center', va='center')
+
     plt.xlabel('Reaction Thresholds')
     plt.legend(*scatter.legend_elements(), title="Message Count")
     plt.ylabel('Member Counts')
     plt.title('Bubble Chart of Reaction Thresholds vs Member Counts (Bubble Size = Message Count)')
     plt.grid(True)
-    plt.show()
+    plt.savefig(os.path.join(folder_path, 'bubble_chart.png'))
+    if show_plots:
+        plt.show()
 
 
-# Create a distribution of how many messages are sent (histogram) the first day, then the second day, etc. until 7 days
+def create_average_messages_per_day_compared_to_member_count():
+    avg_messages_per_day = []
+    member_counts = []
+    for stat in server_stats:
+        if stat['message_count'] > 0:
+            join_date = production_db['server_configs'].find_one({'guild_id': stat['server']}).get('joined_date')
+            if not join_date:
+                continue
+            messages_per_day_value = stat['message_count'] / ((datetime.now() - join_date).days + 1)
+            if messages_per_day_value > 0:
+                avg_messages_per_day.append(messages_per_day_value)
+                member_counts.append(int(stat['server_member_count']) if str(stat['server_member_count']).isdigit() else 0)
 
-# Create a plot of the average messages sent per day for each server and compare it to the server member count
+    plt.figure(figsize=(10, 6))
+    plt.scatter(member_counts, avg_messages_per_day, alpha=0.7)
+    plt.xlabel('Server Member Count')
+    plt.ylabel('Average Messages per Day')
+    plt.title('Average Messages per Day vs Server Member Count')
+    plt.grid(True)
+    plt.savefig(os.path.join(folder_path, 'avg_messages_per_day_vs_member_count.png'))
+    if show_plots:
+        plt.show()
 
-# Create a histogram of the amount of messages sent per day across all servers
 
-create_plot_server_count_and_total_members()
-create_bot_stats_plot()
-create_plot(server_stats)
-create_plot_where_msg_count_greater_than_zero(server_stats)
-create_bubble_chart(server_stats)
+def create_histogram_messages_per_day():
+    messages_per_day = []
+    for stat in server_stats:
+        if stat['message_count'] > 0:
+            join_date = production_db['server_configs'].find_one({'guild_id': stat['server']}).get('joined_date')
+            if not join_date:
+                continue
+            messages_per_day_value = stat['message_count'] / ((datetime.now() - join_date).days + 1)
+            if messages_per_day_value > 0:
+                messages_per_day.append(messages_per_day_value)
+
+    plt.figure(figsize=(10, 6))
+    plt.hist(messages_per_day, bins=20, color='blue', alpha=0.7)
+    plt.xlabel('Average Messages per Day')
+    plt.ylabel('Number of Servers')
+    plt.title('Histogram of Average Messages per Day Across All Servers')
+    plt.grid(True)
+    plt.savefig(os.path.join(folder_path, 'histogram_messages_per_day.png'))
+    if show_plots:
+        plt.show()
+
+
+def create_histogram_of_messages_per_month():
+    messages_per_month = {}
+    start_date = datetime(2023, 11, 23)
+    current_date = datetime.now()
+    hall_of_fame_messages = production_db['hall_of_fame_messages']
+
+    while start_date < current_date:
+        end_date = datetime(start_date.year + (start_date.month // 12), ((start_date.month % 12) + 1), 1)
+        query = {
+            'created_at': {
+                '$gte': start_date,
+                '$lt': end_date
+            }
+        }
+        count = hall_of_fame_messages.count_documents(query)
+        server_count = hall_of_fame_messages.distinct('guild_id', query)
+        month_str = start_date.strftime("%Y-%m")
+        messages_per_month[month_str] = {'count': count, 'server_count': len(server_count)}
+        start_date = end_date
+
+    months = list(messages_per_month.keys())
+    message_counts = [messages_per_month[month]['count'] for month in months]
+    server_counts = [messages_per_month[month]['server_count'] for month in months]
+    message_per_server = [
+        message_counts[i] / server_counts[i] if server_counts[i] > 0 else 0
+        for i in range(len(months))
+    ]
+
+    bar_width = 0.35
+    x = np.arange(len(months))
+
+    fig, ax1 = plt.subplots(figsize=(12, 6))
+
+    ax1.bar(x - bar_width / 2, message_counts, bar_width, label='Message Counts', color='green', alpha=0.7)
+    ax1.set_xlabel('Month')
+    ax1.set_ylabel('Message Counts', color='green')
+    ax1.tick_params(axis='y', labelcolor='green')
+    ax1.set_xticks(x)
+    ax1.set_xticklabels(months, rotation=45)
+
+    ax2 = ax1.twinx()
+    ax2.bar(x + bar_width / 2, message_per_server, bar_width, label='Messages per Server', color='blue', alpha=0.7)
+    ax2.set_ylabel('Messages per Server', color='blue')
+    ax2.tick_params(axis='y', labelcolor='blue')
+
+    fig.suptitle('Histogram of Hall of Fame Messages and Messages per Server Per Month')
+    ax1.grid(True, which='both', axis='y', linestyle='--', alpha=0.5)
+
+    fig.legend(loc='upper left', bbox_to_anchor=(0.1, 0.9))
+
+    plt.tight_layout()
+    plt.savefig(os.path.join(folder_path, 'histogram_messages_and_per_server.png'))
+    if show_plots:
+        plt.show()
+
+
+if __name__ == "__main__":
+    timestamp_str = datetime.now().strftime("%Y%m%d_%H%M%S")
+    if not os.path.exists(server_graph_folder):
+        os.makedirs(server_graph_folder)
+    folder_path = os.path.join(server_graph_folder, timestamp_str)
+    if not os.path.exists(folder_path):
+        os.makedirs(folder_path)
+
+    create_histogram_of_messages_per_month()
+    create_average_messages_per_day_compared_to_member_count()
+    create_histogram_messages_per_day()
+    create_plot_server_count_and_total_members()
+    create_bot_stats_plot()
+    create_bubble_chart()
+    create_plot('server_stats_all.png')
+    create_plot_where_msg_count_greater_than_zero()

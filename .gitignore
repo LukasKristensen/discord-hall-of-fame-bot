@@ -4,3 +4,5 @@ __pycache__/message_reactions.cpython-39.pyc
 \# Connecting to the server.txt
 __pycache__/message_reactions.cpython-310.pyc
 *.pyc
+db_backups
+graphs

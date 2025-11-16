@@ -7,6 +7,8 @@ from message_reactions import most_reacted_emoji, reaction_count
 from classes import Server_class
 from classes import Log_type
 
+daily_post_limit = 100
+
 
 async def validate_message(message: discord.RawReactionActionEvent, bot: discord.Client, message_collection,
                            reaction_threshold: int, post_due_date: int, target_channel_id: int,
@@ -37,6 +39,19 @@ async def validate_message(message: discord.RawReactionActionEvent, bot: discord
 
     # Checks if the message is from a bot
     if message.author.bot and ignore_bot_messages:
+        return
+
+    if message_collection.count_documents(
+        {"guild_id": int(message.guild.id),
+         "created_at": {"$gte": datetime.datetime.now(timezone.utc) - datetime.timedelta(days=1)}
+         }) > daily_post_limit:
+        await logging(bot, f"Guild {message.guild.id} has exceeded the daily limit for hall of fame posts.", message.guild.id, log_type=Log_type.CRITICAL)
+        hof_channel = bot.get_channel(target_channel_id)
+        existing_messages = [message async for message in hof_channel.history(limit=10)]
+        for existing_message in existing_messages:
+            if existing_message.author.id == bot.user.id and "has exceeded the daily limit" in existing_message.content:
+                return
+        await hof_channel.send(f"⚠️ Guild {message.guild.name} has exceeded the daily limit {daily_post_limit} for hall of fame posts. ⚠️")
         return
 
     # Gets the adjusted reaction count corrected for not accounting the author
@@ -280,7 +295,7 @@ async def post_hall_of_fame_message(message: discord.Message, bot: discord.Clien
         await hall_of_fame_message.delete()
         if video_message:
             await video_message.delete()
-        await logging(bot, e, message.guild.id, ping_developer=True)
+        await logging(bot, e, message.guild.id, log_type=Log_type.CRITICAL)
 
 
 async def set_footer(embed: discord.Embed):
@@ -603,7 +618,7 @@ async def send_server_owner_error_message(owner, e, bot):
             await logging(bot, f"Failed to send error message to server owner {owner.name}: {history_error}")
 
 
-async def logging(bot: discord.Client, message, server_id=None, new_value=None, log_type=Log_type.ERROR, ping_developer=False):
+async def logging(bot: discord.Client, message, server_id=None, new_value=None, log_type=Log_type.ERROR):
     """
     Log an error message to the error channel
     :param bot:
@@ -611,30 +626,32 @@ async def logging(bot: discord.Client, message, server_id=None, new_value=None, 
     :param server_id: The ID of the server
     :param new_value: The new value of the server configuration
     :param log_type: The type of log message
-    :param ping_developer: Whether to ping the developer
     :return:
     """
     system_channel_id = 1373699890718441482 if bot.application_id == 1177041673352663070 else 1383834858870145214
     error_channel_id = 1344070396575617085 if bot.application_id == 1177041673352663070 else 1383834395726577765
     command_channel_id = 1436699144163954759 if bot.application_id == 1177041673352663070 else 1436699968571183106
+    critical_channel_id = 1439692415454675045 if bot.application_id == 1177041673352663070 else 1439692461176787074
 
     target_guild = bot.get_guild(1180006529575960616)
     date_formatted_message = f"{datetime.datetime.now()}: {message}"
-    error_logging_message = "<@230698327589650432> " if ping_developer else ""
 
     if server_id:
         date_formatted_message += f"\n[Server ID: {server_id}]"
     if new_value:
         date_formatted_message += f"\n[Value: {new_value}]"
     if log_type == Log_type.ERROR:
-        error_channel = target_guild.get_channel(error_channel_id)
-        await error_channel.send(error_logging_message + f"```diff\n{date_formatted_message}\n```")
+        critical_channel = target_guild.get_channel(error_channel_id)
+        await critical_channel.send(f"```diff\n{date_formatted_message}\n```")
     elif log_type == Log_type.SYSTEM:
         system_channel = bot.get_channel(system_channel_id)
-        await system_channel.send(error_logging_message + f"```diff\n{date_formatted_message}\n```")
+        await system_channel.send(f"```diff\n{date_formatted_message}\n```")
     elif log_type == Log_type.COMMAND:
         command_channel = target_guild.get_channel(command_channel_id)
-        await command_channel.send(error_logging_message + f"```diff\n{date_formatted_message}\n```")
+        await command_channel.send(f"```diff\n{date_formatted_message}\n```")
+    elif log_type == Log_type.CRITICAL:
+        critical_channel = target_guild.get_channel(critical_channel_id)
+        await critical_channel.send("<@230698327589650432> " + f"```diff\n{date_formatted_message}\n```")
 
 
 async def create_feedback_form(interaction: discord.Interaction, bot):

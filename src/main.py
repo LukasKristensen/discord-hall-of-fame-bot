@@ -433,6 +433,8 @@ async def user_server_profile(interaction: discord.Interaction, specific_user: d
 
     if user_stats is None:
         await interaction.response.send_message(messages.PROFILE_NO_DATA)
+        await utils.logging(bot, f"User server profile command used by {interaction.user.name} in {interaction.guild.name} but no data available for user {user.name}",
+                            interaction.guild.id, str(user.id), log_type=Log_type.COMMAND)
         return
 
     await commands.user_server_profile(interaction, user, user_stats, production_db, month_emoji, all_time_emoji)
@@ -453,6 +455,8 @@ async def leaderboard(interaction: discord.Interaction):
 
     if production_db['server_users'].count_documents({"guild_id": interaction.guild_id}) == 0:
         await interaction.response.send_message(messages.LEADERBOARD_NO_DATA)
+        await utils.logging(bot, f"Leaderboard command used by {interaction.user.name} in {interaction.guild.name} but no data available",
+                            interaction.guild.id, log_type=Log_type.COMMAND)
         return
 
     if interaction.guild_id in daily_command_cooldowns and "leaderboard" in daily_command_cooldowns[interaction.guild_id]:
