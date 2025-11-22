@@ -4,7 +4,7 @@ import datetime
 from datetime import timezone
 import asyncio
 from message_reactions import most_reacted_emoji, reaction_count
-from classes import Server_class, Log_type, Command_refs
+from classes import server_class, log_type, command_refs
 
 daily_post_limit = 100
 

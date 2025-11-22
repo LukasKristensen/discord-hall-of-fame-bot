@@ -1,7 +1,7 @@
 import random
 import discord
 import utils
-from classes import version, Command_refs
+from classes import version, command_refs
 
 
 async def get_random_message(interaction: discord.Interaction, collection, bot, reaction_threshold):

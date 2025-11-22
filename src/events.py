@@ -3,7 +3,7 @@ import asyncio
 import datetime
 import utils
 from translations import messages
-from classes import Command_refs
+from classes import command_refs
 
 
 async def post_wrapped():

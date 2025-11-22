@@ -8,8 +8,8 @@ from pymongo.mongo_client import MongoClient
 import commands
 import events
 import utils
-from classes import version, Log_type, Command_refs
-from classes.Bot_stats import BotStats
+from classes import version, log_type, command_refs
+from classes.bot_stats import BotStats
 from api_services import topgg_api, discordbotlist_api
 import os
 from translations import messages
