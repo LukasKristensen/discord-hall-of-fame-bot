@@ -204,6 +204,12 @@ async def check_write_permissions_to_hall_of_fame_channel(bot: discord.Client, s
                 continue
             alt_permissions = alt_channel.permissions_for(guild.me)
             if alt_permissions.send_messages:
+                recent_messages = [msg async for msg in alt_channel.history(limit=30)]
+                if any(messages.MISSING_HOF_CHANNEL_PERMISSIONS.split(".")[0] in msg.content for msg in
+                       recent_messages):
+                    await utils.logging(bot, f"Missing permissions message already sent to {alt_channel.name} in "
+                                             f"server {guild.name} recently", guild.id)
+                    break
                 try:
                     await alt_channel.send(
                         messages.MISSING_HOF_CHANNEL_PERMISSIONS.format(missing_permissions=", ".join(misising_permissions)))
