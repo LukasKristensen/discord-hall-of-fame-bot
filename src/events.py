@@ -33,7 +33,7 @@ async def check_for_new_server_classes(bot: discord.Client, db_client):
                 new_server_class = await utils.create_database_context(bot, guild, db_client)
                 new_server_classes[guild.id] = new_server_class
         except Exception as e:
-            await utils.send_server_owner_error_message(guild.owner, messages.FAILED_SETUP_HOF.format(serverName=guild.name))
+            await utils.send_server_owner_error_message(guild.owner, messages.FAILED_SETUP_HOF.format(serverName=guild.name), bot)
             await utils.logging(bot, f"Sending error message to server owner: {e}", guild.id)
     return new_server_classes
 
