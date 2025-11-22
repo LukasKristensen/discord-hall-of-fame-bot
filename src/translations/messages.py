@@ -1,11 +1,9 @@
-from ..classes import Command_refs
-
 AUTHOR_REACTION_INCLUDED = "Author's own reaction included in the reaction threshold: {include}"
 BOT_PERMISSIONS_ERROR = "The bot does not have the required permissions to setup the server"
 SERVER_ALREADY_SETUP = "The server is already set up"
 CUSTOM_EMOJI_CHECK_DISABLED = (
     "Custom emoji check logic is not enabled for this server. "
-    f"Use {Command_refs.CUSTOM_EMOJI_CHECK_LOGIC} to enable it."
+    f"Use </custom_emoji_check_logic:1358208382473076848> to enable it."
 )
 INVALID_EMOJI_FORMAT = "Can only whitelist one emoji at a time"
 VOTE_MESSAGE = "Vote for the bot on top.gg: https://top.gg/bot/1177041673352663070/vote"
