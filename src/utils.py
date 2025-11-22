@@ -853,7 +853,7 @@ async def post_server_perms(bot, server):
                              f"Can add reactions: {server.me.guild_permissions.add_reactions}\n"
                              f"Can use external emojis: {server.me.guild_permissions.use_external_emojis}\n"
                              f"Can view channels: {server.me.guild_permissions.view_channel}\n"
-                             f"Server member count: {server.member_count}")
+                             f"Server member count: {server.member_count}", log_type=Log_type.SYSTEM)
 
 
 async def send_message_to_highest_prio_channel(bot: discord.Client, guild: discord.Guild, message_content: str,
