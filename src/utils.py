@@ -873,7 +873,7 @@ async def send_message_to_highest_prio_channel(bot: discord.Client, guild: disco
         if alt_permissions.send_messages and alt_permissions.view_channel and alt_permissions.read_message_history:
             if history_limit > 0:
                 recent_messages = [msg async for msg in alt_channel.history(limit=history_limit)]
-                if any(message_content.split(".")[0] in msg.content for msg in
+                if any(message_content[:20] in msg.content for msg in
                        recent_messages):
                     await logging(bot, f"Missing permissions message already sent to {alt_channel.name} in "
                                              f"server {guild.name} recently", guild.id)

@@ -183,10 +183,13 @@ async def check_write_permissions_to_hall_of_fame_channel(bot: discord.Client, s
             missing_permissions.append("View Channel")
         if not channel.permissions_for(guild.me).send_messages:
             missing_permissions.append("Send Messages")
+        if not channel.permissions_for(guild.me).read_message_history:
+            missing_permissions.append("Read Message History")
         if not missing_permissions:
             continue
+        channel_ref = f"<#{channel.id}>"
         await utils.send_message_to_highest_prio_channel(bot, guild, messages.MISSING_HOF_CHANNEL_PERMISSIONS.format(
-                        missing_permissions=", ".join(missing_permissions)))
+                        missing_permissions=", ".join(missing_permissions), channel=channel_ref))
 
 
 async def update_user_database(bot: discord.Client, db_client):
