@@ -15,8 +15,8 @@ import os
 from translations import messages
 import migrations
 
-dev_test = os.getenv('DEV_TEST') == "True"
 load_dotenv()
+dev_test = os.getenv('DEV_TEST') == "True"
 if dev_test:
     TOKEN = os.getenv('DEV_KEY')
 else:
@@ -489,9 +489,16 @@ async def set_hall_of_fame_channel(interaction: discord.Interaction, channel: di
     if not await check_if_user_has_manage_server_permission(interaction, False):
         return
 
+    missing_permissions = []
     if not channel.permissions_for(interaction.guild.me).send_messages:
-        await interaction.response.send_message("I do not have permission to send messages in this channel.")
-        await utils.logging(bot, f"User {interaction.user.name} tried to set Hall of Fame channel without write permissions in {interaction.guild.name}", interaction.guild.id, str(channel.id))
+        missing_permissions.append("Send Messages")
+    if not channel.permissions_for(interaction.guild.me).view_channel:
+        missing_permissions.append("View Channel")
+    if not channel.permissions_for(interaction.guild.me).read_message_history:
+        missing_permissions.append("Read Message History")
+    if missing_permissions:
+        await interaction.response.send_message(f"Failed to set Hall of Fame channel. In {channel.mention}, the bot is missing the following permissions: {', '.join(missing_permissions)}")
+        await utils.logging(bot, f"User {interaction.user.name} tried to set Hall of Fame channel without necessary permissions in {interaction.guild.name}", interaction.guild.id, str(channel.id))
         return
 
     if interaction.guild_id not in server_classes or server_classes[interaction.guild_id] is None:

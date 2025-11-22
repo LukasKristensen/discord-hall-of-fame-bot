@@ -32,8 +32,8 @@ for server in servers:
 
 
 # Update the plot function to include server_member_count
-def create_plot(file_name):
-    filtered_stats = [
+def create_plot(file_name, filtered_stats=None):
+    filtered_stats = filtered_stats or [
         stat for stat in server_stats
         if isinstance(stat['reaction_threshold'], (int, float)) and isinstance(stat['server_member_count'], (int, float))
         and stat['reaction_threshold'] <= stat['server_member_count']
@@ -75,7 +75,7 @@ def create_plot(file_name):
 
 def create_plot_where_msg_count_greater_than_zero():
     filtered_stats = [stat for stat in server_stats if stat['message_count'] > 0]
-    create_plot(filtered_stats, 'server_stats_msg_count_gt_zero.png')
+    create_plot('server_stats_msg_count_gt_zero.png', filtered_stats)
 
 
 def create_bot_stats_plot():

@@ -6,6 +6,7 @@ import asyncio
 from message_reactions import most_reacted_emoji, reaction_count
 from classes import Server_class
 from classes import Log_type
+from src.translations import messages
 
 daily_post_limit = 100
 
@@ -29,6 +30,9 @@ async def validate_message(message: discord.RawReactionActionEvent, bot: discord
     message_id: int = message.message_id
 
     channel = bot.get_channel(channel_id)
+    if not channel.permissions_for(message.guild.me).read_messages:
+        await logging(bot, f"Bot does not have read message permissions in channel {channel.id} of guild {message.guild.id}", message.guild.id)
+        return
     message = await channel.fetch_message(message_id)
 
     # Checks if the post is older than the due date and has not been added to the database
@@ -852,3 +856,33 @@ async def post_server_perms(bot, server):
                              f"Can use external emojis: {server.me.guild_permissions.use_external_emojis}\n"
                              f"Can view channels: {server.me.guild_permissions.view_channel}\n"
                              f"Server member count: {server.member_count}")
+
+
+async def send_message_to_highest_prio_channel(bot: discord.Client, guild: discord.Guild, message_content: str,
+                                               history_limit: int = 100):
+    """
+    Send a message to the highest priority channel in the guild where the bot has permission to send messages
+    :param bot: The Discord bot
+    :param guild: The guild to send the message to
+    :param message_content: The content of the message to send
+    :param history_limit: The number of messages to check for recent similar messages
+    :return:
+    """
+    for alt_channel in sorted(guild.text_channels, key=lambda c: c.position):
+        alt_permissions = alt_channel.permissions_for(guild.me)
+        if alt_permissions.send_messages and alt_permissions.view_channel and alt_permissions.read_message_history:
+            if history_limit > 0:
+                recent_messages = [msg async for msg in alt_channel.history(limit=history_limit)]
+                if any(message_content.split(".")[0] in msg.content for msg in
+                       recent_messages):
+                    await logging(bot, f"Missing permissions message already sent to {alt_channel.name} in "
+                                             f"server {guild.name} recently", guild.id)
+                    break
+            try:
+                await alt_channel.send(message_content)
+                await logging(bot, f"Sent missing permissions message to {alt_channel.name} in "
+                                         f"server {guild.name}", guild.id)
+                break
+            except Exception as e:
+                await logging(bot, f"Failed to send missing permissions message to {alt_channel.name} in server "
+                                   f"{guild.name}: {e}", guild.id)
