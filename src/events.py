@@ -172,6 +172,53 @@ async def daily_task(bot: discord.Client, db_client, server_classes, dev_testing
             await utils.logging(bot, f"Could not find server {guild_id} in bot guilds")
     await utils.logging(bot, f"Checked {len(server_classes)} servers for daily task")
     await update_user_database(bot, db_client)
+    await check_write_permissions_to_hall_of_fame_channel(bot, server_classes)
+
+
+async def check_write_permissions_to_hall_of_fame_channel(bot: discord.Client, server_classes):
+    """
+    Check if the bot has write permissions to the Hall of Fame channel for each server
+    :param bot: The bot client
+    :param server_classes: The server classes
+    :return: None
+    """
+    for server_class in list(server_classes.values()):
+        guild = bot.get_guild(server_class.guild_id)
+        if not guild:
+            continue
+        channel = guild.get_channel(server_class.hall_of_fame_channel_id)
+        if not channel:
+            await utils.logging(bot, f"Could not find Hall of Fame channel for server {guild.name}", guild.id)
+            continue
+        misising_permissions = []
+        if not channel.permissions_for(guild.me).view_channel:
+            misising_permissions.append("View Channel")
+        if not channel.permissions_for(guild.me).send_messages:
+            misising_permissions.append("Send Messages")
+        if not channel.permissions_for(guild.me).embed_links:
+            misising_permissions.append("Embed Links")
+        if not misising_permissions:
+            continue
+        for alt_channel in sorted(guild.text_channels, key=lambda c: c.position):
+            if alt_channel.id == channel.id:
+                continue
+            alt_permissions = alt_channel.permissions_for(guild.me)
+            if alt_permissions.send_messages:
+                recent_messages = [msg async for msg in alt_channel.history(limit=100)]
+                if any(messages.MISSING_HOF_CHANNEL_PERMISSIONS.split(".")[0] in msg.content for msg in
+                       recent_messages):
+                    await utils.logging(bot, f"Missing permissions message already sent to {alt_channel.name} in "
+                                             f"server {guild.name} recently", guild.id)
+                    break
+                try:
+                    await alt_channel.send(
+                        messages.MISSING_HOF_CHANNEL_PERMISSIONS.format(missing_permissions=", ".join(misising_permissions)))
+                    await utils.logging(bot, f"Sent missing permissions message to {alt_channel.name} in "
+                                             f"server {guild.name}", guild.id)
+                    break
+                except Exception as e:
+                    await utils.logging(bot, f"Failed to send missing permissions message to "
+                                             f"{alt_channel.name} in server {guild.name}: {e}", guild.id)
 
 
 async def update_user_database(bot: discord.Client, db_client):

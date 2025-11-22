@@ -42,3 +42,6 @@ BOT_LOADING = "Please wait while the bot is loading..."
 COMMAND_ON_COOLDOWN = "This command is on a daily cooldown. Please try again later."
 LEADERBOARD_NO_DATA = "The leaderboard is currently empty. Data updates every 24 hours, so please check back later."
 PROFILE_NO_DATA = "No profile data is available for this user yet. Data is refreshed every 24 hours."
+MISSING_HOF_CHANNEL_PERMISSIONS = ("The bot is missing the required permissions to post in the Hall of Fame channel. "
+                                   "Please ensure the bot has: {missing_permissions}. \nIf the hall of channel does not exist,"
+                                   " set it up using </set_hall_of_fame_channel:1393576242237804768> and ensure the bot has the required permissions.")
