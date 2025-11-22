@@ -195,15 +195,13 @@ async def check_write_permissions_to_hall_of_fame_channel(bot: discord.Client, s
             misising_permissions.append("View Channel")
         if not channel.permissions_for(guild.me).send_messages:
             misising_permissions.append("Send Messages")
-        if not channel.permissions_for(guild.me).embed_links:
-            misising_permissions.append("Embed Links")
         if not misising_permissions:
             continue
         for alt_channel in sorted(guild.text_channels, key=lambda c: c.position):
             if alt_channel.id == channel.id:
                 continue
             alt_permissions = alt_channel.permissions_for(guild.me)
-            if alt_permissions.send_messages:
+            if alt_permissions.send_messages and alt_permissions.view_channel and alt_permissions.read_message_history:
                 recent_messages = [msg async for msg in alt_channel.history(limit=100)]
                 if any(messages.MISSING_HOF_CHANNEL_PERMISSIONS.split(".")[0] in msg.content for msg in
                        recent_messages):
