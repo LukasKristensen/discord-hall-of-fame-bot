@@ -4,8 +4,7 @@ import datetime
 from datetime import timezone
 import asyncio
 from message_reactions import most_reacted_emoji, reaction_count
-from classes import Server_class
-from classes import Log_type
+from classes import Server_class, Log_type, Command_refs
 
 daily_post_limit = 100
 
@@ -470,9 +469,8 @@ async def create_database_context(bot, server, db_client, custom_channel: discor
     :return: The database context
     """
     db_server_configs = db_client["server_configs"]
-    server_member_count = sum(1 for member in server.members if not member.bot)
-    if not server_member_count:
-        server_member_count = server.member_count
+    # server_member_count = sum(1 for member in server.members if not member.bot) // todo: enable when members intent
+    server_member_count = server.member_count
 
     reaction_threshold_default = (
         1 if server_member_count < 3 else
@@ -525,12 +523,12 @@ async def create_database_context(bot, server, db_client, custom_channel: discor
         f"🎉 **Welcome to the Hall of Fame!** 🎉\n"
         f"When a message receives **{reaction_threshold_default} or more (default threshold) of the same reaction**, it’s automatically **reposted here** to celebrate its popularity.\n\n"
         f"🔧 **Customize your setup:**\n"
-        f"   • Change the reaction threshold with </set_reaction_threshold:1367582528675774595>\n"
-        f"   • View your current settings with </get_server_config:1358208382473076852>\n\n"
+        f"   • Change the reaction threshold with {Command_refs.SET_REACTION_THRESHOLD}\n"
+        f"   • View your current settings with {Command_refs.GET_SERVER_CONFIG}\n\n"
         f"✨ **Want to only track specific emojis?**\n"
-        f"   Enable emoji filtering with </custom_emoji_check_logic:1358208382473076848>\n\n"
+        f"   Enable emoji filtering with {Command_refs.CUSTOM_EMOJI_CHECK_LOGIC}\n\n"
         f"🧠 **Want to adjust how reactions are counted? (e.g. all votes on a message, not just the highest reaction)**\n"
-        f"   Use </calculation_method:1378150000600678440> to change the reaction count calculation method.\n\n"
+        f"   Use {Command_refs.CALCULATION_METHOD} to change the reaction count calculation method.\n\n"
     )
 
     new_server_class = Server_class.Server(

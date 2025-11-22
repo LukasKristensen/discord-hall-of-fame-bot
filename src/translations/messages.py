@@ -1,10 +1,11 @@
-# Strings for bot responses
+from src.classes import Command_refs
+
 AUTHOR_REACTION_INCLUDED = "Author's own reaction included in the reaction threshold: {include}"
 BOT_PERMISSIONS_ERROR = "The bot does not have the required permissions to setup the server"
 SERVER_ALREADY_SETUP = "The server is already set up"
 CUSTOM_EMOJI_CHECK_DISABLED = (
     "Custom emoji check logic is not enabled for this server. "
-    "Use </custom_emoji_check_logic:1358208382473076848> to enable it."
+    f"Use {Command_refs.CUSTOM_EMOJI_CHECK_LOGIC} to enable it."
 )
 INVALID_EMOJI_FORMAT = "Can only whitelist one emoji at a time"
 VOTE_MESSAGE = "Vote for the bot on top.gg: https://top.gg/bot/1177041673352663070/vote"
@@ -23,18 +24,18 @@ SERVER_CONFIG = (
     "**Server Configuration:**\n"
     "```"
     "Reaction Threshold: {reaction_threshold}\n"
-    "Allow Messages in HOF Channel: {allow_messages_in_hof_channel}\n"
-    "Include Author in Reaction Calculation: {include_author_in_reaction_calculation}\n"
-    "Ignore Bot Messages: {ignore_bot_messages}\n"
-    "Post Validity (How many days back a post is considered valid): {post_due_date}\n"
-    "Calculation Method: {calculation_method}\n"
-    "Hide hall of fame posts when they are below the threshold: {hide_hof_post_below_threshold}\n"
-    "Custom Emoji Check Logic: {custom_emoji_check_logic}\n"
+    f"Allow Messages in HOF Channel: {Command_refs.ALLOW_MESSAGES_IN_HOF_CHANNEL}\n"
+    f"Include Author in Reaction Calculation: {Command_refs.INCLUDE_AUTHORS_REACTION}\n"
+    f"Ignore Bot Messages: {Command_refs.IGNORE_BOT_MESSAGES}\n"
+    f"Post Validity (How many days back a post is considered valid): {Command_refs.SET_POST_DUE_DATE}\n"
+    f"Calculation Method: {Command_refs.CALCULATION_METHOD}\n"
+    f"Hide hall of fame posts when they are below the threshold: {Command_refs.HIDE_HOF_POST_BELOW_THRESHOLD}\n"
+    f"Custom Emoji Check Logic: {Command_refs.CUSTOM_EMOJI_CHECK_LOGIC}\n"
 )
 FAILED_SETUP_HOF = ("Failed to setup Hall Of Fame for server {serverName}.\n"
                     "This may be due to missing permissions, try re-inviting the bot with the correct permissions.\n"
                     "If the problem persists, please contact support. https://discord.gg/r98WC5GHcn\n"
-                    "Want to setup the Hall Of Fame manually? Use the </set_hall_of_fame_channel:1393576242237804768> command.")
+                    f"Want to setup the Hall Of Fame manually? Use the {Command_refs.SET_HALL_OF_FAME_CHANNEL} command.")
 ERROR_SERVER_NOT_SETUP = ("The server is not set up yet. Try re-inviting the bot with the correct permissions it is "
                           "asking for in the server join message. Giving the permissions after the bot has joined will "
                           "not work.")
@@ -44,5 +45,5 @@ LEADERBOARD_NO_DATA = "The leaderboard is currently empty. Data updates every 24
 PROFILE_NO_DATA = "No profile data is available for this user yet. Data is refreshed every 24 hours."
 MISSING_HOF_CHANNEL_PERMISSIONS = ("The bot is missing the required permissions to post in {channel}.\n"
                                    "Update the channel permission for the bot to have: ``{missing_permissions}``\n"
-                                   "If the hall of channel does not exist, set it up using </set_hall_of_fame_channel:1393576242237804768> "
+                                   f"If the hall of channel does not exist, set it up using {Command_refs.SET_HALL_OF_FAME_CHANNEL} "
                                    "and ensure the bot has the required permissions.")
