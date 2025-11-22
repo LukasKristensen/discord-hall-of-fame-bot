@@ -79,11 +79,10 @@ async def on_raw_reaction(message: discord.RawReactionActionEvent, bot: discord.
             await utils.logging(bot, f"Error in reaction event: {e}", message.guild_id)
 
 
-async def on_message(message, bot: discord.Client, target_channel_id, allow_messages_in_hof_channel):
+async def on_message(message, target_channel_id, allow_messages_in_hof_channel):
     """
     Event handler for when a message is sent in a channel
     :param message:
-    :param bot:
     :param target_channel_id:
     :param allow_messages_in_hof_channel:
     :return:

@@ -139,7 +139,7 @@ async def on_message(message: discord.Message):
         server_class = server_classes[message.guild.id]
         target_channel_id = server_class.hall_of_fame_channel_id
         allow_messages_in_hof = server_class.allow_messages_in_hof_channel
-        await events.on_message(message, bot, target_channel_id, allow_messages_in_hof)
+        await events.on_message(message, target_channel_id, allow_messages_in_hof)
     except Exception as e:
         await utils.logging(bot, f"Error in on_message: {e}", message.guild.id)
 

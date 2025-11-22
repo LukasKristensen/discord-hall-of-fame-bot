@@ -12,7 +12,7 @@ else:
     TOKEN = os.getenv('KEY')
 
 
-def custom_bot_profile_for_guild(guild_id: str, image_url: str = None, cover_url: str = None):
+def custom_bot_profile_for_guild(guild_id: int, image_url: str = None, cover_url: str = None):
     encoded_avatar = encode_image_to_base64(image_url) if image_url and is_valid_url(image_url) else None
     encoded_banner = encode_image_to_base64(cover_url) if cover_url and is_valid_url(cover_url) else None
     url = f"https://discord.com/api/v10/guilds/{guild_id}/members/@me"
