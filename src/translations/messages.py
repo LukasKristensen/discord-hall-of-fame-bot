@@ -50,5 +50,5 @@ FAILED_TO_FIND_HOF_CHANNEL = (
     "Failed to find the Hall of Fame channel - Ensure the bot has access with "
     "``View Channel, Send Messages, and Read Message History`` permissions.\n"
     f"Set it up using </set_hall_of_fame_channel:1393576242237804768> if it doesn't exist.\n"
-    "For further assistance, contact support: https://discord.gg/r98WC5GHcn"
+    "For further assistance, contact support: <https://discord.gg/r98WC5GHcn>"
 )
