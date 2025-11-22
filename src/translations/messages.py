@@ -1,4 +1,4 @@
-from src.classes import Command_refs
+from ..classes import Command_refs
 
 AUTHOR_REACTION_INCLUDED = "Author's own reaction included in the reaction threshold: {include}"
 BOT_PERMISSIONS_ERROR = "The bot does not have the required permissions to setup the server"
