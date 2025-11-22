@@ -6,7 +6,6 @@ import asyncio
 from message_reactions import most_reacted_emoji, reaction_count
 from classes import Server_class
 from classes import Log_type
-from src.translations import messages
 
 daily_post_limit = 100
 
@@ -30,8 +29,8 @@ async def validate_message(message: discord.RawReactionActionEvent, bot: discord
     message_id: int = message.message_id
 
     channel = bot.get_channel(channel_id)
-    if not channel.permissions_for(message.guild.me).read_messages:
-        await logging(bot, f"Bot does not have read message permissions in channel {channel.id} of guild {message.guild.id}", message.guild.id)
+    if not channel.permissions_for(channel.guild.me).read_messages:
+        await logging(bot, f"Bot does not have read message permissions in channel {channel.id} of guild {channel.guild.id}", channel.guild.id)
         return
     message = await channel.fetch_message(message_id)
 
@@ -65,8 +64,7 @@ async def validate_message(message: discord.RawReactionActionEvent, bot: discord
                                                                           "message_id": int(message_id)}):
             await remove_embed(message_id, message_collection, bot, target_channel_id, message.guild.id, channel_id)
             if ("video_link_message_id" in message_collection.find_one({"guild_id": int(message.guild.id), "channel_id": int(channel_id),
-                                                                       "message_id": int(message_id)})
-                                                                        and message.attachments):
+                                                                       "message_id": int(message_id)}) and message.attachments):
                 video_link_message = message_collection.find_one({"message_id": int(message_id)})["video_link_message_id"]
                 if video_link_message is not None:
                     target_channel = bot.get_channel(target_channel_id)
@@ -226,12 +224,11 @@ async def check_all_server_messages(guild_id: int, sweep_limit, sweep_limited: b
         if not channel.permissions_for(guild.me).read_messages:
             continue
         try:
-            await interaction.edit_original_response(content=
-                                                     status_message+
-                                                     f"\n\nChecking channel {channel.name} ({channel.id})"+
+            await interaction.edit_original_response(content=status_message +
+                                                     f"\n\nChecking channel {channel.name} ({channel.id})" +
                                                      f"\nTotal HOF messages waiting to post: {len(messages_to_post)}")
             if not isinstance(channel, discord.TextChannel):
-                continue # Ignore if the current channel is not a text channel
+                continue  # Ignore if the current channel is not a text channel
             if channel.id == target_channel_id and not allow_messages_in_hof_channel:
                 continue
             async for message in channel.history(limit=sweep_limit):
@@ -239,7 +236,7 @@ async def check_all_server_messages(guild_id: int, sweep_limit, sweep_limited: b
                     if message.author.bot:
                         continue  # Ignore messages from bots
                     if (datetime.datetime.now(timezone.utc) - message.created_at).days > post_due_date and sweep_limit is not None:
-                        break # If the message is older than the due date, no need to check further
+                        break  # If the message is older than the due date, no need to check further
                     message_reactions = await reaction_count(message)
 
                     if message_reactions >= reaction_threshold:
@@ -248,7 +245,7 @@ async def check_all_server_messages(guild_id: int, sweep_limit, sweep_limited: b
                             if sweep_limited:
                                 break  # if message is already in the database, no need to check further
                             else:
-                                continue # if a total channel sweep is needed
+                                continue  # if a total channel sweep is needed
                         messages_to_post.append(message)
                     elif message_reactions >= reaction_threshold-3:
                         if collection.find_one({"message_id": int(message.id)}):

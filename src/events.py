@@ -177,6 +177,7 @@ async def check_write_permissions_to_hall_of_fame_channel(bot: discord.Client, s
         channel = guild.get_channel(server_class.hall_of_fame_channel_id)
         if not channel:
             await utils.logging(bot, f"Could not find Hall of Fame channel for server {guild.name}", guild.id)
+            await utils.send_message_to_highest_prio_channel(bot, guild, messages.FAILED_SETUP_HOF.format(serverName=guild.name))
             continue
         missing_permissions = []
         if not channel.permissions_for(guild.me).view_channel:
