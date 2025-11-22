@@ -47,3 +47,9 @@ MISSING_HOF_CHANNEL_PERMISSIONS = ("The bot is missing the required permissions 
                                    "Update the channel permission for the bot to have: ``{missing_permissions}``\n"
                                    f"If the hall of channel does not exist, set it up using {Command_refs.SET_HALL_OF_FAME_CHANNEL} "
                                    "and ensure the bot has the required permissions.")
+FAILED_TO_FIND_HOF_CHANNEL = (
+    "Failed to find the Hall of Fame channel - Ensure the bot has access with "
+    "``View Channel, Send Messages, and Read Message History`` permissions.\n"
+    f"Set it up using {Command_refs.SET_HALL_OF_FAME_CHANNEL} if it doesn't exist.\n"
+    "For further assistance, contact support: https://discord.gg/r98WC5GHcn"
+)
