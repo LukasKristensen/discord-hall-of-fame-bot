@@ -1,7 +1,7 @@
 import random
 import discord
 import utils
-from classes import version
+from classes import version, Command_refs
 
 
 async def get_random_message(interaction: discord.Interaction, collection, bot, reaction_threshold):
@@ -47,23 +47,24 @@ async def get_help(interaction: discord.Interaction):
         title="Commands",
         color=0x00ff00
     )
-    embed.add_field(name="</help:1343460166263115796>", value="List of commands", inline=False)
-    embed.add_field(name="</set_reaction_threshold:1367582528675774595>", value="Set the amount of reactions needed for a post to reach hall of fame", inline=False)
-    embed.add_field(name="</include_authors_reaction:1348428694007316570>", value="Should the author of a message be included in the reaction count?", inline=False)
-    embed.add_field(name="</allow_messages_in_hof_channel:1348428694007316571>", value="Allow anyone to type in the Hall of Fame channel", inline=False)
-    embed.add_field(name="</custom_emoji_check_logic:1358208382473076848>", value="Use only whitelisted emojis for the reaction count", inline=False)
-    embed.add_field(name="</whitelist_emoji:1358208382473076849>", value="Add a whitelisted emoji to the list [custom_emoji_check_logic]", inline=False)
-    embed.add_field(name="</unwhitelist_emoji:1358208382473076850>", value="Remove a whitelisted emoji from the list [custom_emoji_check_logic]", inline=False)
-    embed.add_field(name="</clear_whitelist:1358208382473076851>", value="Clear the whitelist of emojis [custom_emoji_check_logic]", inline=False)
-    embed.add_field(name="</get_server_config:1358208382473076852>", value="Get the current bot configuration for the server", inline=False)
-    embed.add_field(name="</ignore_bot_messages:1369721901726961686>", value="Should the bot ignore messages from other bots?", inline=False)
-    embed.add_field(name="</hide_hof_post_below_threshold:1379918311197769800>", value="Should hall of fame posts be hidden when they go below the reaction threshold? (Will be visible again when they reach the threshold again)", inline=False)
-    embed.add_field(name="</calculation_method:1378150000600678440>", value="Change the calculation method for reactions", inline=False)
-    embed.add_field(name="</user_profile:1437074090707124316>", value="Get the Hall of Fame profile for a user", inline=False)
-    embed.add_field(name="</leaderboard:1437111068987101305>", value="Get the Hall of Fame leaderboard for the server", inline=False)
-    embed.add_field(name="</set_hall_of_fame_channel:1393576242237804768>", value="Manually set the Hall of Fame channel for the server", inline=False)
-    embed.add_field(name="</feedback:1345567421834068060>", value="Got a feature request or bug report? Let us know!", inline=False)
-    embed.add_field(name="</vote:1357399188526334074>", value="Support the bot by voting for it on top.gg: https://top.gg/bot/1177041673352663070/vote", inline=False)
+    embed.add_field(name=Command_refs.HELP, value="List of commands", inline=False)
+    embed.add_field(name=Command_refs.SET_REACTION_THRESHOLD, value="Set the amount of reactions needed for a post to reach hall of fame", inline=False)
+    embed.add_field(name=Command_refs.INCLUDE_AUTHORS_REACTION, value="Should the author of a message be included in the reaction count?", inline=False)
+    embed.add_field(name=Command_refs.ALLOW_MESSAGES_IN_HOF_CHANNEL, value="Allow anyone to type in the Hall of Fame channel", inline=False)
+    embed.add_field(name=Command_refs.CUSTOM_EMOJI_CHECK_LOGIC, value="Use only whitelisted emojis for the reaction count", inline=False)
+    embed.add_field(name=Command_refs.WHITELIST_EMOJI, value="Add a whitelisted emoji to the list [custom_emoji_check_logic]", inline=False)
+    embed.add_field(name=Command_refs.UNWHITELIST_EMOJI, value="Remove a whitelisted emoji from the list [custom_emoji_check_logic]", inline=False)
+    embed.add_field(name=Command_refs.CLEAR_WHITELIST, value="Clear the whitelist of emojis [custom_emoji_check_logic]", inline=False)
+    embed.add_field(name=Command_refs.GET_SERVER_CONFIG, value="Get the current bot configuration for the server", inline=False)
+    embed.add_field(name=Command_refs.IGNORE_BOT_MESSAGES, value="Should the bot ignore messages from other bots?", inline=False)
+    embed.add_field(name=Command_refs.HIDE_HOF_POST_BELOW_THRESHOLD, value="Should hall of fame posts be hidden when they go below the reaction threshold? (Will be visible again when they reach the threshold again)", inline=False)
+    embed.add_field(name=Command_refs.CALCULATION_METHOD, value="Change the calculation method for reactions", inline=False)
+    embed.add_field(name=Command_refs.SET_POST_DUE_DATE, value="Set how many days back a post is considered valid for reaching the Hall of Fame", inline=False)
+    embed.add_field(name=Command_refs.USER_PROFILE, value="Get the Hall of Fame profile for a user", inline=False)
+    embed.add_field(name=Command_refs.LEADERBOARD, value="Get the Hall of Fame leaderboard for the server", inline=False)
+    embed.add_field(name=Command_refs.SET_HALL_OF_FAME_CHANNEL, value="Manually set the Hall of Fame channel for the server", inline=False)
+    embed.add_field(name=Command_refs.FEEDBACK, value="Got a feature request or bug report? Let us know!", inline=False)
+    embed.add_field(name=Command_refs.VOTE_BOT, value="Support the bot by voting for it on top.gg: https://top.gg/bot/1177041673352663070/vote", inline=False)
     embed.add_field(name="", value="", inline=True)
     embed.add_field(name="Having trouble setting up the bot?", value="Make sure the bot has the correct permissions in the server or try to re-invite it", inline=False)
     embed.add_field(name="Need help?", value="Join the community server: https://discord.gg/r98WC5GHcn", inline=False)

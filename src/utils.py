@@ -4,8 +4,7 @@ import datetime
 from datetime import timezone
 import asyncio
 from message_reactions import most_reacted_emoji, reaction_count
-from classes import Server_class
-from classes import Log_type
+from classes import Server_class, Log_type, Command_refs
 
 daily_post_limit = 100
 
@@ -29,6 +28,9 @@ async def validate_message(message: discord.RawReactionActionEvent, bot: discord
     message_id: int = message.message_id
 
     channel = bot.get_channel(channel_id)
+    if not channel.permissions_for(channel.guild.me).read_messages:
+        await logging(bot, f"Bot does not have read message permissions in channel {channel.id} of guild {channel.guild.id}", channel.guild.id)
+        return
     message = await channel.fetch_message(message_id)
 
     # Checks if the post is older than the due date and has not been added to the database
@@ -61,8 +63,7 @@ async def validate_message(message: discord.RawReactionActionEvent, bot: discord
                                                                           "message_id": int(message_id)}):
             await remove_embed(message_id, message_collection, bot, target_channel_id, message.guild.id, channel_id)
             if ("video_link_message_id" in message_collection.find_one({"guild_id": int(message.guild.id), "channel_id": int(channel_id),
-                                                                       "message_id": int(message_id)})
-                                                                        and message.attachments):
+                                                                       "message_id": int(message_id)}) and message.attachments):
                 video_link_message = message_collection.find_one({"message_id": int(message_id)})["video_link_message_id"]
                 if video_link_message is not None:
                     target_channel = bot.get_channel(target_channel_id)
@@ -222,12 +223,11 @@ async def check_all_server_messages(guild_id: int, sweep_limit, sweep_limited: b
         if not channel.permissions_for(guild.me).read_messages:
             continue
         try:
-            await interaction.edit_original_response(content=
-                                                     status_message+
-                                                     f"\n\nChecking channel {channel.name} ({channel.id})"+
+            await interaction.edit_original_response(content=status_message +
+                                                     f"\n\nChecking channel {channel.name} ({channel.id})" +
                                                      f"\nTotal HOF messages waiting to post: {len(messages_to_post)}")
             if not isinstance(channel, discord.TextChannel):
-                continue # Ignore if the current channel is not a text channel
+                continue  # Ignore if the current channel is not a text channel
             if channel.id == target_channel_id and not allow_messages_in_hof_channel:
                 continue
             async for message in channel.history(limit=sweep_limit):
@@ -235,7 +235,7 @@ async def check_all_server_messages(guild_id: int, sweep_limit, sweep_limited: b
                     if message.author.bot:
                         continue  # Ignore messages from bots
                     if (datetime.datetime.now(timezone.utc) - message.created_at).days > post_due_date and sweep_limit is not None:
-                        break # If the message is older than the due date, no need to check further
+                        break  # If the message is older than the due date, no need to check further
                     message_reactions = await reaction_count(message)
 
                     if message_reactions >= reaction_threshold:
@@ -244,7 +244,7 @@ async def check_all_server_messages(guild_id: int, sweep_limit, sweep_limited: b
                             if sweep_limited:
                                 break  # if message is already in the database, no need to check further
                             else:
-                                continue # if a total channel sweep is needed
+                                continue  # if a total channel sweep is needed
                         messages_to_post.append(message)
                     elif message_reactions >= reaction_threshold-3:
                         if collection.find_one({"message_id": int(message.id)}):
@@ -469,14 +469,16 @@ async def create_database_context(bot, server, db_client, custom_channel: discor
     :return: The database context
     """
     db_server_configs = db_client["server_configs"]
+    # server_member_count = sum(1 for member in server.members if not member.bot) // todo: enable when members intent
+    server_member_count = server.member_count
 
     reaction_threshold_default = (
-        1 if server.member_count < 3 else
-        2 if server.member_count < 5 else
-        3 if server.member_count < 10 else
-        4 if server.member_count < 20 else
-        5 if server.member_count < 40 else
-        6 if server.member_count < 50 else
+        1 if server_member_count < 3 else
+        2 if server_member_count < 5 else
+        3 if server_member_count < 10 else
+        4 if server_member_count < 20 else
+        5 if server_member_count < 40 else
+        6 if server_member_count < 50 else
         7
     )
 
@@ -521,12 +523,12 @@ async def create_database_context(bot, server, db_client, custom_channel: discor
         f"🎉 **Welcome to the Hall of Fame!** 🎉\n"
         f"When a message receives **{reaction_threshold_default} or more (default threshold) of the same reaction**, it’s automatically **reposted here** to celebrate its popularity.\n\n"
         f"🔧 **Customize your setup:**\n"
-        f"   • Change the reaction threshold with </set_reaction_threshold:1367582528675774595>\n"
-        f"   • View your current settings with </get_server_config:1358208382473076852>\n\n"
+        f"   • Change the reaction threshold with {Command_refs.SET_REACTION_THRESHOLD}\n"
+        f"   • View your current settings with {Command_refs.GET_SERVER_CONFIG}\n\n"
         f"✨ **Want to only track specific emojis?**\n"
-        f"   Enable emoji filtering with </custom_emoji_check_logic:1358208382473076848>\n\n"
+        f"   Enable emoji filtering with {Command_refs.CUSTOM_EMOJI_CHECK_LOGIC}\n\n"
         f"🧠 **Want to adjust how reactions are counted? (e.g. all votes on a message, not just the highest reaction)**\n"
-        f"   Use </calculation_method:1378150000600678440> to change the reaction count calculation method.\n\n"
+        f"   Use {Command_refs.CALCULATION_METHOD} to change the reaction count calculation method.\n\n"
     )
 
     new_server_class = Server_class.Server(
@@ -852,3 +854,33 @@ async def post_server_perms(bot, server):
                              f"Can use external emojis: {server.me.guild_permissions.use_external_emojis}\n"
                              f"Can view channels: {server.me.guild_permissions.view_channel}\n"
                              f"Server member count: {server.member_count}")
+
+
+async def send_message_to_highest_prio_channel(bot: discord.Client, guild: discord.Guild, message_content: str,
+                                               history_limit: int = 100):
+    """
+    Send a message to the highest priority channel in the guild where the bot has permission to send messages
+    :param bot: The Discord bot
+    :param guild: The guild to send the message to
+    :param message_content: The content of the message to send
+    :param history_limit: The number of messages to check for recent similar messages
+    :return:
+    """
+    for alt_channel in sorted(guild.text_channels, key=lambda c: c.position):
+        alt_permissions = alt_channel.permissions_for(guild.me)
+        if alt_permissions.send_messages and alt_permissions.view_channel and alt_permissions.read_message_history:
+            if history_limit > 0:
+                recent_messages = [msg async for msg in alt_channel.history(limit=history_limit)]
+                if any(message_content[:20] in msg.content for msg in
+                       recent_messages):
+                    await logging(bot, f"Missing permissions message already sent to {alt_channel.name} in "
+                                             f"server {guild.name} recently", guild.id)
+                    break
+            try:
+                await alt_channel.send(message_content)
+                await logging(bot, f"Sent missing permissions message to {alt_channel.name} in "
+                                         f"server {guild.name}", guild.id)
+                break
+            except Exception as e:
+                await logging(bot, f"Failed to send missing permissions message to {alt_channel.name} in server "
+                                   f"{guild.name}: {e}", guild.id)

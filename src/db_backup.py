@@ -1,7 +1,8 @@
 import os
 from datetime import datetime
 import json
-from pymongo import MongoClient
+from pymongo.mongo_client import MongoClient
+from dotenv import load_dotenv
 
 
 def backup_database(db_client):
@@ -34,6 +35,7 @@ def backup_database(db_client):
 
 
 if __name__ == "__main__":
+    load_dotenv()
     mongo_uri = os.getenv('MONGO_URI')
     client = MongoClient(mongo_uri)
     backup_database(client)

@@ -3,6 +3,7 @@ import asyncio
 import datetime
 import utils
 from translations import messages
+from classes import Command_refs
 
 
 async def post_wrapped():
@@ -28,16 +29,12 @@ async def check_for_new_server_classes(bot: discord.Client, db_client):
     new_server_classes = {}
     for guild in bot.guilds:
         try:
-            # check if there are not any documents in the collection for this guild
             if server_classes_collection.count_documents({"guild_id": int(guild.id)}) == 0:
                 await utils.logging(bot, f"Guild {guild.name} not found in database, creating...", guild.id)
                 new_server_class = await utils.create_database_context(bot, guild, db_client)
                 new_server_classes[guild.id] = new_server_class
         except Exception as e:
-            error_message = (f"Failed to setup Hall Of Fame for server {guild.name}. This may be due to missing "
-                             f"permissions, try re-inviting the bot with the correct permissions. If the problem "
-                             f"persists, please contact support. https://discord.gg/awZ83mmGrJ")
-            await utils.send_server_owner_error_message(guild.owner, error_message, bot)
+            await utils.send_server_owner_error_message(guild.owner, messages.FAILED_SETUP_HOF.format(serverName=guild.name), bot)
             await utils.logging(bot, f"Sending error message to server owner: {e}", guild.id)
     return new_server_classes
 
@@ -83,11 +80,10 @@ async def on_raw_reaction(message: discord.RawReactionActionEvent, bot: discord.
             await utils.logging(bot, f"Error in reaction event: {e}", message.guild_id)
 
 
-async def on_message(message, bot: discord.Client, target_channel_id, allow_messages_in_hof_channel):
+async def on_message(message, target_channel_id, allow_messages_in_hof_channel):
     """
     Event handler for when a message is sent in a channel
     :param message:
-    :param bot:
     :param target_channel_id:
     :param allow_messages_in_hof_channel:
     :return:
@@ -96,8 +92,8 @@ async def on_message(message, bot: discord.Client, target_channel_id, allow_mess
         return
 
     await message.delete()
-    msg = await message.channel.send(
-        f"Only Hall of Fame messages are allowed in this channel, {message.author.mention}. Can be disabled by </allow_messages_in_hof_channel:1348428694007316571>")
+    msg = await message.channel.send(f"Only Hall of Fame messages are allowed in this channel, {message.author.mention}. "
+                                     f"Can be disabled by {Command_refs.ALLOW_MESSAGES_IN_HOF_CHANNEL}")
     await asyncio.sleep(5)
     await msg.delete()
 
@@ -115,16 +111,8 @@ async def guild_join(server, db_client, bot, custom_channel: discord.TextChannel
         return await utils.create_database_context(bot, server, db_client, custom_channel)
     except Exception as e:
         await utils.logging(bot, f"Failed to create database context for server {server.name}: {e}", server.id)
-        try:
-            for channel in server.text_channels:
-                if not channel.permissions_for(server.me).send_messages:
-                    continue
-                await channel.send(messages.FAILED_SETUP_HOF.format(serverName=server.name))
-                await utils.logging(bot, f"Sent an error message to {channel.name} on server {server.name}", server.id)
-                break
-        except Exception as exception:
-            await utils.logging(bot, f"Failed to send error message to server {server.name}: {exception}", server.id)
-        return None
+        await utils.send_message_to_highest_prio_channel(bot, server,
+                                                         messages.FAILED_SETUP_HOF.format(serverName=server.name), 0)
 
 
 async def guild_remove(server, db_client):
@@ -189,34 +177,20 @@ async def check_write_permissions_to_hall_of_fame_channel(bot: discord.Client, s
         channel = guild.get_channel(server_class.hall_of_fame_channel_id)
         if not channel:
             await utils.logging(bot, f"Could not find Hall of Fame channel for server {guild.name}", guild.id)
+            await utils.send_message_to_highest_prio_channel(bot, guild, messages.FAILED_TO_FIND_HOF_CHANNEL)
             continue
-        misising_permissions = []
+        missing_permissions = []
         if not channel.permissions_for(guild.me).view_channel:
-            misising_permissions.append("View Channel")
+            missing_permissions.append("View Channel")
         if not channel.permissions_for(guild.me).send_messages:
-            misising_permissions.append("Send Messages")
-        if not misising_permissions:
+            missing_permissions.append("Send Messages")
+        if not channel.permissions_for(guild.me).read_message_history:
+            missing_permissions.append("Read Message History")
+        if not missing_permissions:
             continue
-        for alt_channel in sorted(guild.text_channels, key=lambda c: c.position):
-            if alt_channel.id == channel.id:
-                continue
-            alt_permissions = alt_channel.permissions_for(guild.me)
-            if alt_permissions.send_messages and alt_permissions.view_channel and alt_permissions.read_message_history:
-                recent_messages = [msg async for msg in alt_channel.history(limit=100)]
-                if any(messages.MISSING_HOF_CHANNEL_PERMISSIONS.split(".")[0] in msg.content for msg in
-                       recent_messages):
-                    await utils.logging(bot, f"Missing permissions message already sent to {alt_channel.name} in "
-                                             f"server {guild.name} recently", guild.id)
-                    break
-                try:
-                    await alt_channel.send(
-                        messages.MISSING_HOF_CHANNEL_PERMISSIONS.format(missing_permissions=", ".join(misising_permissions)))
-                    await utils.logging(bot, f"Sent missing permissions message to {alt_channel.name} in "
-                                             f"server {guild.name}", guild.id)
-                    break
-                except Exception as e:
-                    await utils.logging(bot, f"Failed to send missing permissions message to "
-                                             f"{alt_channel.name} in server {guild.name}: {e}", guild.id)
+        channel_ref = f"<#{channel.id}>"
+        await utils.send_message_to_highest_prio_channel(bot, guild, messages.MISSING_HOF_CHANNEL_PERMISSIONS.format(
+                        missing_permissions=", ".join(missing_permissions), channel=channel_ref))
 
 
 async def update_user_database(bot: discord.Client, db_client):

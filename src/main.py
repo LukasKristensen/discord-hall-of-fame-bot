@@ -8,15 +8,15 @@ from pymongo.mongo_client import MongoClient
 import commands
 import events
 import utils
-from classes import version, Log_type
+from classes import version, Log_type, Command_refs
 from classes.Bot_stats import BotStats
 from api_services import topgg_api, discordbotlist_api
 import os
 from translations import messages
 import migrations
 
-dev_test = os.getenv('DEV_TEST') == "True"
 load_dotenv()
+dev_test = os.getenv('DEV_TEST') == "True"
 if dev_test:
     TOKEN = os.getenv('DEV_KEY')
 else:
@@ -139,7 +139,7 @@ async def on_message(message: discord.Message):
         server_class = server_classes[message.guild.id]
         target_channel_id = server_class.hall_of_fame_channel_id
         allow_messages_in_hof = server_class.allow_messages_in_hof_channel
-        await events.on_message(message, bot, target_channel_id, allow_messages_in_hof)
+        await events.on_message(message, target_channel_id, allow_messages_in_hof)
     except Exception as e:
         await utils.logging(bot, f"Error in on_message: {e}", message.guild.id)
 
@@ -246,7 +246,7 @@ async def custom_emoji_check_logic(interaction: discord.Interaction, config_opti
     server_classes[interaction.guild_id].custom_emoji_check_logic = custom_emoji_check
     response = f"Custom emoji check logic set to {config_option.name}"
     if config_option.value == "whitelisted_emojis":
-        response += "\n\nYou can now use the commands </whitelist_emoji:1358208382473076849>, </unwhitelist_emoji:1358208382473076850> and </clear_whitelist:1358208382473076851> to manage the whitelist"
+        response += f"\n\nYou can now use the commands {Command_refs.WHITELIST_EMOJI}, {Command_refs.UNWHITELIST_EMOJI} and {Command_refs.CLEAR_WHITELIST} to manage the whitelist"
     await interaction.response.send_message(response)
     await utils.logging(bot, f"Custom emoji check logic command used by {interaction.user.name} in {interaction.guild.name}",
                         interaction.guild.id, str(config_option.value), log_type=Log_type.COMMAND)
@@ -489,9 +489,18 @@ async def set_hall_of_fame_channel(interaction: discord.Interaction, channel: di
     if not await check_if_user_has_manage_server_permission(interaction, False):
         return
 
+    missing_permissions = []
     if not channel.permissions_for(interaction.guild.me).send_messages:
-        await interaction.response.send_message("I do not have permission to send messages in this channel.")
-        await utils.logging(bot, f"User {interaction.user.name} tried to set Hall of Fame channel without write permissions in {interaction.guild.name}", interaction.guild.id, str(channel.id))
+        missing_permissions.append("Send Messages")
+    if not channel.permissions_for(interaction.guild.me).view_channel:
+        missing_permissions.append("View Channel")
+    if not channel.permissions_for(interaction.guild.me).read_message_history:
+        missing_permissions.append("Read Message History")
+    if missing_permissions:
+        await interaction.response.send_message(f"Failed to set Hall of Fame channel. In {channel.mention}, the bot is missing the following permissions: {', '.join(missing_permissions)}")
+        await utils.logging(bot, f"Failed to set Hall of Fame channel due to missing permissions by {interaction.user.name} in "
+                                 f"{interaction.guild.name} with missing permissions: {', '.join(missing_permissions)}",
+                                 interaction.guild.id, str(channel.id), log_type=Log_type.COMMAND)
         return
 
     if interaction.guild_id not in server_classes or server_classes[interaction.guild_id] is None:
