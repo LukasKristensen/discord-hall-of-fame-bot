@@ -111,11 +111,11 @@ async def process_all_server_messages(guild: discord.Guild):
             if not isinstance(channel, discord.TextChannel):
                 continue  # Ignore if the current channel is not a text channel
             if message.author.bot:
-                continue # Ignore if the author of the message is a bot
+                continue  # Ignore if the author of the message is a bot
             if message.author.id not in users:
-                continue # Ignore if the author of the message is not in the users list
+                continue  # Ignore if the author of the message is not in the users list
             if message.created_at.year != datetime.datetime.now().year:
-                break # Check if message is from current year
+                break  # Check if message is from current year
 
             user = users[message.author.id]
             user.messageCount += 1

@@ -4,7 +4,8 @@ import datetime
 from datetime import timezone
 import asyncio
 from message_reactions import most_reacted_emoji, reaction_count
-from classes import server_class, log_type, command_refs
+from classes import server_class
+from enums import command_refs, log_type
 
 daily_post_limit = 100
 
@@ -47,7 +48,7 @@ async def validate_message(message: discord.RawReactionActionEvent, bot: discord
         {"guild_id": int(message.guild.id),
          "created_at": {"$gte": datetime.datetime.now(timezone.utc) - datetime.timedelta(days=1)}
          }) > daily_post_limit:
-        await logging(bot, f"Guild {message.guild.id} has exceeded the daily limit for hall of fame posts.", message.guild.id, log_type=Log_type.CRITICAL)
+        await logging(bot, f"Guild {message.guild.id} has exceeded the daily limit for hall of fame posts.", message.guild.id, log_level=log_type.CRITICAL)
         hof_channel = bot.get_channel(target_channel_id)
         existing_messages = [message async for message in hof_channel.history(limit=10)]
         for existing_message in existing_messages:
@@ -295,7 +296,7 @@ async def post_hall_of_fame_message(message: discord.Message, bot: discord.Clien
         await hall_of_fame_message.delete()
         if video_message:
             await video_message.delete()
-        await logging(bot, e, message.guild.id, log_type=Log_type.CRITICAL)
+        await logging(bot, e, message.guild.id, log_level=log_type.CRITICAL)
 
 
 async def set_footer(embed: discord.Embed):
@@ -523,15 +524,15 @@ async def create_database_context(bot, server, db_client, custom_channel: discor
         f"🎉 **Welcome to the Hall of Fame!** 🎉\n"
         f"When a message receives **{reaction_threshold_default} or more (default threshold) of the same reaction**, it’s automatically **reposted here** to celebrate its popularity.\n\n"
         f"🔧 **Customize your setup:**\n"
-        f"   • Change the reaction threshold with {Command_refs.SET_REACTION_THRESHOLD}\n"
-        f"   • View your current settings with {Command_refs.GET_SERVER_CONFIG}\n\n"
+        f"   • Change the reaction threshold with {command_refs.SET_REACTION_THRESHOLD}\n"
+        f"   • View your current settings with {command_refs.GET_SERVER_CONFIG}\n\n"
         f"✨ **Want to only track specific emojis?**\n"
-        f"   Enable emoji filtering with {Command_refs.CUSTOM_EMOJI_CHECK_LOGIC}\n\n"
+        f"   Enable emoji filtering with {command_refs.CUSTOM_EMOJI_CHECK_LOGIC}\n\n"
         f"🧠 **Want to adjust how reactions are counted? (e.g. all votes on a message, not just the highest reaction)**\n"
-        f"   Use {Command_refs.CALCULATION_METHOD} to change the reaction count calculation method.\n\n"
+        f"   Use {command_refs.CALCULATION_METHOD} to change the reaction count calculation method.\n\n"
     )
 
-    new_server_class = Server_class.Server(
+    new_server_class = server_class.Server(
         hall_of_fame_channel_id=hall_of_fame_channel.id,
         guild_id=server.id,
         reaction_threshold=reaction_threshold_default,
@@ -577,7 +578,7 @@ async def get_server_classes(db_client):
     server_classes = {}
 
     for document in client_documents.find():
-        server_classes[document["guild_id"]] = Server_class.Server(
+        server_classes[document["guild_id"]] = server_class.Server(
             hall_of_fame_channel_id=document["hall_of_fame_channel_id"],
             guild_id=document["guild_id"],
             reaction_threshold=document["reaction_threshold"],
@@ -620,21 +621,21 @@ async def send_server_owner_error_message(owner, e, bot):
             await logging(bot, f"Failed to send error message to server owner {owner.name}: {history_error}")
 
 
-async def logging(bot: discord.Client, message, server_id=None, new_value=None, log_type=Log_type.ERROR):
+async def logging(bot: discord.Client, message, server_id=None, new_value=None, log_level=log_type.ERROR):
     """
     Log an error message to the error channel
     :param bot:
     :param message:
     :param server_id: The ID of the server
     :param new_value: The new value of the server configuration
-    :param log_type: The type of log message
+    :param log_level: The type of log message
     :return:
     """
     log_channels = {
-        Log_type.ERROR: 1344070396575617085 if bot.application_id == 1177041673352663070 else 1383834395726577765,
-        Log_type.SYSTEM: 1373699890718441482 if bot.application_id == 1177041673352663070 else 1383834858870145214,
-        Log_type.COMMAND: 1436699144163954759 if bot.application_id == 1177041673352663070 else 1436699968571183106,
-        Log_type.CRITICAL: 1439692415454675045 if bot.application_id == 1177041673352663070 else 1439692461176787074
+        log_type.ERROR: 1344070396575617085 if bot.application_id == 1177041673352663070 else 1383834395726577765,
+        log_type.SYSTEM: 1373699890718441482 if bot.application_id == 1177041673352663070 else 1383834858870145214,
+        log_type.COMMAND: 1436699144163954759 if bot.application_id == 1177041673352663070 else 1436699968571183106,
+        log_type.CRITICAL: 1439692415454675045 if bot.application_id == 1177041673352663070 else 1439692461176787074
     }
 
     target_guild = bot.get_guild(1180006529575960616)
@@ -645,10 +646,10 @@ async def logging(bot: discord.Client, message, server_id=None, new_value=None, 
     if server_id:
         date_formatted_message += f"\n[Server ID: {server_id}]"
 
-    channel_id = log_channels.get(log_type)
+    channel_id = log_channels.get(log_level)
     if channel_id:
         channel = target_guild.get_channel(channel_id)
-        message_prefix = "<@230698327589650432> " if log_type == Log_type.CRITICAL else ""
+        message_prefix = "<@230698327589650432> " if log_level == log_type.CRITICAL else ""
         await channel.send(f"{message_prefix}```diff\n{date_formatted_message}\n```")
 
 

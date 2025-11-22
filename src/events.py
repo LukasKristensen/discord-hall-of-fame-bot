@@ -3,7 +3,7 @@ import asyncio
 import datetime
 import utils
 from translations import messages
-from classes import command_refs
+from enums import command_refs
 
 
 async def post_wrapped():
@@ -93,7 +93,7 @@ async def on_message(message, target_channel_id, allow_messages_in_hof_channel):
 
     await message.delete()
     msg = await message.channel.send(f"Only Hall of Fame messages are allowed in this channel, {message.author.mention}. "
-                                     f"Can be disabled by {Command_refs.ALLOW_MESSAGES_IN_HOF_CHANNEL}")
+                                     f"Can be disabled by {command_refs.ALLOW_MESSAGES_IN_HOF_CHANNEL}")
     await asyncio.sleep(5)
     await msg.delete()
 
