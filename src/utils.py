@@ -470,14 +470,17 @@ async def create_database_context(bot, server, db_client, custom_channel: discor
     :return: The database context
     """
     db_server_configs = db_client["server_configs"]
+    server_member_count = sum(1 for member in server.members if not member.bot)
+    if not server_member_count:
+        server_member_count = server.member_count
 
     reaction_threshold_default = (
-        1 if server.member_count < 3 else
-        2 if server.member_count < 5 else
-        3 if server.member_count < 10 else
-        4 if server.member_count < 20 else
-        5 if server.member_count < 40 else
-        6 if server.member_count < 50 else
+        1 if server_member_count < 3 else
+        2 if server_member_count < 5 else
+        3 if server_member_count < 10 else
+        4 if server_member_count < 20 else
+        5 if server_member_count < 40 else
+        6 if server_member_count < 50 else
         7
     )
 
