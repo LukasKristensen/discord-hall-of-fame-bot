@@ -4,7 +4,6 @@ from discord import app_commands
 from discord.ext import commands as discord_commands
 from discord.ext import tasks
 from dotenv import load_dotenv
-from pymongo.mongo_client import MongoClient
 import commands
 import events
 import utils
@@ -15,6 +14,9 @@ from api_services import topgg_api, discordbotlist_api
 import os
 from translations import messages
 import migrations
+import psycopg2
+from psycopg2 import pool
+from pymongo import MongoClient
 
 load_dotenv()
 dev_test = os.getenv('DEV_TEST') == "True"
@@ -24,8 +26,31 @@ else:
     TOKEN = os.getenv('KEY')
 mongo_uri = os.getenv('MONGO_URI')
 topgg_api_key = os.getenv('TOPGG_API_KEY')
+connection = psycopg2.connect(host=os.getenv('POSTGRES_HOST'),
+                              database=os.getenv('POSTGRES_DB'),
+                              user=os.getenv('POSTGRES_USER'),
+                              password=os.getenv('POSTGRES_PASSWORD'))
+
+cursor = connection.cursor()
+
+# Create server_configs table if it doesn't exist
+
+connection.commit()
+cursor.close()
+
+"""
+connection_pool = psycopg2.pool.SimpleConnectionPool(
+    minconn=1,
+    maxconn=10,
+    host=os.getenv('POSTGRES_HOST'),
+    database=os.getenv('POSTGRES_DB'),
+    user=os.getenv('POSTGRES_USER'),
+    password=os.getenv('POSTGRES_PASSWORD'))
+"""
+
 db_client = MongoClient(mongo_uri)
 production_db = db_client["production"]
+
 messages_processing = []
 daily_command_cooldowns = {}
 
@@ -50,10 +75,12 @@ async def on_ready():
     await events.bot_login(bot, tree)
     await utils.logging(bot, f"Logged in as {bot.user}", log_level=log_type.SYSTEM)
 
+    """
     completed_migrations = migrations.run_migrations(not dev_test)
     if len(completed_migrations) > 0:
         await utils.logging(bot, f"Completed migrations: {', '.join(completed_migrations)}",
                             log_level=log_type.SYSTEM)
+    """
 
     server_classes = await utils.get_server_classes(production_db)
     new_server_classes_dict = await events.check_for_new_server_classes(bot, production_db)
@@ -149,6 +176,21 @@ async def on_message(message: discord.Message):
 async def on_guild_join(server):
     await utils.logging(bot, f"Joined server {server.name}", server.id, log_level=log_type.SYSTEM)
     await utils.post_server_perms(bot, server)
+
+    cursor = connection.cursor()
+    try:
+        # Create a new server config in the database
+        cursor.execute("""
+        INSERT INTO server_configs (guild_id)
+        VALUES (%s)
+        ON CONFLICT (guild_id) DO NOTHING;
+        """, (server.id,))
+        connection.commit()
+    except Exception as e:
+        connection.rollback()  # Roll back the transaction on failure
+        await utils.logging(bot, f"Error in on_guild_join: {e}", server.id, log_level=log_type.ERROR)
+    finally:
+        cursor.close()
 
     new_server_class = await events.guild_join(server, production_db, bot)
     if new_server_class is None:
