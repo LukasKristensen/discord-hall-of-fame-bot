@@ -1,41 +1,7 @@
-import random
 import discord
 import utils
 from constants import version
 from enums import command_refs
-
-
-async def get_random_message(interaction: discord.Interaction, collection, bot, reaction_threshold):
-    """
-    Command to get a random message from the Hall of Fame database
-    :param interaction:
-    :param collection:
-    :param bot:
-    :param reaction_threshold:
-    :return:
-    """
-    sender_channel = interaction.channel.id
-
-    all_messages = [x for x in collection.find()]
-    if not all_messages:
-        await interaction.response.send_message("No available messages in the database for this server")
-        return
-    random_num = random.randint(0, len(all_messages)-1)
-    random_msg = all_messages[random_num]
-
-    msg_channel = bot.get_channel(int(random_msg["channel_id"]))
-    if not msg_channel:
-        await interaction.response.send_message("No available messages in the database for this server")
-        return
-    message = await msg_channel.fetch_message(int(random_msg["message_id"]))
-    target_channel = bot.get_channel(sender_channel)
-
-    video_link = utils.check_video_extension(message)
-    if video_link:
-        await target_channel.send(video_link)
-
-    embed = await utils.create_embed(message, reaction_threshold)
-    await interaction.response.send_message(embed=embed)
 
 
 async def get_help(interaction: discord.Interaction):
