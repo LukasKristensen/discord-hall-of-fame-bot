@@ -17,6 +17,7 @@ import migrations
 import psycopg2
 from psycopg2 import pool
 from pymongo import MongoClient
+from repositories import server_config, hall_of_fame_message
 
 load_dotenv()
 dev_test = os.getenv('DEV_TEST') == "True"
@@ -34,6 +35,7 @@ connection = psycopg2.connect(host=os.getenv('POSTGRES_HOST'),
 cursor = connection.cursor()
 
 # Create server_configs table if it doesn't exist
+server_config.setup_database(connection)
 
 connection.commit()
 cursor.close()
@@ -117,6 +119,11 @@ async def daily_task():
 
     await bot.change_presence(activity=discord.CustomActivity(name=f'🏆 Hall of Fame - {total_server_members} users', type=5))
     await post_api_bot_stats()
+
+async def setup_databases(connection):
+    hall_of_fame_message.setup_database(connection)
+    server_config.setup_database(connection)
+    
 
 
 @bot.event
