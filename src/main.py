@@ -17,7 +17,7 @@ import migrations
 import psycopg2
 from psycopg2 import pool
 from pymongo import MongoClient
-from repositories import server_config, hall_of_fame_message
+from repositories import server_config, hall_of_fame_message, hof_wrapped
 
 load_dotenv()
 dev_test = os.getenv('DEV_TEST') == "True"
@@ -36,6 +36,7 @@ cursor = connection.cursor()
 
 # Create server_configs table if it doesn't exist
 server_config.setup_database(connection)
+hof_wrapped.create_hof_wrapped_table(connection.cursor())
 
 connection.commit()
 cursor.close()

@@ -29,6 +29,12 @@ def insert_server_user(cursor, user_id, guild_id, monthly_reaction_rank,
           this_month_hall_of_fame_messages, total_hall_of_fame_messages, monthly_message_rank,
           this_month_hall_of_fame_message_reactions, total_hall_of_fame_message_reactions))
 
+def delete_server_user(cursor, user_id, guild_id):
+    cursor.execute("""
+        DELETE FROM server_user 
+        WHERE user_id = ? AND guild_id = ?
+    """, (user_id, guild_id))
+
 def setup_database(connection):
     cursor = connection.cursor()
     create_server_user_table(cursor)

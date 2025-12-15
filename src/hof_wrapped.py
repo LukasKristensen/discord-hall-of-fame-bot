@@ -2,6 +2,17 @@ import discord as discord
 import message_reactions
 from discord.ext import commands
 import datetime
+from repositories import hof_wrapped
+import psycopg2
+import os
+from dotenv import load_dotenv
+import json
+
+load_dotenv()
+POSTGRES_HOST = os.getenv('POSTGRES_HOST')
+POSTGRES_DB = os.getenv('POSTGRES_DB')
+POSTGRES_USER = os.getenv('POSTGRES_USER')
+POSTGRES_PASSWORD = os.getenv('POSTGRES_PASSWORD')
 
 users = {}
 total_hall_of_fame_posts = 0
@@ -293,6 +304,31 @@ def add_rankings(embed, user: User, rankings: dict):
     return embed
 
 
+def save_user_wrapped_to_db(guild_id, user, year):
+    connection = psycopg2.connect(host=POSTGRES_HOST, database=POSTGRES_DB, user=POSTGRES_USER, password=POSTGRES_PASSWORD)
+    cursor = connection.cursor()
+    hof_wrapped.insert_hof_wrapped(
+        cursor,
+        guild_id=guild_id,
+        user_id=user.id,
+        year=year,
+        message_count=user.messageCount,
+        reaction_count=user.reactionCount,
+        reaction_to_non_hof_posts=user.reactionToNonHallOfFamePosts,
+        reaction_to_hof_posts=user.reactionToHallOfFamePosts,
+        hof_message_posts=user.hallOfFameMessagePosts,
+        most_used_channels=json.dumps(user.mostUsedChannels),
+        most_used_emojis=json.dumps(user.mostUsedEmojis),
+        most_reacted_post_id=(user.mostReactedPost["post"].id if user.mostReactedPost["post"] else None),
+        most_reacted_post_reaction_count=user.mostReactedPost["reaction_count"],
+        fan_of_users=json.dumps(user.fanOfUsers),
+        users_fans=json.dumps(user.usersFans)
+    )
+    connection.commit()
+    cursor.close()
+    connection.close()
+
+
 async def main(guild_id: int, bot: commands.Bot, get_reaction_threshold: int, hall_of_fame_channel_id: int):
     global rankings
     global reactionThreshold
@@ -323,7 +359,7 @@ async def main(guild_id: int, bot: commands.Bot, get_reaction_threshold: int, ha
 
     for user in users.values():
         wrapped_embed = create_embed(user, guild)
-
+        save_user_wrapped_to_db(guild_id, user, datetime.datetime.now().year)
         if wrapped_embed is not None:
             await wrapped_channel.send(f"Your Hall Of Fame Wrapped {datetime.datetime.now().year} is here <@" + str(user.id) + "> 🎉", embed=wrapped_embed)
     return users
