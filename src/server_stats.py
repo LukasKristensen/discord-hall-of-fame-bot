@@ -6,7 +6,7 @@ import numpy as np
 from datetime import datetime
 
 load_dotenv('../.env')
-mongo_uri = os.getenv('MONGO_URI_TEST_DEV')
+mongo_uri = os.getenv('MONGODB_URI')
 db_client = MongoClient(mongo_uri)
 production_db = db_client['production']
 server_graph_folder = 'graphs'

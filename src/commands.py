@@ -2,7 +2,7 @@ import discord
 import utils
 from constants import version
 from enums import command_refs
-
+from repositories import server_config_repo
 
 async def get_help(interaction: discord.Interaction):
     """
@@ -62,17 +62,15 @@ async def manual_sweep(interaction: discord.Interaction, guild_id: int, sweep_li
     await utils.check_all_server_messages(int(guild_id), sweep_limit, sweep_limited, bot, collection, reaction_threshold, post_due_date, target_channel_id, allow_messages_in_hof_channel, interaction)
 
 
-async def set_reaction_threshold(interaction: discord.Interaction, reaction_threshold: int, db_client):
+async def set_reaction_threshold(interaction: discord.Interaction, reaction_threshold: int, connection):
     """
     Command to set the reaction threshold for posting a message in the Hall of Fame
     :param interaction:
     :param reaction_threshold:
-    :param db_client:
+    :param connection:
     :return:
     """
-    server_config = db_client['server_configs']
-    server_config.update_one({"guild_id": int(interaction.guild_id)}, {"$set": {"reaction_threshold": reaction_threshold}})
-
+    server_config_repo.update_server_config_param(interaction.guild.id, 'reaction_threshold', reaction_threshold, connection)
     await interaction.response.send_message(f"Reaction threshold set to {reaction_threshold}.\n"
                                             f"Note: The reaction threshold is based on the highest reaction count"
                                             f" of a single emoji per message.")

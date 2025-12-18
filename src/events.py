@@ -4,6 +4,7 @@ import datetime
 import utils
 from translations import messages
 from enums import command_refs
+from repositories import server_config_repo, hall_of_fame_message_repo
 
 
 async def post_wrapped():
@@ -39,6 +40,16 @@ async def check_for_new_server_classes(bot: discord.Client, db_client):
     return new_server_classes
 
 
+async def check_for_new_server_classes_sql(bot, connection):
+    new_server_classes = {}
+    for guild in bot.guilds:
+        if not server_config_repo.check_if_guild_exists(connection, guild.id):
+            await utils.logging(bot, f"Guild {guild.name} not found in database, creating...", guild.id)
+            new_server_class = await utils.create_database_context(bot, guild, connection)
+            new_server_classes[guild.id] = new_server_class
+    return new_server_classes
+
+
 async def bot_login(bot: discord.Client, tree):
     """
     Event handler for when the bot is ready
@@ -55,14 +66,14 @@ async def bot_login(bot: discord.Client, tree):
     await utils.logging(bot, f"Total servers: {len(bot.guilds)}")
 
 
-async def on_raw_reaction(message: discord.RawReactionActionEvent, bot: discord.Client, message_collection,
+async def on_raw_reaction(message: discord.RawReactionActionEvent, bot: discord.Client, connection,
                           reaction_threshold: int, post_due_date: int, target_channel_id: int,
                           ignore_bot_messages: bool, hide_hof_post_below_threshold: bool):
     """
     Event handler for when a reaction is added to a message
     :param message: The message that the reaction was removed from
     :param bot: The bot client
-    :param message_collection: The collection of messages
+    :param connection:
     :param reaction_threshold: The threshold for reactions
     :param post_due_date: The due date for posting
     :param target_channel_id: The target channel id
@@ -70,14 +81,16 @@ async def on_raw_reaction(message: discord.RawReactionActionEvent, bot: discord.
     :param hide_hof_post_below_threshold: Whether to hide hall of fame posts below the threshold
     :return: None
     """
+
     try:
-        await utils.validate_message(message, bot, message_collection, reaction_threshold, post_due_date,
+        await utils.validate_message(message, bot, connection, reaction_threshold, post_due_date,
                                      target_channel_id, ignore_bot_messages, hide_hof_post_below_threshold)
     except Exception as e:
         if "Unknown Message" in str(e) or "object has no attribute" in str(e):
             return
-        if message_collection.find_one({"guild_id": int(message.guild_id)}):
+        if hall_of_fame_message_repo.find_hall_of_fame_message(connection, message.guild_id, message.channel_id, message.message_id):
             await utils.logging(bot, f"Error in reaction event: {e}", message.guild_id)
+            return
 
 
 async def on_message(message, target_channel_id, allow_messages_in_hof_channel):
@@ -161,6 +174,13 @@ async def daily_task(bot: discord.Client, db_client, server_classes, dev_testing
     await utils.logging(bot, f"Checked {len(server_classes)} servers for daily task")
     await update_user_database(bot, db_client)
     await check_write_permissions_to_hall_of_fame_channel(bot, server_classes)
+
+
+async def daily_task_sql(bot, connection, server_classes, dev_test):
+    # Implement your daily SQL-based logic here
+    # For now, just log and pass
+    await utils.logging(bot, "Running daily SQL-based daily_task", log_level=0)
+    pass
 
 
 async def check_write_permissions_to_hall_of_fame_channel(bot: discord.Client, server_classes):

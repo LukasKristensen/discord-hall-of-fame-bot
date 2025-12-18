@@ -1,4 +1,5 @@
-def create_hof_wrapped_table(cursor):
+def create_hof_wrapped_table(connection):
+    cursor = connection.cursor()
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS hof_wrapped (
             id SERIAL PRIMARY KEY,
@@ -20,8 +21,11 @@ def create_hof_wrapped_table(cursor):
             UNIQUE(guild_id, user_id, year)
         )
     """)
+    connection.commit()
+    cursor.close()
 
-def insert_hof_wrapped(cursor, guild_id, user_id, year, message_count, reaction_count, reaction_to_non_hof_posts, reaction_to_hof_posts, hof_message_posts, most_used_channels, most_used_emojis, most_reacted_post_id, most_reacted_post_reaction_count, fan_of_users, users_fans):
+def insert_hof_wrapped(connection, guild_id, user_id, year, message_count, reaction_count, reaction_to_non_hof_posts, reaction_to_hof_posts, hof_message_posts, most_used_channels, most_used_emojis, most_reacted_post_id, most_reacted_post_reaction_count, fan_of_users, users_fans):
+    cursor = connection.cursor()
     cursor.execute("""
         INSERT INTO hof_wrapped (
             guild_id, user_id, year, message_count, reaction_count, reaction_to_non_hof_posts, reaction_to_hof_posts, hof_message_posts, most_used_channels, most_used_emojis, most_reacted_post_id, most_reacted_post_reaction_count, fan_of_users, users_fans
@@ -41,10 +45,11 @@ def insert_hof_wrapped(cursor, guild_id, user_id, year, message_count, reaction_
             created_at=CURRENT_TIMESTAMP
     """,
     (guild_id, user_id, year, message_count, reaction_count, reaction_to_non_hof_posts, reaction_to_hof_posts, hof_message_posts, most_used_channels, most_used_emojis, most_reacted_post_id, most_reacted_post_reaction_count, fan_of_users, users_fans))
+    connection.commit()
+    cursor.close()
 
 def get_hof_wrapped(cursor, guild_id, user_id, year):
     cursor.execute("""
         SELECT * FROM hof_wrapped WHERE guild_id = %s AND user_id = %s AND year = %s
     """, (guild_id, user_id, year))
     return cursor.fetchone()
-

@@ -2,7 +2,7 @@ import discord as discord
 import message_reactions
 from discord.ext import commands
 import datetime
-from repositories import hof_wrapped
+from repositories import hof_wrapped_repo, hall_of_fame_message_repo, server_config_repo, server_user_repo
 import psycopg2
 import os
 from dotenv import load_dotenv
@@ -52,8 +52,8 @@ class User:
             return f"Hall of Fame Ghost: The Hall of Fame isn't your scene. (Ratio: {round(ratio * 100, 2)}%)"
 
 
-def initialize_users(guild: discord.Guild):
-    for member in guild.members:
+def initialize_users(connection, guild_id: int):
+    for member in hall_of_fame_message_repo.find_guild_ids_from_server(connection, guild_id):
         users[member.id] = User(member)
 
 
@@ -114,29 +114,33 @@ async def process_message_reactions(message: discord.Message):
             user_reactor.fanOfUsers[user_author.id] += 1
 
 
-async def process_all_server_messages(guild: discord.Guild):
-    for channel in guild.channels:
+async def process_hof_messages_from_db(guild: discord.Guild, connection):
+    rows = hall_of_fame_message_repo.get_all_hall_of_fame_messages_for_guild(connection, guild.id)
+    print("rows fetched from DB:", len(rows))
+
+    for channel_id, message_id in rows:
+        channel = guild.get_channel(channel_id)
         if not isinstance(channel, discord.TextChannel):
             continue
-        async for message in channel.history(limit=None):
-            if not isinstance(channel, discord.TextChannel):
-                continue  # Ignore if the current channel is not a text channel
-            if message.author.bot:
-                continue  # Ignore if the author of the message is a bot
-            if message.author.id not in users:
-                continue  # Ignore if the author of the message is not in the users list
-            if message.created_at.year != datetime.datetime.now().year:
-                break  # Check if message is from current year
+        try:
+            message = await channel.fetch_message(message_id)
+        except Exception:
+            continue  # Skip if message not found or fetch fails
+        if message.author.bot or message.author.id not in users:
+            continue
+        if message.created_at.year != datetime.datetime.now().year:
+            continue
 
-            user = users[message.author.id]
-            user.messageCount += 1
-            await process_message_reactions(message)
+        user = users[message.author.id]
+        user.messageCount += 1
+        await process_message_reactions(message)
 
-            # Feature: Most used channels
-            if channel.id not in user.mostUsedChannels:
-                user.mostUsedChannels[channel.id] = 1
-            else:
-                user.mostUsedChannels[channel.id] += 1
+        # Feature: Most used channels
+        if channel.id not in user.mostUsedChannels:
+            user.mostUsedChannels[channel.id] = 1
+        else:
+            user.mostUsedChannels[channel.id] += 1
+    print("users:", users)
     return users
 
 
@@ -307,8 +311,8 @@ def add_rankings(embed, user: User, rankings: dict):
 def save_user_wrapped_to_db(guild_id, user, year):
     connection = psycopg2.connect(host=POSTGRES_HOST, database=POSTGRES_DB, user=POSTGRES_USER, password=POSTGRES_PASSWORD)
     cursor = connection.cursor()
-    hof_wrapped.insert_hof_wrapped(
-        cursor,
+    hof_wrapped_repo.insert_hof_wrapped(
+        connection,
         guild_id=guild_id,
         user_id=user.id,
         year=year,
@@ -329,37 +333,45 @@ def save_user_wrapped_to_db(guild_id, user, year):
     connection.close()
 
 
-async def main(guild_id: int, bot: commands.Bot, get_reaction_threshold: int, hall_of_fame_channel_id: int):
+async def main(guild_id: int, bot: commands.Bot, get_reaction_threshold: int, connection):
     global rankings
     global reactionThreshold
     reactionThreshold = get_reaction_threshold
 
     print(f"Hall Of Fame Wrapped {datetime.datetime.now().year} is being prepared... 🎁")
-
-    # Todo: Create a DB entry for the current years wrapped to ensure that the wrapped is not created multiple times
-    #           - If it exists, return and do not create a new wrapped
-    #           - It should be an integer, 0 for not created, 1 for created, 2 for posted
-
-    # Todo:
-    #   - Check if possible to run with same approach as used in /leaderboard to retrieve members
-
     guild = bot.get_guild(guild_id)
 
-    hall_of_fame_channel = bot.get_channel(hall_of_fame_channel_id)
-    wrapped_channel = await hall_of_fame_channel.create_thread(
-        name=f"Hall Of Fame Wrapped {datetime.datetime.now().year}",
-        auto_archive_duration=60,
-        reason=f"Creating a new thread for Hall Of Fame Wrapped {datetime.datetime.now().year}"
-    )
-    await wrapped_channel.send(f"Hall Of Fame Wrapped {datetime.datetime.now().year} is being prepared... 🎁")
+    initialize_users(connection, guild_id)
+    await process_hof_messages_from_db(guild, connection)
 
-    initialize_users(guild)
-    await process_all_server_messages(guild)
     rankings = rank_stats(users)
 
     for user in users.values():
-        wrapped_embed = create_embed(user, guild)
-        save_user_wrapped_to_db(guild_id, user, datetime.datetime.now().year)
-        if wrapped_embed is not None:
-            await wrapped_channel.send(f"Your Hall Of Fame Wrapped {datetime.datetime.now().year} is here <@" + str(user.id) + "> 🎉", embed=wrapped_embed)
-    return users
+        save_user_wrapped_to_db(guild.id, user, datetime.datetime.now().year)
+
+if __name__ == "__main__":
+    from discord.ext import commands
+
+    intents = discord.Intents.default()
+    intents.message_content = True
+
+    bot = commands.Bot(command_prefix="!", intents=intents)
+
+    @bot.event
+    async def on_ready():
+        print(f'Logged in as {bot.user} (ID: {bot.user.id})')
+        print('------')
+
+        connection = psycopg2.connect(host=POSTGRES_HOST, database=POSTGRES_DB, user=POSTGRES_USER, password=POSTGRES_PASSWORD)
+        for guild in bot.guilds:
+            guild_id = guild.id
+            reaction_threshold = server_config_repo.get_parameter_value(connection, guild_id, "reaction_threshold")
+
+            await main(guild_id, bot, 1, connection)
+            await bot.close()
+
+        connection.close()
+
+    print("Logging in the bot...")
+    bot.token = os.getenv('DEV_KEY')
+    bot.run(bot.token)
