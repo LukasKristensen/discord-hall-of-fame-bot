@@ -144,6 +144,7 @@ async def process_hof_messages_from_db(guild: discord.Guild, connection):
     return users
 
 
+# Todo: this should be called from an external command to generate the embed for a user, which will also give more flexibility for data handling
 def create_embed(user: User, guild: discord.Guild):
     if len(user.mostUsedChannels) < 3:
         return None
@@ -367,7 +368,7 @@ if __name__ == "__main__":
             guild_id = guild.id
             reaction_threshold = server_config_repo.get_parameter_value(connection, guild_id, "reaction_threshold")
 
-            await main(guild_id, bot, 1, connection)
+            await main(guild_id, bot, reaction_threshold, connection)
             await bot.close()
 
         connection.close()
