@@ -6,6 +6,7 @@ import numpy as np
 from datetime import datetime
 
 load_dotenv('../.env')
+# TODO: Refactor db connection to a PostgreSQL compatible version
 mongo_uri = os.getenv('MONGODB_URI')
 db_client = MongoClient(mongo_uri)
 production_db = db_client['production']

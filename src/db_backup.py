@@ -140,6 +140,8 @@ def convert_mongodb_to_postgresql(db_client, connection):
     cursor.close()
 
 
+# Todo: Implement a recurring job to back up data every 15 min, then every hour, then every day, etc.
+
 if __name__ == "__main__":
     load_dotenv()
     mongo_uri = os.getenv('MONGODB_URI')
