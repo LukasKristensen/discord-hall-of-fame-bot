@@ -648,6 +648,12 @@ async def logging(bot: discord.Client, message, server_id=None, new_value=None, 
     channel_id = log_channels.get(log_type)
     if channel_id:
         channel = target_guild.get_channel(channel_id)
+
+        existing_messages = [msg async for msg in channel.history(limit=10)]
+        for existing_message in existing_messages:
+            if existing_message.author.id == bot.user.id and message in existing_message.content:
+                return  # Do not send duplicate error message
+
         message_prefix = "<@230698327589650432> " if log_type == Log_type.CRITICAL else ""
         await channel.send(f"{message_prefix}```diff\n{date_formatted_message}\n```")
 
