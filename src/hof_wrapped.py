@@ -7,6 +7,7 @@ import psycopg2
 import os
 from dotenv import load_dotenv
 import json
+from constants import version
 
 load_dotenv()
 POSTGRES_HOST = os.getenv('POSTGRES_HOST')
@@ -115,7 +116,7 @@ async def process_hof_messages_from_db(guild: discord.Guild, connection):
             continue  # Skip if message not found or fetch fails
         if message.author.bot or message.author.id not in users:
             continue
-        if message.created_at.year != datetime.datetime.now().year:
+        if message.created_at.year != version.WRAPPED_YEAR:
             continue
         user = users[message.author.id]
         user.hallOfFameMessagePosts += 1
@@ -149,7 +150,7 @@ async def create_embed(discord_user, data_for_user_wrapped, bot):
     user_wrapped.mostReactedPost["reaction_count"] = data_for_user_wrapped['most_reacted_post_reaction_count']
 
     embed = discord.Embed(
-        title=f"✨ Hall Of Fame Wrapped {datetime.datetime.now().year} ✨",
+        title=f"✨ Hall Of Fame Wrapped {version.WRAPPED_YEAR} ✨",
         description=(
             f"📅 **User:** {discord_user.mention}\n"
         ),
@@ -179,7 +180,7 @@ async def create_embed(discord_user, data_for_user_wrapped, bot):
         )
         embed.add_field(
             name="🧠 Total HOF Channels Used",
-            value=f"{len(user_wrapped.mostUsedChannels)} channels",
+            value=f"Your HOF posts were from across **{len(user_wrapped.mostUsedChannels)}** different channels!",
             inline=True
         )
 
@@ -318,7 +319,7 @@ async def main(guild_id: int, bot: commands.Bot, get_reaction_threshold: int, co
     global reactionThreshold
     reactionThreshold = get_reaction_threshold
 
-    print(f"Hall Of Fame Wrapped {datetime.datetime.now().year} is being prepared... 🎁")
+    print(f"Hall Of Fame Wrapped {version.WRAPPED_YEAR} is being prepared... 🎁")
     guild = bot.get_guild(guild_id)
 
     initialize_users(connection, guild_id)
@@ -327,7 +328,120 @@ async def main(guild_id: int, bot: commands.Bot, get_reaction_threshold: int, co
     rankings = rank_stats(users)
 
     for user in users.values():
-        save_user_wrapped_to_db(guild.id, user, datetime.datetime.now().year)
+        save_user_wrapped_to_db(guild.id, user, version.WRAPPED_YEAR)
+
+def create_server_embed(guild, users):
+    user_list = list(users)
+
+    # Aggregate totals
+    total_posts = sum(user.get('hof_message_posts', 0) if isinstance(user, dict) else user.hallOfFameMessagePosts for user in user_list)
+    total_reactions = sum(user.get('reaction_count', 0) if isinstance(user, dict) else user.reactionCount for user in user_list)
+
+    # Aggregate most used channels
+    channel_counts = {}
+    for user in user_list:
+        channels = user.get('most_used_channels', '{}') if isinstance(user, dict) else user.mostUsedChannels
+        if isinstance(channels, str):
+            channels = json.loads(channels)
+        for channel_id, count in channels.items():
+            channel_counts[channel_id] = channel_counts.get(channel_id, 0) + count
+    top_channels = sorted(channel_counts.items(), key=lambda x: x[1], reverse=True)[:5]
+    channel_list = "\n".join(f"**<#{channel_id}>**: {count} times" for channel_id, count in top_channels)
+
+    # Aggregate most used emojis
+    emoji_counts = {}
+    most_reacted_post = None
+    max_reactions = 0
+    for user in user_list:
+        count = user.get('most_reacted_post_reaction_count', 0)
+        channel_id = user.get('most_reacted_post_channel_id')
+        message_id = user.get('most_reacted_post_message_id')
+
+        if count and count > max_reactions and channel_id and message_id:
+            max_reactions = count
+            most_reacted_post = (channel_id, message_id, count)
+
+        emojis = user.get('most_used_emojis', '{}') if isinstance(user, dict) else user.mostUsedEmojis
+        if isinstance(emojis, str):
+            emojis = json.loads(emojis)
+        for emoji, count in emojis.items():
+            emoji_counts[emoji] = emoji_counts.get(emoji, 0) + count
+    top_emojis = sorted(emoji_counts.items(), key=lambda x: x[1], reverse=True)[:5]
+    emoji_list = "\n".join(f"{emoji}: {count} times" for emoji, count in top_emojis)
+
+    # Top HOF members by posts
+    top_members = sorted(
+        user_list,
+        key=lambda u: u.get('hof_message_posts', 0) if isinstance(u, dict) else u.hallOfFameMessagePosts,
+        reverse=True
+    )[:5]
+    member_list = "\n".join(
+        f"**<@{member['user_id'] if isinstance(member, dict) else member.id}>**: {member.get('hof_message_posts', 0) if isinstance(member, dict) else member.hallOfFameMessagePosts} posts"
+        for member in top_members if (member.get('hof_message_posts', 0) if isinstance(member, dict) else member.hallOfFameMessagePosts) > 0
+    )
+
+    # Top fans (users who reacted the most)
+    top_fans = sorted(
+        user_list,
+        key=lambda u: u.get('reaction_count', 0) if isinstance(u, dict) else u.reactionCount,
+        reverse=True
+    )[:5]
+    fans_list = "\n".join(
+        f"**<@{fan['user_id'] if isinstance(fan, dict) else fan.id}>**: {fan.get('reaction_count', 0) if isinstance(fan, dict) else fan.reactionCount} reactions"
+        for fan in top_fans if (fan.get('reaction_count', 0) if isinstance(fan, dict) else fan.reactionCount) > 0
+    )
+
+    embed = discord.Embed(
+        title=f"🎁 Hall Of Fame Wrapped {version.WRAPPED_YEAR} - {guild.name} 🎁",
+        description=(
+            f"🏆 **Server Hall of Fame Recap**\n"
+            f"Total HOF Posts: **{total_posts}**\n"
+            f"Total Reactions on HOF Posts: **{total_reactions}**\n"
+        ),
+        color=discord.Color.purple()
+    )
+    if guild.icon:
+        embed.set_thumbnail(url=guild.icon.url)
+
+    embed.add_field(
+        name="📢 Most Used HOF Channels",
+        value=channel_list if channel_list else "No HOF channels yet.",
+        inline=False
+    )
+    embed.add_field(
+        name="😄 Most Used HOF Emojis",
+        value=emoji_list if emoji_list else "No HOF emojis yet.",
+        inline=False
+    )
+    embed.add_field(
+        name="🏅 Top Hall of Fame Members",
+        value=member_list if member_list else "No HOF members yet.",
+        inline=False
+    )
+    embed.add_field(
+        name="👥 Top Fans (Most Reactions)",
+        value=fans_list if fans_list else "No fans yet.",
+        inline=False
+    )
+
+    if most_reacted_post:
+        channel_id, message_id, count = most_reacted_post
+        jump_url = f"https://discord.com/channels/{guild.id}/{channel_id}/{message_id}"
+        embed.add_field(
+            name="🔥 Most Reacted HOF Post",
+            value=f"[Jump to post]({jump_url}) ({count} reactions)",
+            inline=False
+        )
+
+    # should include that users can get their own hof wrapped for the server by using /hof_wrapped
+    embed.add_field(
+        name="🔔 Get Your Own Hall Of Fame Wrapped!",
+        value="Use the `/hof_wrapped` command to see your personal Hall Of Fame Wrapped for this server!",
+        inline=False
+    )
+    return embed
+
+
 
 if __name__ == "__main__":
     from discord.ext import commands
@@ -356,14 +470,14 @@ if __name__ == "__main__":
             rankings = None
 
             print(f"Processing guild: {guild.name} (ID: {guild.id})")
-            if hof_wrapped_guild_status.is_hof_wrapped_processed(connection, guild.id, datetime.datetime.now().year):
+            if hof_wrapped_guild_status.is_hof_wrapped_processed(connection, guild.id, version.WRAPPED_YEAR):
                 print(f"Hall Of Fame Wrapped already processed for guild {guild.id}, skipping...")
                 continue
             guild_id = guild.id
             reaction_threshold = server_config_repo.get_parameter_value(connection, guild_id, "reaction_threshold")
 
             await main(guild_id, bot, reaction_threshold, connection)
-            hof_wrapped_guild_status.mark_hof_wrapped_as_processed(connection, guild.id, datetime.datetime.now().year)
+            hof_wrapped_guild_status.mark_hof_wrapped_as_processed(connection, guild.id, version.WRAPPED_YEAR)
         connection.close()
         await bot.close()
 

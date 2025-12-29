@@ -17,7 +17,7 @@ import psycopg2
 from psycopg2 import pool
 from repositories import server_config_repo, hall_of_fame_message_repo, server_user_repo, hof_wrapped_repo
 import hof_wrapped
-from contextlib import contextmanager
+from contextlib import asynccontextmanager
 
 load_dotenv()
 dev_test = os.getenv('DEV_TEST') == "True"
@@ -57,15 +57,15 @@ month_emoji = "<:month_most_hof_messages:1380272332609683517>" if not dev_test e
 all_time_emoji = "<:all_time_most_hof_messages:1380272422842007622>" if not dev_test else "<:all_time_most_hof_messages:1380272953098244166>"
 
 
-@contextmanager
-def get_db_connection(connection_pool):
+@asynccontextmanager
+async def get_db_connection(connection_pool):
     conn = connection_pool.getconn()
     try:
         try:
             yield conn
             conn.commit()
         except Exception as e:
-            utils.logging(bot, f"Database error: {e}", log_level=log_type.CRITICAL)
+            await utils.logging(bot, f"Database error: {e}", log_level=log_type.CRITICAL)
             raise
     finally:
         connection_pool.putconn(conn)
@@ -78,7 +78,7 @@ async def on_ready():
     await events.bot_login(bot, tree)
     await utils.logging(bot, f"Logged in as {bot.user}", log_level=log_type.SYSTEM)
 
-    with get_db_connection(connection_pool) as connection:
+    async with get_db_connection(connection_pool) as connection:
         server_classes = server_config_repo.get_server_classes(connection)
         new_server_classes_dict = await events.check_for_new_server_classes(bot, connection)
 
@@ -94,7 +94,7 @@ async def on_ready():
 async def daily_task():
     await utils.logging(bot, "Running daily task")
     try:
-        with get_db_connection(connection_pool) as connection:
+        async with get_db_connection(connection_pool) as connection:
             await events.daily_task(bot, connection, server_classes, dev_test)
         await utils.logging(bot, f"Daily task completed")
     except Exception as e:
@@ -125,7 +125,7 @@ async def on_raw_reaction_add(payload: discord.RawReactionActionEvent):
 
         if payload.message_id not in messages_processing:
             messages_processing.append(payload.message_id)
-            with get_db_connection(connection_pool) as connection:
+            async with get_db_connection(connection_pool) as connection:
                 await events.on_raw_reaction(payload, bot, connection, server_class.reaction_threshold,
                                              server_class.post_due_date, server_class.hall_of_fame_channel_id,
                                              server_class.ignore_bot_messages, server_class.hide_hof_post_below_threshold)
@@ -145,7 +145,7 @@ async def on_raw_reaction_remove(payload: discord.RawReactionActionEvent):
 
         if payload.message_id not in messages_processing:
             messages_processing.append(payload.message_id)
-            with get_db_connection(connection_pool) as connection:
+            async with get_db_connection(connection_pool) as connection:
                 await events.on_raw_reaction(payload, bot, connection, server_class.reaction_threshold,
                                              server_class.post_due_date, server_class.hall_of_fame_channel_id,
                                              server_class.ignore_bot_messages, server_class.hide_hof_post_below_threshold)
@@ -173,7 +173,7 @@ async def on_guild_join(server):
     await utils.post_server_perms(bot, server)
 
     try:
-        with get_db_connection(connection_pool) as connection:
+        async with get_db_connection(connection_pool) as connection:
             server_config_repo.insert_server_config(connection, server.id)
     except Exception as e:
         await utils.logging(bot, f"Error in on_guild_join: {e}", server.id, log_level=log_type.ERROR)
@@ -191,7 +191,7 @@ async def on_guild_remove(server):
     if server_classes is None or server.id not in server_classes:
         return
     await utils.logging(bot, f"Left server {server.name}", server.id, log_level=log_type.SYSTEM)
-    with get_db_connection(connection_pool) as connection:
+    async with get_db_connection(connection_pool) as connection:
         await events.guild_remove(server, connection)
     if server.id in server_classes:
         del server_classes[server.id]
@@ -209,7 +209,7 @@ async def configure_bot(interaction: discord.Interaction, reaction_threshold: in
         return
     reaction_threshold = reaction_threshold if reaction_threshold > 0 else 1
 
-    with get_db_connection(connection_pool) as connection:
+    async with get_db_connection(connection_pool) as connection:
         await commands.set_reaction_threshold(interaction, reaction_threshold, connection)
     server_classes[interaction.guild_id].reaction_threshold = reaction_threshold
     await utils.logging(bot, f"Reaction threshold configure command used by {interaction.user.name} in {interaction.guild.name}",
@@ -223,7 +223,7 @@ async def send_feedback(interaction: discord.Interaction):
 async def include_author_own_reaction_in_threshold(interaction: discord.Interaction, include: bool):
     if not await check_if_user_has_manage_server_permission(interaction):
         return
-    with get_db_connection(connection_pool) as connection:
+    async with get_db_connection(connection_pool) as connection:
         server_config_repo.update_server_config_param(interaction.guild_id, "include_author_in_reaction_calculation", include, connection)
     server_classes[interaction.guild_id].include_author_in_reaction_calculation = include
     # noinspection PyUnresolvedReferences
@@ -236,7 +236,7 @@ async def allow_messages_in_hof_channel(interaction: discord.Interaction, allow:
     if not await check_if_user_has_manage_server_permission(interaction):
         return
 
-    with get_db_connection(connection_pool) as connection:
+    async with get_db_connection(connection_pool) as connection:
         server_config_repo.update_server_config_param(interaction.guild_id, "allow_messages_in_hof_channel", allow, connection)
     server_classes[interaction.guild_id].allow_messages_in_hof_channel = allow
     # noinspection PyUnresolvedReferences
@@ -266,7 +266,7 @@ async def custom_emoji_check_logic(interaction: discord.Interaction, config_opti
     if config_option.value == "whitelisted_emojis":
         custom_emoji_check = True
 
-    with get_db_connection(connection_pool) as connection:
+    async with get_db_connection(connection_pool) as connection:
         server_config_repo.update_server_config_param(interaction.guild_id, "custom_emoji_check_logic", custom_emoji_check, connection)
     server_classes[interaction.guild_id].custom_emoji_check_logic = custom_emoji_check
 
@@ -294,7 +294,7 @@ async def whitelist_emoji(interaction: discord.Interaction, emoji: str):
         await interaction.response.send_message(messages.INVALID_EMOJI_FORMAT)
         return
 
-    with get_db_connection(connection_pool) as connection:
+    async with get_db_connection(connection_pool) as connection:
         whitelist = server_config_repo.get_parameter_value(connection, interaction.guild_id, "whitelisted_emojis")
 
         if emoji not in whitelist:
@@ -323,7 +323,7 @@ async def unwhitelist_emoji(interaction: discord.Interaction, emoji: str):
         await interaction.response.send_message(messages.CUSTOM_EMOJI_CHECK_DISABLED)
         return
 
-    with get_db_connection(connection_pool) as connection:
+    async with get_db_connection(connection_pool) as connection:
         whitelist = server_config_repo.get_parameter_value(connection, interaction.guild_id, "whitelisted_emojis")
 
         if emoji in whitelist:
@@ -349,7 +349,7 @@ async def clear_whitelist(interaction: discord.Interaction):
         await interaction.response.send_message(messages.CUSTOM_EMOJI_CHECK_DISABLED)
         return
 
-    with get_db_connection(connection_pool) as connection:
+    async with get_db_connection(connection_pool) as connection:
         server_config_repo.update_server_config_param(interaction.guild_id, "whitelisted_emojis", [], connection)
     server_class.whitelisted_emojis = []
     # noinspection PyUnresolvedReferences
@@ -387,7 +387,7 @@ async def set_post_due_date(interaction: discord.Interaction, post_due_date: int
     if not await check_if_user_has_manage_server_permission(interaction):
         return
 
-    with get_db_connection(connection_pool) as connection:
+    async with get_db_connection(connection_pool) as connection:
         server_config_repo.update_server_config_param(interaction.guild_id, "post_due_date", post_due_date, connection)
     server_classes[interaction.guild_id].post_due_date = post_due_date
     # noinspection PyUnresolvedReferences
@@ -407,7 +407,7 @@ async def ignore_bot_messages(interaction: discord.Interaction, should_ignore_bo
     if not await check_if_user_has_manage_server_permission(interaction):
         return
 
-    with get_db_connection(connection_pool) as connection:
+    async with get_db_connection(connection_pool) as connection:
         server_config_repo.update_server_config_param(interaction.guild_id, "ignore_bot_messages", should_ignore_bot_messages, connection)
     server_classes[interaction.guild_id].ignore_bot_messages = should_ignore_bot_messages
     # noinspection PyUnresolvedReferences
@@ -427,7 +427,7 @@ async def calculation_method(interaction: discord.Interaction, method: app_comma
     if not await check_if_user_has_manage_server_permission(interaction):
         return
 
-    with get_db_connection(connection_pool) as connection:
+    async with get_db_connection(connection_pool) as connection:
         server_config_repo.update_server_config_param(interaction.guild_id, "reaction_count_calculation_method", method.value, connection)
     server_classes[interaction.guild_id].reaction_count_calculation_method = method.value
     # noinspection PyUnresolvedReferences
@@ -446,7 +446,7 @@ async def hide_hall_of_fame_posts_when_they_are_below_threshold(interaction: dis
     if not await check_if_user_has_manage_server_permission(interaction):
         return
 
-    with get_db_connection(connection_pool) as connection:
+    async with get_db_connection(connection_pool) as connection:
         server_config_repo.update_server_config_param(interaction.guild_id, "hide_hof_post_below_threshold", hide, connection)
     server_classes[interaction.guild_id].hide_hof_post_below_threshold = hide
     # noinspection PyUnresolvedReferences
@@ -463,7 +463,7 @@ async def user_server_profile(interaction: discord.Interaction, specific_user: d
     :return: The server profile of the user
     """
     user = specific_user or interaction.user
-    with get_db_connection(connection_pool) as connection:
+    async with get_db_connection(connection_pool) as connection:
         user_stats = server_user_repo.get_server_user(connection, user.id, interaction.guild_id)
 
     if user_stats is None:
@@ -473,7 +473,7 @@ async def user_server_profile(interaction: discord.Interaction, specific_user: d
                             interaction.guild.id, str(user.id), log_level=log_type.COMMAND)
         return
 
-    with get_db_connection(connection_pool) as connection:
+    async with get_db_connection(connection_pool) as connection:
         await commands.user_server_profile(interaction, user, user_stats, connection, month_emoji, all_time_emoji)
     await utils.logging(bot, f"Get user server profile command used by {interaction.user.name} in {interaction.guild.name}",
                         interaction.guild.id, str(user.id), log_level=log_type.COMMAND)
@@ -490,7 +490,7 @@ async def leaderboard(interaction: discord.Interaction):
         await interaction.response.send_message(messages.ERROR_SERVER_NOT_SETUP)
         return
 
-    with get_db_connection(connection_pool) as connection:
+    async with get_db_connection(connection_pool) as connection:
         user_stat = server_user_repo.get_server_user(connection, interaction.user.id, interaction.guild_id)
         if not user_stat:
             # noinspection PyUnresolvedReferences
@@ -544,7 +544,7 @@ async def set_hall_of_fame_channel(interaction: discord.Interaction, channel: di
                                  interaction.guild.id, str(channel.id), log_level=log_type.COMMAND)
         return
 
-    with get_db_connection(connection_pool) as connection:
+    async with get_db_connection(connection_pool) as connection:
         if interaction.guild_id not in server_classes or server_classes[interaction.guild_id] is None:
             new_server_class = await events.guild_join(interaction.guild, connection, bot, channel)
             if new_server_class is None:
@@ -563,13 +563,16 @@ async def set_hall_of_fame_channel(interaction: discord.Interaction, channel: di
 
 @tree.command(name="hof_wrapped", description="Get your Hall of Fame Wrapped for the year")
 async def hof_wrapped_command(interaction: discord.Interaction):
+    if not bot_is_loaded():
+        return
+
     if not (interaction.guild_id in server_classes and server_classes[interaction.guild_id] is not None):
         # noinspection PyUnresolvedReferences
         await interaction.response.send_message("Server is not set up for Hall of Fame yet.")
         return
 
-    with get_db_connection(connection_pool) as connection:
-        user_wrapped = hof_wrapped_repo.get_hof_wrapped(connection, interaction.guild_id, interaction.user.id, 2025)
+    async with get_db_connection(connection_pool) as connection:
+        user_wrapped = hof_wrapped_repo.get_hof_wrapped(connection, interaction.guild_id, interaction.user.id, version.WRAPPED_YEAR)
     if user_wrapped is None:
         # noinspection PyUnresolvedReferences
         await interaction.response.send_message("No Hall of Fame Wrapped data available for you this year. Participate more in Hall of Fame to get your wrapped next year!")
@@ -584,6 +587,22 @@ async def hof_wrapped_command(interaction: discord.Interaction):
     await utils.logging(bot, f"HOF Wrapped command used by {interaction.user.name} in {interaction.guild.name}",
                         interaction.guild.id, str(interaction.user.id), log_level=log_type.COMMAND)
 
+@tree.command(name="server_hof_wrapped", description="Get your Hall of Fame Wrapped for the year")
+async def server_hof_wrapped_command(interaction: discord.Interaction):
+    if not bot_is_loaded():
+        return
+
+    if not (interaction.guild_id in server_classes and server_classes[interaction.guild_id] is not None):
+        # noinspection PyUnresolvedReferences
+        await interaction.response.send_message("Server is not set up for Hall of Fame yet.")
+        return
+
+    async with get_db_connection(connection_pool) as connection:
+        all_users_wrapped = hof_wrapped_repo.get_all_hof_wrapped_for_guild(connection, interaction.guild_id,  version.WRAPPED_YEAR)
+    embed = hof_wrapped.create_server_embed(interaction.guild, all_users_wrapped)
+    # noinspection PyUnresolvedReferences
+    await interaction.response.send_message(embed=embed)
+
 # Command disabled for now due to few customization requests
 """
 @tree.command(name="request_to_set_bot_profile", description="Request to set a custom bot profile picture and cover")
@@ -592,6 +611,15 @@ async def set_bot_profile_picture(interaction: discord.Interaction, image_url: s
         return
     await utils.create_custom_profile_picture_and_cover_form(interaction, bot, image_url, cover_url)
 """
+
+def bot_is_loaded():
+    """
+    Check if the bot has loaded
+    :return: True if the bot has loaded
+    """
+    if len(server_classes) <= 1:
+        return False
+    return True
 
 async def check_if_user_has_manage_server_permission(interaction: discord.Interaction, check_server_set_up: bool = True):
     """
@@ -649,3 +677,4 @@ if __name__ == "__main__":
     if TOKEN is None:
         raise ValueError("TOKEN environment variable is not set in the .env file")
     bot.run(TOKEN)
+    connection_pool.closeall()

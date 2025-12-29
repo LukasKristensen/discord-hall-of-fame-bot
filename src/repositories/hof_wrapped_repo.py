@@ -59,6 +59,17 @@ def get_hof_wrapped(connection, guild_id, user_id, year):
     cursor.close()
     return result
 
+def get_all_hof_wrapped_for_guild(connection, guild_id, year):
+    cursor = connection.cursor()
+    cursor.execute("""
+        SELECT * FROM hof_wrapped WHERE guild_id = %s AND year = %s
+    """, (guild_id, year))
+    rows = cursor.fetchall()
+    columns = [desc[0] for desc in cursor.description]
+    results = [dict(zip(columns, row)) for row in rows]
+    cursor.close()
+    return results
+
 def delete_hof_wrapped_for_guild(connection, guild_id):
     cursor = connection.cursor()
     cursor.execute("""

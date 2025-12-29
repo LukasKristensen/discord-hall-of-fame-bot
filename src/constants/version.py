@@ -1,2 +1,3 @@
 VERSION = "2.0.0"
 DATE = None
+WRAPPED_YEAR = 2025
