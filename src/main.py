@@ -586,6 +586,7 @@ async def set_hall_of_fame_channel(interaction: discord.Interaction, channel: di
     if not channel.permissions_for(interaction.guild.me).read_message_history:
         missing_permissions.append("Read Message History")
     if missing_permissions:
+        # noinspection PyUnresolvedReferences
         await interaction.response.send_message(f"Failed to set Hall of Fame channel. In {channel.mention}, the bot is missing the following permissions for the channel: {', '.join(missing_permissions)}")
         await utils.logging(bot, f"Failed to set Hall of Fame channel due to missing permissions by {interaction.user.name} in "
                                  f"{interaction.guild.name} with missing permissions: {', '.join(missing_permissions)}",

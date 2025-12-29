@@ -581,7 +581,7 @@ async def logging(bot: discord.Client, message, server_id=None, new_value=None, 
             if existing_message.author.id == bot.user.id and message in existing_message.content:
                 return  # Do not send duplicate error message
 
-        message_prefix = "<@230698327589650432> " if log_type == Log_type.CRITICAL else ""
+        message_prefix = "<@230698327589650432> " if log_type == log_type.CRITICAL else ""
         await channel.send(f"{message_prefix}```diff\n{date_formatted_message}\n```")
 
 
@@ -772,7 +772,7 @@ async def post_server_perms(bot, server):
                              f"Can add reactions: {server.me.guild_permissions.add_reactions}\n"
                              f"Can use external emojis: {server.me.guild_permissions.use_external_emojis}\n"
                              f"Can view channels: {server.me.guild_permissions.view_channel}\n"
-                             f"Server member count: {server.member_count}", log_type=Log_type.SYSTEM)
+                             f"Server member count: {server.member_count}", log_level=log_type.SYSTEM)
 
 
 async def send_message_to_highest_prio_channel(bot: discord.Client, guild: discord.Guild, message_content: str,
