@@ -382,6 +382,10 @@ if __name__ == "__main__":
 
     @bot.event
     async def on_ready():
+        global users
+        global total_hall_of_fame_posts
+        global rankings
+
         print(f'Logged in as {bot.user} (ID: {bot.user.id})')
         print('------')
 
@@ -390,6 +394,10 @@ if __name__ == "__main__":
         hof_wrapped_guild_status.create_hof_wrapped_progress_table(connection)
 
         for guild in bot.guilds:
+            users.clear()
+            total_hall_of_fame_posts = 0
+            rankings = None
+
             print(f"Processing guild: {guild.name} (ID: {guild.id})")
             if hof_wrapped_guild_status.is_hof_wrapped_processed(connection, guild.id, datetime.datetime.now().year):
                 print(f"Hall Of Fame Wrapped already processed for guild {guild.id}, skipping...")
@@ -400,6 +408,7 @@ if __name__ == "__main__":
             await main(guild_id, bot, reaction_threshold, connection)
             hof_wrapped_guild_status.mark_hof_wrapped_as_processed(connection, guild.id, datetime.datetime.now().year)
         connection.close()
+        await bot.close()
 
     print("Logging in the bot...")
     bot.token = os.getenv('DEV_KEY')
