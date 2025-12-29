@@ -20,10 +20,7 @@ def create_progress_entry(connection, guild_id, year, message_count):
     cursor.execute("""
         INSERT INTO hof_wrapped_progress (guild_id, year, hall_of_fame_message_count)
         VALUES (%s, %s, %s)
-        ON CONFLICT (guild_id, year) DO UPDATE SET
-            hall_of_fame_message_count = EXCLUDED.hall_of_fame_message_count,
-            last_updated = CURRENT_TIMESTAMP,
-            is_complete = FALSE
+        ON CONFLICT (guild_id, year) DO NOTHING
     """, (guild_id, year, message_count))
     connection.commit()
     cursor.close()

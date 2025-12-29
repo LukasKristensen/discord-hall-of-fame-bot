@@ -119,7 +119,6 @@ async def process_hof_messages_from_db(guild: discord.Guild, connection):
         if message.created_at.year != version.WRAPPED_YEAR:
             continue
         user = users[message.author.id]
-        user.hallOfFameMessagePosts += 1
         await process_message_reactions(message, connection)
         # Most used channels
         if channel.id not in user.mostUsedChannels:
@@ -416,7 +415,7 @@ def create_server_embed(guild, users):
         inline=False
     )
     embed.add_field(
-        name="👥 Top Fans (Most Reactions)",
+        name="👥 Top Fans (Gave The Most Reactions)",
         value=fans_list if fans_list else "No fans yet.",
         inline=False
     )
