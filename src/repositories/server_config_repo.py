@@ -1,4 +1,5 @@
-from src.classes.server_class import ServerClass
+# noinspection PyUnresolvedReferences
+from classes.server_class import ServerClass
 
 ALLOWED_COLUMNS = {
     "hall_of_fame_channel_id",

@@ -7,7 +7,6 @@ from message_reactions import most_reacted_emoji, reaction_count
 from classes import server_class
 from enums import command_refs, log_type, calculation_method_type
 from repositories import server_config_repo, hall_of_fame_message_repo, server_user_repo, hof_wrapped_repo
-from src.classes.server_class import Server
 
 daily_post_limit = 100
 
@@ -141,7 +140,7 @@ async def remove_embed(message, bot: discord.Client, target_channel_id: int):
     await hall_of_fame_message.edit(content="** **", embed=None)
 
 
-async def update_leaderboard(connection, bot: discord.Client, server_config: Server):
+async def update_leaderboard(connection, bot: discord.Client, server_config: server_class.Server):
     """
     Update the leaderboard of the Hall of Fame channel with the top 20 most reacted messages
     :param connection:
@@ -434,7 +433,7 @@ def check_video_extension(message):
     return None
 
 
-async def create_database_context(bot, server, connection, custom_channel=None) -> Server:
+async def create_database_context(bot, server, connection, custom_channel=None) -> server_class.Server:
     """
     Create a database context for the server
     :param bot: The Discord bot
