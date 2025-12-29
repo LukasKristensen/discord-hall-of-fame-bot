@@ -99,11 +99,11 @@ async def user_server_profile(interaction, user, user_stats, connection, month_e
         description=f"Here are your stats for **{interaction.guild.name}**:",
         color=discord.Color.gold()
     )
-    if user_has_most_this_month_hall_of_fame_messages and user.id == user_has_most_this_month_hall_of_fame_messages.get("user_id") and user_stats:
+    if user_has_most_this_month_hall_of_fame_messages and user_stats:
         embed.add_field(name=f"{month_emoji} **Monthly Hall of Fame Champion**",
                         value=f"**{user.name}** is the champion of this month's Hall of Fame with **{user_stats.get('this_month_hall_of_fame_messages', 0)}** messages!",
                         inline=False)
-    if user_with_most_all_time_hall_of_fame_messages and user.id == user_with_most_all_time_hall_of_fame_messages.get("user_id") and user_stats:
+    if user_with_most_all_time_hall_of_fame_messages and user_stats:
         embed.add_field(name=f"{all_time_emoji} **All-Time Hall of Fame Champion**",
                         value=f"**{user.name}** is the all-time champion with **{user_stats.get('total_hall_of_fame_messages', 0)}** messages!",
                         inline=False)

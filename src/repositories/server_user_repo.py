@@ -46,21 +46,18 @@ def delete_server_users(connection, guild_id):
 
 def get_server_user(connection, user_id, guild_id):
     cursor = connection.cursor()
-    try:
-        cursor.execute("""
-            SELECT user_id, guild_id, monthly_reaction_rank, total_message_rank, total_reaction_rank,
-                   this_month_hall_of_fame_messages, total_hall_of_fame_messages, monthly_message_rank,
-                   this_month_hall_of_fame_message_reactions, total_hall_of_fame_message_reactions
-            FROM server_user
-            WHERE user_id = %s AND guild_id = %s
-        """, (user_id, guild_id))
-        result = cursor.fetchone()
-    except Exception as e:
-        connection.rollback()
-        print(f"Error fetching server user: {e}")
-        raise
-    finally:
-        cursor.close()
+    cursor.execute("""
+        SELECT *
+        FROM server_user
+        WHERE user_id = %s AND guild_id = %s
+    """, (user_id, guild_id))
+    row = cursor.fetchone()
+    if row is not None:
+        columns = [desc[0] for desc in cursor.description]
+        result = dict(zip(columns, row))
+    else:
+        result = None
+    cursor.close()
     return result
 
 def update_user_stats(connection, stats, user_id, guild_id):
@@ -99,13 +96,14 @@ def get_top_users_by_stat(connection, guild_id, stat_field, limit=10):
         LIMIT %s
     """
     cursor.execute(query, (guild_id, limit))
-    results = cursor.fetchall()
+    columns = [desc[0] for desc in cursor.description]
+    results = [dict(zip(columns, row)) for row in cursor.fetchall()]
     cursor.close()
     return results
 
 def check_if_user_is_top_of_stat(connection, user_id, guild_id, stat_field):
     """
-    Checks if the user is the ranked 1 in the specified stat field within the guild
+    Returns the top user (as a dict) for the specified stat field within the guild, or None if not found.
     """
     cursor = connection.cursor()
     query = f"""
@@ -116,6 +114,6 @@ def check_if_user_is_top_of_stat(connection, user_id, guild_id, stat_field):
         LIMIT 1
     """
     cursor.execute(query, (guild_id,))
-    result = cursor.fetchone()
+    row = cursor.fetchone()
     cursor.close()
-    return result is not None and result[0] == user_id
+    return row is not None and row[0] == user_id

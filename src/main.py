@@ -199,12 +199,18 @@ async def on_guild_remove(server):
 
 @tree.command(name="help", description="List of commands")
 async def get_help(interaction: discord.Interaction):
+    if not bot_is_loaded():
+        return
+
     await commands.get_help(interaction)
     await utils.logging(bot, f"Help command used by {interaction.user.name} in {interaction.guild.name}",
                         interaction.guild.id, log_level=log_type.COMMAND)
 
 @tree.command(name="set_reaction_threshold", description="Configure the amount of reactions needed to post a message in the Hall of Fame")
 async def configure_bot(interaction: discord.Interaction, reaction_threshold: int):
+    if not bot_is_loaded():
+        return
+
     if not await check_if_user_has_manage_server_permission(interaction):
         return
     reaction_threshold = reaction_threshold if reaction_threshold > 0 else 1
@@ -221,6 +227,9 @@ async def send_feedback(interaction: discord.Interaction):
 
 @tree.command(name="include_authors_reaction", description="Should the author's own reaction be included in the reaction threshold calculation?")
 async def include_author_own_reaction_in_threshold(interaction: discord.Interaction, include: bool):
+    if not bot_is_loaded():
+        return
+
     if not await check_if_user_has_manage_server_permission(interaction):
         return
     async with get_db_connection(connection_pool) as connection:
@@ -233,6 +242,9 @@ async def include_author_own_reaction_in_threshold(interaction: discord.Interact
 
 @tree.command(name="allow_messages_in_hof_channel", description="Should people be allowed to send messages in the Hall of Fame channel?")
 async def allow_messages_in_hof_channel(interaction: discord.Interaction, allow: bool):
+    if not bot_is_loaded():
+        return
+
     if not await check_if_user_has_manage_server_permission(interaction):
         return
 
@@ -260,8 +272,12 @@ async def vote(interaction: discord.Interaction):
     ]
 )
 async def custom_emoji_check_logic(interaction: discord.Interaction, config_option: app_commands.Choice[str]):
+    if not bot_is_loaded():
+        return
+
     if not await check_if_user_has_manage_server_permission(interaction):
         return
+
     custom_emoji_check = False
     if config_option.value == "whitelisted_emojis":
         custom_emoji_check = True
@@ -280,6 +296,9 @@ async def custom_emoji_check_logic(interaction: discord.Interaction, config_opti
 
 @tree.command(name="whitelist_emoji", description="Whitelist an emoji for the server if custom emoji check logic is enabled")
 async def whitelist_emoji(interaction: discord.Interaction, emoji: str):
+    if not bot_is_loaded():
+        return
+
     if not await check_if_user_has_manage_server_permission(interaction):
         return
 
@@ -314,6 +333,9 @@ async def whitelist_emoji(interaction: discord.Interaction, emoji: str):
     name="unwhitelist_emoji",
     description="Unwhitelist an emoji for the server if custom emoji check logic is enabled")
 async def unwhitelist_emoji(interaction: discord.Interaction, emoji: str):
+    if not bot_is_loaded():
+        return
+
     if not await check_if_user_has_manage_server_permission(interaction):
         return
 
@@ -341,6 +363,9 @@ async def unwhitelist_emoji(interaction: discord.Interaction, emoji: str):
 
 @tree.command(name="clear_whitelist", description="Clear the whitelist for the server if custom emoji check logic is enabled")
 async def clear_whitelist(interaction: discord.Interaction):
+    if not bot_is_loaded():
+        return
+
     if not await check_if_user_has_manage_server_permission(interaction):
         return
     server_class = server_classes[interaction.guild_id]
@@ -359,6 +384,9 @@ async def clear_whitelist(interaction: discord.Interaction):
 
 @tree.command(name="get_server_config", description="Get the server config")
 async def get_server_config(interaction: discord.Interaction):
+    if not bot_is_loaded():
+        return
+
     server_class = server_classes[interaction.guild_id]
     config_message = messages.SERVER_CONFIG.format(
         reaction_threshold=server_class.reaction_threshold,
@@ -384,6 +412,9 @@ async def get_server_config(interaction: discord.Interaction):
     name="set_post_due_date",
     description="How many days ago should the post be to be considered old and not valid?")
 async def set_post_due_date(interaction: discord.Interaction, post_due_date: int):
+    if not bot_is_loaded():
+        return
+
     if not await check_if_user_has_manage_server_permission(interaction):
         return
 
@@ -404,6 +435,9 @@ async def invite(interaction: discord.Interaction):
 
 @tree.command(name="ignore_bot_messages", description="Should the bot ignore messages from other bots?")
 async def ignore_bot_messages(interaction: discord.Interaction, should_ignore_bot_messages: bool):
+    if not bot_is_loaded():
+        return
+
     if not await check_if_user_has_manage_server_permission(interaction):
         return
 
@@ -424,6 +458,9 @@ async def ignore_bot_messages(interaction: discord.Interaction, should_ignore_bo
     ]
 )
 async def calculation_method(interaction: discord.Interaction, method: app_commands.Choice[str]):
+    if not bot_is_loaded():
+        return
+
     if not await check_if_user_has_manage_server_permission(interaction):
         return
 
@@ -443,6 +480,9 @@ async def hide_hall_of_fame_posts_when_they_are_below_threshold(interaction: dis
     :param hide: True to hide, False to not hide
     :return:
     """
+    if not bot_is_loaded():
+        return
+
     if not await check_if_user_has_manage_server_permission(interaction):
         return
 
@@ -462,6 +502,9 @@ async def user_server_profile(interaction: discord.Interaction, specific_user: d
     :param specific_user: The user to get the profile of, defaults to the interaction user
     :return: The server profile of the user
     """
+    if not bot_is_loaded():
+        return
+
     user = specific_user or interaction.user
     async with get_db_connection(connection_pool) as connection:
         user_stats = server_user_repo.get_server_user(connection, user.id, interaction.guild_id)
@@ -485,6 +528,9 @@ async def leaderboard(interaction: discord.Interaction):
     :param interaction: The interaction object
     :return: The server stats
     """
+    if not bot_is_loaded():
+        return
+
     if interaction.guild_id not in server_classes:
         # noinspection PyUnresolvedReferences
         await interaction.response.send_message(messages.ERROR_SERVER_NOT_SETUP)
@@ -499,16 +545,16 @@ async def leaderboard(interaction: discord.Interaction):
                                 interaction.guild.id, log_level=log_type.COMMAND)
             return
 
-        if interaction.guild_id in daily_command_cooldowns and "leaderboard" in daily_command_cooldowns[interaction.guild_id]:
+        if interaction.user.id in daily_command_cooldowns and "leaderboard" in daily_command_cooldowns[interaction.user.id]:
             # noinspection PyUnresolvedReferences
             await interaction.response.send_message(messages.COMMAND_ON_COOLDOWN)
             await utils.logging(bot, f"Leaderboard command on cooldown for {interaction.user.name} in {interaction.guild.name}",
                                 interaction.guild.id, log_level=log_type.COMMAND)
             return
 
-        if interaction.guild_id not in daily_command_cooldowns:
-            daily_command_cooldowns[interaction.guild_id] = []
-        daily_command_cooldowns[interaction.guild_id].append("leaderboard")
+        if interaction.user.id not in daily_command_cooldowns:
+            daily_command_cooldowns[interaction.user.id] = []
+        daily_command_cooldowns[interaction.user.id].append("leaderboard")
 
         try:
             await commands.server_leaderboard(interaction, connection, month_emoji, all_time_emoji)
@@ -526,6 +572,9 @@ async def set_hall_of_fame_channel(interaction: discord.Interaction, channel: di
     :param interaction: The interaction object
     :param channel: The channel to set as the Hall of Fame channel
     """
+    if not bot_is_loaded():
+        return
+
     if not await check_if_user_has_manage_server_permission(interaction, False):
         return
 
