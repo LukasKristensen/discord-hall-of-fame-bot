@@ -6,10 +6,7 @@ def create_hof_wrapped_table(connection):
             guild_id BIGINT NOT NULL,
             user_id BIGINT NOT NULL,
             year INTEGER NOT NULL,
-            message_count INTEGER,
             reaction_count INTEGER,
-            reaction_to_non_hof_posts INTEGER,
-            reaction_to_hof_posts INTEGER,
             hof_message_posts INTEGER,
             most_used_channels TEXT,
             most_used_emojis TEXT,
@@ -26,17 +23,14 @@ def create_hof_wrapped_table(connection):
     connection.commit()
     cursor.close()
 
-def insert_hof_wrapped(connection, guild_id, user_id, year, message_count, reaction_count, reaction_to_non_hof_posts, reaction_to_hof_posts, hof_message_posts, most_used_channels, most_used_emojis, most_reacted_post_message_id, most_reacted_post_channel_id, most_reacted_post_reaction_count, fan_of_users, users_fans, user_ranks):
+def insert_hof_wrapped(connection, guild_id, user_id, year, reaction_count, hof_message_posts, most_used_channels, most_used_emojis, most_reacted_post_message_id, most_reacted_post_channel_id, most_reacted_post_reaction_count, fan_of_users, users_fans, user_ranks):
     cursor = connection.cursor()
     cursor.execute("""
         INSERT INTO hof_wrapped (
-            guild_id, user_id, year, message_count, reaction_count, reaction_to_non_hof_posts, reaction_to_hof_posts, hof_message_posts, most_used_channels, most_used_emojis, most_reacted_post_message_id, most_reacted_post_channel_id, most_reacted_post_reaction_count, fan_of_users, users_fans, user_ranks
-        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            guild_id, user_id, year, reaction_count, hof_message_posts, most_used_channels, most_used_emojis, most_reacted_post_message_id, most_reacted_post_channel_id, most_reacted_post_reaction_count, fan_of_users, users_fans, user_ranks
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         ON CONFLICT (guild_id, user_id, year) DO UPDATE SET
-            message_count=EXCLUDED.message_count,
             reaction_count=EXCLUDED.reaction_count,
-            reaction_to_non_hof_posts=EXCLUDED.reaction_to_non_hof_posts,
-            reaction_to_hof_posts=EXCLUDED.reaction_to_hof_posts,
             hof_message_posts=EXCLUDED.hof_message_posts,
             most_used_channels=EXCLUDED.most_used_channels,
             most_used_emojis=EXCLUDED.most_used_emojis,
@@ -48,7 +42,7 @@ def insert_hof_wrapped(connection, guild_id, user_id, year, message_count, react
             user_ranks=EXCLUDED.user_ranks,
             created_at=CURRENT_TIMESTAMP
     """,
-    (guild_id, user_id, year, message_count, reaction_count, reaction_to_non_hof_posts, reaction_to_hof_posts, hof_message_posts, most_used_channels, most_used_emojis, most_reacted_post_message_id, most_reacted_post_channel_id, most_reacted_post_reaction_count, fan_of_users, users_fans, user_ranks))
+    (guild_id, user_id, year, reaction_count, hof_message_posts, most_used_channels, most_used_emojis, most_reacted_post_message_id, most_reacted_post_channel_id, most_reacted_post_reaction_count, fan_of_users, users_fans, user_ranks))
     connection.commit()
     cursor.close()
 
