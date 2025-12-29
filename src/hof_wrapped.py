@@ -246,7 +246,6 @@ async def create_embed(discord_user, data_for_user_wrapped, bot):
 def rank_stats(users: dict):
     rankings = {
         "hallOfFameMessagePosts": [],
-        "reactionCount": [],
         "mostUsedChannels": [],
         "mostUsedEmojis": [],
         "fanOfUsers": [],
@@ -254,7 +253,6 @@ def rank_stats(users: dict):
     }
     for user in users.values():
         rankings["hallOfFameMessagePosts"].append((user.id, user.hallOfFameMessagePosts))
-        rankings["reactionCount"].append((user.id, user.reactionCount))
         rankings["mostUsedChannels"].append((user.id, len(user.mostUsedChannels)))
         rankings["mostUsedEmojis"].append((user.id, sum(user.mostUsedEmojis.values())))
         rankings["fanOfUsers"].append((user.id, sum(user.fanOfUsers.values())))
@@ -269,7 +267,6 @@ def add_rankings(embed, user_ranks: dict):
         name="📊 Your Rankings (HOF):",
         value=(
             f"**Hall of Fame Posts:** #{user_ranks['hallOfFameMessagePosts']}\n"
-            f"**Reactions on HOF Posts:** #{user_ranks['reactionCount']}\n"
             f"**Most Used Channels:** #{user_ranks['mostUsedChannels']}\n"
             f"**Most Used Emojis:** #{user_ranks['mostUsedEmojis']}\n"
             f"**Received the Most Reactions:** #{user_ranks['usersFans']}\n"
@@ -433,7 +430,7 @@ def create_server_embed(guild, users):
             inline=False
         )
 
-    # should include that users can get their own hof wrapped for the server by using /hof_wrapped
+    # todo: ref this as a discord internal command
     embed.add_field(
         name="🔔 Get Your Own Hall Of Fame Wrapped!",
         value="Use the `/hof_wrapped` command to see your personal Hall Of Fame Wrapped for this server!",
@@ -465,6 +462,12 @@ if __name__ == "__main__":
         hof_wrapped_guild_status.create_hof_wrapped_progress_table(connection)
 
         for guild in bot.guilds:
+            message_count = hall_of_fame_message_repo.count_messages_for_guild(connection, guild.id)
+            hof_wrapped_guild_status.create_progress_entry(connection, guild.id, version.WRAPPED_YEAR, message_count)
+
+        for guild in bot.guilds:
+            # completion timer
+            start_time = datetime.datetime.now()
             users.clear()
             total_hall_of_fame_posts = 0
             rankings = None
@@ -477,7 +480,9 @@ if __name__ == "__main__":
             reaction_threshold = server_config_repo.get_parameter_value(connection, guild_id, "reaction_threshold")
 
             await main(guild_id, bot, reaction_threshold, connection)
-            hof_wrapped_guild_status.mark_hof_wrapped_as_processed(connection, guild.id, version.WRAPPED_YEAR)
+            completion_time = datetime.datetime.now() - start_time
+            print(f"Completed Hall Of Fame Wrapped for guild {guild.name} (ID: {guild.id}) in {completion_time.total_seconds()} seconds.")
+            hof_wrapped_guild_status.mark_hof_wrapped_as_processed(connection, guild.id, version.WRAPPED_YEAR, completion_time.total_seconds())
         connection.close()
         await bot.close()
 

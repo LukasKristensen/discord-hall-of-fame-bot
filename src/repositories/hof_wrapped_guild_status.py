@@ -7,21 +7,36 @@ def create_hof_wrapped_progress_table(connection):
             year INTEGER NOT NULL,
             is_complete BOOLEAN DEFAULT FALSE,
             last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            hall_of_fame_message_count INTEGER DEFAULT 0,
+            duration_seconds FLOAT,
             UNIQUE(guild_id, year)
         )
     """)
     connection.commit()
     cursor.close()
 
-def mark_hof_wrapped_as_processed(connection, guild_id, year):
+def create_progress_entry(connection, guild_id, year, message_count):
     cursor = connection.cursor()
     cursor.execute("""
-        INSERT INTO hof_wrapped_progress (guild_id, year, is_complete, last_updated)
-        VALUES (%s, %s, TRUE, CURRENT_TIMESTAMP)
+        INSERT INTO hof_wrapped_progress (guild_id, year, hall_of_fame_message_count)
+        VALUES (%s, %s, %s)
         ON CONFLICT (guild_id, year) DO UPDATE SET
-            is_complete = TRUE,
+            hall_of_fame_message_count = EXCLUDED.hall_of_fame_message_count,
+            last_updated = CURRENT_TIMESTAMP,
+            is_complete = FALSE
+    """, (guild_id, year, message_count))
+    connection.commit()
+    cursor.close()
+
+def mark_hof_wrapped_as_processed(connection, guild_id, year, duration_seconds):
+    cursor = connection.cursor()
+    cursor.execute("""
+        UPDATE hof_wrapped_progress
+        SET is_complete = TRUE,
+            duration_seconds = %s,
             last_updated = CURRENT_TIMESTAMP
-    """, (guild_id, year))
+        WHERE guild_id = %s AND year = %s
+    """, (duration_seconds, guild_id, year))
     connection.commit()
     cursor.close()
 
