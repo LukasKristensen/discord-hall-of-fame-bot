@@ -2,7 +2,7 @@ import discord
 import utils
 from constants import version
 from enums import command_refs
-from repositories import server_config_repo
+from repositories import server_config_repo, server_user_repo
 
 async def get_help(interaction: discord.Interaction):
     """
@@ -39,6 +39,7 @@ async def get_help(interaction: discord.Interaction):
     embed.add_field(name="Invite the bot", value="https://discord.com/oauth2/authorize?client_id=1177041673352663070", inline=False)
     embed.set_footer(text=f"Bot Version: {version.VERSION} - {version.DATE}")
     embed.set_image(url="https://raw.githubusercontent.com/LukasKristensen/discord-hall-of-fame-bot/refs/heads/main/Assets/reaction_calculation_methods_wide.jpg")
+    # noinspection PyUnresolvedReferences
     await interaction.response.send_message(embed=embed)
 
 
@@ -71,26 +72,28 @@ async def set_reaction_threshold(interaction: discord.Interaction, reaction_thre
     :return:
     """
     server_config_repo.update_server_config_param(interaction.guild.id, 'reaction_threshold', reaction_threshold, connection)
+    # noinspection PyUnresolvedReferences
     await interaction.response.send_message(f"Reaction threshold set to {reaction_threshold}.\n"
                                             f"Note: The reaction threshold is based on the highest reaction count"
                                             f" of a single emoji per message.")
 
 
-async def user_server_profile(interaction, user, user_stats, db_client, month_emoji: str, all_time_emoji: str):
+async def user_server_profile(interaction, user, user_stats, connection, month_emoji: str, all_time_emoji: str):
     """
     Command to get the Hall of Fame profile for a user in a specific server
     :param interaction:
     :param user:
     :param user_stats:
-    :param db_client:
+    :param connection:
     :param month_emoji:
     :param all_time_emoji:
     :return:
     """
-    user_has_most_this_month_hall_of_fame_messages = db_client['server_users'].find_one(
-        {"guild_id": interaction.guild_id}, sort=[("this_month_hall_of_fame_messages", -1)])
-    user_with_most_all_time_hall_of_fame_messages = db_client['server_users'].find_one(
-        {"guild_id": interaction.guild_id}, sort=[("total_hall_of_fame_messages", -1)])
+    user_has_most_this_month_hall_of_fame_messages = server_user_repo.check_if_user_is_top_of_stat(
+        connection, user.id, interaction.guild.id, "this_month_hall_of_fame_messages")
+    user_with_most_all_time_hall_of_fame_messages = server_user_repo.check_if_user_is_top_of_stat(
+        connection, user.id, interaction.guild.id, "total_hall_of_fame_messages")
+
     embed = discord.Embed(
         title=f"📊 {user.name}'s Server Profile",
         description=f"Here are your stats for **{interaction.guild.name}**:",
@@ -127,11 +130,11 @@ async def user_server_profile(interaction, user, user_stats, db_client, month_em
     await interaction.response.send_message(embed=embed)
 
 
-async def server_leaderboard(interaction, db_client, month_emoji: str, all_time_emoji: str):
+async def server_leaderboard(interaction, connection, month_emoji: str, all_time_emoji: str):
     """
     Command to get the Hall of Fame leaderboard for a server
     :param interaction:
-    :param db_client:
+    :param connection:
     :param month_emoji:
     :param all_time_emoji:
     :return:
@@ -149,8 +152,7 @@ async def server_leaderboard(interaction, db_client, month_emoji: str, all_time_
     leaderboard = ""
 
     # Top 5 This Month's Hall of Fame Messages
-    top_monthly = db_client['server_users'].find({"guild_id": interaction.guild_id}).sort(
-        "this_month_hall_of_fame_messages", -1).limit(5)
+    top_monthly = server_user_repo.get_top_users_by_stat(connection, interaction.guild_id, "this_month_hall_of_fame_messages", limit=5)
     leaderboard += f"{month_emoji} **Top 5 This Month's Hall of Fame Messages**\n"
     for rank, user in enumerate(top_monthly, start=1):
         try:
@@ -160,8 +162,7 @@ async def server_leaderboard(interaction, db_client, month_emoji: str, all_time_
             leaderboard += f"{rank}. Unknown Member: {user.get('this_month_hall_of_fame_messages', 0)} messages\n"
 
     # Top 5 All-Time Hall of Fame Messages
-    top_all_time = db_client['server_users'].find({"guild_id": interaction.guild_id}).sort(
-        "total_hall_of_fame_messages", -1).limit(5)
+    top_all_time = server_user_repo.get_top_users_by_stat(connection, interaction.guild_id, "total_hall_of_fame_messages", limit=5)
     leaderboard += f"\n{all_time_emoji} **Top 5 All-Time Hall of Fame Messages**\n"
     for rank, user in enumerate(top_all_time, start=1):
         try:
@@ -171,8 +172,7 @@ async def server_leaderboard(interaction, db_client, month_emoji: str, all_time_
             leaderboard += f"{rank}. Unknown Member: {user.get('total_hall_of_fame_messages', 0)} messages\n"
 
     # Top 5 This Month's Reactions
-    top_monthly_reactions = db_client['server_users'].find({"guild_id": interaction.guild_id}).sort(
-        "this_month_hall_of_fame_message_reactions", -1).limit(5)
+    top_monthly_reactions = server_user_repo.get_top_users_by_stat(connection, interaction.guild_id, "this_month_hall_of_fame_message_reactions", limit=5)
     leaderboard += f"\n💬 **Top 5 This Month's Reactions**\n"
     for rank, user in enumerate(top_monthly_reactions, start=1):
         try:
@@ -182,8 +182,7 @@ async def server_leaderboard(interaction, db_client, month_emoji: str, all_time_
             leaderboard += f"{rank}. Unknown Member: {user.get('this_month_hall_of_fame_message_reactions', 0)} reactions\n"
 
     # Top 5 All-Time Reactions
-    top_all_time_reactions = db_client['server_users'].find({"guild_id": interaction.guild_id}).sort(
-        "total_hall_of_fame_message_reactions", -1).limit(5)
+    top_all_time_reactions = server_user_repo.get_top_users_by_stat(connection, interaction.guild_id, "total_hall_of_fame_message_reactions", limit=5)
     leaderboard += f"\n💬 **Top 5 All-Time Reactions**\n"
     for rank, user in enumerate(top_all_time_reactions, start=1):
         try:

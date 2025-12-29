@@ -1,34 +1,32 @@
 import os
-from pymongo.mongo_client import MongoClient
 from dotenv import load_dotenv
 import matplotlib.pyplot as plt
 import numpy as np
 from datetime import datetime
+import psycopg2
+from repositories import server_config_repo, hall_of_fame_message_repo, server_user_repo, hof_wrapped_repo
 
 load_dotenv('../.env')
-# TODO: Refactor db connection to a PostgreSQL compatible version
-mongo_uri = os.getenv('MONGODB_URI')
-db_client = MongoClient(mongo_uri)
-production_db = db_client['production']
+connection = psycopg2.connect(host=os.getenv('POSTGRES_HOST'),
+                              database=os.getenv('POSTGRES_DB'),
+                              user=os.getenv('POSTGRES_USER'),
+                              password=os.getenv('POSTGRES_PASSWORD'))
+
 server_graph_folder = 'graphs'
 show_plots = False
 
 server_stats = []
-servers = production_db['server_configs'].distinct('guild_id')
 
-print("db client: ", production_db)
-print("servers: ", servers)
-for server in servers:
-    config = production_db['server_configs'].find_one({'guild_id': server})
+for config in server_config_repo.get_all_server_configs(connection):
     if config:
-        message_count = production_db["hall_of_fame_messages"].count_documents({'guild_id': server})
+        message_count = hall_of_fame_message_repo.count_messages_for_guild(connection, config.guild_id)
         server_stats.append({
-            'server': server,
-            'reaction_threshold': config.get('reaction_threshold', 'N/A'),
-            'include_author_in_reaction_calculation': config.get('include_author_in_reaction_calculation', 'N/A'),
-            'allow_messages_in_hof_channel': config.get('allow_messages_in_hof_channel', 'N/A'),
+            'server': config,
+            'reaction_threshold': config.reaction_threshold,
+            'include_author_in_reaction_calculation': config.include_author_in_reaction_calculation,
+            'allow_messages_in_hof_channel': config.allow_messages_in_hof_channel,
             'message_count': message_count,
-            'server_member_count': config.get('server_member_count', 'N/A')  # Add server_member_count
+            'server_member_count': config.server_member_count
         })
 
 

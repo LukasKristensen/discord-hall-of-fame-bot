@@ -15,7 +15,8 @@ ALLOWED_COLUMNS = {
     "ignore_bot_messages",
     "server_member_count",
     "reaction_count_calculation_method",
-    "hide_hof_post_below_threshold"
+    "hide_hof_post_below_threshold",
+    "joined_date"
 }
 
 def create_server_config_table(connection):
@@ -116,12 +117,22 @@ def get_server_classes(connection) -> dict[int, ServerClass]:
     cursor = connection.cursor()
     cursor.execute("""
         SELECT hall_of_fame_channel_id, guild_id, reaction_threshold, post_due_date,
-               sweep_limit, sweep_limited, include_author_in_reaction_calculation,
+               leaderboard_message_ids, sweep_limit, sweep_limited, include_author_in_reaction_calculation,
                allow_messages_in_hof_channel, custom_emoji_check_logic, whitelisted_emojis,
-               leaderboard_setup, ignore_bot_messages, reaction_count_calculation_method,
+               leaderboard_setup, ignore_bot_messages, server_member_count, reaction_count_calculation_method,
                hide_hof_post_below_threshold
         FROM server_configs
     """)
     rows = cursor.fetchall()
     cursor.close()
     return {row[1]: ServerClass(*row) for row in rows}
+
+def get_all_server_configs(connection) -> list[ServerClass]:
+    cursor = connection.cursor()
+    cursor.execute("""
+        SELECT *
+        FROM server_configs
+    """)
+    rows = cursor.fetchall()
+    cursor.close()
+    return [ServerClass(*row) for row in rows]

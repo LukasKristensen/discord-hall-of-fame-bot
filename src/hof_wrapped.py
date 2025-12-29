@@ -2,7 +2,7 @@ import discord as discord
 import message_reactions
 from discord.ext import commands
 import datetime
-from repositories import hof_wrapped_repo, hall_of_fame_message_repo, server_config_repo, server_user_repo
+from repositories import hof_wrapped_repo, hall_of_fame_message_repo, server_config_repo, hof_wrapped_guild_status
 import psycopg2
 import os
 from dotenv import load_dotenv
@@ -21,8 +21,7 @@ reactionThreshold: int
 
 
 class User:
-    def __init__(self, member: discord.Member):
-        self.member = member
+    def __init__(self, user_id):
         self.messageCount = 0  # Implemented
         self.reactionCount = 0  # Implemented
         self.reactionToNonHallOfFamePosts = 0  # Implemented
@@ -33,7 +32,7 @@ class User:
         self.mostUsedChannels = {}  # Implemented
         self.mostReactedPost = {"post": None, "reaction_count": 0}  # Implemented
         self.mostUsedEmojis = {}  # Implemented
-        self.id = member.id
+        self.id = user_id
 
     def get_ratio_hall_of_fame_posts_to_normal_posts(self):
         ratio = self.reactionToHallOfFamePosts / total_hall_of_fame_posts if total_hall_of_fame_posts > 0 else 0
@@ -53,18 +52,18 @@ class User:
 
 
 def initialize_users(connection, guild_id: int):
-    for member in hall_of_fame_message_repo.find_guild_ids_from_server(connection, guild_id):
-        users[member.id] = User(member)
+    for user_id in hall_of_fame_message_repo.find_members_for_guild(connection, guild_id):
+        users[user_id] = User(user_id)
 
 
-async def process_message_reactions(message: discord.Message):
+async def process_message_reactions(message: discord.Message, connection):
     global total_hall_of_fame_posts
 
     user_author = users[message.author.id]
     hall_of_fame_post = False
     users_reacted = []
 
-    highest_reaction_count = await message_reactions.reaction_count(message)
+    highest_reaction_count = await message_reactions.reaction_count(message, connection)
     if highest_reaction_count >= reactionThreshold:
         user_author.hallOfFameMessagePosts += 1
         hall_of_fame_post = True
@@ -115,10 +114,13 @@ async def process_message_reactions(message: discord.Message):
 
 
 async def process_hof_messages_from_db(guild: discord.Guild, connection):
-    rows = hall_of_fame_message_repo.get_all_hall_of_fame_messages_for_guild(connection, guild.id)
-    print("rows fetched from DB:", len(rows))
+    messages = hall_of_fame_message_repo.get_all_hall_of_fame_messages_for_guild(connection, guild.id)
+    print("rows fetched from DB:", len(messages))
 
-    for channel_id, message_id in rows:
+    for message in messages:
+        channel_id = message['channel_id']
+        message_id = message['message_id']
+
         channel = guild.get_channel(channel_id)
         if not isinstance(channel, discord.TextChannel):
             continue
@@ -133,7 +135,7 @@ async def process_hof_messages_from_db(guild: discord.Guild, connection):
 
         user = users[message.author.id]
         user.messageCount += 1
-        await process_message_reactions(message)
+        await process_message_reactions(message, connection)
 
         # Feature: Most used channels
         if channel.id not in user.mostUsedChannels:
@@ -145,39 +147,60 @@ async def process_hof_messages_from_db(guild: discord.Guild, connection):
 
 
 # Todo: this should be called from an external command to generate the embed for a user, which will also give more flexibility for data handling
-def create_embed(user: User, guild: discord.Guild):
-    if len(user.mostUsedChannels) < 3:
-        return None
+async def create_embed(user: User, data_for_user_wrapped, bot):
+    # load the user_wrapped data as a User object
+    user_wrapped = User(user.id)
+    user_wrapped.messageCount = data_for_user_wrapped['message_count']
+    user_wrapped.reactionCount = data_for_user_wrapped['reaction_count']
+    user_wrapped.reactionToNonHallOfFamePosts = data_for_user_wrapped['reaction_to_non_hof_posts']
+    user_wrapped.reactionToHallOfFamePosts = data_for_user_wrapped['reaction_to_hof_posts']
+    user_wrapped.hallOfFameMessagePosts = data_for_user_wrapped['hof_message_posts']
+    user_wrapped.fanOfUsers = json.loads(data_for_user_wrapped['fan_of_users'])
+    user_wrapped.usersFans = json.loads(data_for_user_wrapped['users_fans'])
+    user_wrapped.mostUsedChannels = json.loads(data_for_user_wrapped['most_used_channels'])
+    user_wrapped.mostUsedEmojis = json.loads(data_for_user_wrapped['most_used_emojis'])
+    user_wrapped.userRanks = json.loads(data_for_user_wrapped['user_ranks'])
+
+    if data_for_user_wrapped['most_reacted_post_message_id'] and data_for_user_wrapped['most_reacted_post_channel_id']:
+        try:
+            channel = bot.get_channel(data_for_user_wrapped['most_reacted_post_channel_id'])
+            if isinstance(channel, discord.TextChannel):
+                message = await channel.fetch_message(data_for_user_wrapped['most_reacted_post_message_id'])
+                user_wrapped.mostReactedPost["post"] = message
+        except Exception:
+            user_wrapped.mostReactedPost["post"] = None
+    user_wrapped.mostReactedPost["reaction_count"] = data_for_user_wrapped['most_reacted_post_reaction_count']
+
     embed = discord.Embed(
         title=f"✨ Hall Of Fame Wrapped {datetime.datetime.now().year} ✨",
         description=(
-            f"📅 **User:** {user.member.mention}\n"
+            f"📅 **User:** {user.mention}\n"
         ),
         color=discord.Color.gold()
     )
-    embed.set_thumbnail(url=user.member.avatar.url if user.member.avatar else guild.icon.url)
+    embed.set_thumbnail(url=user.avatar.url if user.avatar else user.default_avatar.url)
 
-    embed.add_field(name="💬 Total Messages", value=f"{user.messageCount} messages", inline=True)
-    embed.add_field(name="🎉 Total Reactions", value=f"{user.reactionCount} reactions", inline=True)
-    embed.add_field(name="🏅 Hall of Fame", value=f"{user.hallOfFameMessagePosts} posts", inline=True)
-    embed.add_field(name="🏆 Percentage of Your Posts Posted in HOF:", value=f"{round(user.hallOfFameMessagePosts * 100 / user.messageCount, 2)}%", inline=True)
+    embed.add_field(name="💬 Total Messages", value=f"{user_wrapped.messageCount} messages", inline=True)
+    embed.add_field(name="🎉 Total Reactions", value=f"{user_wrapped.reactionCount} reactions", inline=True)
+    embed.add_field(name="🏅 Hall of Fame", value=f"{user_wrapped.hallOfFameMessagePosts} posts", inline=True)
+    embed.add_field(name="🏆 Percentage of Your Posts Posted in HOF:", value=f"{round(user_wrapped.hallOfFameMessagePosts * 100 / user_wrapped.messageCount, 2)}%", inline=True)
 
     # Hall of Fame Contribution
     if total_hall_of_fame_posts > 0:
         embed.add_field(
             name="🏆 Hall of Fame Contribution",
             value=(
-                f"You represented **{round(user.hallOfFameMessagePosts * 100 / total_hall_of_fame_posts, 2)}%** "
+                f"You represented **{round(user_wrapped.hallOfFameMessagePosts * 100 / total_hall_of_fame_posts, 2)}%** "
                 f"of all Hall of Fame posts this year!"
             ),
             inline=False
         )
 
     # Most Used Channels Section
-    most_used_channel_names = sorted(user.mostUsedChannels.items(), key=lambda x: x[1], reverse=True)[:5]
+    most_used_channel_names = sorted(user_wrapped.mostUsedChannels.items(), key=lambda x: x[1], reverse=True)[:5]
 
     channel_list = "\n".join(
-        f"**#{guild.get_channel(channel[0]).name if guild.get_channel(channel[0]) else 'Unknown'}**: {channel[1]} messages"
+        f"**<#{channel[0]}>**: {channel[1]} times"
         for channel in most_used_channel_names
     )
     embed.add_field(
@@ -187,12 +210,12 @@ def create_embed(user: User, guild: discord.Guild):
     )
     embed.add_field(
         name="🧠 Total amount of channels used",
-        value=f"{len(user.mostUsedChannels)} channels",
+        value=f"{len(user_wrapped.mostUsedChannels)} channels",
         inline=True
     )
 
     # Most Used Emojis Section
-    most_used_emojis = sorted(user.mostUsedEmojis.items(), key=lambda x: x[1], reverse=True)[:5]
+    most_used_emojis = sorted(user_wrapped.mostUsedEmojis.items(), key=lambda x: x[1], reverse=True)[:5]
     emoji_list = "\n".join(f"{emoji[0]}: {emoji[1]} times" for emoji in most_used_emojis)
     embed.add_field(
         name="😄 Most Used Emojis",
@@ -201,9 +224,9 @@ def create_embed(user: User, guild: discord.Guild):
     )
 
     # Fans and Fan Of
-    top_fans = sorted(user.usersFans.items(), key=lambda x: x[1], reverse=True)[:5]
+    top_fans = sorted(user_wrapped.usersFans.items(), key=lambda x: x[1], reverse=True)[:5]
     fans_list = "\n".join(
-        f"**{guild.get_member(fan[0]).global_name if guild.get_member(fan[0]) else 'Unknown'}**: {fan[1]} reactions"
+        f"**<@{fan[0]}>**: {fan[1]} reactions"
         for fan in top_fans
     )
     embed.add_field(
@@ -212,9 +235,9 @@ def create_embed(user: User, guild: discord.Guild):
         inline=False
     )
 
-    top_user_fans = sorted(user.fanOfUsers.items(), key=lambda x: x[1], reverse=True)[:5]
+    top_user_fans = sorted(user_wrapped.fanOfUsers.items(), key=lambda x: x[1], reverse=True)[:5]
     fan_of_list = "\n".join(
-        f"**{guild.get_member(fan[0]).global_name if guild.get_member(fan[0]) else 'Unknown'}**: {fan[1]} reactions"
+        f"**<@{fan[0]}>**: {fan[1]} reactions"
         for fan in top_user_fans
     )
     embed.add_field(
@@ -226,15 +249,15 @@ def create_embed(user: User, guild: discord.Guild):
     # Hall of Fame Reaction Ratio
     embed.add_field(
         name="📊 Hall of Fame Reaction Ratio",
-        value=user.get_ratio_hall_of_fame_posts_to_normal_posts(),
+        value=user_wrapped.get_ratio_hall_of_fame_posts_to_normal_posts(),
         inline=False
     )
 
-    embed = add_rankings(embed, user, rankings)
+    embed = add_rankings(embed, user_wrapped.userRanks)
 
     # Most Reacted Post Section
-    if user.mostReactedPost["post"] is not None:
-        most_reacted_post = user.mostReactedPost
+    if user_wrapped.mostReactedPost["post"] is not None:
+        most_reacted_post = user_wrapped.mostReactedPost
         embed.add_field(
             name="🔥 Most Reacted Post",
             value=(
@@ -268,13 +291,13 @@ def rank_stats(users: dict):
 
     # Add users to rankings for each stat
     for user in users.values():
-        rankings["messageCount"].append((user.member, user.messageCount))
-        rankings["hallOfFameMessagePosts"].append((user.member, user.hallOfFameMessagePosts))
-        rankings["reactionToHallOfFamePosts"].append((user.member, user.reactionToHallOfFamePosts))
-        rankings["mostUsedChannels"].append((user.member, len(user.mostUsedChannels)))
-        rankings["mostUsedEmojis"].append((user.member, sum(user.mostUsedEmojis.values())))
-        rankings["fanOfUsers"].append((user.member, sum(user.fanOfUsers.values())))
-        rankings["usersFans"].append((user.member, sum(user.usersFans.values())))
+        rankings["messageCount"].append((user.id, user.messageCount))
+        rankings["hallOfFameMessagePosts"].append((user.id, user.hallOfFameMessagePosts))
+        rankings["reactionToHallOfFamePosts"].append((user.id, user.reactionToHallOfFamePosts))
+        rankings["mostUsedChannels"].append((user.id, len(user.mostUsedChannels)))
+        rankings["mostUsedEmojis"].append((user.id, sum(user.mostUsedEmojis.values())))
+        rankings["fanOfUsers"].append((user.id, sum(user.fanOfUsers.values())))
+        rankings["usersFans"].append((user.id, sum(user.usersFans.values())))
 
     # Sort each ranking in descending order
     for key in rankings.keys():
@@ -285,15 +308,12 @@ def rank_stats(users: dict):
 def get_user_rank(rankings: dict, user: User):
     user_ranks = {}
     for stat, ranked_list in rankings.items():
-        user_rank = next((i + 1 for i, (member, _) in enumerate(ranked_list) if member.id == user.member.id), None)
+        user_rank = next((i + 1 for i, (member, _) in enumerate(ranked_list) if member == user.id), None)
         user_ranks[stat] = user_rank
     return user_ranks
 
 
-def add_rankings(embed, user: User, rankings: dict):
-    user_ranks = get_user_rank(rankings, user)
-
-    # Add rankings to the embed
+def add_rankings(embed, user_ranks: dict):
     embed.add_field(
         name="📊 Your Rankings:",
         value=(
@@ -323,11 +343,13 @@ def save_user_wrapped_to_db(guild_id, user, year):
         reaction_to_hof_posts=user.reactionToHallOfFamePosts,
         hof_message_posts=user.hallOfFameMessagePosts,
         most_used_channels=json.dumps(user.mostUsedChannels),
-        most_used_emojis=json.dumps(user.mostUsedEmojis),
-        most_reacted_post_id=(user.mostReactedPost["post"].id if user.mostReactedPost["post"] else None),
+        most_used_emojis=json.dumps({str(k): v for k, v in user.mostUsedEmojis.items()}),
+        most_reacted_post_message_id=(user.mostReactedPost["post"].id if user.mostReactedPost["post"] else None),
+        most_reacted_post_channel_id=(user.mostReactedPost["post"].channel.id if user.mostReactedPost["post"] else None),
         most_reacted_post_reaction_count=user.mostReactedPost["reaction_count"],
         fan_of_users=json.dumps(user.fanOfUsers),
-        users_fans=json.dumps(user.usersFans)
+        users_fans=json.dumps(user.usersFans),
+        user_ranks=json.dumps(get_user_rank(rankings, user))
     )
     connection.commit()
     cursor.close()
@@ -364,13 +386,19 @@ if __name__ == "__main__":
         print('------')
 
         connection = psycopg2.connect(host=POSTGRES_HOST, database=POSTGRES_DB, user=POSTGRES_USER, password=POSTGRES_PASSWORD)
+        hof_wrapped_repo.create_hof_wrapped_table(connection)
+        hof_wrapped_guild_status.create_hof_wrapped_progress_table(connection)
+
         for guild in bot.guilds:
+            print(f"Processing guild: {guild.name} (ID: {guild.id})")
+            if hof_wrapped_guild_status.is_hof_wrapped_processed(connection, guild.id, datetime.datetime.now().year):
+                print(f"Hall Of Fame Wrapped already processed for guild {guild.id}, skipping...")
+                continue
             guild_id = guild.id
             reaction_threshold = server_config_repo.get_parameter_value(connection, guild_id, "reaction_threshold")
 
             await main(guild_id, bot, reaction_threshold, connection)
-            await bot.close()
-
+            hof_wrapped_guild_status.mark_hof_wrapped_as_processed(connection, guild.id, datetime.datetime.now().year)
         connection.close()
 
     print("Logging in the bot...")

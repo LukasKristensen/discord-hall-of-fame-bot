@@ -2,8 +2,8 @@ import discord as discord
 from enums import calculation_method_type
 from repositories import server_config_repo
 
-
-def most_reacted_emoji(reactions: [discord.Reaction], guild_id, connection) -> [discord.Reaction]:
+# todo: make this return either a single emoji or null
+def most_reacted_emoji(reactions: list[discord.Reaction], guild_id, connection) -> discord.Reaction.emoji:
     """
     Returns the reaction with the most reactions.
     :param reactions:
@@ -22,27 +22,25 @@ def most_reacted_emoji(reactions: [discord.Reaction], guild_id, connection) -> [
         reactions = corrected_reactions
 
     if len(reactions) == 1:
-        return reactions
+        return reactions[0].emoji
     if len(reactions) == 0:
-        return []
+        return ""
 
     largest_num = reactions[0].count    
-    biggest = [reactions[0]]
+    biggest = reactions[0]
 
     for reaction in reactions[1:]:
-        if reaction.count == largest_num:
-            biggest.append(reaction)
-        elif reaction.count > largest_num:
-            biggest = [reaction]
+        if reaction.count > largest_num:
+            biggest = reaction
             largest_num = reaction.count
     
-    return biggest
+    return biggest.emoji
 
 
 async def total_reaction_count(message: discord.Message, guild_id, connection) -> int:
     """
     Returns the total number of reactions, taking into account the custom emoji check logic and whitelisted emojis.
-    :param reactions:
+    :param message:
     :param guild_id:
     :param connection:
     :return:
@@ -136,7 +134,6 @@ async def reaction_count(message, connection) -> int:
     """
     Returns the reaction count of a message based on the server configuration.
     :param message:
-    :param guild_id:
     :param connection:
     :return:
     """

@@ -50,10 +50,11 @@ def delete_hall_of_fame_messages_for_guild(connection, guild_id):
 def get_all_hall_of_fame_messages_for_guild(connection, guild_id):
     cursor = connection.cursor()
     cursor.execute("""
-        SELECT channel_id, message_id FROM hall_of_fame_message 
+        SELECT * FROM hall_of_fame_message
         WHERE guild_id = %s
     """, (guild_id,))
-    results = cursor.fetchall()
+    columns = [desc[0] for desc in cursor.description]
+    results = [dict(zip(columns, row)) for row in cursor.fetchall()]
     cursor.close()
     return results
 
@@ -63,9 +64,10 @@ def find_hall_of_fame_message(connection, guild_id, channel_id, message_id):
         SELECT * FROM hall_of_fame_message 
         WHERE guild_id = %s AND channel_id = %s AND message_id = %s
     """, (guild_id, channel_id, message_id))
-    result = cursor.fetchone()
+    row = cursor.fetchone()
+    columns = [desc[0] for desc in cursor.description]
     cursor.close()
-    return result
+    return dict(zip(columns, row)) if row else None
 
 def guild_message_count_past_24_hours(connection, guild_id):
     cursor = connection.cursor()
@@ -88,12 +90,35 @@ def update_field_for_message(connection, guild_id, channel_id, message_id, field
     connection.commit()
     cursor.close()
 
-def find_guild_ids_from_server(connection, guild_id):
+def find_members_for_guild(connection, guild_id):
     cursor = connection.cursor()
     cursor.execute("""
-        SELECT author_id FROM hall_of_fame_message
+        SELECT DISTINCT author_id FROM hall_of_fame_message 
         WHERE guild_id = %s
     """, (guild_id,))
-    results = cursor.fetchall()
+    rows = cursor.fetchall()
     cursor.close()
-    return results
+    return [row[0] for row in rows]
+
+def find_top_messages_by_reaction_count(connection, guild_id, limit=10):
+    cursor = connection.cursor()
+    cursor.execute("""
+        SELECT * FROM hall_of_fame_message 
+        WHERE guild_id = %s 
+        ORDER BY reaction_count DESC 
+        LIMIT %s
+    """, (guild_id, limit))
+    rows = cursor.fetchall()
+    columns = [desc[0] for desc in cursor.description]
+    cursor.close()
+    return [dict(zip(columns, row)) for row in rows]
+
+def count_messages_for_guild(connection, guild_id):
+    cursor = connection.cursor()
+    cursor.execute("""
+        SELECT COUNT(*) FROM hall_of_fame_message 
+        WHERE guild_id = %s
+    """, (guild_id,))
+    result = cursor.fetchone()
+    cursor.close()
+    return result[0] if result else 0

@@ -6,18 +6,18 @@ import asyncio
 from message_reactions import most_reacted_emoji, reaction_count
 from classes import server_class
 from enums import command_refs, log_type, calculation_method_type
-from repositories import server_config_repo, hall_of_fame_message_repo, server_user_repo, user_repo
+from repositories import server_config_repo, hall_of_fame_message_repo, server_user_repo, hof_wrapped_repo
 from src.classes.server_class import Server
 
 daily_post_limit = 100
 
 
-async def validate_message(message: discord.RawReactionActionEvent, bot: discord.Client, connection,
+async def validate_message(discord_message: discord.RawReactionActionEvent, bot: discord.Client, connection,
                            reaction_threshold: int, post_due_date: int, target_channel_id: int,
                            ignore_bot_messages: bool, hide_hof_post_below_threshold: bool):
     """
     Check if the message is valid for posting based on the reaction count, date and origin of the message
-    :param message: The message to validate
+    :param discord_message: The message to validate
     :param bot: The Discord bot
     :param connection: The database connection
     :param reaction_threshold: The minimum number of reactions for a message to be posted in the Hall of Fame
@@ -27,43 +27,43 @@ async def validate_message(message: discord.RawReactionActionEvent, bot: discord
     :param hide_hof_post_below_threshold: Whether to hide the Hall of Fame post if the reaction count is below the threshold
     :return: None
     """
-    channel_id: int = message.channel_id
-    message_id: int = message.message_id
-    guild_id: int = message.guild_id
+    channel_id: int = discord_message.channel_id
+    message_id: int = discord_message.message_id
+    guild_id: int = discord_message.guild_id
 
     channel = bot.get_channel(channel_id)
     if not channel.permissions_for(channel.guild.me).read_messages:
         await logging(bot, f"Bot does not have read message permissions in channel {channel.id} of guild {channel.guild.id}", channel.guild.id)
         return
 
-    message = await channel.fetch_message(message_id)
+    discord_message = await channel.fetch_message(message_id)
     db_message = hall_of_fame_message_repo.find_hall_of_fame_message(connection, guild_id, channel_id, message_id)
 
     # Checks if the post is older than the due date and has not been added to the database
-    if (datetime.datetime.now(timezone.utc) - message.created_at).days > post_due_date and not db_message:
+    if (datetime.datetime.now(timezone.utc) - discord_message.created_at).days > post_due_date and not db_message:
         return
 
     # Checks if the message is from a bot
-    if message.author.bot and ignore_bot_messages:
+    if discord_message.author.bot and ignore_bot_messages:
         return
 
     target_channel = bot.get_channel(target_channel_id)
 
     if hall_of_fame_message_repo.guild_message_count_past_24_hours(connection, guild_id) > daily_post_limit:
-        await logging(bot, f"Guild {guild_id} has exceeded the daily limit for hall of fame posts.", message.guild.id, log_level=log_type.CRITICAL)
+        await logging(bot, f"Guild {guild_id} has exceeded the daily limit for hall of fame posts.", discord_message.guild.id, log_level=log_type.CRITICAL)
         existing_messages = [message async for message in target_channel.history(limit=10)]
         for existing_message in existing_messages:
             if existing_message.author.id == bot.user.id and "has exceeded the daily limit" in existing_message.content:
                 return
-        await target_channel.send(f"⚠️ Guild {message.guild.name} has exceeded the daily limit {daily_post_limit} for hall of fame posts. ⚠️")
+        await target_channel.send(f"⚠️ Guild {discord_message.guild.name} has exceeded the daily limit {daily_post_limit} for hall of fame posts. ⚠️")
         return
 
     # Gets the adjusted reaction count corrected for not accounting the author
-    corrected_reactions = await reaction_count(message, connection)
+    corrected_reactions = await reaction_count(discord_message, connection)
     if corrected_reactions < reaction_threshold:
         if hide_hof_post_below_threshold and db_message:
             await remove_embed(db_message, bot, target_channel_id)
-            if "video_link_message_id" in db_message and message.attachments:
+            if "video_link_message_id" in db_message and discord_message.attachments:
                 video_link_message = db_message["video_link_message_id"]
                 if video_link_message is not None:
                     video_link_message = await target_channel.fetch_message(int(video_link_message))
@@ -73,27 +73,28 @@ async def validate_message(message: discord.RawReactionActionEvent, bot: discord
     if db_message:
         message_to_update = await bot.get_channel(target_channel_id).fetch_message(db_message["hall_of_fame_message_id"])
         if len(message_to_update.embeds) > 0:
-            hall_of_fame_message_repo.update_field_for_message(connection, guild_id, channel_id, message_id,"reaction_count", await reaction_count(message, connection))
-            await update_reaction_counter(db_message, bot, target_channel_id, reaction_threshold, connection)
+            hall_of_fame_message_repo.update_field_for_message(connection, guild_id, channel_id, message_id,"reaction_count", await reaction_count(discord_message, connection))
+            await update_reaction_counter(db_message, bot, target_channel_id, reaction_threshold, connection, discord_message)
             return
         else:
-            await message_to_update.edit(embed=await create_embed(message, reaction_threshold, connection))
-            if "video_link_message_id" in db_message and message.attachments:
-                message_attachment = message.attachments[0]
+            await message_to_update.edit(embed=await create_embed(discord_message, reaction_threshold, connection))
+            if "video_link_message_id" in db_message and discord_message.attachments:
+                message_attachment = discord_message.attachments[0]
                 video_link_message = await target_channel.fetch_message(db_message["video_link_message_id"])
                 await video_link_message.edit(content=message_attachment.url, embed=None)
             return
-    await post_hall_of_fame_message(message, bot, connection, target_channel_id, reaction_threshold)
+    await post_hall_of_fame_message(discord_message, bot, connection, target_channel_id, reaction_threshold)
 
 
-async def update_reaction_counter(db_message, bot: discord.Client, target_channel_id: int, reaction_threshold: int, connection):
+async def update_reaction_counter(db_message, bot: discord.Client, target_channel_id: int, reaction_threshold: int, connection, discord_message: discord.Message):
     """
     Update the reaction counter of a message in the Hall of Fame
     :param db_message:
-    :param connection:
     :param bot:
     :param target_channel_id:
     :param reaction_threshold:
+    :param connection:
+    :param discord_message:
     :return:
     """
     if not db_message["hall_of_fame_message_id"]:
@@ -105,19 +106,18 @@ async def update_reaction_counter(db_message, bot: discord.Client, target_channe
 
     if not hall_of_fame_message.embeds:
         # Post the message in the Hall of Fame channel if it was removed
-        await hall_of_fame_message.edit(embed=await create_embed(db_message, reaction_threshold, connection))
+        await hall_of_fame_message.edit(embed=await create_embed(discord_message, reaction_threshold, connection))
         return
 
     embed = hall_of_fame_message.embeds[0]
-    corrected_reactions = await reaction_count(db_message, connection)
+    corrected_reactions = await reaction_count(discord_message, connection)
 
-    # embed.set_field_at(index=0, name=f"{corrected_reactions} Reactions ", value=most_reacted_emoji(message.reactions)[0].emoji, inline=True)
     for i, field in enumerate(embed.fields):
         if field.name.endswith("Reactions"):
             embed.set_field_at(
                 index=i,
                 name=f"{corrected_reactions} Reactions ",
-                value=most_reacted_emoji(db_message.reactions, db_message.guild.id, connection)[0].emoji,
+                value=most_reacted_emoji(discord_message.reactions, discord_message.guild.id, connection),
                 inline=True
             )
             break
@@ -141,49 +141,41 @@ async def remove_embed(message, bot: discord.Client, target_channel_id: int):
     await hall_of_fame_message.edit(content="** **", embed=None)
 
 
-async def update_leaderboard(message_collection, bot: discord.Client, server_config, target_channel_id: int,
-                             reaction_threshold: int, leaderboard_length: int = 20):
+async def update_leaderboard(connection, bot: discord.Client, server_config: Server):
     """
     Update the leaderboard of the Hall of Fame channel with the top 20 most reacted messages
-    :param message_collection:
+    :param connection:
     :param bot:
     :param server_config:
-    :param target_channel_id:
-    :param reaction_threshold:
-    :param leaderboard_length:
     :return:
     """
-    server_message_collection = message_collection.find({"guild_id": int(server_config['guild_id'])}).sort(
-        "reaction_count", -1).limit(30)
-    most_reacted_messages = list(server_message_collection)
-
-    msg_id_array = server_config.get("leaderboard_message_ids", [])
+    server_messages = hall_of_fame_message_repo.find_top_messages_by_reaction_count(connection, int(server_config.guild_id), limit=30)
+    most_reacted_messages = list(server_messages)
+    msg_id_array = server_config.leaderboard_message_ids
 
     # Update the reaction count of the top 30 most reacted messages
-    for i in range(min(len(most_reacted_messages), message_collection.count_documents({"guild_id": int(server_config['guild_id'])}) - 1)):
+    for i in range(min(len(most_reacted_messages), 30)):
         message = most_reacted_messages[i]
         channel = bot.get_channel(message["channel_id"])
         message = await channel.fetch_message(message["message_id"])
-        message_collection.update_one({"message_id": int(message.id), "guild_id": int(server_config['guild_id']),
-                                       "channel_id": int(message.channel.id)},
-                                      {"$set": {"reaction_count": await reaction_count(message)}})
-
-    total_documents = message_collection.count_documents({"guild_id": int(server_config['guild_id'])})
-
+        hall_of_fame_message_repo.update_field_for_message(connection, int(server_config.guild_id), message.channel.id, message.id,
+                                                          "reaction_count", await reaction_count(message, connection))
     # Update the embeds of the top 20 most reacted messages
     if msg_id_array:
-        for i in range(min(leaderboard_length, total_documents - 1)):
-            hall_of_fame_channel = bot.get_channel(target_channel_id)
+        for i in range(min(20, len(most_reacted_messages), len(msg_id_array))):
+            hall_of_fame_channel = bot.get_channel(server_config.hall_of_fame_channel_id)
             hall_of_fame_message = await hall_of_fame_channel.fetch_message(msg_id_array[i])
             original_channel = bot.get_channel(most_reacted_messages[i]["channel_id"])
             original_message = await original_channel.fetch_message(most_reacted_messages[i]["message_id"])
 
-            await hall_of_fame_message.edit(embed=await create_embed(original_message, reaction_threshold))
+            await hall_of_fame_message.edit(embed=await create_embed(original_message, server_config.reaction_threshold, connection))
             await hall_of_fame_message.edit(content=f"**HallOfFame#{i+1}**")
             if original_message.attachments:
                 await hall_of_fame_message.edit(content=f"**HallOfFame#{i+1}**\n{original_message.attachments[0].url}")
 
 
+# Todo: Disabled, if re-enable needs to be refactored for the new database structure
+# noinspection PyUnresolvedReferences
 async def check_all_server_messages(guild_id: int, sweep_limit, sweep_limited: bool, bot: discord.Client,
                                     collection, reaction_threshold: int, post_due_date: int, target_channel_id: int,
                                     allow_messages_in_hof_channel: bool, interaction: discord.Interaction = None):
@@ -207,6 +199,7 @@ async def check_all_server_messages(guild_id: int, sweep_limit, sweep_limited: b
     messages_to_post = []
 
     # Write a response to the interaction to indicate that the sweep is in progress
+    # noinspection PyUnresolvedReferences
     await interaction.response.send_message(status_message, ephemeral=False)
 
     for channel in guild.channels:
@@ -230,7 +223,7 @@ async def check_all_server_messages(guild_id: int, sweep_limit, sweep_limited: b
 
                     if message_reactions >= reaction_threshold:
                         if collection.find_one({"message_id": int(message.id)}):
-                            await update_reaction_counter(message, collection, bot, target_channel_id, reaction_threshold)
+                            await update_reaction_counter(message, collection, bot, target_channel_id, reaction_threshold, message)
                             if sweep_limited:
                                 break  # if message is already in the database, no need to check further
                             else:
@@ -305,6 +298,7 @@ async def create_embed(message: discord.Message, reaction_threshold: int, connec
     Create an embed for a message in the Hall of Fame channel
     :param message: The message to create an embed for
     :param reaction_threshold: The minimum number of reactions for a message to be posted in the Hall of Fame
+    :param connection: MySQL connection
     :return: The embed for the message
     """
     # handle 1024 character limit on embed description
@@ -313,6 +307,8 @@ async def create_embed(message: discord.Message, reaction_threshold: int, connec
     if message.reference:
         reference_message = await message.channel.fetch_message(message.reference.message_id)
         reference_message.content = reference_message.content[:1021] + "..." if len(reference_message.content) > 1024 else reference_message.content
+    corrected_reactions = await reaction_count(message, connection)
+    top_reaction = most_reacted_emoji(message.reactions, message.guild.id, connection)
 
     # Check if the message is a sticker and has a reference
     if message.reference and message.stickers:
@@ -327,8 +323,7 @@ async def create_embed(message: discord.Message, reaction_threshold: int, connec
 
         embed.add_field(name=f"{reference_message.author.name}'s message:", value=reference_message.content, inline=False)
 
-        corrected_reactions = await reaction_count(message)
-        embed.add_field(name=f"{corrected_reactions} Reactions", value=most_reacted_emoji(message.reactions)[0].emoji, inline=True)
+        embed.add_field(name=f"{corrected_reactions} Reactions", value=top_reaction, inline=True)
         embed.add_field(name="Jump to Message", value=message.jump_url, inline=False)
 
         embed = await set_footer(embed)
@@ -344,8 +339,7 @@ async def create_embed(message: discord.Message, reaction_threshold: int, connec
         )
         embed.set_image(url=sticker.url)
         embed.set_author(name=message.author.name, icon_url=message.author.avatar.url if message.author.avatar else None)
-        corrected_reactions = await reaction_count(message, connection)
-        embed.add_field(name=f"{corrected_reactions} Reactions", value=most_reacted_emoji(message.reactions)[0].emoji, inline=True)
+        embed.add_field(name=f"{corrected_reactions} Reactions", value=top_reaction, inline=True)
         embed.add_field(name="Jump to Message", value=message.jump_url, inline=False)
         embed = await set_footer(embed)
         return embed
@@ -356,13 +350,11 @@ async def create_embed(message: discord.Message, reaction_threshold: int, connec
             title=f"{message.author.name} replied to {reference_message.author.name}'s message",
             color=discord.Color.gold()
         )
-        top_reaction = most_reacted_emoji(message.reactions, message.guild.id, connection)
 
         embed.set_author(name=message.author.name, icon_url=message.author.avatar.url if message.author.avatar else None)
-        corrected_reactions = await reaction_count(message, connection)
 
         if reference_message.attachments:
-            embed.add_field(name=f"{corrected_reactions} Reactions", value=top_reaction[0].emoji, inline=True)
+            embed.add_field(name=f"{corrected_reactions} Reactions", value=top_reaction, inline=True)
             embed.add_field(name="Jump to Message", value=message.jump_url, inline=False)
 
             # Author of the original message
@@ -377,7 +369,7 @@ async def create_embed(message: discord.Message, reaction_threshold: int, connec
             # Author of the original message
             embed.add_field(name=f"{message.author.name}'s reply:", value=message.content, inline=False)
 
-            embed.add_field(name=f"{corrected_reactions} Reactions", value=top_reaction[0].emoji, inline=True)
+            embed.add_field(name=f"{corrected_reactions} Reactions", value=top_reaction, inline=True)
             embed.add_field(name="Jump to Message", value=message.jump_url, inline=False)
         embed = await set_footer(embed)
         return embed
@@ -389,12 +381,8 @@ async def create_embed(message: discord.Message, reaction_threshold: int, connec
             color=discord.Color.gold()
         )
 
-        top_reaction = most_reacted_emoji(message.reactions, message.guild.id, connection)
         embed.set_author(name=message.author.name, icon_url=message.author.avatar.url if message.author.avatar else None)
-
-        corrected_reactions = await reaction_count(message, connection)
-
-        embed.add_field(name=f"{corrected_reactions} Reactions", value=top_reaction[0].emoji, inline=True)
+        embed.add_field(name=f"{corrected_reactions} Reactions", value=top_reaction, inline=True)
         embed.add_field(name="Jump to Message", value=message.jump_url, inline=False)
 
         # Original message
@@ -417,14 +405,12 @@ async def create_embed(message: discord.Message, reaction_threshold: int, connec
             description=message.content,
             color=discord.Color.gold()
         )
-        top_reaction = most_reacted_emoji(message.reactions, message.guild.id, connection)
 
         embed.set_author(name=message.author.name, icon_url=message.author.avatar.url if message.author.avatar else None)
         if message.attachments:
             embed.set_image(url=message.attachments[0].url)
 
-        corrected_reactions = await reaction_count(message, connection)
-        embed.add_field(name=f"{corrected_reactions} Reactions", value=top_reaction[0].emoji, inline=True)
+        embed.add_field(name=f"{corrected_reactions} Reactions", value=top_reaction, inline=True)
         embed.add_field(name="Jump to Message", value=message.jump_url, inline=False)
 
         embed = await set_footer(embed)
@@ -516,9 +502,11 @@ async def create_database_context(bot, server, connection, custom_channel=None) 
         custom_emoji_check_logic=False,
         whitelisted_emojis=[],
         leaderboard_setup=False,
+        leaderboard_message_ids=[],
         ignore_bot_messages=False,
         reaction_count_calculation_method=calculation_method_type.MOST_REACTIONS_ON_EMOJI,
-        hide_hof_post_below_threshold=True)
+        hide_hof_post_below_threshold=True,
+        server_member_count=server_member_count)
     return new_server_class
 
 
@@ -532,7 +520,7 @@ def delete_database_context(server_id: int, connection):
     hall_of_fame_message_repo.delete_hall_of_fame_messages_for_guild(connection, server_id)
     server_user_repo.delete_server_users(connection, server_id)
     server_config_repo.delete_server_config(connection, server_id)
-    user_repo.delete_users_for_guild(connection, server_id)
+    hof_wrapped_repo.delete_hof_wrapped_for_guild(connection, server_id)
 
 
 async def send_server_owner_error_message(owner, e, bot):
@@ -592,6 +580,7 @@ async def logging(bot: discord.Client, message, server_id=None, new_value=None, 
         await channel.send(f"{message_prefix}```diff\n{date_formatted_message}\n```")
 
 
+# noinspection PyTypeChecker
 async def create_feedback_form(interaction: discord.Interaction, bot):
     """
     Create a feedback form for the user and send the feedback to the feedback channel
@@ -631,9 +620,11 @@ async def create_feedback_form(interaction: discord.Interaction, bot):
             await asyncio.sleep(5)
             await feedback_interaction.delete_original_response()
 
+    # noinspection PyUnresolvedReferences
     await interaction.response.send_modal(FeedbackModal())
 
 
+# noinspection PyTypeChecker
 async def create_custom_profile_picture_and_cover_form(interaction: discord.Interaction, bot, default_profile_url="", default_cover_url=""):
     """
     Create a custom profile picture and cover form for the user and send the feedback to the feedback channel
@@ -674,27 +665,24 @@ async def create_custom_profile_picture_and_cover_form(interaction: discord.Inte
             await target_channel.send(embed=embed)
             await custom_profile_interaction.response.send_message(f"Your request has been sent, {custom_profile_interaction.user.mention}. "
                                                                    f"Processing times can vary and it may not be possible to fulfill all requests.")
+    # noinspection PyUnresolvedReferences
     await interaction.response.send_modal(CustomProfilePictureAndCoverModal())
 
 
-async def update_user_database(bot: discord.Client, db_client):
+async def update_user_database(bot: discord.Client, connection):
     """
     Update the user database with the latest information
     :param bot: The Discord bot
-    :param db_client: The MongoDB client
+    :param connection: MySQL connection
     :return: None
     """
     await logging(bot, f"Updating user database...")
     for guild in bot.guilds:
-        if not db_client['server_configs'].find_one({"guild_id": int(guild.id)}):
+        if not server_config_repo.check_if_guild_exists(connection, guild.id):
             continue
-        hall_of_fame_messages_document = db_client["hall_of_fame_messages"]
-        messages = list(hall_of_fame_messages_document.find({"guild_id": int(guild.id)}))
 
-        users_collection = db_client['server_users']
         users_stats = {}
-
-        for message in messages:
+        for message in hall_of_fame_message_repo.get_all_hall_of_fame_messages_for_guild(connection, guild.id):
             try:
                 if not message.get('author_id') or not message.get('created_at'):
                     continue
@@ -737,21 +725,7 @@ async def update_user_database(bot: discord.Client, db_client):
 
         for user_id, stats in users_stats.items():
             try:
-                users_collection.update_one(
-                    {"user_id": user_id, "guild_id": int(guild.id)},
-                    {"$set": {
-                        "user_id": user_id,
-                        "guild_id": int(guild.id),
-                        "total_hall_of_fame_messages": stats["total_hall_of_fame_messages"],
-                        "this_month_hall_of_fame_messages": stats["this_month_hall_of_fame_messages"],
-                        "total_hall_of_fame_message_reactions": stats["total_hall_of_fame_message_reactions"],
-                        "this_month_hall_of_fame_message_reactions": stats["this_month_hall_of_fame_message_reactions"],
-                        "total_message_rank": stats["total_message_rank"],
-                        "monthly_message_rank": stats["monthly_message_rank"],
-                        "total_reaction_rank": stats["total_reaction_rank"],
-                        "monthly_reaction_rank": stats["monthly_reaction_rank"]
-                    }},
-                    upsert=True)
+                server_user_repo.update_user_stats(connection, stats, user_id, guild.id)
             except Exception as e:
                 await logging(bot, f"Failed to update user {user_id} in database: {e}", guild.id)
     await logging(bot, f"Finished updating user database...")

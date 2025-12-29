@@ -3,7 +3,7 @@ import importlib
 import discord
 from pymongo.mongo_client import MongoClient
 from dotenv import load_dotenv
-from datetime import datetime
+from datetime import datetime, UTC
 
 load_dotenv('../.env')
 mongo_uri = os.getenv('MONGO_URI')
@@ -33,7 +33,7 @@ def run_migrations(production: bool = True):
 
         migration_collection.update_one(
             {"migration_name": migration_name},
-            {"$set": {"completed": production, "timestamp": datetime.utcnow()}},
+            {"$set": {"completed": production, "timestamp": datetime.now(UTC)}},
             upsert=True
         )
         print(f"Migration '{migration_name}' completed.")
