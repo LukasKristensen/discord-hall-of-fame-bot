@@ -1,2 +1,0 @@
-VERSION = "1.18.1"
-DATE = None

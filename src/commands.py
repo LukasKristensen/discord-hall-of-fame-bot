@@ -1,41 +1,8 @@
-import random
 import discord
 import utils
-from classes import version, Command_refs
-
-
-async def get_random_message(interaction: discord.Interaction, collection, bot, reaction_threshold):
-    """
-    Command to get a random message from the Hall of Fame database
-    :param interaction:
-    :param collection:
-    :param bot:
-    :param reaction_threshold:
-    :return:
-    """
-    sender_channel = interaction.channel.id
-
-    all_messages = [x for x in collection.find()]
-    if not all_messages:
-        await interaction.response.send_message("No available messages in the database for this server")
-        return
-    random_num = random.randint(0, len(all_messages)-1)
-    random_msg = all_messages[random_num]
-
-    msg_channel = bot.get_channel(int(random_msg["channel_id"]))
-    if not msg_channel:
-        await interaction.response.send_message("No available messages in the database for this server")
-        return
-    message = await msg_channel.fetch_message(int(random_msg["message_id"]))
-    target_channel = bot.get_channel(sender_channel)
-
-    video_link = utils.check_video_extension(message)
-    if video_link:
-        await target_channel.send(video_link)
-
-    embed = await utils.create_embed(message, reaction_threshold)
-    await interaction.response.send_message(embed=embed)
-
+from constants import version
+from enums import command_refs
+from repositories import server_config_repo, server_user_repo
 
 async def get_help(interaction: discord.Interaction):
     """
@@ -47,24 +14,24 @@ async def get_help(interaction: discord.Interaction):
         title="Commands",
         color=0x00ff00
     )
-    embed.add_field(name=Command_refs.HELP, value="List of commands", inline=False)
-    embed.add_field(name=Command_refs.SET_REACTION_THRESHOLD, value="Set the amount of reactions needed for a post to reach hall of fame", inline=False)
-    embed.add_field(name=Command_refs.INCLUDE_AUTHORS_REACTION, value="Should the author of a message be included in the reaction count?", inline=False)
-    embed.add_field(name=Command_refs.ALLOW_MESSAGES_IN_HOF_CHANNEL, value="Allow anyone to type in the Hall of Fame channel", inline=False)
-    embed.add_field(name=Command_refs.CUSTOM_EMOJI_CHECK_LOGIC, value="Use only whitelisted emojis for the reaction count", inline=False)
-    embed.add_field(name=Command_refs.WHITELIST_EMOJI, value="Add a whitelisted emoji to the list [custom_emoji_check_logic]", inline=False)
-    embed.add_field(name=Command_refs.UNWHITELIST_EMOJI, value="Remove a whitelisted emoji from the list [custom_emoji_check_logic]", inline=False)
-    embed.add_field(name=Command_refs.CLEAR_WHITELIST, value="Clear the whitelist of emojis [custom_emoji_check_logic]", inline=False)
-    embed.add_field(name=Command_refs.GET_SERVER_CONFIG, value="Get the current bot configuration for the server", inline=False)
-    embed.add_field(name=Command_refs.IGNORE_BOT_MESSAGES, value="Should the bot ignore messages from other bots?", inline=False)
-    embed.add_field(name=Command_refs.HIDE_HOF_POST_BELOW_THRESHOLD, value="Should hall of fame posts be hidden when they go below the reaction threshold? (Will be visible again when they reach the threshold again)", inline=False)
-    embed.add_field(name=Command_refs.CALCULATION_METHOD, value="Change the calculation method for reactions", inline=False)
-    embed.add_field(name=Command_refs.SET_POST_DUE_DATE, value="Set how many days back a post is considered valid for reaching the Hall of Fame", inline=False)
-    embed.add_field(name=Command_refs.USER_PROFILE, value="Get the Hall of Fame profile for a user", inline=False)
-    embed.add_field(name=Command_refs.LEADERBOARD, value="Get the Hall of Fame leaderboard for the server", inline=False)
-    embed.add_field(name=Command_refs.SET_HALL_OF_FAME_CHANNEL, value="Manually set the Hall of Fame channel for the server", inline=False)
-    embed.add_field(name=Command_refs.FEEDBACK, value="Got a feature request or bug report? Let us know!", inline=False)
-    embed.add_field(name=Command_refs.VOTE_BOT, value="Support the bot by voting for it on top.gg: https://top.gg/bot/1177041673352663070/vote", inline=False)
+    embed.add_field(name=command_refs.HELP, value="List of commands", inline=False)
+    embed.add_field(name=command_refs.SET_REACTION_THRESHOLD, value="Set the amount of reactions needed for a post to reach hall of fame", inline=False)
+    embed.add_field(name=command_refs.INCLUDE_AUTHORS_REACTION, value="Should the author of a message be included in the reaction count?", inline=False)
+    embed.add_field(name=command_refs.ALLOW_MESSAGES_IN_HOF_CHANNEL, value="Allow anyone to type in the Hall of Fame channel", inline=False)
+    embed.add_field(name=command_refs.CUSTOM_EMOJI_CHECK_LOGIC, value="Use only whitelisted emojis for the reaction count", inline=False)
+    embed.add_field(name=command_refs.WHITELIST_EMOJI, value="Add a whitelisted emoji to the list [custom_emoji_check_logic]", inline=False)
+    embed.add_field(name=command_refs.UNWHITELIST_EMOJI, value="Remove a whitelisted emoji from the list [custom_emoji_check_logic]", inline=False)
+    embed.add_field(name=command_refs.CLEAR_WHITELIST, value="Clear the whitelist of emojis [custom_emoji_check_logic]", inline=False)
+    embed.add_field(name=command_refs.GET_SERVER_CONFIG, value="Get the current bot configuration for the server", inline=False)
+    embed.add_field(name=command_refs.IGNORE_BOT_MESSAGES, value="Should the bot ignore messages from other bots?", inline=False)
+    embed.add_field(name=command_refs.HIDE_HOF_POST_BELOW_THRESHOLD, value="Should hall of fame posts be hidden when they go below the reaction threshold? (Will be visible again when they reach the threshold again)", inline=False)
+    embed.add_field(name=command_refs.CALCULATION_METHOD, value="Change the calculation method for reactions", inline=False)
+    embed.add_field(name=command_refs.SET_POST_DUE_DATE, value="Set how many days back a post is considered valid for reaching the Hall of Fame", inline=False)
+    embed.add_field(name=command_refs.USER_PROFILE, value="Get the Hall of Fame profile for a user", inline=False)
+    embed.add_field(name=command_refs.LEADERBOARD, value="Get the Hall of Fame leaderboard for the server", inline=False)
+    embed.add_field(name=command_refs.SET_HALL_OF_FAME_CHANNEL, value="Manually set the Hall of Fame channel for the server", inline=False)
+    embed.add_field(name=command_refs.FEEDBACK, value="Got a feature request or bug report? Let us know!", inline=False)
+    embed.add_field(name=command_refs.VOTE_BOT, value="Support the bot by voting for it on top.gg: https://top.gg/bot/1177041673352663070/vote", inline=False)
     embed.add_field(name="", value="", inline=True)
     embed.add_field(name="Having trouble setting up the bot?", value="Make sure the bot has the correct permissions in the server or try to re-invite it", inline=False)
     embed.add_field(name="Need help?", value="Join the community server: https://discord.gg/r98WC5GHcn", inline=False)
@@ -72,6 +39,7 @@ async def get_help(interaction: discord.Interaction):
     embed.add_field(name="Invite the bot", value="https://discord.com/oauth2/authorize?client_id=1177041673352663070", inline=False)
     embed.set_footer(text=f"Bot Version: {version.VERSION} - {version.DATE}")
     embed.set_image(url="https://raw.githubusercontent.com/LukasKristensen/discord-hall-of-fame-bot/refs/heads/main/Assets/reaction_calculation_methods_wide.jpg")
+    # noinspection PyUnresolvedReferences
     await interaction.response.send_message(embed=embed)
 
 
@@ -95,47 +63,47 @@ async def manual_sweep(interaction: discord.Interaction, guild_id: int, sweep_li
     await utils.check_all_server_messages(int(guild_id), sweep_limit, sweep_limited, bot, collection, reaction_threshold, post_due_date, target_channel_id, allow_messages_in_hof_channel, interaction)
 
 
-async def set_reaction_threshold(interaction: discord.Interaction, reaction_threshold: int, db_client):
+async def set_reaction_threshold(interaction: discord.Interaction, reaction_threshold: int, connection):
     """
     Command to set the reaction threshold for posting a message in the Hall of Fame
     :param interaction:
     :param reaction_threshold:
-    :param db_client:
+    :param connection:
     :return:
     """
-    server_config = db_client['server_configs']
-    server_config.update_one({"guild_id": int(interaction.guild_id)}, {"$set": {"reaction_threshold": reaction_threshold}})
-
+    server_config_repo.update_server_config_param(interaction.guild.id, 'reaction_threshold', reaction_threshold, connection)
+    # noinspection PyUnresolvedReferences
     await interaction.response.send_message(f"Reaction threshold set to {reaction_threshold}.\n"
                                             f"Note: The reaction threshold is based on the highest reaction count"
                                             f" of a single emoji per message.")
 
 
-async def user_server_profile(interaction, user, user_stats, db_client, month_emoji: str, all_time_emoji: str):
+async def user_server_profile(interaction, user, user_stats, connection, month_emoji: str, all_time_emoji: str):
     """
     Command to get the Hall of Fame profile for a user in a specific server
     :param interaction:
     :param user:
     :param user_stats:
-    :param db_client:
+    :param connection:
     :param month_emoji:
     :param all_time_emoji:
     :return:
     """
-    user_has_most_this_month_hall_of_fame_messages = db_client['server_users'].find_one(
-        {"guild_id": interaction.guild_id}, sort=[("this_month_hall_of_fame_messages", -1)])
-    user_with_most_all_time_hall_of_fame_messages = db_client['server_users'].find_one(
-        {"guild_id": interaction.guild_id}, sort=[("total_hall_of_fame_messages", -1)])
+    user_has_most_this_month_hall_of_fame_messages = server_user_repo.check_if_user_is_top_of_stat(
+        connection, user.id, interaction.guild.id, "this_month_hall_of_fame_messages")
+    user_with_most_all_time_hall_of_fame_messages = server_user_repo.check_if_user_is_top_of_stat(
+        connection, user.id, interaction.guild.id, "total_hall_of_fame_messages")
+
     embed = discord.Embed(
         title=f"📊 {user.name}'s Server Profile",
         description=f"Here are your stats for **{interaction.guild.name}**:",
         color=discord.Color.gold()
     )
-    if user_has_most_this_month_hall_of_fame_messages and user.id == user_has_most_this_month_hall_of_fame_messages.get("user_id") and user_stats:
+    if user_has_most_this_month_hall_of_fame_messages and user_stats:
         embed.add_field(name=f"{month_emoji} **Monthly Hall of Fame Champion**",
                         value=f"**{user.name}** is the champion of this month's Hall of Fame with **{user_stats.get('this_month_hall_of_fame_messages', 0)}** messages!",
                         inline=False)
-    if user_with_most_all_time_hall_of_fame_messages and user.id == user_with_most_all_time_hall_of_fame_messages.get("user_id") and user_stats:
+    if user_with_most_all_time_hall_of_fame_messages and user_stats:
         embed.add_field(name=f"{all_time_emoji} **All-Time Hall of Fame Champion**",
                         value=f"**{user.name}** is the all-time champion with **{user_stats.get('total_hall_of_fame_messages', 0)}** messages!",
                         inline=False)
@@ -162,11 +130,11 @@ async def user_server_profile(interaction, user, user_stats, db_client, month_em
     await interaction.response.send_message(embed=embed)
 
 
-async def server_leaderboard(interaction, db_client, month_emoji: str, all_time_emoji: str):
+async def server_leaderboard(interaction, connection, month_emoji: str, all_time_emoji: str):
     """
     Command to get the Hall of Fame leaderboard for a server
     :param interaction:
-    :param db_client:
+    :param connection:
     :param month_emoji:
     :param all_time_emoji:
     :return:
@@ -184,8 +152,7 @@ async def server_leaderboard(interaction, db_client, month_emoji: str, all_time_
     leaderboard = ""
 
     # Top 5 This Month's Hall of Fame Messages
-    top_monthly = db_client['server_users'].find({"guild_id": interaction.guild_id}).sort(
-        "this_month_hall_of_fame_messages", -1).limit(5)
+    top_monthly = server_user_repo.get_top_users_by_stat(connection, interaction.guild_id, "this_month_hall_of_fame_messages", limit=5)
     leaderboard += f"{month_emoji} **Top 5 This Month's Hall of Fame Messages**\n"
     for rank, user in enumerate(top_monthly, start=1):
         try:
@@ -195,8 +162,7 @@ async def server_leaderboard(interaction, db_client, month_emoji: str, all_time_
             leaderboard += f"{rank}. Unknown Member: {user.get('this_month_hall_of_fame_messages', 0)} messages\n"
 
     # Top 5 All-Time Hall of Fame Messages
-    top_all_time = db_client['server_users'].find({"guild_id": interaction.guild_id}).sort(
-        "total_hall_of_fame_messages", -1).limit(5)
+    top_all_time = server_user_repo.get_top_users_by_stat(connection, interaction.guild_id, "total_hall_of_fame_messages", limit=5)
     leaderboard += f"\n{all_time_emoji} **Top 5 All-Time Hall of Fame Messages**\n"
     for rank, user in enumerate(top_all_time, start=1):
         try:
@@ -206,8 +172,7 @@ async def server_leaderboard(interaction, db_client, month_emoji: str, all_time_
             leaderboard += f"{rank}. Unknown Member: {user.get('total_hall_of_fame_messages', 0)} messages\n"
 
     # Top 5 This Month's Reactions
-    top_monthly_reactions = db_client['server_users'].find({"guild_id": interaction.guild_id}).sort(
-        "this_month_hall_of_fame_message_reactions", -1).limit(5)
+    top_monthly_reactions = server_user_repo.get_top_users_by_stat(connection, interaction.guild_id, "this_month_hall_of_fame_message_reactions", limit=5)
     leaderboard += f"\n💬 **Top 5 This Month's Reactions**\n"
     for rank, user in enumerate(top_monthly_reactions, start=1):
         try:
@@ -217,8 +182,7 @@ async def server_leaderboard(interaction, db_client, month_emoji: str, all_time_
             leaderboard += f"{rank}. Unknown Member: {user.get('this_month_hall_of_fame_message_reactions', 0)} reactions\n"
 
     # Top 5 All-Time Reactions
-    top_all_time_reactions = db_client['server_users'].find({"guild_id": interaction.guild_id}).sort(
-        "total_hall_of_fame_message_reactions", -1).limit(5)
+    top_all_time_reactions = server_user_repo.get_top_users_by_stat(connection, interaction.guild_id, "total_hall_of_fame_message_reactions", limit=5)
     leaderboard += f"\n💬 **Top 5 All-Time Reactions**\n"
     for rank, user in enumerate(top_all_time_reactions, start=1):
         try:

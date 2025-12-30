@@ -38,8 +38,8 @@ def custom_bot_profile_for_guild(guild_id: int, image_url: str = None, cover_url
 
 def encode_image_to_base64(image_url):
     response = requests.get(image_url, stream=True)
-    if int(response.headers.get('Content-Length', 0)) > 1_000_000:
-        raise Exception("Image size exceeds 1 MB limit.")
+    if int(response.headers.get('Content-Length', 0)) > 10_000_000:
+        raise Exception("Image size exceeds 10 MB limit.")
     if response.status_code == 200:
         return f"data:image/png;base64,{base64.b64encode(response.content).decode('utf-8')}"
     else:

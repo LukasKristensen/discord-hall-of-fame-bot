@@ -1,53 +1,54 @@
 import discord as discord
-import main
+from enums import calculation_method_type
+from repositories import server_config_repo
 
-
-def most_reacted_emoji(reactions: [discord.Reaction]) -> [discord.Reaction]:
+# todo: make this return either a single emoji or null
+def most_reacted_emoji(reactions: list[discord.Reaction], guild_id, connection) -> discord.Reaction.emoji:
     """
     Returns the reaction with the most reactions.
     :param reactions:
+    :param guild_id:
+    :param connection:
     :return:
     """
-    server_config = main.production_db["server_configs"].find_one({"guild_id": int(reactions[0].message.guild.id)})
-    custom_emoji_check_logic = server_config["custom_emoji_check_logic"]
-    whited_listed_emojis = server_config["whitelisted_emojis"]
+    custom_emoji_check_logic = server_config_repo.get_parameter_value(connection, guild_id, "custom_emoji_check_logic")
+    white_listed_emojis = server_config_repo.get_parameter_value(connection, guild_id, "whitelisted_emojis")
 
-    if custom_emoji_check_logic and len(whited_listed_emojis) > 0:
+    if custom_emoji_check_logic and len(white_listed_emojis) > 0:
         corrected_reactions = []
         for reaction in reactions:
-            if str(reaction.emoji) in str(whited_listed_emojis):
+            if str(reaction.emoji) in str(white_listed_emojis):
                 corrected_reactions.append(reaction)
         reactions = corrected_reactions
 
     if len(reactions) == 1:
-        return reactions
+        return reactions[0].emoji
     if len(reactions) == 0:
-        return []
+        return ""
 
     largest_num = reactions[0].count    
-    biggest = [reactions[0]]
+    biggest = reactions[0]
 
     for reaction in reactions[1:]:
-        if reaction.count == largest_num:
-            biggest.append(reaction)
-        elif reaction.count > largest_num:
-            biggest = [reaction]
+        if reaction.count > largest_num:
+            biggest = reaction
             largest_num = reaction.count
     
-    return biggest
+    return biggest.emoji
 
 
-async def total_reaction_count(reactions: [discord.Reaction]) -> int:
+async def total_reaction_count(message: discord.Message, guild_id, connection) -> int:
     """
     Returns the total number of reactions, taking into account the custom emoji check logic and whitelisted emojis.
-    :param reactions:
+    :param message:
+    :param guild_id:
+    :param connection:
     :return:
     """
-    server_config = main.production_db["server_configs"].find_one({"guild_id": int(reactions[0].message.guild.id)})
-
-    custom_emoji_check_logic = server_config["custom_emoji_check_logic"]
-    whited_listed_emojis = server_config["whitelisted_emojis"]
-    include_author_in_threshold = server_config["include_author_in_reaction_calculation"]
+    custom_emoji_check_logic = server_config_repo.get_parameter_value(connection, guild_id, "custom_emoji_check_logic")
+    whited_listed_emojis = server_config_repo.get_parameter_value(connection, guild_id, "whitelisted_emojis")
+    include_author_in_threshold = server_config_repo.get_parameter_value(connection, guild_id, "include_author_in_reaction_calculation")
+    reactions = message.reactions
 
     if custom_emoji_check_logic and len(whited_listed_emojis) > 0:
         corrected_reactions = []
@@ -67,17 +68,16 @@ async def total_reaction_count(reactions: [discord.Reaction]) -> int:
     return total_count
 
 
-async def unique_reactor_count(message: discord.Message) -> int:
+async def unique_reactor_count(message: discord.Message, connection) -> int:
     """
     Returns the number of unique reactors for a message, excluding the author if configured.
     :param message:
+    :param connection:
     :return:
     """
-    server_config = main.production_db["server_configs"].find_one({"guild_id": int(message.guild.id)})
-
-    server_includes_author_in_threshold = server_config["include_author_in_reaction_calculation"]
-    custom_emoji_check_logic = server_config["custom_emoji_check_logic"]
-    whited_listed_emojis = server_config["whitelisted_emojis"]
+    server_includes_author_in_threshold = server_config_repo.get_parameter_value(connection, message.guild.id, "include_author_in_reaction_calculation")
+    custom_emoji_check_logic = server_config_repo.get_parameter_value(connection, message.guild.id, "custom_emoji_check_logic")
+    whited_listed_emojis = server_config_repo.get_parameter_value(connection, message.guild.id, "whitelisted_emojis")
     reactions = message.reactions
 
     if custom_emoji_check_logic and len(whited_listed_emojis) > 0:
@@ -96,19 +96,18 @@ async def unique_reactor_count(message: discord.Message) -> int:
     return len(unique_users)
 
 
-async def most_reacted_emoji_from_message(message: discord.Message) -> [discord.Reaction]:
+async def most_reacted_emoji_from_message(message: discord.Message, connection) -> int:
     """
     Returns the most reactions from the highest reacted emoji in a message.
     :param message:
+    :param connection:
     :return:
     """
-    server_config = main.production_db["server_configs"].find_one({"guild_id": int(message.guild.id)})
-    max_reaction_count = 0
-
-    server_includes_author_in_threshold = server_config["include_author_in_reaction_calculation"]
-    custom_emoji_check_logic = server_config["custom_emoji_check_logic"]
-    whited_listed_emojis = server_config["whitelisted_emojis"]
+    server_includes_author_in_threshold = server_config_repo.get_parameter_value(connection, message.guild.id, "include_author_in_reaction_calculation")
+    custom_emoji_check_logic = server_config_repo.get_parameter_value(connection, message.guild.id, "custom_emoji_check_logic")
+    whited_listed_emojis = server_config_repo.get_parameter_value(connection, message.guild.id, "whitelisted_emojis")
     reactions = message.reactions
+    max_reaction_count = 0
 
     if custom_emoji_check_logic and len(whited_listed_emojis) > 0:
         corrected_reactions = []
@@ -131,20 +130,20 @@ async def most_reacted_emoji_from_message(message: discord.Message) -> [discord.
     return max_reaction_count
 
 
-async def reaction_count(message) -> int:
+async def reaction_count(message, connection) -> int:
     """
     Returns the reaction count of a message based on the server configuration.
     :param message:
+    :param connection:
     :return:
     """
-    server_config = main.production_db["server_configs"].find_one({"guild_id": int(message.guild.id)})
-    calculation_method = server_config["reaction_count_calculation_method"]
+    calculation_method = server_config_repo.get_parameter_value(connection, message.guild.id, "reaction_count_calculation_method")
 
-    if calculation_method == "total_reactions":
-        return await total_reaction_count(message.reactions)
-    elif calculation_method == "unique_users":
-        return await unique_reactor_count(message)
-    elif calculation_method == "most_reactions_on_emoji":
-        return await most_reacted_emoji_from_message(message)
+    if calculation_method == calculation_method_type.TOTAL_REACTIONS:
+        return await total_reaction_count(message, message.guild.id, connection)
+    elif calculation_method == calculation_method_type.UNIQUE_USERS:
+        return await unique_reactor_count(message, connection)
+    elif calculation_method == calculation_method_type.MOST_REACTIONS_ON_EMOJI:
+        return await most_reacted_emoji_from_message(message, connection)
     else:
-        return await most_reacted_emoji_from_message(message)
+        return await most_reacted_emoji_from_message(message, connection)
