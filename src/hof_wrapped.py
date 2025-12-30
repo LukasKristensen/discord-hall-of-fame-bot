@@ -2,7 +2,7 @@ import discord as discord
 import message_reactions
 from discord.ext import commands
 import datetime
-from repositories import hof_wrapped_repo, hall_of_fame_message_repo, server_config_repo, hof_wrapped_guild_status
+from repositories import hof_wrapped_repo, hall_of_fame_message_repo, server_config_repo, hof_wrapped_guild_status_repo
 import psycopg2
 import os
 from dotenv import load_dotenv

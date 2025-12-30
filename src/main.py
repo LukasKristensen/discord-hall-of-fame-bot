@@ -15,7 +15,7 @@ import os
 from translations import messages
 import psycopg2
 from psycopg2 import pool
-from repositories import server_config_repo, hall_of_fame_message_repo, server_user_repo, hof_wrapped_repo
+from repositories import server_config_repo, hall_of_fame_message_repo, server_user_repo, hof_wrapped_repo, hof_wrapped_guild_status_repo
 import hof_wrapped
 from contextlib import asynccontextmanager
 
@@ -116,6 +116,8 @@ def setup_databases(connection):
     server_user_repo.create_server_user_table(connection)
     print("Creating hof wrapped table...")
     hof_wrapped_repo.create_hof_wrapped_table(connection)
+    print("Creating hof wrapped guild status table...")
+    hof_wrapped_guild_status_repo.create_hof_wrapped_progress_table(connection)
 
 @bot.event
 async def on_raw_reaction_add(payload: discord.RawReactionActionEvent):
