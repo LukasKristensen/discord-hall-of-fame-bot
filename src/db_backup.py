@@ -4,6 +4,7 @@ import json
 from pymongo.mongo_client import MongoClient
 from dotenv import load_dotenv
 import psycopg2
+from repositories import hall_of_fame_message_repo, server_config_repo, server_user_repo, hof_wrapped_repo, hof_wrapped_guild_status_repo
 
 
 def backup_database(db_client):
@@ -152,4 +153,11 @@ if __name__ == "__main__":
                                   database=os.getenv('POSTGRES_DB'),
                                   user=os.getenv('POSTGRES_USER'),
                                   password=os.getenv('POSTGRES_PASSWORD'))
+
+    hall_of_fame_message_repo.create_hall_of_fame_message_table(connection)
+    server_config_repo.create_server_config_table(connection)
+    server_user_repo.create_server_user_table(connection)
+    hof_wrapped_repo.create_hof_wrapped_table(connection)
+    hof_wrapped_guild_status_repo.create_hof_wrapped_progress_table(connection)
+    
     convert_mongodb_to_postgresql(client, connection)
