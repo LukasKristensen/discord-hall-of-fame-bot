@@ -1,6 +1,6 @@
 #!/bin/bash
 
-cd /home/lukas/hall-of-fame-testing-branch/src
+cd /home/lukas/hall-of-fame/src
 source /home/lukas/myenv/bin/activate
 
 run_bot() {
