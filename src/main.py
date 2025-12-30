@@ -79,6 +79,7 @@ async def on_ready():
     await utils.logging(bot, f"Logged in as {bot.user}", log_level=log_type.SYSTEM)
 
     async with get_db_connection(connection_pool) as connection:
+        setup_databases(connection)
         server_classes = server_config_repo.get_server_classes(connection)
         new_server_classes_dict = await events.check_for_new_server_classes(bot, connection)
 
