@@ -159,5 +159,5 @@ if __name__ == "__main__":
     server_user_repo.create_server_user_table(connection)
     hof_wrapped_repo.create_hof_wrapped_table(connection)
     hof_wrapped_guild_status_repo.create_hof_wrapped_progress_table(connection)
-    
+
     convert_mongodb_to_postgresql(client, connection)
