@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Load environment variables
-ENV_FILE="/home/lukas/hall-of-fame-testing-branch/.env"
+ENV_FILE="/home/lukas/hall-of-fame/.env"
 if [ -f "$ENV_FILE" ]; then
   set -a
   source "$ENV_FILE"

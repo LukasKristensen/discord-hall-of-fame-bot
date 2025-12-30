@@ -56,9 +56,8 @@ async def process_message_reactions(message: discord.Message, connection):
     users_reacted = []
 
     highest_reaction_count = await message_reactions.reaction_count(message, connection)
-    if highest_reaction_count >= reactionThreshold:
-        user_author.hallOfFameMessagePosts += 1
-        total_hall_of_fame_posts += 1
+    user_author.hallOfFameMessagePosts += 1
+    total_hall_of_fame_posts += 1
 
     if highest_reaction_count > user_author.mostReactedPost["reaction_count"]:
         user_author.mostReactedPost["post"] = message
@@ -437,7 +436,24 @@ def create_server_embed(guild, users):
     )
     return embed
 
+async def post_server_wrapped_embed(guild, connection):
+    if guild is None:
+        print(f"Guild with ID {guild} not found.")
+        return
 
+    hof_wrapped_data = hof_wrapped_repo.get_all_hof_wrapped_for_guild(connection, guild.id, version.WRAPPED_YEAR)
+    embed = create_server_embed(guild, hof_wrapped_data)
+
+    # hall of fame channel
+    hall_of_fame_channel_id = server_config_repo.get_parameter_value(connection, guild.id, "hall_of_fame_channel_id")
+    post_channel = guild.get_channel(hall_of_fame_channel_id)
+
+    if post_channel is None or not isinstance(post_channel, discord.TextChannel) or not post_channel.permissions_for(guild.me).send_messages:
+        print(f"No suitable channel found to post the Hall Of Fame Wrapped in guild {guild.name} (ID: {guild.id}).")
+        return
+
+    await post_channel.send(embed=embed)
+    print(f"Posted Hall Of Fame Wrapped for guild {guild.name} (ID: {guild.id}) in channel {post_channel.name}.")
 
 if __name__ == "__main__":
     from discord.ext import commands
@@ -481,6 +497,10 @@ if __name__ == "__main__":
             await main(guild_id, bot, reaction_threshold, connection)
             completion_time = datetime.datetime.now() - start_time
             print(f"Completed Hall Of Fame Wrapped for guild {guild.name} (ID: {guild.id}) in {completion_time.total_seconds()} seconds.")
+
+            if hall_of_fame_message_repo.count_messages_for_guild(connection, guild.id) > 0:
+                await post_server_wrapped_embed(guild, connection)
+
             hof_wrapped_guild_status_repo.mark_hof_wrapped_as_processed(connection, guild.id, version.WRAPPED_YEAR, completion_time.total_seconds())
         connection.close()
         await bot.close()
