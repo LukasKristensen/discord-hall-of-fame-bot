@@ -1,7 +1,8 @@
 #!/bin/bash
 
-cd "$(dirname "$0")"
-source ../../myenv/bin/activate
+cd /home/lukas/hall-of-fame-testing-branch/src
+
+source /home/lukas/myenv/bin/activate
 
 pull_changes() {
     echo "Pulling latest changes..."
