@@ -458,11 +458,11 @@ if __name__ == "__main__":
 
         connection = psycopg2.connect(host=POSTGRES_HOST, database=POSTGRES_DB, user=POSTGRES_USER, password=POSTGRES_PASSWORD)
         hof_wrapped_repo.create_hof_wrapped_table(connection)
-        hof_wrapped_guild_status.create_hof_wrapped_progress_table(connection)
+        hof_wrapped_guild_status_repo.create_hof_wrapped_progress_table(connection)
 
         for guild in bot.guilds:
             message_count = hall_of_fame_message_repo.count_messages_for_guild(connection, guild.id)
-            hof_wrapped_guild_status.create_progress_entry(connection, guild.id, version.WRAPPED_YEAR, message_count)
+            hof_wrapped_guild_status_repo.create_progress_entry(connection, guild.id, version.WRAPPED_YEAR, message_count)
 
         for guild in bot.guilds:
             # completion timer
@@ -472,7 +472,7 @@ if __name__ == "__main__":
             rankings = None
 
             print(f"Processing guild: {guild.name} (ID: {guild.id})")
-            if hof_wrapped_guild_status.is_hof_wrapped_processed(connection, guild.id, version.WRAPPED_YEAR):
+            if hof_wrapped_guild_status_repo.is_hof_wrapped_processed(connection, guild.id, version.WRAPPED_YEAR):
                 print(f"Hall Of Fame Wrapped already processed for guild {guild.id}, skipping...")
                 continue
             guild_id = guild.id
@@ -481,7 +481,7 @@ if __name__ == "__main__":
             await main(guild_id, bot, reaction_threshold, connection)
             completion_time = datetime.datetime.now() - start_time
             print(f"Completed Hall Of Fame Wrapped for guild {guild.name} (ID: {guild.id}) in {completion_time.total_seconds()} seconds.")
-            hof_wrapped_guild_status.mark_hof_wrapped_as_processed(connection, guild.id, version.WRAPPED_YEAR, completion_time.total_seconds())
+            hof_wrapped_guild_status_repo.mark_hof_wrapped_as_processed(connection, guild.id, version.WRAPPED_YEAR, completion_time.total_seconds())
         connection.close()
         await bot.close()
 
