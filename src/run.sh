@@ -1,46 +1,41 @@
-#!/user/bin/env bash
+#!/bin/bash
 
 cd /home/lukas/hall-of-fame/src
 source /home/lukas/myenv/bin/activate
 
-run_bot() {
-    python3 main.py &
-    BOT_PID=$!
-}
-
-kill_bot() {
-    if [ -n "$BOT_PID" ] && kill -0 "$BOT_PID" 2>/dev/null; then
-        kill "$BOT_PID"
-        wait "$BOT_PID"
-    fi
-}
-
 pull_changes() {
-    echo "Checking for remote changes..."
-    git fetch origin main
-    LOCAL=$(git rev-parse @)
-    REMOTE=$(git rev-parse origin/main)
-    if [ "$LOCAL" != "$REMOTE" ]; then
-        echo "Remote changes detected. Discarding local changes..."
-        git reset --hard origin/main
-        return 0
+    echo "Pulling latest changes..."
+    output=$(git pull origin main)
+    echo "$output"
+
+    if [[ "$output" == *"Already up to date."* ]]; then
+        return 1  # No updates
     else
-        echo "Already up to date."
-        return 1
+        return 0  # New updates
     fi
 }
 
+run_bot() {
+  if tmux has-session -t bot_session 2>/dev/null; then
+      echo "Stopping existing bot session..."
+      tmux kill-session -t bot_session
+      sleep 2
+  fi
+
+  echo "Starting bot in tmux session..."
+  tmux new-session -d -s bot_session 'python3 main.py; tmux kill-session -t bot_session'
+}
+
+# Start the bot for the first time
 run_bot
 
 while true; do
-    sleep 60
-    if pull_changes; then
-        echo "Changes detected. Restarting bot..."
-        kill_bot
-        run_bot
-    fi
-    if ! kill -0 "$BOT_PID" 2>/dev/null; then
-        echo "Bot stopped. Restarting..."
-        run_bot
-    fi
+  if pull_changes; then
+    echo "Changes detected. Restarting bot..."
+    run_bot
+  else
+    echo "No changes. Bot not restarted."
+  fi
+
+  sleep 60
 done
