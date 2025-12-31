@@ -21,7 +21,7 @@ async def post_wrapped():
 async def check_for_new_server_classes(bot, connection):
     new_server_classes = {}
     for guild in bot.guilds:
-        if not server_config_repo.check_if_guild_exists(connection, guild.id):
+        if not server_config_repo.check_if_guild_exists(connection, guild.id) and guild.me.guild_permissions.manage_channels:
             await utils.logging(bot, f"Guild {guild.name} not found in database, creating...", guild.id)
             try:
                 new_server_class = await utils.create_database_context(bot, guild, connection)
