@@ -23,8 +23,11 @@ async def check_for_new_server_classes(bot, connection):
     for guild in bot.guilds:
         if not server_config_repo.check_if_guild_exists(connection, guild.id):
             await utils.logging(bot, f"Guild {guild.name} not found in database, creating...", guild.id)
-            new_server_class = await utils.create_database_context(bot, guild, connection)
-            new_server_classes[guild.id] = new_server_class
+            try:
+                new_server_class = await utils.create_database_context(bot, guild, connection)
+                new_server_classes[guild.id] = new_server_class
+            except Exception as e:
+                await utils.logging(bot, f"Failed to create database context for server {guild.name}: {e}", guild.id)
     return new_server_classes
 
 
