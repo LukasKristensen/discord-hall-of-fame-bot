@@ -8,6 +8,7 @@ import os
 from dotenv import load_dotenv
 import json
 from constants import version
+from enums import command_refs
 
 load_dotenv()
 POSTGRES_HOST = os.getenv('POSTGRES_HOST')
@@ -431,7 +432,7 @@ def create_server_embed(guild, users):
     # todo: ref this as a discord internal command
     embed.add_field(
         name="🔔 Get Your Own Hall Of Fame Wrapped!",
-        value="Use the `/hof_wrapped` command to see your personal Hall Of Fame Wrapped for this server!",
+        value=f"Use the command {command_refs.HOF_WRAPPED} to get your personal Hall Of Fame Wrapped summary!",
         inline=False
     )
     return embed

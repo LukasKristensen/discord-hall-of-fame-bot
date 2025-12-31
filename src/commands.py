@@ -32,6 +32,8 @@ async def get_help(interaction: discord.Interaction):
     embed.add_field(name=command_refs.SET_HALL_OF_FAME_CHANNEL, value="Manually set the Hall of Fame channel for the server", inline=False)
     embed.add_field(name=command_refs.FEEDBACK, value="Got a feature request or bug report? Let us know!", inline=False)
     embed.add_field(name=command_refs.VOTE_BOT, value="Support the bot by voting for it on top.gg: https://top.gg/bot/1177041673352663070/vote", inline=False)
+    embed.add_field(name=command_refs.HOF_WRAPPED, value="Get your personal Hall of Fame wrap-up for the year", inline=False)
+    embed.add_field(name=command_refs.SERVER_HOF_WRAPPED, value="Get the server's Hall of Fame wrap-up for the year", inline=False)
     embed.add_field(name="", value="", inline=True)
     embed.add_field(name="Having trouble setting up the bot?", value="Make sure the bot has the correct permissions in the server or try to re-invite it", inline=False)
     embed.add_field(name="Need help?", value="Join the community server: https://discord.gg/r98WC5GHcn", inline=False)
