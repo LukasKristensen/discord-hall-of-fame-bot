@@ -78,23 +78,34 @@ async def on_ready():
     global server_classes
     global bot_loaded
 
-    version.DATE = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    await events.bot_login(bot, tree)
-    await utils.logging(bot, f"Logged in as {bot.user}", log_level=log_type.SYSTEM)
+    try:
+        version.DATE = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        await events.bot_login(bot, tree)
+        await utils.logging(bot, f"Logged in as {bot.user}", log_level=log_type.SYSTEM)
 
-    async with get_db_connection(connection_pool) as connection:
-        setup_databases(connection)
-        server_classes = server_config_repo.get_server_classes(connection)
-        new_server_classes_dict = await events.check_for_new_server_classes(bot, connection)
+        try:
+            async with get_db_connection(connection_pool) as connection:
+                setup_databases(connection)
+                server_classes = server_config_repo.get_server_classes(connection)
+                new_server_classes_dict = await events.check_for_new_server_classes(bot, connection)
+        except Exception as e:
+            await utils.logging(bot, f"Error setting up databases or loading server classes: {e}", log_level=log_type.CRITICAL)
+            return
+
+        for key, value in new_server_classes_dict.items():
+            server_classes[key] = value
+        await utils.logging(bot, f"Loaded a total of {len(server_classes)} servers")
+        await bot.change_presence(activity=discord.CustomActivity(name=f'🏆 Hall of Fame - {sum(server.member_count for server in bot.guilds)} users', type=5))
+
+        await events.post_wrapped()
+        daily_task.start()
+
+        # Ensure commands are registered
+        await tree.sync()
+        await utils.logging(bot, "Command tree synced", log_level=log_type.SYSTEM)
+    except Exception as e:
+        await utils.logging(bot, f"Error in on_ready: {e}", log_level=log_type.CRITICAL)
     bot_loaded = True
-
-    for key, value in new_server_classes_dict.items():
-        server_classes[key] = value
-    await utils.logging(bot, f"Loaded a total of {len(server_classes)} servers")
-    await bot.change_presence(activity=discord.CustomActivity(name=f'🏆 Hall of Fame - {sum(server.member_count for server in bot.guilds)} users', type=5))
-
-    await events.post_wrapped()
-    daily_task.start()
 
 @tasks.loop(hours=24)
 async def daily_task():
