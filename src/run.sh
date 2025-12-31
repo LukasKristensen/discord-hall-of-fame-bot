@@ -3,8 +3,8 @@
 set -e
 
 REPO_URL="https://github.com/LukasKristensen/discord-hall-of-fame-bot.git"
-WORKDIR="/home/pi/hall-of-fame"
-VENV="/home/pi/myenv"
+WORKDIR="/home/lukas/hall-of-fame"
+VENV="/home/lukas/myenv"
 
 terminate=false
 child_pid=0
@@ -30,7 +30,7 @@ trap graceful_exit SIGINT SIGTERM
 
 ensure_repo() {
     ENV_FILE="$WORKDIR/.env"
-    TEMP_ENV="/home/pi/.env_temp"
+    TEMP_ENV="/home/lukas/.env_temp"
     updated=1
 
     # Temporarily move .env if it exists
