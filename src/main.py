@@ -56,6 +56,9 @@ bot_stats = BotStats()
 month_emoji = "<:month_most_hof_messages:1380272332609683517>" if not dev_test else "<:month_most_hof_messages:1380272983368532160>"
 all_time_emoji = "<:all_time_most_hof_messages:1380272422842007622>" if not dev_test else "<:all_time_most_hof_messages:1380272953098244166>"
 
+bot_loaded = False
+def bot_is_loaded():
+    return bot_loaded
 
 @asynccontextmanager
 async def get_db_connection(connection_pool):
@@ -73,6 +76,7 @@ async def get_db_connection(connection_pool):
 @bot.event
 async def on_ready():
     global server_classes
+    global bot_loaded
 
     try:
         version.DATE = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -97,6 +101,7 @@ async def on_ready():
         await utils.logging(bot, "Command tree synced", log_level=log_type.SYSTEM)
     except Exception as e:
         await utils.logging(bot, f"Error in on_ready: {e}", log_level=log_type.CRITICAL)
+    bot_loaded = True
 
 @tasks.loop(hours=24)
 async def daily_task():
@@ -665,14 +670,6 @@ async def set_bot_profile_picture(interaction: discord.Interaction, image_url: s
     await utils.create_custom_profile_picture_and_cover_form(interaction, bot, image_url, cover_url)
 """
 
-def bot_is_loaded():
-    """
-    Check if the bot has loaded
-    :return: True if the bot has loaded
-    """
-    if len(server_classes) <= 1:
-        return False
-    return True
 
 async def check_if_user_has_manage_server_permission(interaction: discord.Interaction, check_server_set_up: bool = True):
     """
