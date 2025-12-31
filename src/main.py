@@ -209,9 +209,6 @@ async def on_guild_remove(server):
 
 @tree.command(name="help", description="List of commands")
 async def get_help(interaction: discord.Interaction):
-    if not bot_is_loaded():
-        return
-
     await commands.get_help(interaction)
     await utils.logging(bot, f"Help command used by {interaction.user.name} in {interaction.guild.name}",
                         interaction.guild.id, log_level=log_type.COMMAND)
