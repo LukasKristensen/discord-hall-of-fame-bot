@@ -91,6 +91,7 @@ async def on_ready():
         except Exception as e:
             await utils.logging(bot, f"Error setting up databases or loading server classes: {e}", log_level=log_type.CRITICAL)
             return
+        bot_loaded = True
 
         for key, value in new_server_classes_dict.items():
             server_classes[key] = value
@@ -105,7 +106,6 @@ async def on_ready():
         await utils.logging(bot, "Command tree synced", log_level=log_type.SYSTEM)
     except Exception as e:
         await utils.logging(bot, f"Error in on_ready: {e}", log_level=log_type.CRITICAL)
-    bot_loaded = True
 
 @tasks.loop(hours=24)
 async def daily_task():
