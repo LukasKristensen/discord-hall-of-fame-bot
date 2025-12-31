@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/user/bin/env bash
 
 cd /home/lukas/hall-of-fame/src
 source /home/lukas/myenv/bin/activate
