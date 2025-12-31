@@ -16,13 +16,17 @@ kill_bot() {
 }
 
 pull_changes() {
-    echo "Pulling latest changes..."
-    output=$(git pull origin main)
-    echo "$output"
-    if [[ "$output" == *"Already up to date."* ]]; then
-        return 1
-    else
+    echo "Checking for remote changes..."
+    git fetch origin main
+    LOCAL=$(git rev-parse @)
+    REMOTE=$(git rev-parse origin/main)
+    if [ "$LOCAL" != "$REMOTE" ]; then
+        echo "Remote changes detected. Discarding local changes..."
+        git reset --hard origin/main
         return 0
+    else
+        echo "Already up to date."
+        return 1
     fi
 }
 
