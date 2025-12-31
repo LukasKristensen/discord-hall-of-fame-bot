@@ -507,5 +507,5 @@ if __name__ == "__main__":
         await bot.close()
 
     print("Logging in the bot...")
-    bot.token = os.getenv('DEV_KEY')
+    bot.token = os.getenv('KEY')
     bot.run(bot.token)
