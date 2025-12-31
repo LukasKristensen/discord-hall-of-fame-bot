@@ -91,10 +91,11 @@ async def on_ready():
         except Exception as e:
             await utils.logging(bot, f"Error setting up databases or loading server classes: {e}", log_level=log_type.CRITICAL)
             return
-        bot_loaded = True
 
         for key, value in new_server_classes_dict.items():
             server_classes[key] = value
+        bot_loaded = True
+
         await utils.logging(bot, f"Loaded a total of {len(server_classes)} servers")
         await bot.change_presence(activity=discord.CustomActivity(name=f'🏆 Hall of Fame - {sum(server.member_count for server in bot.guilds)} users', type=5))
 
