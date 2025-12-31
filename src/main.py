@@ -597,7 +597,7 @@ async def set_hall_of_fame_channel(interaction: discord.Interaction, channel: di
         return
 
     async with get_db_connection(connection_pool) as connection:
-        if interaction.guild_id not in server_classes or server_classes[interaction.guild_id] is None:
+        if interaction.guild_id not in server_classes or server_classes[interaction.guild_id] is None or server_config_repo.check_if_guild_exists(connection, interaction.guild_id) is False:
             new_server_class = await events.guild_join(interaction.guild, connection, bot, channel)
             if new_server_class is None:
                 return
