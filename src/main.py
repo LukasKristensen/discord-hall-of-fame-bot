@@ -394,9 +394,6 @@ async def clear_whitelist(interaction: discord.Interaction):
 
 @tree.command(name="get_server_config", description="Get the server config")
 async def get_server_config(interaction: discord.Interaction):
-    if not bot_is_loaded():
-        return
-
     server_class = server_classes[interaction.guild_id]
     config_message = messages.SERVER_CONFIG.format(
         reaction_threshold=server_class.reaction_threshold,
