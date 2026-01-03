@@ -551,14 +551,6 @@ async def leaderboard(interaction: discord.Interaction):
         return
 
     async with get_db_connection(connection_pool) as connection:
-        user_stat = server_user_repo.get_server_user(connection, interaction.user.id, interaction.guild_id)
-        if not user_stat:
-            # noinspection PyUnresolvedReferences
-            await interaction.response.send_message(messages.LEADERBOARD_NO_DATA)
-            await utils.logging(bot, f"Leaderboard command used by {interaction.user.name} in {interaction.guild.name} but no data available",
-                                interaction.guild.id, log_level=log_type.COMMAND)
-            return
-
         if interaction.user.id in daily_command_cooldowns and "leaderboard" in daily_command_cooldowns[interaction.user.id]:
             # noinspection PyUnresolvedReferences
             await interaction.response.send_message(messages.COMMAND_ON_COOLDOWN)
