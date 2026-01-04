@@ -138,7 +138,7 @@ def setup_databases(connection):
 
 @bot.event
 async def on_raw_reaction_add(payload: discord.RawReactionActionEvent):
-    if payload.guild_id not in server_classes:
+    if payload.guild_id not in server_classes or payload.member is not None and payload.member.bot:
         return
     try:
         server_class = server_classes[payload.guild_id]
@@ -158,7 +158,7 @@ async def on_raw_reaction_add(payload: discord.RawReactionActionEvent):
 
 @bot.event
 async def on_raw_reaction_remove(payload: discord.RawReactionActionEvent):
-    if payload.guild_id not in server_classes:
+    if payload.guild_id not in server_classes or payload.member is not None and payload.member.bot:
         return
     try:
         server_class = server_classes[payload.guild_id]
