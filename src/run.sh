@@ -43,5 +43,9 @@ source "$VENV/bin/activate"
 export $(grep -v '^#' "../.env" | xargs)
 
 # Start the bot in foreground (systemd manages it)
-echo "[INFO] Starting bot..."
-exec python main.py
+echo "[INFO] Starting bot with auto-retry..."
+while true; do
+    python main.py
+    echo "[WARN] Bot exited. Restarting in 5 seconds..."
+    sleep 5
+done
