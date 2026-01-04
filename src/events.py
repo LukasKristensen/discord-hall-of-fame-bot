@@ -141,9 +141,10 @@ async def daily_task(bot, connection, server_classes, dev_testing):
 
     await utils.logging(bot, f"Checking for db entries that are not in the guilds")
     for server in server_classes.values():
-        if server and not dev_testing and int(server["guild_id"]) not in [guild.id for guild in bot.guilds]:
-            guild_id = int(server["guild_id"])
-            await utils.logging(bot, f"Could not find server {guild_id} in bot guilds")
+        if dev_testing:
+            continue
+        if int(server.guild_id) not in [guild.id for guild in bot.guilds]:
+            await utils.logging(bot, f"Could not find server {server.guild_id} in bot guilds")
     await utils.logging(bot, f"Checked {len(server_classes)} servers for daily task")
     await update_user_database(bot, connection)
     await check_write_permissions_to_hall_of_fame_channel(bot, server_classes)
