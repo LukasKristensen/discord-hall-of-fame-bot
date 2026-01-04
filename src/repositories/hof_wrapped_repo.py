@@ -77,3 +77,12 @@ def delete_hof_wrapped_for_guild(connection, guild_id):
     """, (guild_id,))
     connection.commit()
     cursor.close()
+
+def check_if_guild_wrapped_data_exists(connection, guild_id, year):
+    cursor = connection.cursor()
+    cursor.execute("""
+        SELECT 1 FROM hof_wrapped WHERE guild_id = %s AND year = %s
+    """, (guild_id, year))
+    exists = cursor.fetchone() is not None
+    cursor.close()
+    return exists

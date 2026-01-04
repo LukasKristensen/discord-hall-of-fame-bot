@@ -630,7 +630,7 @@ async def hof_wrapped_command(interaction: discord.Interaction):
         user_wrapped = hof_wrapped_repo.get_hof_wrapped(connection, interaction.guild_id, interaction.user.id, version.WRAPPED_YEAR)
     if user_wrapped is None:
         # noinspection PyUnresolvedReferences
-        await interaction.response.send_message("No Hall of Fame Wrapped data available for you this year. Participate more in Hall of Fame to get your wrapped next year!")
+        await interaction.response.send_message(f"No Hall of Fame Wrapped data available for you in {version.WRAPPED_YEAR}. Participate more in Hall of Fame to get your wrapped next year!")
         await utils.logging(bot, f"HOF Wrapped command used by {interaction.user.name} in {interaction.guild.name} but no data available",
                             interaction.guild.id, str(interaction.user.id), log_level=log_type.COMMAND)
         return
@@ -653,6 +653,10 @@ async def server_hof_wrapped_command(interaction: discord.Interaction):
         return
 
     async with get_db_connection(connection_pool) as connection:
+        if not hof_wrapped_repo.check_if_guild_wrapped_data_exists(connection, interaction.guild_id, version.WRAPPED_YEAR):
+            # noinspection PyUnresolvedReferences
+            await interaction.response.send_message(f"No Hall of Fame Wrapped data available for {version.WRAPPED_YEAR}. The bot will start collecting data for next year's wrapped!")
+            return
         all_users_wrapped = hof_wrapped_repo.get_all_hof_wrapped_for_guild(connection, interaction.guild_id,  version.WRAPPED_YEAR)
     embed = hof_wrapped.create_server_embed(interaction.guild, all_users_wrapped)
     # noinspection PyUnresolvedReferences

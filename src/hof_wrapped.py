@@ -429,7 +429,6 @@ def create_server_embed(guild, users):
             inline=False
         )
 
-    # todo: ref this as a discord internal command
     embed.add_field(
         name="🔔 Get Your Own Hall Of Fame Wrapped!",
         value=f"Use the command {command_refs.HOF_WRAPPED} to get your personal Hall Of Fame Wrapped summary!",
