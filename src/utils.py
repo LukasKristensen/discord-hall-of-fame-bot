@@ -155,17 +155,17 @@ async def update_leaderboard(connection, bot: discord.Client, server_config: ser
     # Update the reaction count of the top 30 most reacted messages
     for i in range(min(len(most_reacted_messages), 30)):
         message = most_reacted_messages[i]
-        channel = bot.get_channel(message["channel_id"])
-        message = await channel.fetch_message(message["message_id"])
+        channel = bot.get_channel(int(message["channel_id"]))
+        message = await channel.fetch_message(int(message["message_id"]))
         hall_of_fame_message_repo.update_field_for_message(connection, int(server_config.guild_id), message.channel.id, message.id,
                                                           "reaction_count", await reaction_count(message, connection))
     # Update the embeds of the top 20 most reacted messages
     if msg_id_array:
         for i in range(min(20, len(most_reacted_messages), len(msg_id_array))):
-            hall_of_fame_channel = bot.get_channel(server_config.hall_of_fame_channel_id)
-            hall_of_fame_message = await hall_of_fame_channel.fetch_message(msg_id_array[i])
-            original_channel = bot.get_channel(most_reacted_messages[i]["channel_id"])
-            original_message = await original_channel.fetch_message(most_reacted_messages[i]["message_id"])
+            hall_of_fame_channel = bot.get_channel(int(server_config.hall_of_fame_channel_id))
+            hall_of_fame_message = await hall_of_fame_channel.fetch_message(int(msg_id_array[i]))
+            original_channel = bot.get_channel(int(most_reacted_messages[i]["channel_id"]))
+            original_message = await original_channel.fetch_message(int(most_reacted_messages[i]["message_id"]))
 
             await hall_of_fame_message.edit(embed=await create_embed(original_message, server_config.reaction_threshold, connection))
             await hall_of_fame_message.edit(content=f"**HallOfFame#{i+1}**")
