@@ -132,7 +132,7 @@ async def daily_task(bot, connection, server_classes, dev_testing):
 
     bot_guild_ids = [guild.id for guild in bot.guilds]
     for server_class in list(server_classes.values()):
-        if not server_class.leaderboard_setup or server_class.guild_id not in bot_guild_ids:
+        if server_class.guild_id not in bot_guild_ids or not server_config_repo.get_parameter_value(connection, server_class.guild_id, "leaderboard_setup"):
             continue
         try:
             await utils.update_leaderboard(connection, bot, server_class)

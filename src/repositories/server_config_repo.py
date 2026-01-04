@@ -120,13 +120,36 @@ def get_server_classes(connection) -> dict[int, ServerClass]:
         SELECT hall_of_fame_channel_id, guild_id, reaction_threshold, post_due_date,
                leaderboard_message_ids, sweep_limit, sweep_limited, include_author_in_reaction_calculation,
                allow_messages_in_hof_channel, custom_emoji_check_logic, whitelisted_emojis,
-               leaderboard_setup, ignore_bot_messages, server_member_count, reaction_count_calculation_method,
-               hide_hof_post_below_threshold
+               joined_date, leaderboard_setup, ignore_bot_messages, server_member_count,
+               reaction_count_calculation_method, hide_hof_post_below_threshold
         FROM server_configs
     """)
     rows = cursor.fetchall()
     cursor.close()
-    return {row[1]: ServerClass(*row) for row in rows}
+
+    classes = {}
+    for row in rows:
+        server_class = ServerClass(
+            hall_of_fame_channel_id=row[0],
+            guild_id=row[1],
+            reaction_threshold=row[2],
+            post_due_date=row[3],
+            leaderboard_message_ids=row[4],
+            sweep_limit=row[5],
+            sweep_limited=row[6],
+            include_author_in_reaction_calculation=row[7],
+            allow_messages_in_hof_channel=row[8],
+            custom_emoji_check_logic=row[9],
+            whitelisted_emojis=row[10],
+            leaderboard_setup=row[12],
+            ignore_bot_messages=row[13],
+            server_member_count=row[14],
+            reaction_count_calculation_method=row[15],
+            hide_hof_post_below_threshold=row[16]
+        )
+        classes[server_class.guild_id] = server_class
+    return classes
+
 
 def get_all_server_configs(connection) -> list[ServerClass]:
     cursor = connection.cursor()
