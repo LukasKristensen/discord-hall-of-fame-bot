@@ -81,7 +81,6 @@ async def on_ready():
     try:
         version.DATE = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         await events.bot_login(bot, tree)
-        await utils.logging(bot, f"Logged in as {bot.user}", log_level=log_type.SYSTEM)
 
         try:
             async with get_db_connection(connection_pool) as connection:
