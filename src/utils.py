@@ -555,7 +555,7 @@ async def send_server_owner_error_message(owner, e, bot):
             await logging(bot, f"Failed to send error message to server owner {owner.name}: {history_error}")
 
 
-async def logging(bot: discord.Client, message, server_id=None, new_value=None, log_level=log_type.ERROR):
+async def logging(bot: discord.Client, message, server_id=None, new_value=None, log_level=log_type.ERROR, check_duplicates=True):
     """
     Log an error message to the error channel
     :param bot:
@@ -563,6 +563,7 @@ async def logging(bot: discord.Client, message, server_id=None, new_value=None, 
     :param server_id: The ID of the server
     :param new_value: The new value of the server configuration
     :param log_level: The type of log message
+    :param check_duplicates: Whether to check for duplicate logging messages
     :return:
     """
     log_channels = {
@@ -584,10 +585,11 @@ async def logging(bot: discord.Client, message, server_id=None, new_value=None, 
     if channel_id:
         channel = target_guild.get_channel(channel_id)
 
-        existing_messages = [msg async for msg in channel.history(limit=10)]
-        for existing_message in existing_messages:
-            if existing_message.author.id == bot.user.id and message in existing_message.content:
-                return  # Do not send duplicate error message
+        if check_duplicates:
+            existing_messages = [msg async for msg in channel.history(limit=10)]
+            for existing_message in existing_messages:
+                if existing_message.author.id == bot.user.id and message in existing_message.content:
+                    return  # Do not send duplicate error message
 
         message_prefix = "<@230698327589650432> " if log_type == log_type.CRITICAL else ""
         await channel.send(f"{message_prefix}```diff\n{date_formatted_message}\n```")
