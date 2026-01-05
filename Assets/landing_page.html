@@ -1,8 +1,8 @@
 <style>
   section {
-    margin-top: 10px; /* Reduce space above the section */
-    margin-bottom: 10px; /* Reduce space below the section */
-    padding: 5px 0; /* Adjust padding inside the section */
+    margin-top: 10px;
+    margin-bottom: 10px;
+    padding: 5px 0;
   }
 
   div.container ul {
@@ -10,14 +10,41 @@
     white-space: normal !important;
     text-wrap: balance !important;
   }
+
+  .video-wrapper {
+    position: relative;
+    padding-bottom: 56.25%; /* 16:9 */
+    height: 0;
+    margin: 15px 0;
+  }
+
+  .video-wrapper iframe {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    border-radius: 8px;
+  }
 </style>
 
 <div class="container">
+  <img
+    class="promo-image"
+    src="https://raw.githubusercontent.com/LukasKristensen/discord-hall-of-fame-bot/refs/heads/main/Assets/main_context_2.png"
+    alt="Hall of Fame Bot Preview"
+  />
   <h2>🏆 Hall of Fame Bot ✨</h2>
-  <p class="lead">Capture legendary moments in your Discord server with style and magic.</p>
-
-  <img class="promo-image" src="https://raw.githubusercontent.com/LukasKristensen/discord-hall-of-fame-bot/refs/heads/main/Assets/main_context_2.png" alt="Hall of Fame Bot Preview" />
-
+  <!-- YouTube Video Embed -->
+  <div class="video-wrapper">
+    <iframe
+      src="https://www.youtube.com/embed/D4onxYa7Ikw"
+      title="Hall of Fame Bot Trailer"
+      frameborder="0"
+      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+      allowfullscreen>
+    </iframe>
+  </div>
   <section>
     <h3>🌟 Features that Shine</h3>
     <ul>
