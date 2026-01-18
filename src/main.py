@@ -725,7 +725,17 @@ async def post_api_bot_stats():
         await utils.logging(bot, f"Failed to post bot stats to discordbotlist.com: {e}")
 
 if __name__ == "__main__":
+    import time
     if TOKEN is None:
         raise ValueError("TOKEN environment variable is not set in the .env file")
-    bot.run(TOKEN)
+    while True:
+        try:
+            bot.run(TOKEN)
+        except Exception as e:
+            print(f"[ERROR] Bot crashed with exception: {e}. Restarting in 5 seconds...")
+            import traceback
+            traceback.print_exc()
+            time.sleep(5)
+        else:
+            break
     connection_pool.closeall()
