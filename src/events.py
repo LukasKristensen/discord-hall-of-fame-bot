@@ -70,7 +70,7 @@ async def on_raw_reaction(message: discord.RawReactionActionEvent, bot: discord.
         if "Unknown Message" in str(e) or "object has no attribute" in str(e):
             return
         if hall_of_fame_message_repo.find_hall_of_fame_message(connection, message.guild_id, message.channel_id, message.message_id):
-            await utils.logging(bot, f"Error in reaction event: {e}", message.guild_id)
+            await utils.logging(bot, f"Error in reaction event: {e}", message.guild_id, validate_for_duplicates=True)
             return
 
 

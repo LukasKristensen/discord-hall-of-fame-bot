@@ -49,7 +49,7 @@ async def validate_message(discord_message: discord.RawReactionActionEvent, bot:
     target_channel = bot.get_channel(target_channel_id)
 
     if hall_of_fame_message_repo.guild_message_count_past_24_hours(connection, guild_id) > daily_post_limit:
-        await logging(bot, f"Guild {guild_id} has exceeded the daily limit for hall of fame posts.", discord_message.guild.id, log_level=log_type.CRITICAL)
+        await logging(bot, f"Guild {guild_id} has exceeded the daily limit for hall of fame posts.", discord_message.guild.id, log_level=log_type.CRITICAL, validate_for_duplicates=True)
         existing_messages = [message async for message in target_channel.history(limit=10)]
         for existing_message in existing_messages:
             if existing_message.author.id == bot.user.id and "has exceeded the daily limit" in existing_message.content:
@@ -555,7 +555,7 @@ async def send_server_owner_error_message(owner, e, bot):
             await logging(bot, f"Failed to send error message to server owner {owner.name}: {history_error}")
 
 
-async def logging(bot: discord.Client, message, server_id=None, new_value=None, log_level=log_type.ERROR, check_duplicates=True):
+async def logging(bot: discord.Client, message, server_id=None, new_value=None, log_level=log_type.ERROR, validate_for_duplicates=False):
     """
     Log an error message to the error channel
     :param bot:
@@ -563,7 +563,7 @@ async def logging(bot: discord.Client, message, server_id=None, new_value=None, 
     :param server_id: The ID of the server
     :param new_value: The new value of the server configuration
     :param log_level: The type of log message
-    :param check_duplicates: Whether to check for duplicate logging messages
+    :param validate_for_duplicates: Whether to check for duplicate logging messages
     :return:
     """
     log_channels = {
@@ -585,7 +585,7 @@ async def logging(bot: discord.Client, message, server_id=None, new_value=None, 
     if channel_id:
         channel = target_guild.get_channel(channel_id)
 
-        if check_duplicates:
+        if validate_for_duplicates:
             existing_messages = [msg async for msg in channel.history(limit=10)]
             for existing_message in existing_messages:
                 if existing_message.author.id == bot.user.id and message in existing_message.content:

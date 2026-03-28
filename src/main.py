@@ -81,7 +81,7 @@ async def on_ready():
     try:
         version.DATE = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         await events.bot_login(bot, tree)
-        await utils.logging(bot, f"Logged in as {bot.user}", log_level=log_type.SYSTEM, check_duplicates=False)
+        await utils.logging(bot, f"Logged in as {bot.user}", log_level=log_type.SYSTEM, validate_for_duplicates=False)
 
         try:
             async with get_db_connection(connection_pool) as connection:
@@ -151,7 +151,7 @@ async def on_raw_reaction_add(payload: discord.RawReactionActionEvent):
                                              server_class.ignore_bot_messages, server_class.hide_hof_post_below_threshold)
             messages_processing.remove(payload.message_id)
     except Exception as e:
-        await utils.logging(bot, f"Error in on_raw_reaction_add: {e}", payload.guild_id)
+        await utils.logging(bot, f"Error in on_raw_reaction_add: {e}", payload.guild_id, validate_for_duplicates=True)
         if payload.message_id in messages_processing:
             messages_processing.remove(payload.message_id)
 
@@ -171,7 +171,7 @@ async def on_raw_reaction_remove(payload: discord.RawReactionActionEvent):
                                              server_class.ignore_bot_messages, server_class.hide_hof_post_below_threshold)
             messages_processing.remove(payload.message_id)
     except Exception as e:
-        await utils.logging(bot, f"Error in on_raw_reaction_remove: {e}", payload.guild_id)
+        await utils.logging(bot, f"Error in on_raw_reaction_remove: {e}", payload.guild_id, validate_for_duplicates=True)
         if payload.message_id in messages_processing:
             messages_processing.remove(payload.message_id)
 

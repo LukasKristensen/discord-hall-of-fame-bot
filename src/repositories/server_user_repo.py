@@ -1,9 +1,10 @@
 def create_server_user_table(connection):
     cursor = connection.cursor()
-    cursor.execute("""
+    cursor.execute(
+        """
         CREATE TABLE IF NOT EXISTS server_user (
-            user_id BIGINT PRIMARY KEY,
-            guild_id BIGINT,
+            user_id BIGINT NOT NULL,
+            guild_id BIGINT NOT NULL,
             monthly_reaction_rank INTEGER,
             total_message_rank INTEGER,
             total_reaction_rank INTEGER,
@@ -11,10 +12,11 @@ def create_server_user_table(connection):
             total_hall_of_fame_messages INTEGER,
             monthly_message_rank INTEGER,
             this_month_hall_of_fame_message_reactions INTEGER,
-            total_hall_of_fame_message_reactions INTEGER
+            total_hall_of_fame_message_reactions INTEGER,
+            PRIMARY KEY (user_id, guild_id)
         )
-    """
-   )
+        """
+    )
     connection.commit()
     cursor.close()
 
@@ -62,13 +64,14 @@ def get_server_user(connection, user_id, guild_id):
 
 def update_user_stats(connection, stats, user_id, guild_id):
     cursor = connection.cursor()
-    cursor.execute("""
+    cursor.execute(
+        """
         INSERT INTO server_user (
             user_id, guild_id, monthly_reaction_rank, total_message_rank, total_reaction_rank,
             this_month_hall_of_fame_messages, total_hall_of_fame_messages, monthly_message_rank,
             this_month_hall_of_fame_message_reactions, total_hall_of_fame_message_reactions
         ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-        ON CONFLICT(user_id) DO UPDATE SET
+        ON CONFLICT(user_id, guild_id) DO UPDATE SET
             total_hall_of_fame_messages = excluded.total_hall_of_fame_messages,
             this_month_hall_of_fame_messages = excluded.this_month_hall_of_fame_messages,
             total_hall_of_fame_message_reactions = excluded.total_hall_of_fame_message_reactions,
@@ -76,17 +79,40 @@ def update_user_stats(connection, stats, user_id, guild_id):
             total_message_rank = excluded.total_message_rank,
             monthly_message_rank = excluded.monthly_message_rank,
             total_reaction_rank = excluded.total_reaction_rank,
-            monthly_reaction_rank = excluded.monthly_reaction_rank,
-            guild_id = excluded.guild_id
-    """, (
-        user_id, guild_id, stats["monthly_reaction_rank"], stats["total_message_rank"], stats["total_reaction_rank"],
-        stats["this_month_hall_of_fame_messages"], stats["total_hall_of_fame_messages"], stats["monthly_message_rank"],
-        stats["this_month_hall_of_fame_message_reactions"], stats["total_hall_of_fame_message_reactions"]
-    ))
+            monthly_reaction_rank = excluded.monthly_reaction_rank
+        """,
+        (
+            user_id,
+            guild_id,
+            stats["monthly_reaction_rank"],
+            stats["total_message_rank"],
+            stats["total_reaction_rank"],
+            stats["this_month_hall_of_fame_messages"],
+            stats["total_hall_of_fame_messages"],
+            stats["monthly_message_rank"],
+            stats["this_month_hall_of_fame_message_reactions"],
+            stats["total_hall_of_fame_message_reactions"],
+        ),
+    )
     connection.commit()
     cursor.close()
 
+
+ALLOWED_STAT_FIELDS = {
+    "monthly_reaction_rank",
+    "total_message_rank",
+    "total_reaction_rank",
+    "this_month_hall_of_fame_messages",
+    "total_hall_of_fame_messages",
+    "monthly_message_rank",
+    "this_month_hall_of_fame_message_reactions",
+    "total_hall_of_fame_message_reactions",
+}
+
+
 def get_top_users_by_stat(connection, guild_id, stat_field, limit=10):
+    if stat_field not in ALLOWED_STAT_FIELDS:
+        raise ValueError(f"Invalid stat_field: {stat_field}")
     cursor = connection.cursor()
     query = f"""
         SELECT user_id, guild_id, {stat_field}
@@ -101,10 +127,13 @@ def get_top_users_by_stat(connection, guild_id, stat_field, limit=10):
     cursor.close()
     return results
 
+
 def check_if_user_is_top_of_stat(connection, user_id, guild_id, stat_field):
     """
-    Returns the top user (as a dict) for the specified stat field within the guild, or None if not found.
+    Returns True if the given user is currently #1 for the specified stat field within the guild.
     """
+    if stat_field not in ALLOWED_STAT_FIELDS:
+        raise ValueError(f"Invalid stat_field: {stat_field}")
     cursor = connection.cursor()
     query = f"""
         SELECT user_id
