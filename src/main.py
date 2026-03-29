@@ -50,7 +50,6 @@ intents.message_content = True
 bot = discord_commands.Bot(command_prefix="/", intents=intents)
 tree = bot.tree
 server_classes = {}
-dev_user = 230698327589650432  # todo: put in env variable
 bot_stats = BotStats()
 
 month_emoji = "<:month_most_hof_messages:1380272332609683517>" if not dev_test else "<:month_most_hof_messages:1380272983368532160>"
@@ -662,15 +661,6 @@ async def server_hof_wrapped_command(interaction: discord.Interaction):
     # noinspection PyUnresolvedReferences
     await interaction.response.send_message(embed=embed)
 
-# Command disabled for now due to few customization requests
-"""
-@tree.command(name="request_to_set_bot_profile", description="Request to set a custom bot profile picture and cover")
-async def set_bot_profile_picture(interaction: discord.Interaction, image_url: str = None, cover_url: str = None):
-    if not await check_if_user_has_manage_server_permission(interaction):
-        return
-    await utils.create_custom_profile_picture_and_cover_form(interaction, bot, image_url, cover_url)
-"""
-
 
 async def check_if_user_has_manage_server_permission(interaction: discord.Interaction, check_server_set_up: bool = True):
     """
@@ -688,20 +678,6 @@ async def check_if_user_has_manage_server_permission(interaction: discord.Intera
     if check_server_set_up and len(server_classes) > 1 and (interaction.guild_id not in server_classes or server_classes[interaction.guild_id] is None):
         # noinspection PyUnresolvedReferences
         await interaction.response.send_message(messages.ERROR_SERVER_NOT_SETUP)
-        return False
-    return True
-
-async def check_if_dev_user(interaction: discord.Interaction):
-    """
-    Check if the user is a developer
-    :param interaction:
-    :return: True if the user is a developer
-    """
-    if interaction.user.id != dev_user:
-        # noinspection PyUnresolvedReferences
-        await interaction.response.send_message(messages.DEV_NOT_AUTHORIZED)
-        await utils.logging(bot, f"User {interaction.user.name} is not a developer", interaction.guild_id,
-                            log_level=log_type.COMMAND)
         return False
     return True
 
