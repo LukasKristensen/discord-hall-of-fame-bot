@@ -151,12 +151,42 @@ def get_server_classes(connection) -> dict[int, ServerClass]:
     return classes
 
 
+def row_to_server_class(row) -> ServerClass:
+    """Map a server_configs row to ServerClass.
+
+    Note: server_configs includes `joined_date`, but ServerClass/Server.__init__ does not.
+    """
+    return ServerClass(
+        hall_of_fame_channel_id=row[1],
+        guild_id=row[0],
+        reaction_threshold=row[2],
+        post_due_date=row[3],
+        sweep_limit=row[5],
+        sweep_limited=row[6],
+        include_author_in_reaction_calculation=row[7],
+        allow_messages_in_hof_channel=row[8],
+        custom_emoji_check_logic=row[9],
+        whitelisted_emojis=row[10],
+        leaderboard_setup=row[12],
+        ignore_bot_messages=row[13],
+        reaction_count_calculation_method=row[15],
+        hide_hof_post_below_threshold=row[16],
+        leaderboard_message_ids=row[4],
+        server_member_count=row[14],
+    )
+
+
 def get_all_server_configs(connection) -> list[ServerClass]:
     cursor = connection.cursor()
+    # Select columns in a stable order and keep joined_date available separately if needed.
     cursor.execute("""
-        SELECT *
+        SELECT guild_id, hall_of_fame_channel_id, reaction_threshold, post_due_date,
+               leaderboard_message_ids, sweep_limit, sweep_limited, include_author_in_reaction_calculation,
+               allow_messages_in_hof_channel, custom_emoji_check_logic, whitelisted_emojis,
+               joined_date, leaderboard_setup, ignore_bot_messages, server_member_count,
+               reaction_count_calculation_method, hide_hof_post_below_threshold
         FROM server_configs
     """)
     rows = cursor.fetchall()
     cursor.close()
-    return [ServerClass(*row) for row in rows]
+    return [row_to_server_class(row) for row in rows]

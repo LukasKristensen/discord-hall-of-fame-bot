@@ -23,24 +23,24 @@ load_dotenv()
 dev_test = os.getenv('DEV_TEST') == "True"
 if dev_test:
     TOKEN = os.getenv('DEV_KEY')
+    connection_pool = psycopg2.pool.SimpleConnectionPool(
+        minconn=1,
+        maxconn=10,
+        host=os.getenv('POSTGRES_HOST_LOCAL'),
+        database=os.getenv('POSTGRES_DB_LOCAL'),
+        user=os.getenv('POSTGRES_USER'),
+        password=os.getenv('POSTGRES_PASSWORD'))
+    print("connection pool: ", connection_pool)
 else:
     TOKEN = os.getenv('KEY')
+    connection_pool = psycopg2.pool.SimpleConnectionPool(
+        minconn=1,
+        maxconn=10,
+        host=os.getenv('POSTGRES_HOST'),
+        database=os.getenv('POSTGRES_DB'),
+        user=os.getenv('POSTGRES_USER'),
+        password=os.getenv('POSTGRES_PASSWORD'))
 topgg_api_key = os.getenv('TOPGG_API_KEY')
-
-"""
-connection = psycopg2.connect(host=os.getenv('POSTGRES_HOST'),
-                              database=os.getenv('POSTGRES_DB'),
-                              user=os.getenv('POSTGRES_USER'),
-                              password=os.getenv('POSTGRES_PASSWORD'))
-"""
-
-connection_pool = psycopg2.pool.SimpleConnectionPool(
-    minconn=1,
-    maxconn=10,
-    host=os.getenv('POSTGRES_HOST'),
-    database=os.getenv('POSTGRES_DB'),
-    user=os.getenv('POSTGRES_USER'),
-    password=os.getenv('POSTGRES_PASSWORD'))
 
 messages_processing = []
 daily_command_cooldowns = {}
