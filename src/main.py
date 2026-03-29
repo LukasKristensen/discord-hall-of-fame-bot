@@ -30,7 +30,6 @@ if dev_test:
         database=os.getenv('POSTGRES_DB_LOCAL'),
         user=os.getenv('POSTGRES_USER'),
         password=os.getenv('POSTGRES_PASSWORD'))
-    print("connection pool: ", connection_pool)
 else:
     TOKEN = os.getenv('KEY')
     connection_pool = psycopg2.pool.SimpleConnectionPool(
