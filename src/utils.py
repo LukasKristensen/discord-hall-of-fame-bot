@@ -111,7 +111,7 @@ async def update_reaction_counter(db_message, bot: discord.Client, target_channe
     embed = hall_of_fame_message.embeds[0]
     corrected_reactions = await reaction_count(discord_message, connection)
     top_reaction = most_reacted_emoji(discord_message.reactions, discord_message.guild.id, connection)
-    reactions_field_value = f"{corrected_reactions}x {top_reaction}".strip()
+    reactions_field_value = f"{corrected_reactions} {top_reaction}".strip()
 
     for i, field in enumerate(embed.fields):
         field_name = (field.name or "").strip()
