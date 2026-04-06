@@ -110,13 +110,16 @@ async def update_reaction_counter(db_message, bot: discord.Client, target_channe
 
     embed = hall_of_fame_message.embeds[0]
     corrected_reactions = await reaction_count(discord_message, connection)
+    top_reaction = most_reacted_emoji(discord_message.reactions, discord_message.guild.id, connection)
+    reactions_field_value = f"{corrected_reactions}x {top_reaction}".strip()
 
     for i, field in enumerate(embed.fields):
-        if field.name.endswith("Reactions"):
+        field_name = (field.name or "").strip()
+        if field_name == "Reactions" or field_name.endswith("Reactions"):
             embed.set_field_at(
                 index=i,
-                name=f"{corrected_reactions} Reactions ",
-                value=most_reacted_emoji(discord_message.reactions, discord_message.guild.id, connection),
+                name="Reactions",
+                value=reactions_field_value,
                 inline=True
             )
             break
@@ -299,6 +302,16 @@ async def set_footer(embed: discord.Embed):
     embed.add_field(name="Enjoying the bot? Vote for it on top.gg", value="https://top.gg/bot/1177041673352663070/vote", inline=True)
     return embed
 
+def format_reactions_field_value(count: int, top_reaction) -> str:
+    """
+    User-facing reactions label.
+    Examples:
+      - "12 😂"
+      - "12 reactions" (if no emoji)
+    """
+    emoji = str(top_reaction).strip() if top_reaction else ""
+    return f"{count} {emoji}" if emoji else f"{count} reactions"
+
 
 async def create_embed(message: discord.Message, reaction_threshold: int, connection) -> discord.Embed:
     """
@@ -316,12 +329,12 @@ async def create_embed(message: discord.Message, reaction_threshold: int, connec
         reference_message.content = reference_message.content[:1021] + "..." if len(reference_message.content) > 1024 else reference_message.content
     corrected_reactions = await reaction_count(message, connection)
     top_reaction = most_reacted_emoji(message.reactions, message.guild.id, connection)
+    reactions_field_value = format_reactions_field_value(corrected_reactions, top_reaction)
 
     # Check if the message is a sticker and has a reference
     if message.reference and message.stickers:
         sticker = message.stickers[0]
         embed = discord.Embed(
-            title=f"Sticker from {message.author.name} replying to {reference_message.author.name}'s message",
             description=message.content,
             color=discord.Color.gold()
         )
@@ -330,7 +343,7 @@ async def create_embed(message: discord.Message, reaction_threshold: int, connec
 
         embed.add_field(name=f"{reference_message.author.name}'s message:", value=reference_message.content, inline=False)
 
-        embed.add_field(name=f"{corrected_reactions} Reactions", value=top_reaction, inline=True)
+        embed.add_field(name="Reactions", value=reactions_field_value, inline=True)
         embed.add_field(name="Jump to Message", value=message.jump_url, inline=False)
 
         embed = await set_footer(embed)
@@ -340,13 +353,12 @@ async def create_embed(message: discord.Message, reaction_threshold: int, connec
     elif message.stickers:
         sticker = message.stickers[0]
         embed = discord.Embed(
-            title=f"Sticker from {message.author.name} has surpassed {reaction_threshold} reactions",
             description=message.content,
             color=discord.Color.gold()
         )
         embed.set_image(url=sticker.url)
         embed.set_author(name=message.author.name, icon_url=message.author.avatar.url if message.author.avatar else None)
-        embed.add_field(name=f"{corrected_reactions} Reactions", value=top_reaction, inline=True)
+        embed.add_field(name="Reactions", value=reactions_field_value, inline=True)
         embed.add_field(name="Jump to Message", value=message.jump_url, inline=False)
         embed = await set_footer(embed)
         return embed
@@ -354,14 +366,13 @@ async def create_embed(message: discord.Message, reaction_threshold: int, connec
     # Check if the message is a reply to another message
     elif message.reference and not message.attachments:
         embed = discord.Embed(
-            title=f"{message.author.name} replied to {reference_message.author.name}'s message",
             color=discord.Color.gold()
         )
 
         embed.set_author(name=message.author.name, icon_url=message.author.avatar.url if message.author.avatar else None)
 
         if reference_message.attachments:
-            embed.add_field(name=f"{corrected_reactions} Reactions", value=top_reaction, inline=True)
+            embed.add_field(name="Reactions", value=reactions_field_value, inline=True)
             embed.add_field(name="Jump to Message", value=message.jump_url, inline=False)
 
             # Author of the original message
@@ -376,20 +387,19 @@ async def create_embed(message: discord.Message, reaction_threshold: int, connec
             # Author of the original message
             embed.add_field(name=f"{message.author.name}'s reply:", value=message.content, inline=False)
 
-            embed.add_field(name=f"{corrected_reactions} Reactions", value=top_reaction, inline=True)
+            embed.add_field(name="Reactions", value=reactions_field_value, inline=True)
             embed.add_field(name="Jump to Message", value=message.jump_url, inline=False)
         embed = await set_footer(embed)
         return embed
 
-    # Include the reference message in the embed if the message has both a reference and attachments
-    elif message.reference and message.attachments:
+    # Include the reference message in the embed if the message has both a reference and attachment with an image content type
+    elif message.reference and message.attachments and message.attachments[0].content_type and message.attachments[0].content_type.startswith('image'):
         embed = discord.Embed(
-            title=f"{message.author.name} replied to {reference_message.author.name}'s message",
             color=discord.Color.gold()
         )
 
         embed.set_author(name=message.author.name, icon_url=message.author.avatar.url if message.author.avatar else None)
-        embed.add_field(name=f"{corrected_reactions} Reactions", value=top_reaction, inline=True)
+        embed.add_field(name="Reactions", value=reactions_field_value, inline=True)
         embed.add_field(name="Jump to Message", value=message.jump_url, inline=False)
 
         # Original message
@@ -399,16 +409,32 @@ async def create_embed(message: discord.Message, reaction_threshold: int, connec
         embed.add_field(name=f"{message.author.name}'s reply:", value=message.content, inline=False)
 
         attachment = message.attachments[0]
-        if attachment.content_type and attachment.content_type.startswith('image'):
-            embed.set_image(url=attachment.url)
-        else:
-            embed.add_field(name="Attachment", value=f"{attachment.url}", inline=False)
+        embed.set_image(url=attachment.url)
 
+        embed = await set_footer(embed)
+        return embed
+
+    # Include the reference message in the embed if the message has both a reference and attachment but the attachment is not an image (e.g. video, file, etc.)
+    elif message.reference and message.attachments:
+        embed = discord.Embed(
+            color=discord.Color.gold()
+        )
+
+        # Original message
+        embed.add_field(name=f"{reference_message.author.name}'s message:", value=reference_message.content, inline=False)
+
+        # Reply message
+        embed.add_field(name=f"{message.author.name}'s reply:", value=message.content, inline=False)
+        attachment = message.attachments[0]
+        embed.add_field(name="Attachment", value=f"{attachment.url}", inline=False)
+
+        embed.set_author(name=message.author.name, icon_url=message.author.avatar.url if message.author.avatar else None)
+        embed.add_field(name="Reactions", value=reactions_field_value, inline=True)
+        embed.add_field(name="Jump to Message", value=message.jump_url, inline=False)
         embed = await set_footer(embed)
         return embed
     else:
         embed = discord.Embed(
-            title=f"Message in <#{message.channel.id}> has surpassed {reaction_threshold} reactions",
             description=message.content,
             color=discord.Color.gold()
         )
@@ -417,7 +443,7 @@ async def create_embed(message: discord.Message, reaction_threshold: int, connec
         if message.attachments:
             embed.set_image(url=message.attachments[0].url)
 
-        embed.add_field(name=f"{corrected_reactions} Reactions", value=top_reaction, inline=True)
+        embed.add_field(name="Reactions", value=reactions_field_value, inline=True)
         embed.add_field(name="Jump to Message", value=message.jump_url, inline=False)
 
         embed = await set_footer(embed)
@@ -813,4 +839,3 @@ async def send_message_to_highest_prio_channel(bot: discord.Client, guild: disco
             except Exception as e:
                 await logging(bot, f"Failed to send missing permissions message to {alt_channel.name} in server "
                                    f"{guild.name}: {e}", guild.id)
-
