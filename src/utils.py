@@ -372,14 +372,14 @@ async def create_embed(message: discord.Message, reaction_threshold: int, connec
         embed.set_author(name=message.author.name, icon_url=message.author.avatar.url if message.author.avatar else None)
 
         if reference_message.attachments:
-            embed.add_field(name="Reactions", value=reactions_field_value, inline=True)
-            embed.add_field(name="Jump to Message", value=message.jump_url, inline=False)
 
             # Author of the original message
             embed.add_field(name=f"{message.author.name}'s reply:", value=message.content, inline=False)
 
             # Replied message
             embed.add_field(name=f"{reference_message.author.name}'s message:", value=reference_message.content, inline=False)
+            embed.add_field(name="Reactions", value=reactions_field_value, inline=True)
+            embed.add_field(name="Jump to Message", value=message.jump_url, inline=False)
             embed.set_image(url=reference_message.attachments[0].url)
         else:
             # Author of the replied message
@@ -399,15 +399,15 @@ async def create_embed(message: discord.Message, reaction_threshold: int, connec
         )
 
         embed.set_author(name=message.author.name, icon_url=message.author.avatar.url if message.author.avatar else None)
-        embed.add_field(name="Reactions", value=reactions_field_value, inline=True)
-        embed.add_field(name="Jump to Message", value=message.jump_url, inline=False)
 
         # Original message
         embed.add_field(name=f"{reference_message.author.name}'s message:", value=reference_message.content, inline=False)
 
         # Reply message
         embed.add_field(name=f"{message.author.name}'s reply:", value=message.content, inline=False)
-
+        embed.add_field(name="Reactions", value=reactions_field_value, inline=True)
+        embed.add_field(name="Jump to Message", value=message.jump_url, inline=False)
+        
         attachment = message.attachments[0]
         embed.set_image(url=attachment.url)
 
