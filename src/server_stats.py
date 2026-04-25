@@ -2,9 +2,14 @@ import os
 from dotenv import load_dotenv
 import matplotlib.pyplot as plt
 import numpy as np
-from datetime import datetime
+from datetime import datetime, timezone
 import psycopg2
-from repositories import server_config_repo, hall_of_fame_message_repo
+from repositories import (
+    server_config_repo,
+    hall_of_fame_message_repo,
+    guild_lifecycle_event_repo,
+    guild_monthly_snapshot_repo,
+)
 
 # Make exports deterministic regardless of the current working directory.
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -377,6 +382,172 @@ def create_histogram_of_messages_per_month():
         plt.show()
 
 
+def get_month_window(reference_dt=None):
+    now = reference_dt or datetime.now(timezone.utc)
+    month_start = datetime(now.year, now.month, 1)
+    if now.month == 12:
+        next_month_start = datetime(now.year + 1, 1, 1)
+    else:
+        next_month_start = datetime(now.year, now.month + 1, 1)
+    return month_start, next_month_start
+
+
+def create_monthly_members_per_server_plot(reference_dt=None):
+    month_start, _ = get_month_window(reference_dt)
+    rows = guild_monthly_snapshot_repo.get_monthly_members_per_server(connection, month_start.date())
+    if not rows:
+        return
+
+    guild_ids = [str(r["guild_id"]) for r in rows]
+    member_counts = [int(r["member_count"] or 0) for r in rows]
+
+    plt.figure(figsize=(12, 6))
+    plt.bar(guild_ids, member_counts, color="teal", alpha=0.8)
+    plt.xlabel("Guild ID")
+    plt.ylabel("Member Count")
+    plt.title(f"Members per Server ({month_start.strftime('%Y-%m')})")
+    if len(guild_ids) > 20:
+        step = max(1, len(guild_ids) // 20)
+        plt.xticks(range(0, len(guild_ids), step), [guild_ids[i] for i in range(0, len(guild_ids), step)], rotation=45, ha="right")
+    else:
+        plt.xticks(rotation=45, ha="right")
+    plt.tight_layout()
+    plt.savefig(os.path.join(folder_path, "monthly_members_per_server.png"))
+    if show_plots:
+        plt.show()
+
+
+def create_monthly_messages_per_server_plot(reference_dt=None):
+    month_start, _ = get_month_window(reference_dt)
+    rows = guild_monthly_snapshot_repo.get_monthly_messages_per_server(connection, month_start.date())
+    if not rows:
+        return
+
+    guild_ids = [str(r["guild_id"]) for r in rows]
+    message_counts = [int(r["message_count"] or 0) for r in rows]
+
+    plt.figure(figsize=(12, 6))
+    plt.bar(guild_ids, message_counts, color="purple", alpha=0.8)
+    plt.xlabel("Guild ID")
+    plt.ylabel("Message Count")
+    plt.title(f"Messages per Server ({month_start.strftime('%Y-%m')})")
+    if len(guild_ids) > 20:
+        step = max(1, len(guild_ids) // 20)
+        plt.xticks(range(0, len(guild_ids), step), [guild_ids[i] for i in range(0, len(guild_ids), step)], rotation=45, ha="right")
+    else:
+        plt.xticks(rotation=45, ha="right")
+    plt.tight_layout()
+    plt.savefig(os.path.join(folder_path, "monthly_messages_per_server.png"))
+    if show_plots:
+        plt.show()
+
+
+def create_monthly_messages_per_1k_members_plot(reference_dt=None):
+    month_start, _ = get_month_window(reference_dt)
+    rows = guild_monthly_snapshot_repo.get_monthly_messages_vs_members(connection, month_start.date())
+    if not rows:
+        return
+
+    guild_ids = [str(r["guild_id"]) for r in rows]
+    values = [float(r["messages_per_1k_members"] or 0) for r in rows]
+
+    plt.figure(figsize=(12, 6))
+    plt.bar(guild_ids, values, color="orange", alpha=0.85)
+    plt.xlabel("Guild ID")
+    plt.ylabel("Messages per 1k Members")
+    plt.title(f"Messages per 1k Members ({month_start.strftime('%Y-%m')})")
+    if len(guild_ids) > 20:
+        step = max(1, len(guild_ids) // 20)
+        plt.xticks(range(0, len(guild_ids), step), [guild_ids[i] for i in range(0, len(guild_ids), step)], rotation=45, ha="right")
+    else:
+        plt.xticks(rotation=45, ha="right")
+    plt.tight_layout()
+    plt.savefig(os.path.join(folder_path, "monthly_messages_per_1k_members.png"))
+    if show_plots:
+        plt.show()
+
+
+def create_monthly_messages_vs_members_scatter(reference_dt=None):
+    month_start, _ = get_month_window(reference_dt)
+    rows = guild_monthly_snapshot_repo.get_monthly_messages_vs_members(connection, month_start.date())
+    if not rows:
+        return
+
+    members = [int(r["member_count"] or 0) for r in rows]
+    messages = [int(r["message_count"] or 0) for r in rows]
+
+    plt.figure(figsize=(10, 6))
+    plt.scatter(members, messages, alpha=0.7)
+    plt.xlabel("Member Count")
+    plt.ylabel("Message Count")
+    plt.title(f"Messages vs Members ({month_start.strftime('%Y-%m')})")
+    plt.grid(True)
+    plt.tight_layout()
+    plt.savefig(os.path.join(folder_path, "monthly_messages_vs_members.png"))
+    if show_plots:
+        plt.show()
+
+
+def create_joins_leaves_per_month_plot():
+    rows = guild_lifecycle_event_repo.get_monthly_join_leave_counts(
+        connection,
+        datetime(2000, 1, 1),
+        datetime.now(timezone.utc),
+    )
+    if not rows:
+        return
+
+    months = [row["month_start"].strftime("%Y-%m") for row in rows]
+    joined = [int(row["joined_count"] or 0) for row in rows]
+    left = [int(row["left_count"] or 0) for row in rows]
+
+    x = np.arange(len(months))
+    width = 0.4
+
+    plt.figure(figsize=(12, 6))
+    plt.bar(x - width / 2, joined, width=width, label="Joined", color="green", alpha=0.8)
+    plt.bar(x + width / 2, left, width=width, label="Left", color="red", alpha=0.8)
+    plt.xlabel("Month")
+    plt.ylabel("Server Count")
+    plt.title("Servers Joined vs Left per Month")
+    if len(months) > 24:
+        step = max(1, len(months) // 24)
+        tick_positions = x[::step]
+        tick_labels = [months[i] for i in range(0, len(months), step)]
+        plt.xticks(tick_positions, tick_labels, rotation=45, ha="right")
+    else:
+        plt.xticks(x, months, rotation=45, ha="right")
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig(os.path.join(folder_path, "servers_joined_vs_left_per_month.png"))
+    if show_plots:
+        plt.show()
+
+
+def create_active_servers_over_time_plot():
+    rows = guild_lifecycle_event_repo.get_active_servers_timeseries(
+        connection,
+        datetime(2000, 1, 1),
+        datetime.now(timezone.utc),
+    )
+    if not rows:
+        return
+
+    months = [row["month_start"] for row in rows]
+    active_counts = [int(row["active_servers"] or 0) for row in rows]
+
+    plt.figure(figsize=(12, 6))
+    plt.plot(months, active_counts, color="blue", marker="o", linewidth=2)
+    plt.xlabel("Month")
+    plt.ylabel("Active Servers")
+    plt.title("Active Servers Over Time")
+    plt.grid(True, linestyle="--", alpha=0.5)
+    plt.tight_layout()
+    plt.savefig(os.path.join(folder_path, "active_servers_over_time.png"))
+    if show_plots:
+        plt.show()
+
+
 if __name__ == "__main__":
     timestamp_str = datetime.now().strftime("%Y%m%d_%H%M%S")
     if not os.path.exists(server_graph_folder):
@@ -395,3 +566,9 @@ if __name__ == "__main__":
     create_bubble_chart()
     create_plot('server_stats_all.png')
     create_plot_where_msg_count_greater_than_zero()
+    create_joins_leaves_per_month_plot()
+    create_active_servers_over_time_plot()
+    create_monthly_members_per_server_plot()
+    create_monthly_messages_per_server_plot()
+    create_monthly_messages_vs_members_scatter()
+    create_monthly_messages_per_1k_members_plot()

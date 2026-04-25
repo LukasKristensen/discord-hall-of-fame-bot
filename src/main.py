@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 import discord
 from discord import app_commands
 from discord.ext import commands as discord_commands
@@ -15,9 +15,18 @@ import os
 from translations import messages
 import psycopg2
 from psycopg2 import pool
-from repositories import server_config_repo, hall_of_fame_message_repo, server_user_repo, hof_wrapped_repo, hof_wrapped_guild_status_repo
+from repositories import (
+    server_config_repo,
+    hall_of_fame_message_repo,
+    server_user_repo,
+    hof_wrapped_repo,
+    hof_wrapped_guild_status_repo,
+    guild_lifecycle_event_repo,
+    guild_monthly_snapshot_repo,
+)
 import hof_wrapped
 from contextlib import asynccontextmanager
+from scripts import monthly_guild_snapshot
 
 load_dotenv()
 dev_test = os.getenv('DEV_TEST') == "True"
@@ -112,6 +121,7 @@ async def daily_task():
     try:
         async with get_db_connection(connection_pool) as connection:
             await events.daily_task(bot, connection, server_classes, dev_test)
+            monthly_guild_snapshot.run_monthly_snapshot(connection, bot.guilds)
         await utils.logging(bot, f"Daily task completed")
     except Exception as e:
         await utils.logging(bot, f"Error in daily_task: {e}")
@@ -133,6 +143,10 @@ def setup_databases(connection):
     hof_wrapped_repo.create_hof_wrapped_table(connection)
     print("Creating hof wrapped guild status table...")
     hof_wrapped_guild_status_repo.create_hof_wrapped_progress_table(connection)
+    print("Creating guild lifecycle event table...")
+    guild_lifecycle_event_repo.create_guild_lifecycle_event_table(connection)
+    print("Creating guild monthly snapshot table...")
+    guild_monthly_snapshot_repo.create_guild_monthly_snapshot_table(connection)
 
 @bot.event
 async def on_raw_reaction_add(payload: discord.RawReactionActionEvent):
@@ -193,11 +207,14 @@ async def on_guild_join(server):
     try:
         async with get_db_connection(connection_pool) as connection:
             server_config_repo.insert_server_config(connection, server.id)
+            new_server_class = await events.guild_join(server, connection, bot)
+            guild_lifecycle_event_repo.insert_guild_lifecycle_event(
+                connection, server.id, "JOIN", datetime.now(timezone.utc)
+            )
     except Exception as e:
         await utils.logging(bot, f"Error in on_guild_join: {e}", server.id, log_level=log_type.ERROR)
         return
 
-    new_server_class = await events.guild_join(server, connection, bot)
     if new_server_class is None:
         return
     server_classes[server.id] = new_server_class
@@ -211,6 +228,9 @@ async def on_guild_remove(server):
     await utils.logging(bot, f"Left server {server.name}", server.id, log_level=log_type.SYSTEM)
     async with get_db_connection(connection_pool) as connection:
         await events.guild_remove(server, connection)
+        guild_lifecycle_event_repo.insert_guild_lifecycle_event(
+            connection, server.id, "LEAVE", datetime.now(timezone.utc)
+        )
     if server.id in server_classes:
         del server_classes[server.id]
     await post_api_bot_stats()
