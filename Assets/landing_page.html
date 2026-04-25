@@ -1,103 +1,111 @@
 <style>
-  section {
-    margin-top: 10px;
-    margin-bottom: 10px;
-    padding: 5px 0;
+  /* Everything is prefixed with #hof-description-block to prevent breaking Top.gg UI */
+
+  #hof-description-block {
+    font-family: 'Inter', sans-serif; /* Clean, modern font */
+    color: #2c3e50;
+    line-height: 1.6;
   }
 
-  div.container ul {
-    overflow-wrap: break-word !important;
-    white-space: normal !important;
-    text-wrap: balance !important;
-  }
-
-  .video-wrapper {
+  #hof-description-block .video-wrapper {
     position: relative;
-    padding-bottom: 56.25%; /* 16:9 */
+    padding-bottom: 56.25%;
     height: 0;
-    margin: 15px 0;
+    margin: 20px 0;
   }
 
-  .video-wrapper iframe {
+  #hof-description-block .video-wrapper iframe {
     position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    border-radius: 8px;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    border-radius: 12px;
+    border: none;
+  }
+
+  #hof-description-block .promo-image {
+    max-width: 100%;
+    height: auto;
+    border-radius: 10px;
+    margin: 15px 0;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+  }
+
+  #hof-description-block .config-box {
+    background: #f8f9fa;
+    border-left: 4px solid #d4af37; /* Gold accent */
+    padding: 16px;
+    border-radius: 6px;
+    margin: 12px 0;
+  }
+
+  #hof-description-block .quick-start-card {
+    background: #ffffff;
+    padding: 20px;
+    border-radius: 10px;
+    border: 1px solid #eaeaea;
+    margin: 20px 0;
+  }
+
+  #hof-description-block h2 {
+    margin-top: 35px;
+    margin-bottom: 15px;
+    font-size: 1.5rem;
+    color: #1a1a1a;
+  }
+
+  #hof-description-block code {
+    background: #eeeeee;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-family: monospace;
+  }
+
+  #hof-description-block .command-line {
+    display: block;
+    margin-bottom: 10px;
+    font-size: 0.95rem;
   }
 </style>
 
-<div class="container">
-  <img
-    class="promo-image"
-    src="https://raw.githubusercontent.com/LukasKristensen/discord-hall-of-fame-bot/refs/heads/main/Assets/main_context_2.png"
-    alt="Hall of Fame Bot Preview"
-  />
-Hall Of Fame supports images, videos and includes context replies 🏆
-  <h2>🏆 Hall of Fame Bot ✨</h2>
-  <!-- YouTube Video Embed -->
+<div id="hof-description-block">
+  <p style="font-size: 1.15em; margin-bottom: 20px; color: #444;">
+    <strong>Turn your server's best reactions into legends.</strong> Automatically save and showcase your community's top moments with full media support and conversation context.
+  </p>
+
   <div class="video-wrapper">
-    <iframe
-      src="https://www.youtube.com/embed/D4onxYa7Ikw"
-      title="Hall of Fame Bot Trailer"
-      frameborder="0"
-      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-      allowfullscreen>
-    </iframe>
+    <iframe src="https://www.youtube.com/embed/D4onxYa7Ikw" allowfullscreen></iframe>
   </div>
-  <section>
-    <h3>🌟 Features that Shine</h3>
-    <ul>
-      <li><strong>Multi-Emoji Magic</strong> – No more limits, react with any emoji to immortalize messages.</li>
-      <li><strong>Media Included</strong> – Images and videos travel with your cherished posts.</li>
-      <li><strong>Full Conversation Context</strong> – Replies stay visible for clarity and nostalgia.</li>
-      <li><strong>Custom Reaction Goals</strong> – You decide how many reactions earn the spotlight.</li>
-      <li><strong>Auto-Reposting</strong> – Your Hall of Fame fills itself without lifting a finger.</li>
-    </ul>
-  </section>
 
-  <section>
-    <h3>⚙️ Customize Your Hall of Fame</h3>
-    <p>
-      By default, the reaction threshold adjusts automatically based on your server size.
-      Want to set your own goal? Easily update it anytime with the command below:
-    </p>
-    <code>/set_reaction_threshold &lt;number&gt;</code>
-  </section>
+  <h2>🌟 Features that Shine</h2>
+  <div style="font-size: 1.05em;">
+    <p>🔹 <strong>Multi-Emoji Magic:</strong> Any emoji can trigger immortality.</p>
+    <p>🔹 <strong>Media Support:</strong> Images and videos travel with the post.</p>
+    <p>🔹 <strong>Context Preservation:</strong> Keeps replies visible for the full story.</p>
+    <p>🔹 <strong>Smart Scaling:</strong> Thresholds adjust to your server's size automatically.</p>
+  </div>
 
-  <section>
-    <h3>⚙️ Configure Calculation Method</h3>
-    <p>
-      Choose how reaction counts are calculated for Hall of Fame qualification. Use the command below followed by one of the options:
-    </p>
-    <code>/calculation_method &lt;method&gt;</code>
-    <ul>
-      <li><code>most_reactions_on_emoji</code> – Counts the emoji with the highest reactions, each user counts once per emoji.</li>
-      <li><code>total_reactions</code> – Counts every reaction on the message; users reacting multiple times with different emojis count multiple times.</li>
-      <li><code>unique_users</code> – Counts the total number of unique users who reacted, regardless of emoji.</li>
-    </ul>
-  </section>
+  <img class="promo-image" src="https://raw.githubusercontent.com/LukasKristensen/discord-hall-of-fame-bot/refs/heads/main/Assets/main_context_2.png" alt="Context Feature Preview" />
 
-  <section>
-    <h3>🔒 Emoji Whitelist (Optional)</h3>
-    <p>Prefer to limit which emojis count? Just enable and customize with these commands:</p>
-    <ul>
-      <li><code>/custom_emoji_check_logic</code> – Turn on emoji filtering</li>
-      <li><code>/whitelist_emoji</code> – Add approved emojis</li>
-      <li><code>/unwhitelist_emoji</code> – Remove an emoji</li>
-      <li><code>/clear_whitelist</code> – Reset your whitelist</li>
-    </ul>
-  </section>
+  <h2>🚀 Quick Start Guide</h2>
+  <div class="quick-start-card">
+    <p><strong>1. Invite:</strong> Add the bot to your server.</p>
+    <p><strong>2. Permissions:</strong> Ensure it can see your target Hall of Fame channel.</p>
+    <p><strong>3. Relax:</strong> The bot handles the rest! It sets a threshold based on your member count automatically.</p>
+  </div>
 
-  <section>
-    <h3>💬 Command Lineup</h3>
-    <ul>
-      <li><code>/help</code> – Your command cheat sheet</li>
-      <li><code>/set_reaction_threshold &lt;int&gt;</code> – Adjust reaction goal</li>
-      <li><code>/include_authors_reaction</code> – Include or exclude author's reaction</li>
-      <li><code>/allow_messages_in_hof_channel</code> – Control channel posting</li>
-      <li><code>/get_server_config</code> – View current settings</li>
-    </ul>
-  </section>
+  <h2>⚙️ Advanced Configuration</h2>
+  <div class="config-box">
+    <span class="command-line">🔸 <code>/set_reaction_threshold</code> — Override the auto-scaling goal.</span>
+    <span class="command-line">🔸 <code>/calculation_method</code> — Switch between unique users or total reactions.</span>
+    <span class="command-line">🔸 <code>/allow_messages_in_hof_channel</code> — Toggle channel posting.</span>
+    <span class="command-line">🔸 <code>/get_server_config</code> — See everything at a glance.</span>
+  </div>
+
+  <h3 style="margin-top: 25px;">🔒 Emoji Whitelisting</h3>
+  <p>Control exactly which reactions count toward the Hall of Fame:</p>
+  <div class="config-box" style="border-left-color: #7f8c8d;">
+    <span class="command-line">🔸 <code>/custom_emoji_check_logic</code> — Toggle whitelist mode.</span>
+    <span class="command-line">🔸 <code>/whitelist_emoji</code> — Add approved reactions.</span>
+    <span class="command-line">🔸 <code>/unwhitelist_emoji</code> — Remove reactions.</span>
+  </div>
 </div>
