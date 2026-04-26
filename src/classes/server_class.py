@@ -3,7 +3,8 @@ class Server:
                  sweep_limit: int, sweep_limited: bool, include_author_in_reaction_calculation: bool,
                  allow_messages_in_hof_channel: bool, custom_emoji_check_logic: bool, whitelisted_emojis: list,
                  leaderboard_setup: bool, ignore_bot_messages: bool, reaction_count_calculation_method: str,
-                 hide_hof_post_below_threshold: bool, leaderboard_message_ids: list, server_member_count: int):
+                 hide_hof_post_below_threshold: bool, leaderboard_message_ids: list, server_member_count: int,
+                 require_image_or_video: bool = False):
         self.hall_of_fame_channel_id = hall_of_fame_channel_id
         self.guild_id = guild_id
         self.reaction_threshold = reaction_threshold
@@ -20,6 +21,7 @@ class Server:
         self.reaction_count_calculation_method = reaction_count_calculation_method
         self.hide_hof_post_below_threshold = hide_hof_post_below_threshold
         self.server_member_count = server_member_count
+        self.require_image_or_video = require_image_or_video
 
 class ServerClass(Server):
     @staticmethod

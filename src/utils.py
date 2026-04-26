@@ -13,7 +13,8 @@ daily_post_limit = 100
 
 async def validate_message(discord_message: discord.RawReactionActionEvent, bot: discord.Client, connection,
                            reaction_threshold: int, post_due_date: int, target_channel_id: int,
-                           ignore_bot_messages: bool, hide_hof_post_below_threshold: bool):
+                           ignore_bot_messages: bool, hide_hof_post_below_threshold: bool,
+                           require_image_or_video: bool = False):
     """
     Check if the message is valid for posting based on the reaction count, date and origin of the message
     :param discord_message: The message to validate
@@ -24,6 +25,7 @@ async def validate_message(discord_message: discord.RawReactionActionEvent, bot:
     :param target_channel_id: The ID of the Hall of Fame channel
     :param ignore_bot_messages: Whether to ignore messages from bots
     :param hide_hof_post_below_threshold: Whether to hide the Hall of Fame post if the reaction count is below the threshold
+    :param require_image_or_video: Whether to require the message to contain an image or video
     :return: None
     """
     channel_id: int = discord_message.channel_id
@@ -45,6 +47,25 @@ async def validate_message(discord_message: discord.RawReactionActionEvent, bot:
     # Checks if the message is from a bot
     if discord_message.author.bot and ignore_bot_messages:
         return
+
+    # Checks if message is required to have an image or video
+    if require_image_or_video:
+        has_media = False
+        if discord_message.attachments:
+            for attachment in discord_message.attachments:
+                content_type = getattr(attachment, 'content_type', '')
+                if content_type and (content_type.startswith('image/') or content_type.startswith('video/')):
+                    has_media = True
+                    break
+
+        if not has_media and discord_message.embeds:
+            for embed in discord_message.embeds:
+                if embed.type in ['image', 'video'] or embed.image or embed.video:
+                    has_media = True
+                    break
+
+        if not has_media:
+            return
 
     target_channel = bot.get_channel(target_channel_id)
 
@@ -229,19 +250,21 @@ async def check_all_server_messages(guild_id: int, sweep_limit, sweep_limited: b
                         continue  # Ignore messages from bots
                     if (datetime.datetime.now(timezone.utc) - message.created_at).days > post_due_date and sweep_limit is not None:
                         break  # If the message is older than the due date, no need to check further
-                    message_reactions = await reaction_count(message)
+                    message_reactions = await reaction_count(message, collection)
 
                     if message_reactions >= reaction_threshold:
-                        if collection.find_one({"message_id": int(message.id)}):
-                            await update_reaction_counter(message, collection, bot, target_channel_id, reaction_threshold, message)
+                        db_msg = collection.find_one({"message_id": int(message.id)})
+                        if db_msg:
+                            await update_reaction_counter(db_msg, bot, target_channel_id, reaction_threshold, collection, message)
                             if sweep_limited:
                                 break  # if message is already in the database, no need to check further
                             else:
                                 continue  # if a total channel sweep is needed
                         messages_to_post.append(message)
                     elif message_reactions >= reaction_threshold-3:
-                        if collection.find_one({"message_id": int(message.id)}):
-                            await remove_embed(message.id, collection, bot, target_channel_id, guild_id, channel.id)
+                        db_msg = collection.find_one({"message_id": int(message.id)})
+                        if db_msg:
+                            await remove_embed(db_msg, bot, target_channel_id)
                 except Exception as e:
                     await logging(bot, f"An error occurred: {e}", guild_id)
         except Exception as e:
@@ -442,6 +465,19 @@ async def create_embed(message: discord.Message, reaction_threshold: int, connec
         embed.set_author(name=message.author.name, icon_url=message.author.avatar.url if message.author.avatar else None)
         if message.attachments:
             embed.set_image(url=message.attachments[0].url)
+        else:
+            # Check for embedded images if there are no attachments
+            for message_embed in message.embeds:
+                if message_embed.type == 'image' and message_embed.url:
+                    embed.set_image(url=message_embed.url)
+                    break
+                # Sometimes images from links are in the thumbnail or image attribute of a generic embed type
+                elif message_embed.image:
+                    embed.set_image(url=message_embed.image.url)
+                    break
+                elif message_embed.thumbnail:
+                    embed.set_image(url=message_embed.thumbnail.url)
+                    break
 
         embed.add_field(name="Reactions", value=reactions_field_value, inline=True)
         embed.add_field(name="Jump to Message", value=message.jump_url, inline=False)
@@ -509,7 +545,7 @@ async def create_database_context(bot, server, connection, custom_channel=None) 
                                                 reaction_threshold_default, 1000, leader_board_messages,
                                                 1000, False, True, False, False,
                                                 [], datetime.datetime.now(timezone.utc), False, False,
-                                                server_member_count, calculation_method_type.MOST_REACTIONS_ON_EMOJI, True)
+                                                server_member_count, calculation_method_type.MOST_REACTIONS_ON_EMOJI, True, False)
 
     await hall_of_fame_channel.send(
         f"🎉 **Welcome to the Hall of Fame!** 🎉\n"

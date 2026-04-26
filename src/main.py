@@ -164,7 +164,8 @@ async def on_raw_reaction_add(payload: discord.RawReactionActionEvent):
             async with get_db_connection(connection_pool) as connection:
                 await events.on_raw_reaction(payload, bot, connection, server_class.reaction_threshold,
                                              server_class.post_due_date, server_class.hall_of_fame_channel_id,
-                                             server_class.ignore_bot_messages, server_class.hide_hof_post_below_threshold)
+                                             server_class.ignore_bot_messages, server_class.hide_hof_post_below_threshold,
+                                             server_class.require_image_or_video)
             messages_processing.remove(payload.message_id)
     except Exception as e:
         await utils.logging(bot, f"Error in on_raw_reaction_add: {e}", payload.guild_id, validate_for_duplicates=True)
@@ -184,7 +185,8 @@ async def on_raw_reaction_remove(payload: discord.RawReactionActionEvent):
             async with get_db_connection(connection_pool) as connection:
                 await events.on_raw_reaction(payload, bot, connection, server_class.reaction_threshold,
                                              server_class.post_due_date, server_class.hall_of_fame_channel_id,
-                                             server_class.ignore_bot_messages, server_class.hide_hof_post_below_threshold)
+                                             server_class.ignore_bot_messages, server_class.hide_hof_post_below_threshold,
+                                             server_class.require_image_or_video)
             messages_processing.remove(payload.message_id)
     except Exception as e:
         await utils.logging(bot, f"Error in on_raw_reaction_remove: {e}", payload.guild_id, validate_for_duplicates=True)
@@ -302,6 +304,22 @@ async def allow_messages_in_hof_channel(interaction: discord.Interaction, allow:
     await interaction.response.send_message(messages.ALLOW_POST_IN_HOF.format(allow=allow))
     await utils.logging(bot, f"Allow messages in Hall of Fame channel command used by {interaction.user.name} in {interaction.guild.name}",
                         interaction.guild.id, allow, log_level=log_type.COMMAND)
+
+@tree.command(name="require_image_or_video", description="Should only messages with images or videos be allowed in the Hall of Fame?")
+async def require_image_or_video(interaction: discord.Interaction, require: bool):
+    if not bot_is_loaded():
+        return
+
+    if not await check_if_user_has_manage_server_permission(interaction):
+        return
+
+    async with get_db_connection(connection_pool) as connection:
+        server_config_repo.update_server_config_param(interaction.guild_id, "require_image_or_video", require, connection)
+    server_classes[interaction.guild_id].require_image_or_video = require
+    # noinspection PyUnresolvedReferences
+    await interaction.response.send_message(f"Require image or video set to {require}")
+    await utils.logging(bot, f"Require image or video command used by {interaction.user.name} in {interaction.guild.name}",
+                        interaction.guild.id, str(require), log_level=log_type.COMMAND)
 
 @tree.command(name="vote", description="Vote for the bot on top.gg")
 async def vote(interaction: discord.Interaction):
@@ -443,6 +461,11 @@ async def get_server_config(interaction: discord.Interaction):
         hide_hof_post_below_threshold=server_class.hide_hof_post_below_threshold,
         whitelisted_emojis=', '.join(server_class.whitelisted_emojis) if server_class.custom_emoji_check_logic else ''
     )
+    if server_class.require_image_or_video:
+        config_message = config_message.replace("```", f"Require Image/Video: {server_class.require_image_or_video}\n```")
+    else:
+        config_message = config_message.replace("```", f"Require Image/Video: False\n```", 1) # Only replace the first match just in case
+
     if server_class.custom_emoji_check_logic:
         config_message += f"Whitelisted Emojis: {', '.join(server_class.whitelisted_emojis)}\n"
     config_message += f"```"

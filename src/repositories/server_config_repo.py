@@ -17,7 +17,8 @@ ALLOWED_COLUMNS = {
     "server_member_count",
     "reaction_count_calculation_method",
     "hide_hof_post_below_threshold",
-    "joined_date"
+    "joined_date",
+    "require_image_or_video"
 }
 
 def create_server_config_table(connection):
@@ -40,10 +41,17 @@ def create_server_config_table(connection):
                 ignore_bot_messages BOOLEAN DEFAULT FALSE,
                 server_member_count INT DEFAULT 0,
                 reaction_count_calculation_method VARCHAR(50) DEFAULT 'most_reactions_on_emoji',
-                hide_hof_post_below_threshold BOOLEAN DEFAULT TRUE
+                hide_hof_post_below_threshold BOOLEAN DEFAULT TRUE,
+                require_image_or_video BOOLEAN DEFAULT FALSE
             )
         """
     )
+    # Add require_image_or_video column if it doesn't exist
+    try:
+        cursor.execute("ALTER TABLE server_configs ADD COLUMN IF NOT EXISTS require_image_or_video BOOLEAN DEFAULT FALSE")
+    except Exception:
+        connection.rollback()
+
     connection.commit()
     cursor.close()
 
@@ -52,20 +60,24 @@ def insert_server_with_parameters(connection, guild_id, hall_of_fame_channel_id,
                                   include_author_in_reaction_calculation, allow_messages_in_hof_channel,
                                   custom_emoji_check_logic, whitelisted_emojis, joined_date, leaderboard_setup,
                                   ignore_bot_messages, server_member_count, reaction_count_calculation_method,
-                                  hide_hof_post_below_threshold):
+                                  hide_hof_post_below_threshold, require_image_or_video):
     cursor = connection.cursor()
     cursor.execute("""
         INSERT INTO server_configs (
             guild_id, hall_of_fame_channel_id, reaction_threshold, post_due_date, leaderboard_message_ids,
             sweep_limit, sweep_limited, include_author_in_reaction_calculation, allow_messages_in_hof_channel,
             custom_emoji_check_logic, whitelisted_emojis, joined_date, leaderboard_setup, ignore_bot_messages,
-            server_member_count, reaction_count_calculation_method, hide_hof_post_below_threshold
-        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-        ON CONFLICT (guild_id) DO NOTHING;
-        """, (guild_id, hall_of_fame_channel_id, reaction_threshold, post_due_date, leaderboard_message_ids,
-              sweep_limit, sweep_limited, include_author_in_reaction_calculation, allow_messages_in_hof_channel,
-              custom_emoji_check_logic, whitelisted_emojis, joined_date, leaderboard_setup, ignore_bot_messages,
-              server_member_count, reaction_count_calculation_method, hide_hof_post_below_threshold))
+            server_member_count, reaction_count_calculation_method, hide_hof_post_below_threshold, require_image_or_video
+        ) VALUES (
+            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+        )
+        ON CONFLICT (guild_id) DO NOTHING
+    """, (
+        guild_id, hall_of_fame_channel_id, reaction_threshold, post_due_date, leaderboard_message_ids,
+        sweep_limit, sweep_limited, include_author_in_reaction_calculation, allow_messages_in_hof_channel,
+        custom_emoji_check_logic, whitelisted_emojis, joined_date, leaderboard_setup, ignore_bot_messages,
+        server_member_count, reaction_count_calculation_method, hide_hof_post_below_threshold, require_image_or_video
+    ))
     connection.commit()
     cursor.close()
 
@@ -121,7 +133,7 @@ def get_server_classes(connection) -> dict[int, ServerClass]:
                leaderboard_message_ids, sweep_limit, sweep_limited, include_author_in_reaction_calculation,
                allow_messages_in_hof_channel, custom_emoji_check_logic, whitelisted_emojis,
                joined_date, leaderboard_setup, ignore_bot_messages, server_member_count,
-               reaction_count_calculation_method, hide_hof_post_below_threshold
+               reaction_count_calculation_method, hide_hof_post_below_threshold, require_image_or_video
         FROM server_configs
     """)
     rows = cursor.fetchall()
@@ -145,7 +157,8 @@ def get_server_classes(connection) -> dict[int, ServerClass]:
             ignore_bot_messages=row[13],
             server_member_count=row[14],
             reaction_count_calculation_method=row[15],
-            hide_hof_post_below_threshold=row[16]
+            hide_hof_post_below_threshold=row[16],
+            require_image_or_video=row[17] if len(row) > 17 else False
         )
         classes[server_class.guild_id] = server_class
     return classes
@@ -173,6 +186,7 @@ def row_to_server_class(row) -> ServerClass:
         hide_hof_post_below_threshold=row[16],
         leaderboard_message_ids=row[4],
         server_member_count=row[14],
+        require_image_or_video=row[17] if len(row) > 17 else False
     )
 
 
@@ -184,7 +198,7 @@ def get_all_server_configs(connection) -> list[ServerClass]:
                leaderboard_message_ids, sweep_limit, sweep_limited, include_author_in_reaction_calculation,
                allow_messages_in_hof_channel, custom_emoji_check_logic, whitelisted_emojis,
                joined_date, leaderboard_setup, ignore_bot_messages, server_member_count,
-               reaction_count_calculation_method, hide_hof_post_below_threshold
+               reaction_count_calculation_method, hide_hof_post_below_threshold, require_image_or_video
         FROM server_configs
     """)
     rows = cursor.fetchall()
