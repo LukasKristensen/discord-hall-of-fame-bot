@@ -122,8 +122,7 @@ def convert_mongodb_to_postgresql(db_client, connection):
              this_month_hall_of_fame_messages, total_hall_of_fame_messages, monthly_message_rank,
              this_month_hall_of_fame_message_reactions, total_hall_of_fame_message_reactions)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-            ON CONFLICT (user_id) DO UPDATE SET
-                guild_id=EXCLUDED.guild_id,
+            ON CONFLICT (user_id, guild_id) DO UPDATE SET
                 monthly_reaction_rank=EXCLUDED.monthly_reaction_rank,
                 total_message_rank=EXCLUDED.total_message_rank,
                 total_reaction_rank=EXCLUDED.total_reaction_rank,

@@ -79,11 +79,24 @@ def guild_message_count_past_24_hours(connection, guild_id):
     cursor.close()
     return result[0] if result else 0
 
+ALLOWED_UPDATE_FIELDS = {
+    "hall_of_fame_message_id",
+    "reaction_count",
+    "video_link_message_id",
+    "author_id",
+    "created_at",
+    "channel_id",
+    "guild_id",
+}
+
 def update_field_for_message(connection, guild_id, channel_id, message_id, field_name, field_value):
+    if field_name not in ALLOWED_UPDATE_FIELDS:
+        raise ValueError(f"Unsupported field_name: {field_name}")
+
     cursor = connection.cursor()
     query = f"""
-        UPDATE hall_of_fame_message 
-        SET {field_name} = %s 
+        UPDATE hall_of_fame_message
+        SET {field_name} = %s
         WHERE guild_id = %s AND channel_id = %s AND message_id = %s
     """
     cursor.execute(query, (field_value, guild_id, channel_id, message_id))
@@ -122,3 +135,19 @@ def count_messages_for_guild(connection, guild_id):
     result = cursor.fetchone()
     cursor.close()
     return result[0] if result else 0
+
+def get_monthly_message_counts_by_guild(connection, month_start, month_end):
+    cursor = connection.cursor()
+    cursor.execute(
+        """
+        SELECT guild_id, COUNT(*) AS message_count
+        FROM hall_of_fame_message
+        WHERE created_at >= %s AND created_at < %s
+        GROUP BY guild_id
+        ORDER BY message_count DESC
+        """,
+        (month_start, month_end),
+    )
+    rows = cursor.fetchall()
+    cursor.close()
+    return [{"guild_id": row[0], "message_count": row[1]} for row in rows]

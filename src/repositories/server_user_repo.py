@@ -17,6 +17,8 @@ def create_server_user_table(connection):
         )
         """
     )
+    cursor.execute("ALTER TABLE server_user DROP CONSTRAINT IF EXISTS server_user_pkey CASCADE;")
+    cursor.execute("ALTER TABLE server_user ADD PRIMARY KEY (user_id, guild_id);")
     connection.commit()
     cursor.close()
 

@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 import discord
 from discord import app_commands
 from discord.ext import commands as discord_commands
@@ -15,9 +15,19 @@ import os
 from translations import messages
 import psycopg2
 from psycopg2 import pool
-from repositories import server_config_repo, hall_of_fame_message_repo, server_user_repo, hof_wrapped_repo, hof_wrapped_guild_status_repo
+from repositories import (
+    server_config_repo,
+    hall_of_fame_message_repo,
+    server_user_repo,
+    hof_wrapped_repo,
+    hof_wrapped_guild_status_repo,
+    guild_lifecycle_event_repo,
+    guild_monthly_snapshot_repo,
+)
 import hof_wrapped
 from contextlib import asynccontextmanager
+from scripts import monthly_guild_snapshot
+import asyncio
 
 load_dotenv()
 dev_test = os.getenv('DEV_TEST') == "True"
@@ -112,6 +122,10 @@ async def daily_task():
     try:
         async with get_db_connection(connection_pool) as connection:
             await events.daily_task(bot, connection, server_classes, dev_test)
+
+            # Run snapshot work in thread executor to avoid blocking the event loop
+            await asyncio.to_thread(monthly_guild_snapshot.run_monthly_snapshot, connection, bot.guilds)
+
         await utils.logging(bot, f"Daily task completed")
     except Exception as e:
         await utils.logging(bot, f"Error in daily_task: {e}")
@@ -133,6 +147,10 @@ def setup_databases(connection):
     hof_wrapped_repo.create_hof_wrapped_table(connection)
     print("Creating hof wrapped guild status table...")
     hof_wrapped_guild_status_repo.create_hof_wrapped_progress_table(connection)
+    print("Creating guild lifecycle event table...")
+    guild_lifecycle_event_repo.create_guild_lifecycle_event_table(connection)
+    print("Creating guild monthly snapshot table...")
+    guild_monthly_snapshot_repo.create_guild_monthly_snapshot_table(connection)
 
 @bot.event
 async def on_raw_reaction_add(payload: discord.RawReactionActionEvent):
@@ -146,7 +164,8 @@ async def on_raw_reaction_add(payload: discord.RawReactionActionEvent):
             async with get_db_connection(connection_pool) as connection:
                 await events.on_raw_reaction(payload, bot, connection, server_class.reaction_threshold,
                                              server_class.post_due_date, server_class.hall_of_fame_channel_id,
-                                             server_class.ignore_bot_messages, server_class.hide_hof_post_below_threshold)
+                                             server_class.ignore_bot_messages, server_class.hide_hof_post_below_threshold,
+                                             server_class.require_image_or_video)
             messages_processing.remove(payload.message_id)
     except Exception as e:
         await utils.logging(bot, f"Error in on_raw_reaction_add: {e}", payload.guild_id, validate_for_duplicates=True)
@@ -166,7 +185,8 @@ async def on_raw_reaction_remove(payload: discord.RawReactionActionEvent):
             async with get_db_connection(connection_pool) as connection:
                 await events.on_raw_reaction(payload, bot, connection, server_class.reaction_threshold,
                                              server_class.post_due_date, server_class.hall_of_fame_channel_id,
-                                             server_class.ignore_bot_messages, server_class.hide_hof_post_below_threshold)
+                                             server_class.ignore_bot_messages, server_class.hide_hof_post_below_threshold,
+                                             server_class.require_image_or_video)
             messages_processing.remove(payload.message_id)
     except Exception as e:
         await utils.logging(bot, f"Error in on_raw_reaction_remove: {e}", payload.guild_id, validate_for_duplicates=True)
@@ -177,6 +197,14 @@ async def on_raw_reaction_remove(payload: discord.RawReactionActionEvent):
 async def on_message(message: discord.Message):
     if message.author == bot.user or message.guild is None or message.guild.id not in server_classes:
         return
+
+    if message.guild.id == 1180006529575960616 and message.type in (discord.MessageType.new_member, 7):
+        welcome_message = f"Welcome to the Hall of Fame support server, {message.author.mention}! Please check out the <#1493561648009580585> channel for getting help with commonly asked questions, otherwise you can just ask away in the chat."
+        if message.channel.permissions_for(message.guild.me).send_messages:
+            await message.channel.send(welcome_message)
+        # Assuming the rest of the code doesn't need to process new member messages for this guild
+        return
+
     try:
         server_class = server_classes[message.guild.id]
         target_channel_id = server_class.hall_of_fame_channel_id
@@ -193,11 +221,14 @@ async def on_guild_join(server):
     try:
         async with get_db_connection(connection_pool) as connection:
             server_config_repo.insert_server_config(connection, server.id)
+            new_server_class = await events.guild_join(server, connection, bot)
+            guild_lifecycle_event_repo.insert_guild_lifecycle_event(
+                connection, server.id, "JOIN", datetime.now(timezone.utc)
+            )
     except Exception as e:
         await utils.logging(bot, f"Error in on_guild_join: {e}", server.id, log_level=log_type.ERROR)
         return
 
-    new_server_class = await events.guild_join(server, connection, bot)
     if new_server_class is None:
         return
     server_classes[server.id] = new_server_class
@@ -211,6 +242,9 @@ async def on_guild_remove(server):
     await utils.logging(bot, f"Left server {server.name}", server.id, log_level=log_type.SYSTEM)
     async with get_db_connection(connection_pool) as connection:
         await events.guild_remove(server, connection)
+        guild_lifecycle_event_repo.insert_guild_lifecycle_event(
+            connection, server.id, "LEAVE", datetime.now(timezone.utc)
+        )
     if server.id in server_classes:
         del server_classes[server.id]
     await post_api_bot_stats()
@@ -270,6 +304,22 @@ async def allow_messages_in_hof_channel(interaction: discord.Interaction, allow:
     await interaction.response.send_message(messages.ALLOW_POST_IN_HOF.format(allow=allow))
     await utils.logging(bot, f"Allow messages in Hall of Fame channel command used by {interaction.user.name} in {interaction.guild.name}",
                         interaction.guild.id, allow, log_level=log_type.COMMAND)
+
+@tree.command(name="require_image_or_video", description="Should only messages with images or videos be allowed in the Hall of Fame?")
+async def require_image_or_video(interaction: discord.Interaction, require: bool):
+    if not bot_is_loaded():
+        return
+
+    if not await check_if_user_has_manage_server_permission(interaction):
+        return
+
+    async with get_db_connection(connection_pool) as connection:
+        server_config_repo.update_server_config_param(interaction.guild_id, "require_image_or_video", require, connection)
+    server_classes[interaction.guild_id].require_image_or_video = require
+    # noinspection PyUnresolvedReferences
+    await interaction.response.send_message(f"Require image or video set to {require}")
+    await utils.logging(bot, f"Require image or video command used by {interaction.user.name} in {interaction.guild.name}",
+                        interaction.guild.id, str(require), log_level=log_type.COMMAND)
 
 @tree.command(name="vote", description="Vote for the bot on top.gg")
 async def vote(interaction: discord.Interaction):
@@ -409,8 +459,10 @@ async def get_server_config(interaction: discord.Interaction):
         post_due_date=server_class.post_due_date,
         calculation_method=server_class.reaction_count_calculation_method,
         hide_hof_post_below_threshold=server_class.hide_hof_post_below_threshold,
-        whitelisted_emojis=', '.join(server_class.whitelisted_emojis) if server_class.custom_emoji_check_logic else ''
+        whitelisted_emojis=', '.join(server_class.whitelisted_emojis) if server_class.custom_emoji_check_logic else '',
+        require_image_or_video=server_class.require_image_or_video
     )
+
     if server_class.custom_emoji_check_logic:
         config_message += f"Whitelisted Emojis: {', '.join(server_class.whitelisted_emojis)}\n"
     config_message += f"```"
