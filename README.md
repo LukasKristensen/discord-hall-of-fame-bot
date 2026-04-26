@@ -49,6 +49,16 @@ A custom emoji filter can be applied to the bot, so that it will only look for e
 
 ## Development Log
 
+### 2.0
+- [x] Added require_image_or_video server option to enforce media presence in embeds.
+- [x] Added welcome message for the support server.
+- [x]  Fixed images not appearing in embeds when using links.
+- [x]  Improved handling of replies with attachments in embeds.
+- [x]  Extended server statistics.
+- [x]  Refactored server stats backend from MongoDB to PostgreSQL for improved performance and reliability.
+- [x]  Resolved primary key issues for user_id and enforced foreign key constraints.
+- [x]  Made timestamps timezone-aware and improved snapshot batching.
+
 ### 1.17
 - [x] /get_user_profile updated to clarify the 24h calculation window.
 - [x] /set_hall_of_fame_channel command added to manually set the Hall of Fame channel, providing more flexibility for server admins.
