@@ -71,11 +71,15 @@ async def validate_message(discord_message: discord.RawReactionActionEvent, bot:
 
     if hall_of_fame_message_repo.guild_message_count_today(connection, guild_id) > daily_post_limit:
         await logging(bot, f"Guild {guild_id} has exceeded the daily limit for hall of fame posts.", discord_message.guild.id, log_level=log_type.CRITICAL, validate_for_duplicates=True)
-        existing_messages = [message async for message in target_channel.history(limit=10)]
+        existing_messages = [message async for message in target_channel.history(limit=30)]
         for existing_message in existing_messages:
-            if existing_message.author.id == bot.user.id and "has exceeded the daily limit" in existing_message.content:
+            if existing_message.author.id == bot.user.id and "has hit the daily limit of" in existing_message.content:
                 return
-        await target_channel.send(f"⚠️ Guild {discord_message.guild.name} has exceeded the daily limit {daily_post_limit} for hall of fame posts. ⚠️")
+        await target_channel.send(
+            f"⚠️ **Hall of Fame limit reached**\n"
+            f"Server **{discord_message.guild.name}** has hit the daily limit of **{daily_post_limit} posts**.\n"
+            f"No more messages will be added until tomorrow."
+        )
         return
 
     # Gets the adjusted reaction count corrected for not accounting the author
