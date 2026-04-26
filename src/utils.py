@@ -69,7 +69,7 @@ async def validate_message(discord_message: discord.RawReactionActionEvent, bot:
 
     target_channel = bot.get_channel(target_channel_id)
 
-    if hall_of_fame_message_repo.guild_message_count_past_24_hours(connection, guild_id) > daily_post_limit:
+    if hall_of_fame_message_repo.guild_message_count_today(connection, guild_id) > daily_post_limit:
         await logging(bot, f"Guild {guild_id} has exceeded the daily limit for hall of fame posts.", discord_message.guild.id, log_level=log_type.CRITICAL, validate_for_duplicates=True)
         existing_messages = [message async for message in target_channel.history(limit=10)]
         for existing_message in existing_messages:

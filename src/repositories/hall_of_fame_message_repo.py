@@ -69,12 +69,13 @@ def find_hall_of_fame_message(connection, guild_id, channel_id, message_id):
     cursor.close()
     return dict(zip(columns, row)) if row else None
 
-def guild_message_count_past_24_hours(connection, guild_id):
+def guild_message_count_today(connection, guild_id):
     cursor = connection.cursor()
     cursor.execute("""
-        SELECT COUNT(*) FROM hall_of_fame_message 
-        WHERE guild_id = %s AND created_at >= NOW() - INTERVAL '24 HOURS'
-    """, (guild_id,))
+            SELECT COUNT(*) FROM hall_of_fame_message 
+            WHERE guild_id = %s 
+            AND created_at >= DATE_TRUNC('day', NOW())
+        """, (guild_id,))
     result = cursor.fetchone()
     cursor.close()
     return result[0] if result else 0
