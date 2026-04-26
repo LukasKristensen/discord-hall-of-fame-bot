@@ -27,6 +27,7 @@ from repositories import (
 import hof_wrapped
 from contextlib import asynccontextmanager
 from scripts import monthly_guild_snapshot
+import asyncio
 
 load_dotenv()
 dev_test = os.getenv('DEV_TEST') == "True"
@@ -121,7 +122,10 @@ async def daily_task():
     try:
         async with get_db_connection(connection_pool) as connection:
             await events.daily_task(bot, connection, server_classes, dev_test)
-            monthly_guild_snapshot.run_monthly_snapshot(connection, bot.guilds)
+
+            # Run snapshot work in thread executor to avoid blocking the event loop
+            await asyncio.to_thread(monthly_guild_snapshot.run_monthly_snapshot, connection, bot.guilds)
+
         await utils.logging(bot, f"Daily task completed")
     except Exception as e:
         await utils.logging(bot, f"Error in daily_task: {e}")

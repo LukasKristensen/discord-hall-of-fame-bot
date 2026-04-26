@@ -383,12 +383,17 @@ def create_histogram_of_messages_per_month():
 
 
 def get_month_window(reference_dt=None):
-    now = reference_dt or datetime.now(timezone.utc)
-    month_start = datetime(now.year, now.month, 1)
-    if now.month == 12:
-        next_month_start = datetime(now.year + 1, 1, 1)
+    if reference_dt is None:
+        now = datetime.now(timezone.utc)
+    elif reference_dt.tzinfo is None:
+        now = reference_dt.replace(tzinfo=timezone.utc)
     else:
-        next_month_start = datetime(now.year, now.month + 1, 1)
+        now = reference_dt.astimezone(timezone.utc)
+    month_start = datetime(now.year, now.month, 1, tzinfo=timezone.utc)
+    if now.month == 12:
+        next_month_start = datetime(now.year + 1, 1, 1, tzinfo=timezone.utc)
+    else:
+        next_month_start = datetime(now.year, now.month + 1, 1, tzinfo=timezone.utc)
     return month_start, next_month_start
 
 
@@ -491,7 +496,7 @@ def create_monthly_messages_vs_members_scatter(reference_dt=None):
 def create_joins_leaves_per_month_plot():
     rows = guild_lifecycle_event_repo.get_monthly_join_leave_counts(
         connection,
-        datetime(2000, 1, 1),
+        datetime(2000, 1, 1, tzinfo=timezone.utc),
         datetime.now(timezone.utc),
     )
     if not rows:
@@ -527,7 +532,7 @@ def create_joins_leaves_per_month_plot():
 def create_active_servers_over_time_plot():
     rows = guild_lifecycle_event_repo.get_active_servers_timeseries(
         connection,
-        datetime(2000, 1, 1),
+        datetime(2000, 1, 1, tzinfo=timezone.utc),
         datetime.now(timezone.utc),
     )
     if not rows:

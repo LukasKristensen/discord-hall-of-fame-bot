@@ -7,9 +7,16 @@ def create_guild_monthly_snapshot_table(connection):
             month_start DATE NOT NULL,
             member_count INTEGER NOT NULL,
             message_count INTEGER NOT NULL DEFAULT 0,
-            captured_at TIMESTAMP NOT NULL,
+            captured_at TIMESTAMPTZ NOT NULL,
             PRIMARY KEY (guild_id, month_start)
         )
+        """
+    )
+    cursor.execute(
+        """
+        ALTER TABLE guild_monthly_snapshot
+        ALTER COLUMN captured_at TYPE TIMESTAMPTZ
+        USING captured_at AT TIME ZONE 'UTC'
         """
     )
     cursor.execute(
@@ -42,6 +49,31 @@ def upsert_guild_monthly_snapshot(
             captured_at = EXCLUDED.captured_at
         """,
         (guild_id, month_start, member_count, message_count, captured_at),
+    )
+    # Removing commit here because we want to commit outside in bulk
+    connection.commit()
+    cursor.close()
+
+def upsert_guild_monthly_snapshots_batch(connection, records):
+    """
+    records is a list of tuples: (guild_id, month_start, member_count, message_count, captured_at)
+    """
+    if not records:
+        return
+    cursor = connection.cursor()
+    from psycopg2.extras import execute_values
+    execute_values(
+        cursor,
+        """
+        INSERT INTO guild_monthly_snapshot
+            (guild_id, month_start, member_count, message_count, captured_at)
+        VALUES %s
+        ON CONFLICT (guild_id, month_start) DO UPDATE SET
+            member_count = EXCLUDED.member_count,
+            message_count = EXCLUDED.message_count,
+            captured_at = EXCLUDED.captured_at
+        """,
+        records,
     )
     connection.commit()
     cursor.close()
@@ -109,4 +141,3 @@ def get_monthly_messages_vs_members(connection, month_start):
         }
         for row in rows
     ]
-

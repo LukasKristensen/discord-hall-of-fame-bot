@@ -6,7 +6,7 @@ def create_guild_lifecycle_event_table(connection):
             id BIGSERIAL PRIMARY KEY,
             guild_id BIGINT NOT NULL,
             event_type VARCHAR(8) NOT NULL CHECK (event_type IN ('JOIN', 'LEAVE')),
-            occurred_at TIMESTAMP NOT NULL
+            occurred_at TIMESTAMPTZ NOT NULL
         )
         """
     )
@@ -104,8 +104,8 @@ def get_active_servers_timeseries(connection, start_month, end_month):
         """
         WITH months AS (
             SELECT generate_series(
-                DATE_TRUNC('month', %s::timestamp),
-                DATE_TRUNC('month', %s::timestamp) - INTERVAL '1 month',
+                DATE_TRUNC('month', %s::timestamptz),
+                DATE_TRUNC('month', %s::timestamptz) - INTERVAL '1 month',
                 INTERVAL '1 month'
             ) AS month_start
         )
