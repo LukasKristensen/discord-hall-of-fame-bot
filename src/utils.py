@@ -640,7 +640,7 @@ async def logging(bot: discord.Client, message, server_id=None, new_value=None, 
     target_guild = bot.get_guild(1180006529575960616)
     date_formatted_message = f"{datetime.datetime.now()}: {message}"
 
-    if new_value:
+    if new_value is not None:
         date_formatted_message += f"\n[Value: {new_value}]"
     if server_id:
         date_formatted_message += f"\n[Server ID: {server_id}]"
