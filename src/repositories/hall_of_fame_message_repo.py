@@ -136,21 +136,6 @@ def count_messages_for_guild(connection, guild_id):
     cursor.close()
     return result[0] if result else 0
 
-def get_monthly_total_message_count(connection, month_start, month_end):
-    cursor = connection.cursor()
-    cursor.execute(
-        """
-        SELECT COUNT(*)
-        FROM hall_of_fame_message
-        WHERE created_at >= %s AND created_at < %s
-        """,
-        (month_start, month_end),
-    )
-    result = cursor.fetchone()
-    cursor.close()
-    return result[0] if result else 0
-
-
 def get_monthly_message_counts_by_guild(connection, month_start, month_end):
     cursor = connection.cursor()
     cursor.execute(
@@ -166,41 +151,3 @@ def get_monthly_message_counts_by_guild(connection, month_start, month_end):
     rows = cursor.fetchall()
     cursor.close()
     return [{"guild_id": row[0], "message_count": row[1]} for row in rows]
-
-
-def get_monthly_message_count_for_guild(connection, guild_id, month_start, month_end):
-    cursor = connection.cursor()
-    cursor.execute(
-        """
-        SELECT COUNT(*)
-        FROM hall_of_fame_message
-        WHERE guild_id = %s AND created_at >= %s AND created_at < %s
-        """,
-        (guild_id, month_start, month_end),
-    )
-    result = cursor.fetchone()
-    cursor.close()
-    return result[0] if result else 0
-
-
-def get_monthly_timeseries_for_guild(connection, guild_id, start_month, end_month):
-    cursor = connection.cursor()
-    cursor.execute(
-        """
-        SELECT DATE_TRUNC('month', created_at) AS month_start, COUNT(*) AS message_count
-        FROM hall_of_fame_message
-        WHERE guild_id = %s AND created_at >= %s AND created_at < %s
-        GROUP BY DATE_TRUNC('month', created_at)
-        ORDER BY month_start ASC
-        """,
-        (guild_id, start_month, end_month),
-    )
-    rows = cursor.fetchall()
-    cursor.close()
-    return [{"month_start": row[0], "message_count": row[1]} for row in rows]
-
-
-def calculate_messages_per_1k_members(message_count, member_count):
-    if not member_count or member_count <= 0:
-        return 0.0
-    return round((message_count / member_count) * 1000, 2)
