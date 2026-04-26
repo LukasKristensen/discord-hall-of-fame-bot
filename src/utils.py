@@ -575,7 +575,9 @@ async def create_database_context(bot, server, connection, custom_channel=None) 
         ignore_bot_messages=False,
         reaction_count_calculation_method=calculation_method_type.MOST_REACTIONS_ON_EMOJI,
         hide_hof_post_below_threshold=True,
-        server_member_count=server_member_count)
+        server_member_count=server_member_count,
+        require_image_or_video=False
+    )
     return new_server_class
 
 

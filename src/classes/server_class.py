@@ -4,7 +4,7 @@ class Server:
                  allow_messages_in_hof_channel: bool, custom_emoji_check_logic: bool, whitelisted_emojis: list,
                  leaderboard_setup: bool, ignore_bot_messages: bool, reaction_count_calculation_method: str,
                  hide_hof_post_below_threshold: bool, leaderboard_message_ids: list, server_member_count: int,
-                 require_image_or_video: bool = False):
+                 require_image_or_video: bool):
         self.hall_of_fame_channel_id = hall_of_fame_channel_id
         self.guild_id = guild_id
         self.reaction_threshold = reaction_threshold
