@@ -29,6 +29,7 @@ SERVER_CONFIG = (
     "Post Validity (How many days back a post is considered valid): {post_due_date}\n"
     "Calculation Method: {calculation_method}\n"
     "Hide hall of fame posts when they are below the threshold: {hide_hof_post_below_threshold}\n"
+    "Only posts with images or videos are eligible for the hall of fame: {require_image_or_video}\n"
     "Custom Emoji Check Logic: {custom_emoji_check_logic}\n"
 )
 FAILED_SETUP_HOF = ("Failed to setup Hall Of Fame for server {serverName}.\n"

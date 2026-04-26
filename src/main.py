@@ -459,12 +459,9 @@ async def get_server_config(interaction: discord.Interaction):
         post_due_date=server_class.post_due_date,
         calculation_method=server_class.reaction_count_calculation_method,
         hide_hof_post_below_threshold=server_class.hide_hof_post_below_threshold,
-        whitelisted_emojis=', '.join(server_class.whitelisted_emojis) if server_class.custom_emoji_check_logic else ''
+        whitelisted_emojis=', '.join(server_class.whitelisted_emojis) if server_class.custom_emoji_check_logic else '',
+        require_image_or_video=server_class.require_image_or_video
     )
-    if server_class.require_image_or_video:
-        config_message = config_message.replace("```", f"Require Image/Video: {server_class.require_image_or_video}\n```")
-    else:
-        config_message = config_message.replace("```", f"Require Image/Video: False\n```", 1) # Only replace the first match just in case
 
     if server_class.custom_emoji_check_logic:
         config_message += f"Whitelisted Emojis: {', '.join(server_class.whitelisted_emojis)}\n"
