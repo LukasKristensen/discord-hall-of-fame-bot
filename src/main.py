@@ -195,6 +195,14 @@ async def on_raw_reaction_remove(payload: discord.RawReactionActionEvent):
 async def on_message(message: discord.Message):
     if message.author == bot.user or message.guild is None or message.guild.id not in server_classes:
         return
+
+    if message.guild.id == 1180006529575960616 and message.type in (discord.MessageType.new_member, 7):
+        welcome_message = f"Welcome to the Hall of Fame support server, {message.author.mention}! Please check out the <#1493561648009580585> channel for getting help with commonly asked questions, otherwise you can just ask away in the chat."
+        if message.channel.permissions_for(message.guild.me).send_messages:
+            await message.channel.send(welcome_message)
+        # Assuming the rest of the code doesn't need to process new member messages for this guild
+        return
+
     try:
         server_class = server_classes[message.guild.id]
         target_channel_id = server_class.hall_of_fame_channel_id
