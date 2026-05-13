@@ -211,7 +211,7 @@ async def on_message(message: discord.Message):
         allow_messages_in_hof = server_class.allow_messages_in_hof_channel
         await events.on_message(message, target_channel_id, allow_messages_in_hof)
     except Exception as e:
-        await utils.logging(bot, f"Error in on_message: {e}", message.guild.id)
+        await utils.logging(bot, f"Error in on_message: {e}", message.guild.id, validate_for_duplicates=True)
 
 @bot.event
 async def on_guild_join(server):
