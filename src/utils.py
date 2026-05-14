@@ -561,6 +561,8 @@ async def create_database_context(bot, server, connection, custom_channel=None) 
         f"   Enable emoji filtering with {command_refs.CUSTOM_EMOJI_CHECK_LOGIC}\n\n"
         f"🧠 **Want to adjust how reactions are counted? (e.g. all votes on a message, not just the highest reaction)**\n"
         f"   Use {command_refs.CALCULATION_METHOD} to change the reaction count calculation method.\n\n"
+        f"🛡️ **Note on channel permissions:**\n"
+        f"   If most of your channels are view-blocked behind a certain role, the bot will not be able to see messages from these channels unless given that role.\n\n"
     )
 
     new_server_class = server_class.Server(
