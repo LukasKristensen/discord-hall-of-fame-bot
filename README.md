@@ -47,6 +47,21 @@ A custom emoji filter can be applied to the bot, so that it will only look for e
 <br>
 
 
+## Tests
+
+The reaction counting, embed formatting and server config validation are covered by unit tests that use
+lightweight stand-ins for Discord and the database, so no bot token or Postgres instance is needed.
+
+```
+pip install -r requirements.txt
+python -m unittest discover -s tests -t .
+```
+
+The same command runs on every pull request through the ``Tests`` workflow.
+
+<br>
+
+
 ## Development Log
 
 ### 2.0
