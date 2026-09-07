@@ -33,6 +33,9 @@ async def validate_message(discord_message: discord.RawReactionActionEvent, bot:
     guild_id: int = discord_message.guild_id
 
     channel = bot.get_channel(channel_id)
+    if channel is None:
+        # The channel is not cached, which happens when the bot cannot see it anymore
+        return
     if not channel.permissions_for(channel.guild.me).read_messages:
         await logging(bot, f"Bot does not have read message permissions in channel {channel.id} of guild {channel.guild.id}", channel.guild.id)
         return
@@ -68,8 +71,12 @@ async def validate_message(discord_message: discord.RawReactionActionEvent, bot:
             return
 
     target_channel = bot.get_channel(target_channel_id)
+    if target_channel is None:
+        await logging(bot, f"Could not find the Hall of Fame channel {target_channel_id} of guild {guild_id}",
+                      guild_id, validate_for_duplicates=True)
+        return
 
-    if hall_of_fame_message_repo.guild_message_count_today(connection, guild_id) > daily_post_limit:
+    if hall_of_fame_message_repo.guild_message_count_today(connection, guild_id) >= daily_post_limit:
         await logging(bot, f"Guild {guild_id} has exceeded the daily limit for hall of fame posts.", discord_message.guild.id, log_level=log_type.CRITICAL, validate_for_duplicates=True)
         existing_messages = [message async for message in target_channel.history(limit=30)]
         for existing_message in existing_messages:
@@ -82,8 +89,11 @@ async def validate_message(discord_message: discord.RawReactionActionEvent, bot:
         )
         return
 
+    # The reaction config is read once and reused, as counting reactions is done several times below
+    reaction_config = server_config_repo.get_reaction_config(connection, guild_id)
+
     # Gets the adjusted reaction count corrected for not accounting the author
-    corrected_reactions = await reaction_count(discord_message, connection)
+    corrected_reactions = await reaction_count(discord_message, connection, reaction_config)
     if corrected_reactions < reaction_threshold:
         if hide_hof_post_below_threshold and db_message:
             await remove_embed(db_message, bot, target_channel_id)
@@ -95,22 +105,25 @@ async def validate_message(discord_message: discord.RawReactionActionEvent, bot:
         return
 
     if db_message:
-        message_to_update = await bot.get_channel(target_channel_id).fetch_message(db_message["hall_of_fame_message_id"])
+        message_to_update = await target_channel.fetch_message(db_message["hall_of_fame_message_id"])
         if len(message_to_update.embeds) > 0:
-            hall_of_fame_message_repo.update_field_for_message(connection, guild_id, channel_id, message_id,"reaction_count", await reaction_count(discord_message, connection))
-            await update_reaction_counter(db_message, bot, target_channel_id, reaction_threshold, connection, discord_message)
+            hall_of_fame_message_repo.update_field_for_message(connection, guild_id, channel_id, message_id, "reaction_count", corrected_reactions)
+            await update_reaction_counter(db_message, bot, target_channel_id, reaction_threshold, connection,
+                                          discord_message, corrected_reactions, reaction_config)
             return
         else:
-            await message_to_update.edit(embed=await create_embed(discord_message, reaction_threshold, connection))
+            await message_to_update.edit(embed=await create_embed(discord_message, reaction_threshold, connection, reaction_config))
             if "video_link_message_id" in db_message and discord_message.attachments:
                 message_attachment = discord_message.attachments[0]
                 video_link_message = await target_channel.fetch_message(db_message["video_link_message_id"])
                 await video_link_message.edit(content=message_attachment.url, embed=None)
             return
-    await post_hall_of_fame_message(discord_message, bot, connection, target_channel_id, reaction_threshold)
+    await post_hall_of_fame_message(discord_message, bot, connection, target_channel_id, reaction_threshold, reaction_config)
 
 
-async def update_reaction_counter(db_message, bot: discord.Client, target_channel_id: int, reaction_threshold: int, connection, discord_message: discord.Message):
+async def update_reaction_counter(db_message, bot: discord.Client, target_channel_id: int, reaction_threshold: int,
+                                  connection, discord_message: discord.Message, corrected_reactions: int = None,
+                                  config: dict = None):
     """
     Update the reaction counter of a message in the Hall of Fame
     :param db_message:
@@ -119,6 +132,8 @@ async def update_reaction_counter(db_message, bot: discord.Client, target_channe
     :param reaction_threshold:
     :param connection:
     :param discord_message:
+    :param corrected_reactions: The already calculated reaction count, recalculated when not supplied
+    :param config: The reaction related server configuration, fetched when not supplied
     :return:
     """
     if not db_message["hall_of_fame_message_id"]:
@@ -126,17 +141,20 @@ async def update_reaction_counter(db_message, bot: discord.Client, target_channe
     hall_of_fame_message_id = db_message["hall_of_fame_message_id"]
 
     target_channel = bot.get_channel(target_channel_id)
+    if target_channel is None:
+        return
     hall_of_fame_message = await target_channel.fetch_message(hall_of_fame_message_id)
 
     if not hall_of_fame_message.embeds:
         # Post the message in the Hall of Fame channel if it was removed
-        await hall_of_fame_message.edit(embed=await create_embed(discord_message, reaction_threshold, connection))
+        await hall_of_fame_message.edit(embed=await create_embed(discord_message, reaction_threshold, connection, config))
         return
 
     embed = hall_of_fame_message.embeds[0]
-    corrected_reactions = await reaction_count(discord_message, connection)
-    top_reaction = most_reacted_emoji(discord_message.reactions, discord_message.guild.id, connection)
-    reactions_field_value = f"{corrected_reactions} {top_reaction}".strip()
+    if corrected_reactions is None:
+        corrected_reactions = await reaction_count(discord_message, connection, config)
+    top_reaction = most_reacted_emoji(discord_message.reactions, discord_message.guild.id, connection, config)
+    reactions_field_value = format_reactions_field_value(corrected_reactions, top_reaction)
 
     for i, field in enumerate(embed.fields):
         field_name = (field.name or "").strip()
@@ -164,6 +182,8 @@ async def remove_embed(message, bot: discord.Client, target_channel_id: int):
         return
     hall_of_fame_message_id = message["hall_of_fame_message_id"]
     target_channel = bot.get_channel(target_channel_id)
+    if target_channel is None:
+        return
     hall_of_fame_message = await target_channel.fetch_message(hall_of_fame_message_id)
     await hall_of_fame_message.edit(content="** **", embed=None)
 
@@ -186,6 +206,7 @@ async def update_leaderboard(connection, bot: discord.Client, server_config: ser
 
     server_messages = hall_of_fame_message_repo.find_top_messages_by_reaction_count(connection, int(server_config.guild_id), limit=30)
     most_reacted_messages = list(server_messages)
+    reaction_config = server_config_repo.get_reaction_config(connection, int(server_config.guild_id))
 
     # Update the reaction count of the top 30 most reacted messages
     for i in range(min(len(most_reacted_messages), 30)):
@@ -195,7 +216,7 @@ async def update_leaderboard(connection, bot: discord.Client, server_config: ser
             continue
         message = await channel.fetch_message(int(message["message_id"]))
         hall_of_fame_message_repo.update_field_for_message(connection, int(server_config.guild_id), message.channel.id, message.id,
-                                                          "reaction_count", await reaction_count(message, connection))
+                                                          "reaction_count", await reaction_count(message, connection, reaction_config))
 
     # Update the top 20 messages in the leaderboard
     for i in range(min(20, len(most_reacted_messages), len(msg_id_array))):
@@ -203,10 +224,14 @@ async def update_leaderboard(connection, bot: discord.Client, server_config: ser
         original_channel = bot.get_channel(int(most_reacted_messages[i]["channel_id"]))
         original_message = await original_channel.fetch_message(int(most_reacted_messages[i]["message_id"]))
 
-        await hall_of_fame_message.edit(embed=await create_embed(original_message, server_config.reaction_threshold, connection))
-        await hall_of_fame_message.edit(content=f"**HallOfFame#{i+1}**")
+        leaderboard_content = f"**HallOfFame#{i+1}**"
         if original_message.attachments:
-            await hall_of_fame_message.edit(content=f"**HallOfFame#{i+1}**\n{original_message.attachments[0].url}")
+            leaderboard_content += f"\n{original_message.attachments[0].url}"
+
+        # Edited in one request, as editing the same message several times triples the rate limit cost
+        await hall_of_fame_message.edit(
+            content=leaderboard_content,
+            embed=await create_embed(original_message, server_config.reaction_threshold, connection, reaction_config))
 
 
 # Todo: Disabled, if re-enable needs to be refactored for the new database structure
@@ -280,7 +305,7 @@ async def check_all_server_messages(guild_id: int, sweep_limit, sweep_limited: b
 
 
 async def post_hall_of_fame_message(message: discord.Message, bot: discord.Client, connection, target_channel_id: int,
-                                    reaction_threshold: int):
+                                    reaction_threshold: int, config: dict = None):
     """
     Post a message in the Hall of Fame channel
     :param message:
@@ -288,16 +313,21 @@ async def post_hall_of_fame_message(message: discord.Message, bot: discord.Clien
     :param connection:
     :param target_channel_id:
     :param reaction_threshold:
+    :param config: The reaction related server configuration, fetched when not supplied
     :return:
     """
     target_channel = bot.get_channel(target_channel_id)
+    if target_channel is None:
+        await logging(bot, f"Could not find the Hall of Fame channel {target_channel_id} of guild {message.guild.id}",
+                      message.guild.id, validate_for_duplicates=True)
+        return
     video_link = check_video_extension(message)
     video_message = None
 
     if video_link:
         video_message = await target_channel.send(video_link)
 
-    embed = await create_embed(message, reaction_threshold, connection)
+    embed = await create_embed(message, reaction_threshold, connection, config)
     hall_of_fame_message = await target_channel.send(embed=embed)
 
     try:
@@ -306,7 +336,7 @@ async def post_hall_of_fame_message(message: discord.Message, bot: discord.Clien
                                                               int(message.channel.id),
                                                               int(message.guild.id),
                                                               int(hall_of_fame_message.id),
-                                                              int(await reaction_count(message, connection)),
+                                                              int(await reaction_count(message, connection, config)),
                                                               int(message.author.id),
                                                               datetime.datetime.now(timezone.utc),
                                                               int(video_message.id) if video_link else None)
@@ -340,35 +370,60 @@ def format_reactions_field_value(count: int, top_reaction) -> str:
     return f"{count} {emoji}" if emoji else f"{count} reactions"
 
 
-async def create_embed(message: discord.Message, reaction_threshold: int, connection) -> discord.Embed:
+def truncate_content(content: str) -> str:
+    """
+    Truncate message content so that it fits within the 1024 character limit of an embed field
+    :param content: The content of a message
+    :return: The truncated content
+    """
+    if not content:
+        return ""
+    return content[:1021] + "..." if len(content) > 1024 else content
+
+
+def embed_field_value(content: str) -> str:
+    """
+    Discord rejects embed fields with an empty value, so messages without text fall back to a zero width space
+    :param content: The content of a message
+    :return: A value that is safe to use for an embed field
+    """
+    return content if content else "​"
+
+
+async def create_embed(message: discord.Message, reaction_threshold: int, connection, config: dict = None) -> discord.Embed:
     """
     Create an embed for a message in the Hall of Fame channel
     :param message: The message to create an embed for
     :param reaction_threshold: The minimum number of reactions for a message to be posted in the Hall of Fame
     :param connection: MySQL connection
+    :param config: The reaction related server configuration, fetched when not supplied
     :return: The embed for the message
     """
     # handle 1024 character limit on embed description
-    message.content = message.content[:1021] + "..." if len(message.content) > 1024 else message.content
+    content = truncate_content(message.content)
     reference_message = None
-    if message.reference:
-        reference_message = await message.channel.fetch_message(message.reference.message_id)
-        reference_message.content = reference_message.content[:1021] + "..." if len(reference_message.content) > 1024 else reference_message.content
-    corrected_reactions = await reaction_count(message, connection)
-    top_reaction = most_reacted_emoji(message.reactions, message.guild.id, connection)
+    if message.reference and message.reference.message_id:
+        try:
+            reference_message = await message.channel.fetch_message(message.reference.message_id)
+        except discord.HTTPException:
+            # The message that was replied to is gone, so the reply is embedded on its own
+            reference_message = None
+    reference_content = truncate_content(reference_message.content) if reference_message else ""
+    corrected_reactions = await reaction_count(message, connection, config)
+    top_reaction = most_reacted_emoji(message.reactions, message.guild.id, connection, config)
     reactions_field_value = format_reactions_field_value(corrected_reactions, top_reaction)
 
     # Check if the message is a sticker and has a reference
-    if message.reference and message.stickers:
+    if reference_message and message.stickers:
         sticker = message.stickers[0]
         embed = discord.Embed(
-            description=message.content,
+            description=content,
             color=discord.Color.gold()
         )
         embed.set_image(url=sticker.url)
         embed.set_author(name=message.author.name, icon_url=message.author.avatar.url if message.author.avatar else None)
 
-        embed.add_field(name=f"{reference_message.author.name}'s message:", value=reference_message.content, inline=False)
+        embed.add_field(name=f"{reference_message.author.name}'s message:", value=embed_field_value(reference_content), inline=False)
 
         embed.add_field(name="Reactions", value=reactions_field_value, inline=True)
         embed.add_field(name="Jump to Message", value=message.jump_url, inline=False)
@@ -380,7 +435,7 @@ async def create_embed(message: discord.Message, reaction_threshold: int, connec
     elif message.stickers:
         sticker = message.stickers[0]
         embed = discord.Embed(
-            description=message.content,
+            description=content,
             color=discord.Color.gold()
         )
         embed.set_image(url=sticker.url)
@@ -391,7 +446,7 @@ async def create_embed(message: discord.Message, reaction_threshold: int, connec
         return embed
 
     # Check if the message is a reply to another message
-    elif message.reference and not message.attachments:
+    elif reference_message and not message.attachments:
         embed = discord.Embed(
             color=discord.Color.gold()
         )
@@ -401,18 +456,18 @@ async def create_embed(message: discord.Message, reaction_threshold: int, connec
         if reference_message.attachments:
 
             # Author of the original message
-            embed.add_field(name=f"{message.author.name}'s reply:", value=message.content, inline=False)
+            embed.add_field(name=f"{message.author.name}'s reply:", value=embed_field_value(content), inline=False)
 
             # Replied message
-            embed.add_field(name=f"{reference_message.author.name}'s message:", value=reference_message.content, inline=False)
+            embed.add_field(name=f"{reference_message.author.name}'s message:", value=embed_field_value(reference_content), inline=False)
             embed.add_field(name="Reactions", value=reactions_field_value, inline=True)
             embed.add_field(name="Jump to Message", value=message.jump_url, inline=False)
             embed.set_image(url=reference_message.attachments[0].url)
         else:
             # Author of the replied message
-            embed.add_field(name=f"{reference_message.author.name}'s message:", value=reference_message.content, inline=False)
+            embed.add_field(name=f"{reference_message.author.name}'s message:", value=embed_field_value(reference_content), inline=False)
             # Author of the original message
-            embed.add_field(name=f"{message.author.name}'s reply:", value=message.content, inline=False)
+            embed.add_field(name=f"{message.author.name}'s reply:", value=embed_field_value(content), inline=False)
 
             embed.add_field(name="Reactions", value=reactions_field_value, inline=True)
             embed.add_field(name="Jump to Message", value=message.jump_url, inline=False)
@@ -420,7 +475,7 @@ async def create_embed(message: discord.Message, reaction_threshold: int, connec
         return embed
 
     # Include the reference message in the embed if the message has both a reference and attachment with an image content type
-    elif message.reference and message.attachments and message.attachments[0].content_type and message.attachments[0].content_type.startswith('image'):
+    elif reference_message and message.attachments and message.attachments[0].content_type and message.attachments[0].content_type.startswith('image'):
         embed = discord.Embed(
             color=discord.Color.gold()
         )
@@ -428,10 +483,10 @@ async def create_embed(message: discord.Message, reaction_threshold: int, connec
         embed.set_author(name=message.author.name, icon_url=message.author.avatar.url if message.author.avatar else None)
 
         # Original message
-        embed.add_field(name=f"{reference_message.author.name}'s message:", value=reference_message.content, inline=False)
+        embed.add_field(name=f"{reference_message.author.name}'s message:", value=embed_field_value(reference_content), inline=False)
 
         # Reply message
-        embed.add_field(name=f"{message.author.name}'s reply:", value=message.content, inline=False)
+        embed.add_field(name=f"{message.author.name}'s reply:", value=embed_field_value(content), inline=False)
         embed.add_field(name="Reactions", value=reactions_field_value, inline=True)
         embed.add_field(name="Jump to Message", value=message.jump_url, inline=False)
         
@@ -442,16 +497,16 @@ async def create_embed(message: discord.Message, reaction_threshold: int, connec
         return embed
 
     # Include the reference message in the embed if the message has both a reference and attachment but the attachment is not an image (e.g. video, file, etc.)
-    elif message.reference and message.attachments:
+    elif reference_message and message.attachments:
         embed = discord.Embed(
             color=discord.Color.gold()
         )
 
         # Original message
-        embed.add_field(name=f"{reference_message.author.name}'s message:", value=reference_message.content, inline=False)
+        embed.add_field(name=f"{reference_message.author.name}'s message:", value=embed_field_value(reference_content), inline=False)
 
         # Reply message
-        embed.add_field(name=f"{message.author.name}'s reply:", value=message.content, inline=False)
+        embed.add_field(name=f"{message.author.name}'s reply:", value=embed_field_value(content), inline=False)
         attachment = message.attachments[0]
         embed.add_field(name="Attachment", value=f"{attachment.url}", inline=False)
 
@@ -462,7 +517,7 @@ async def create_embed(message: discord.Message, reaction_threshold: int, connec
         return embed
     else:
         embed = discord.Embed(
-            description=message.content,
+            description=content,
             color=discord.Color.gold()
         )
 
@@ -661,7 +716,7 @@ async def logging(bot: discord.Client, message, server_id=None, new_value=None, 
                 if existing_message.author.id == bot.user.id and message in existing_message.content:
                     return  # Do not send duplicate error message
 
-        message_prefix = "<@230698327589650432> " if log_type == log_type.CRITICAL else ""
+        message_prefix = "<@230698327589650432> " if log_level == log_type.CRITICAL else ""
         await channel.send(f"{message_prefix}```diff\n{date_formatted_message}\n```")
 
 

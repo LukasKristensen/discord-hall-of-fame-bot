@@ -50,6 +50,12 @@ A custom emoji filter can be applied to the bot, so that it will only look for e
 ## Development Log
 
 ### 2.0
+- [x] Fixed the emoji whitelist matching on partial emojis, so a reaction is only counted when it is whitelisted exactly.
+- [x] Fixed the total reactions calculation method discarding a whole reaction instead of a single vote when the author is excluded.
+- [x] Fixed developer ping notifications for critical runtime errors, which never triggered.
+- [x] Fixed Hall of Fame posts failing when the message that was replied to has been deleted, or when a reply has no text.
+- [x] Reduced the database and Discord API calls needed per reaction, making reaction handling noticeably lighter.
+- [x] Commands now answer with a loading notice while the bot is still starting up instead of timing out silently.
 - [x] Added require_image_or_video server option to enforce media presence in embeds.
 - [x] Added welcome message for the support server.
 - [x]  Fixed images not appearing in embeds when using links.
