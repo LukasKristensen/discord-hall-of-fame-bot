@@ -40,8 +40,9 @@ class FakeAttachment:
 
 
 class FakeCursor:
-    def __init__(self, row):
+    def __init__(self, row, rows=None):
         self.row = row
+        self.rows = rows if rows is not None else []
         self.executed = []
 
     def execute(self, query, params=None):
@@ -50,6 +51,9 @@ class FakeCursor:
     def fetchone(self):
         return self.row
 
+    def fetchall(self):
+        return self.rows
+
     def close(self):
         pass
 
@@ -57,12 +61,13 @@ class FakeCursor:
 class FakeConnection:
     """Connection that hands out cursors returning a single canned row."""
 
-    def __init__(self, row=None):
+    def __init__(self, row=None, rows=None):
         self.row = row
+        self.rows = rows
         self.cursors = []
 
     def cursor(self):
-        cursor = FakeCursor(self.row)
+        cursor = FakeCursor(self.row, self.rows)
         self.cursors.append(cursor)
         return cursor
 
@@ -72,3 +77,33 @@ class FakeConnection:
     @property
     def queries(self):
         return [query for cursor in self.cursors for query, _ in cursor.executed]
+
+
+class FakeLogChannel:
+    def __init__(self):
+        self.sent = []
+
+    async def send(self, content):
+        self.sent.append(content)
+
+
+class FakeLogGuild:
+    def __init__(self, channels=None):
+        self.channels = channels if channels is not None else {}
+
+    def get_channel(self, channel_id):
+        return self.channels.setdefault(channel_id, FakeLogChannel())
+
+
+class FakeBot:
+    """Just enough of a client for the logging helper: a support guild and an identity."""
+
+    PRODUCTION_APPLICATION_ID = 1177041673352663070
+
+    def __init__(self, guild=None, application_id=PRODUCTION_APPLICATION_ID, user_id=1):
+        self.application_id = application_id
+        self.guild = guild if guild is not None else FakeLogGuild()
+        self.user = FakeUser(user_id)
+
+    def get_guild(self, guild_id):
+        return self.guild

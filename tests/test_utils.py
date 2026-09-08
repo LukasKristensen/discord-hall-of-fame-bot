@@ -134,3 +134,138 @@ class CreateEmbedTests(unittest.IsolatedAsyncioTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class FakeSticker:
+    def __init__(self, url):
+        self.url = url
+
+
+def embed_with(type_name=None, url=None, image_url=None, thumbnail_url=None):
+    """A message embed as discord.py exposes it, used for the link preview fallbacks."""
+    return types.SimpleNamespace(
+        type=type_name,
+        url=url,
+        image=types.SimpleNamespace(url=image_url) if image_url else None,
+        thumbnail=types.SimpleNamespace(url=thumbnail_url) if thumbnail_url else None
+    )
+
+
+class CreateEmbedContentTests(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        patcher = mock.patch("utils.random.random", return_value=1.0)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    @staticmethod
+    def field_named(embed, name):
+        return next((field for field in embed.fields if field.name == name), None)
+
+    async def test_does_not_change_the_message_it_was_given(self):
+        # The message comes from the discord.py cache, so truncating it in place corrupts the cache
+        message = FakeEmbedMessage(content="a" * 2000)
+        await utils.create_embed(message, 5, None, REACTION_CONFIG)
+
+        self.assertEqual(2000, len(message.content))
+
+    async def test_truncates_long_content_in_the_embed(self):
+        embed = await utils.create_embed(FakeEmbedMessage(content="a" * 2000), 5, None, REACTION_CONFIG)
+
+        self.assertEqual(1024, len(embed.description))
+        self.assertTrue(embed.description.endswith("..."))
+
+    async def test_shows_the_reaction_count_and_the_top_emoji(self):
+        message = FakeEmbedMessage(reactions=[FakeReaction("😂", [1, 2, 3]), FakeReaction("👍", [4])])
+        embed = await utils.create_embed(message, 5, None, REACTION_CONFIG)
+
+        self.assertEqual("3 😂", self.field_named(embed, "Reactions").value)
+
+    async def test_uses_the_attachment_as_the_image(self):
+        message = FakeEmbedMessage(content="look", attachments=[FakeAttachment("https://cdn/x.png", "image/png")])
+        embed = await utils.create_embed(message, 5, None, REACTION_CONFIG)
+
+        self.assertEqual("https://cdn/x.png", embed.image.url)
+
+    async def test_falls_back_to_an_embedded_image_from_a_link(self):
+        message = FakeEmbedMessage(content="https://example.com/x")
+        message.embeds = [embed_with(type_name="image", url="https://example.com/x.png")]
+        embed = await utils.create_embed(message, 5, None, REACTION_CONFIG)
+
+        self.assertEqual("https://example.com/x.png", embed.image.url)
+
+    async def test_falls_back_to_an_embedded_thumbnail(self):
+        message = FakeEmbedMessage(content="https://example.com/x")
+        message.embeds = [embed_with(type_name="link", thumbnail_url="https://example.com/thumb.png")]
+        embed = await utils.create_embed(message, 5, None, REACTION_CONFIG)
+
+        self.assertEqual("https://example.com/thumb.png", embed.image.url)
+
+    async def test_shows_a_sticker_as_the_image(self):
+        message = FakeEmbedMessage(content="nice")
+        message.stickers = [FakeSticker("https://cdn/sticker.png")]
+        embed = await utils.create_embed(message, 5, None, REACTION_CONFIG)
+
+        self.assertEqual("https://cdn/sticker.png", embed.image.url)
+        self.assertEqual("nice", embed.description)
+
+    async def test_shows_a_sticker_sent_as_a_reply_with_the_original_message(self):
+        referenced_message = FakeEmbedMessage(content="what do you think", author_name="original")
+        message = FakeEmbedMessage(content="", reference_message_id=42, channel=FakeChannel(referenced_message))
+        message.stickers = [FakeSticker("https://cdn/sticker.png")]
+        embed = await utils.create_embed(message, 5, None, REACTION_CONFIG)
+
+        self.assertEqual("https://cdn/sticker.png", embed.image.url)
+        self.assertEqual("what do you think", self.field_named(embed, "original's message:").value)
+
+    async def test_shows_a_reply_with_an_image_attachment(self):
+        referenced_message = FakeEmbedMessage(content="original text", author_name="original")
+        message = FakeEmbedMessage(content="my reply", reference_message_id=42,
+                                   channel=FakeChannel(referenced_message),
+                                   attachments=[FakeAttachment("https://cdn/reply.png", "image/png")])
+        embed = await utils.create_embed(message, 5, None, REACTION_CONFIG)
+
+        self.assertEqual("https://cdn/reply.png", embed.image.url)
+        self.assertEqual("original text", self.field_named(embed, "original's message:").value)
+        self.assertEqual("my reply", self.field_named(embed, "author's reply:").value)
+
+    async def test_links_a_reply_attachment_that_is_not_an_image(self):
+        referenced_message = FakeEmbedMessage(content="original text", author_name="original")
+        message = FakeEmbedMessage(content="my reply", reference_message_id=42,
+                                   channel=FakeChannel(referenced_message),
+                                   attachments=[FakeAttachment("https://cdn/clip.mp4", "video/mp4")])
+        embed = await utils.create_embed(message, 5, None, REACTION_CONFIG)
+
+        self.assertEqual("https://cdn/clip.mp4", self.field_named(embed, "Attachment").value)
+
+    async def test_shows_the_image_of_the_message_that_was_replied_to(self):
+        referenced_message = FakeEmbedMessage(content="original", author_name="original",
+                                              attachments=[FakeAttachment("https://cdn/original.png", "image/png")])
+        message = FakeEmbedMessage(content="my reply", reference_message_id=42,
+                                   channel=FakeChannel(referenced_message))
+        embed = await utils.create_embed(message, 5, None, REACTION_CONFIG)
+
+        self.assertEqual("https://cdn/original.png", embed.image.url)
+
+
+class SetFooterTests(unittest.IsolatedAsyncioTestCase):
+    async def test_usually_leaves_the_embed_alone(self):
+        with mock.patch("utils.random.random", return_value=1.0):
+            embed = await utils.set_footer(discord.Embed())
+
+        self.assertEqual([], embed.fields)
+
+    async def test_occasionally_asks_for_a_vote(self):
+        with mock.patch("utils.random.random", return_value=0.0):
+            embed = await utils.set_footer(discord.Embed())
+
+        self.assertEqual(1, len(embed.fields))
+        self.assertIn("top.gg", embed.fields[0].value)
+
+    async def test_never_asks_for_a_vote_on_an_embed_with_an_image(self):
+        embed_with_image = discord.Embed()
+        embed_with_image.set_image(url="https://cdn/x.png")
+
+        with mock.patch("utils.random.random", return_value=0.0):
+            embed = await utils.set_footer(embed_with_image)
+
+        self.assertEqual([], embed.fields)

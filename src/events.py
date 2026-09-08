@@ -47,27 +47,18 @@ async def bot_login(bot: discord.Client, tree):
     await utils.logging(bot, f"Total servers: {len(bot.guilds)}")
 
 
-async def on_raw_reaction(message: discord.RawReactionActionEvent, bot: discord.Client, connection,
-                          reaction_threshold: int, post_due_date: int, target_channel_id: int,
-                          ignore_bot_messages: bool, hide_hof_post_below_threshold: bool,
-                          require_image_or_video: bool = False):
+async def on_raw_reaction(message: discord.RawReactionActionEvent, bot: discord.Client, connection, server_config):
     """
     Event handler for when a reaction is added to a message
     :param message: The message that the reaction was removed from
     :param bot: The bot client
     :param connection:
-    :param reaction_threshold: The threshold for reactions
-    :param post_due_date: The due date for posting
-    :param target_channel_id: The target channel id
-    :param ignore_bot_messages: Whether to ignore bot messages
-    :param hide_hof_post_below_threshold: Whether to hide hall of fame posts below the threshold
-    :param require_image_or_video: Whether to require images or videos in the message
+    :param server_config: The in memory configuration of the server the reaction happened in
     :return: None
     """
 
     try:
-        await utils.validate_message(message, bot, connection, reaction_threshold, post_due_date,
-                                     target_channel_id, ignore_bot_messages, hide_hof_post_below_threshold, require_image_or_video)
+        await utils.validate_message(message, bot, connection, server_config)
     except Exception as e:
         if "Unknown Message" in str(e) or "object has no attribute" in str(e):
             return

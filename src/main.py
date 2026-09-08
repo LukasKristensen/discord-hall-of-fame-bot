@@ -5,6 +5,7 @@ from discord.ext import commands as discord_commands
 from discord.ext import tasks
 from dotenv import load_dotenv
 import commands
+import concurrency
 import events
 import utils
 from constants import version
@@ -33,7 +34,7 @@ load_dotenv()
 dev_test = os.getenv('DEV_TEST') == "True"
 if dev_test:
     TOKEN = os.getenv('DEV_KEY')
-    connection_pool = psycopg2.pool.SimpleConnectionPool(
+    connection_pool = psycopg2.pool.ThreadedConnectionPool(
         minconn=1,
         maxconn=10,
         host=os.getenv('POSTGRES_HOST_LOCAL'),
@@ -42,7 +43,7 @@ if dev_test:
         password=os.getenv('POSTGRES_PASSWORD'))
 else:
     TOKEN = os.getenv('KEY')
-    connection_pool = psycopg2.pool.SimpleConnectionPool(
+    connection_pool = psycopg2.pool.ThreadedConnectionPool(
         minconn=1,
         maxconn=10,
         host=os.getenv('POSTGRES_HOST'),
@@ -51,7 +52,7 @@ else:
         password=os.getenv('POSTGRES_PASSWORD'))
 topgg_api_key = os.getenv('TOPGG_API_KEY')
 
-messages_processing = set()
+message_locks = concurrency.KeyedLocks()
 daily_command_cooldowns = {}
 
 intents = discord.Intents.default()
@@ -172,22 +173,16 @@ async def handle_raw_reaction(payload: discord.RawReactionActionEvent, event_nam
     """
     if payload.guild_id not in server_classes or (payload.member is not None and payload.member.bot):
         return
-    if payload.message_id in messages_processing:
-        return
 
-    messages_processing.add(payload.message_id)
-    try:
-        server_class = server_classes[payload.guild_id]
+    # Reactions on the same message queue up instead of being dropped, so the newest count still wins
+    async with message_locks.acquire(payload.message_id):
+        try:
+            server_class = server_classes[payload.guild_id]
 
-        async with get_db_connection(connection_pool) as connection:
-            await events.on_raw_reaction(payload, bot, connection, server_class.reaction_threshold,
-                                         server_class.post_due_date, server_class.hall_of_fame_channel_id,
-                                         server_class.ignore_bot_messages, server_class.hide_hof_post_below_threshold,
-                                         server_class.require_image_or_video)
-    except Exception as e:
-        await utils.logging(bot, f"Error in {event_name}: {e}", payload.guild_id, validate_for_duplicates=True)
-    finally:
-        messages_processing.discard(payload.message_id)
+            async with get_db_connection(connection_pool) as connection:
+                await events.on_raw_reaction(payload, bot, connection, server_class)
+        except Exception as e:
+            await utils.logging(bot, f"Error in {event_name}: {e}", payload.guild_id, validate_for_duplicates=True)
 
 
 @bot.event

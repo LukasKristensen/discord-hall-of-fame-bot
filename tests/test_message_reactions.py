@@ -117,3 +117,87 @@ class ReactionCountTests(unittest.IsolatedAsyncioTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CustomEmoji:
+    """A server emoji, which discord.py represents as an object rather than a string."""
+
+    def __init__(self, name, emoji_id):
+        self.name = name
+        self.emoji_id = emoji_id
+
+    def __str__(self):
+        return f"<:{self.name}:{self.emoji_id}>"
+
+
+class WhitelistedCountingTests(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        self.whitelisted = FakeReaction("👍", [1, 2, 3])
+        self.ignored = FakeReaction("😂", [4, 5, 6, 7])
+        self.message = FakeMessage(author_id=10, reactions=[self.whitelisted, self.ignored])
+        self.config = config(custom_emoji_check=True, whitelist=["👍"])
+
+    async def test_total_reactions_only_counts_whitelisted_emojis(self):
+        self.assertEqual(3, await message_reactions.total_reaction_count(self.message, 1, None, self.config))
+
+    async def test_unique_users_only_counts_whitelisted_emojis(self):
+        self.assertEqual(3, await message_reactions.unique_reactor_count(self.message, None, self.config))
+
+    async def test_most_reactions_on_emoji_only_counts_whitelisted_emojis(self):
+        self.assertEqual(3, await message_reactions.most_reacted_emoji_from_message(self.message, None, self.config))
+
+    def test_the_top_emoji_is_taken_from_the_whitelisted_reactions(self):
+        self.assertEqual("👍", message_reactions.most_reacted_emoji(self.message.reactions, 1, None, self.config))
+
+    def test_nothing_is_returned_when_the_whitelist_excludes_every_reaction(self):
+        config_without_matches = config(custom_emoji_check=True, whitelist=["🔥"])
+        self.assertEqual("", message_reactions.most_reacted_emoji(self.message.reactions, 1, None,
+                                                                 config_without_matches))
+
+    async def test_no_reactions_are_counted_when_the_whitelist_excludes_every_reaction(self):
+        config_without_matches = config(custom_emoji_check=True, whitelist=["🔥"])
+        self.assertEqual(0, await message_reactions.reaction_count(self.message, None, config_without_matches))
+
+
+class CustomEmojiWhitelistTests(unittest.TestCase):
+    def test_a_server_emoji_is_matched_by_its_text_form(self):
+        emoji = CustomEmoji("pog", 123)
+        reaction = FakeReaction(emoji, [1])
+        filtered = message_reactions.filter_whitelisted_reactions(
+            [reaction], config(custom_emoji_check=True, whitelist=["<:pog:123>"]))
+
+        self.assertEqual([reaction], filtered)
+
+    def test_a_different_server_emoji_is_not_matched(self):
+        reaction = FakeReaction(CustomEmoji("pog", 999), [1])
+        filtered = message_reactions.filter_whitelisted_reactions(
+            [reaction], config(custom_emoji_check=True, whitelist=["<:pog:123>"]))
+
+        self.assertEqual([], filtered)
+
+    def test_several_whitelisted_emojis_are_all_kept(self):
+        reactions = [FakeReaction("👍", [1]), FakeReaction("🔥", [2]), FakeReaction("😂", [3])]
+        filtered = message_reactions.filter_whitelisted_reactions(
+            reactions, config(custom_emoji_check=True, whitelist=["👍", "🔥"]))
+
+        self.assertEqual(["👍", "🔥"], [reaction.emoji for reaction in filtered])
+
+
+class AuthorInclusionTests(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        self.message = FakeMessage(author_id=10, reactions=[FakeReaction("👍", [1, 2, 10])])
+
+    async def test_the_author_vote_counts_when_the_author_is_included(self):
+        self.assertEqual(3, await message_reactions.reaction_count(self.message, None, config()))
+
+    async def test_the_author_vote_is_removed_when_the_author_is_excluded(self):
+        self.assertEqual(2, await message_reactions.reaction_count(self.message, None, config(include_author=False)))
+
+    async def test_a_reaction_the_author_did_not_use_is_untouched(self):
+        message = FakeMessage(author_id=10, reactions=[FakeReaction("👍", [1, 2]), FakeReaction("😂", [3, 10])])
+        self.assertEqual(2, await message_reactions.reaction_count(
+            message, None, config(include_author=False, method=calculation_method_type.MOST_REACTIONS_ON_EMOJI)))
+
+    async def test_excluding_the_author_can_empty_a_reaction(self):
+        message = FakeMessage(author_id=10, reactions=[FakeReaction("👍", [10])])
+        self.assertEqual(0, await message_reactions.reaction_count(message, None, config(include_author=False)))

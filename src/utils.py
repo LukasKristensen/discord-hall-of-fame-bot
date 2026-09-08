@@ -7,30 +7,33 @@ from message_reactions import most_reacted_emoji, reaction_count
 from classes import server_class
 from enums import command_refs, log_type, calculation_method_type
 from repositories import server_config_repo, hall_of_fame_message_repo, server_user_repo, hof_wrapped_repo
+from caches import ExpiringSet
 
 daily_post_limit = 100
+duplicate_log_window_seconds = 600
+recently_logged_messages = ExpiringSet(ttl_seconds=duplicate_log_window_seconds)
 
 
 async def validate_message(discord_message: discord.RawReactionActionEvent, bot: discord.Client, connection,
-                           reaction_threshold: int, post_due_date: int, target_channel_id: int,
-                           ignore_bot_messages: bool, hide_hof_post_below_threshold: bool,
-                           require_image_or_video: bool = False):
+                           server_config: server_class.Server):
     """
     Check if the message is valid for posting based on the reaction count, date and origin of the message
     :param discord_message: The message to validate
     :param bot: The Discord bot
     :param connection: The database connection
-    :param reaction_threshold: The minimum number of reactions for a message to be posted in the Hall of Fame
-    :param post_due_date: The number of days after which a message is no longer eligible for the Hall of Fame
-    :param target_channel_id: The ID of the Hall of Fame channel
-    :param ignore_bot_messages: Whether to ignore messages from bots
-    :param hide_hof_post_below_threshold: Whether to hide the Hall of Fame post if the reaction count is below the threshold
-    :param require_image_or_video: Whether to require the message to contain an image or video
+    :param server_config: The in memory configuration of the server the reaction happened in
     :return: None
     """
     channel_id: int = discord_message.channel_id
     message_id: int = discord_message.message_id
     guild_id: int = discord_message.guild_id
+
+    reaction_threshold = server_config.reaction_threshold
+    post_due_date = server_config.post_due_date
+    target_channel_id = server_config.hall_of_fame_channel_id
+    ignore_bot_messages = server_config.ignore_bot_messages
+    hide_hof_post_below_threshold = server_config.hide_hof_post_below_threshold
+    require_image_or_video = server_config.require_image_or_video
 
     channel = bot.get_channel(channel_id)
     if channel is None:
@@ -89,8 +92,8 @@ async def validate_message(discord_message: discord.RawReactionActionEvent, bot:
         )
         return
 
-    # The reaction config is read once and reused, as counting reactions is done several times below
-    reaction_config = server_config_repo.get_reaction_config(connection, guild_id)
+    # Served from the in memory server config, so counting reactions costs no database round trips
+    reaction_config = server_config.reaction_config()
 
     # Gets the adjusted reaction count corrected for not accounting the author
     corrected_reactions = await reaction_count(discord_message, connection, reaction_config)
@@ -206,7 +209,7 @@ async def update_leaderboard(connection, bot: discord.Client, server_config: ser
 
     server_messages = hall_of_fame_message_repo.find_top_messages_by_reaction_count(connection, int(server_config.guild_id), limit=30)
     most_reacted_messages = list(server_messages)
-    reaction_config = server_config_repo.get_reaction_config(connection, int(server_config.guild_id))
+    reaction_config = server_config.reaction_config()
 
     # Update the reaction count of the top 30 most reacted messages
     for i in range(min(len(most_reacted_messages), 30)):
@@ -710,11 +713,10 @@ async def logging(bot: discord.Client, message, server_id=None, new_value=None, 
     if channel_id:
         channel = target_guild.get_channel(channel_id)
 
-        if validate_for_duplicates:
-            existing_messages = [msg async for msg in channel.history(limit=10)]
-            for existing_message in existing_messages:
-                if existing_message.author.id == bot.user.id and message in existing_message.content:
-                    return  # Do not send duplicate error message
+        # Checked in memory rather than by reading the channel history, which cost an API call per
+        # log line and grew worst during the incidents that produce the most logging
+        if validate_for_duplicates and not recently_logged_messages.add_if_absent(f"{log_level}:{message}"):
+            return  # Do not send duplicate error message
 
         message_prefix = "<@230698327589650432> " if log_level == log_type.CRITICAL else ""
         await channel.send(f"{message_prefix}```diff\n{date_formatted_message}\n```")
