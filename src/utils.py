@@ -811,65 +811,38 @@ async def create_custom_profile_picture_and_cover_form(interaction: discord.Inte
     await interaction.response.send_modal(CustomProfilePictureAndCoverModal())
 
 
+monthly_stats_window_days = 30
+
+
+def monthly_window_start(now=None):
+    """
+    The point the monthly hall of fame counters reach back to.
+
+    Returned naive in UTC, because created_at is a TIMESTAMP without a time zone holding UTC wall
+    time, and comparing it against an aware value would be resolved using the database session's
+    time zone rather than UTC.
+    :param now: The current time, taken from the clock when not supplied
+    :return: A naive UTC timestamp
+    """
+    now = now if now is not None else datetime.datetime.now(timezone.utc)
+    return (now - datetime.timedelta(days=monthly_stats_window_days)).replace(tzinfo=None)
+
+
 async def update_user_database(bot: discord.Client, connection):
     """
-    Update the user database with the latest information
+    Recompute the hall of fame totals and ranks for every guild the bot is in
     :param bot: The Discord bot
-    :param connection: MySQL connection
+    :param connection: The database connection
     :return: None
     """
     await logging(bot, f"Updating user database...")
+    window_start = monthly_window_start()
+
     for guild in bot.guilds:
-        if not server_config_repo.check_if_guild_exists(connection, guild.id):
-            continue
-
-        users_stats = {}
-        for message in hall_of_fame_message_repo.get_all_hall_of_fame_messages_for_guild(connection, guild.id):
-            try:
-                if not message.get('author_id') or not message.get('created_at'):
-                    continue
-                user_id = message['author_id']
-                if user_id not in users_stats:
-                    users_stats[user_id] = {
-                        "total_hall_of_fame_messages": 0,
-                        "this_month_hall_of_fame_messages": 0,
-                        "total_hall_of_fame_message_reactions": 0,
-                        "this_month_hall_of_fame_message_reactions": 0
-                    }
-                users_stats[user_id]["total_hall_of_fame_messages"] += 1
-                users_stats[user_id]["total_hall_of_fame_message_reactions"] += message.get('reaction_count', 0)
-                if message['created_at'].replace(tzinfo=timezone.utc) >= (datetime.datetime.now(timezone.utc) - datetime.timedelta(days=30)):
-                    users_stats[user_id]["this_month_hall_of_fame_messages"] += 1
-                    users_stats[user_id]["this_month_hall_of_fame_message_reactions"] += message.get('reaction_count', 0)
-            except KeyError as e:
-                await logging(bot, f"KeyError in message {message['message_id']} in guild {guild.id}: {e}", guild.id)
-
-        # create a rank for each user based on total and monthly for each field
-        for user in users_stats:
-            users_stats[user]["total_message_rank"] = 0
-            users_stats[user]["monthly_message_rank"] = 0
-            users_stats[user]["total_reaction_rank"] = 0
-            users_stats[user]["monthly_reaction_rank"] = 0
-
-        sorted_total_messages = sorted(users_stats.items(), key=lambda x: x[1]["total_hall_of_fame_messages"], reverse=True)
-        sorted_monthly_messages = sorted(users_stats.items(), key=lambda x: x[1]["this_month_hall_of_fame_messages"], reverse=True)
-        sorted_total_reactions = sorted(users_stats.items(), key=lambda x: x[1]["total_hall_of_fame_message_reactions"], reverse=True)
-        sorted_monthly_reactions = sorted(users_stats.items(), key=lambda x: x[1]["this_month_hall_of_fame_message_reactions"], reverse=True)
-
-        for rank, (user_id, stats) in enumerate(sorted_total_messages, start=1):
-            users_stats[user_id]["total_message_rank"] = rank
-        for rank, (user_id, stats) in enumerate(sorted_monthly_messages, start=1):
-            users_stats[user_id]["monthly_message_rank"] = rank
-        for rank, (user_id, stats) in enumerate(sorted_total_reactions, start=1):
-            users_stats[user_id]["total_reaction_rank"] += rank
-        for rank, (user_id, stats) in enumerate(sorted_monthly_reactions, start=1):
-            users_stats[user_id]["monthly_reaction_rank"] += rank
-
-        for user_id, stats in users_stats.items():
-            try:
-                server_user_repo.update_user_stats(connection, stats, user_id, guild.id)
-            except Exception as e:
-                await logging(bot, f"Failed to update user {user_id} in database: {e}", guild.id)
+        try:
+            server_user_repo.rebuild_user_stats_for_guild(connection, guild.id, window_start)
+        except Exception as e:
+            await logging(bot, f"Failed to update user stats for guild {guild.id}: {e}", guild.id)
     await logging(bot, f"Finished updating user database...")
 
 

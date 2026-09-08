@@ -44,6 +44,7 @@ class FakeCursor:
         self.row = row
         self.rows = rows if rows is not None else []
         self.executed = []
+        self.rowcount = 0
 
     def execute(self, query, params=None):
         self.executed.append((query, params))
@@ -107,3 +108,11 @@ class FakeBot:
 
     def get_guild(self, guild_id):
         return self.guild
+
+
+class FakeBotWithGuilds(FakeBot):
+    """A bot that also reports the guilds it is in, for the daily maintenance tasks."""
+
+    def __init__(self, guild_ids, **kwargs):
+        super().__init__(**kwargs)
+        self.guilds = [FakeGuild(guild_id) for guild_id in guild_ids]
