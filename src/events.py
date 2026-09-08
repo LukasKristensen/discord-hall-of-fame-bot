@@ -2,9 +2,13 @@ import discord
 import asyncio
 import datetime
 import utils
+from caches import ExpiringSet
 from translations import messages
 from enums import command_refs
 from repositories import server_config_repo, hall_of_fame_message_repo
+
+# One nag per server per day, rather than one per message posted in the channel
+missing_delete_permission_warnings = ExpiringSet(ttl_seconds=24 * 60 * 60)
 
 
 async def post_wrapped():
@@ -67,18 +71,29 @@ async def on_raw_reaction(message: discord.RawReactionActionEvent, bot: discord.
             return
 
 
-async def on_message(message, target_channel_id, allow_messages_in_hof_channel):
+async def on_message(message: discord.Message, bot: discord.Client, server_config):
     """
     Event handler for when a message is sent in a channel
-    :param message:
-    :param target_channel_id:
-    :param allow_messages_in_hof_channel:
-    :return:
+    :param message: The message that was sent
+    :param bot: The bot client
+    :param server_config: The in memory configuration of the server the message was sent in
+    :return: None
     """
-    if message.channel.id != target_channel_id or message.author.bot or allow_messages_in_hof_channel:
+    if (message.channel.id != server_config.hall_of_fame_channel_id
+            or message.author.bot
+            or server_config.allow_messages_in_hof_channel):
+        return
+
+    permissions = message.channel.permissions_for(message.guild.me)
+    if not permissions.manage_messages:
         return
 
     await message.delete()
+
+    # Without this the reminder itself fails, and the member is left with a deletion and no reason
+    if not permissions.send_messages:
+        return
+
     msg = await message.channel.send(f"Only Hall of Fame messages are allowed in this channel, {message.author.mention}. "
                                      f"Can be disabled by {command_refs.ALLOW_MESSAGES_IN_HOF_CHANNEL}")
     await asyncio.sleep(5)

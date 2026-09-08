@@ -116,3 +116,61 @@ class FakeBotWithGuilds(FakeBot):
     def __init__(self, guild_ids, **kwargs):
         super().__init__(**kwargs)
         self.guilds = [FakeGuild(guild_id) for guild_id in guild_ids]
+
+
+class FakePermissions:
+    def __init__(self, manage_messages=True, send_messages=True, view_channel=True,
+                 read_message_history=True, read_messages=True):
+        self.manage_messages = manage_messages
+        self.send_messages = send_messages
+        self.view_channel = view_channel
+        self.read_message_history = read_message_history
+        self.read_messages = read_messages
+
+
+class FakeSentMessage:
+    def __init__(self, content):
+        self.content = content
+        self.deleted = False
+
+    async def delete(self):
+        self.deleted = True
+
+
+class FakeTextChannel:
+    """A channel that reports a fixed permission set for the bot."""
+
+    def __init__(self, channel_id=100, permissions=None):
+        self.id = channel_id
+        self.permissions = permissions if permissions is not None else FakePermissions()
+        self.sent = []
+
+    def permissions_for(self, _member):
+        return self.permissions
+
+    async def send(self, content):
+        sent = FakeSentMessage(content)
+        self.sent.append(sent)
+        return sent
+
+
+class FakeMemberGuild:
+    """A guild that can report its own bot member, for permission checks."""
+
+    def __init__(self, guild_id=200, name="Test Server"):
+        self.id = guild_id
+        self.name = name
+        self.me = FakeUser(1)
+
+
+class FakeChannelMessage:
+    def __init__(self, channel, guild, author_is_bot=False, author_id=5):
+        self.channel = channel
+        self.guild = guild
+        self.author = FakeUser(author_id)
+        self.author.bot = author_is_bot
+        self.author.mention = f"<@{author_id}>"
+        self.deleted = False
+
+    async def delete(self):
+        self.deleted = True
