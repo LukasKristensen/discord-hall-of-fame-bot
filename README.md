@@ -268,17 +268,26 @@ The same command runs on every pull request through the ``Tests`` workflow.
 
 ## Development Log
 
-### 2.0
-- [x] Fixed the emoji whitelist matching on partial emojis, so a reaction is only counted when it is whitelisted exactly.
+### 2.1
+- [x] Fixed the emoji whitelist matching on partial emojis, so a reaction only counts when it is whitelisted exactly.
 - [x] Fixed the total reactions calculation method discarding a whole reaction instead of a single vote when the author is excluded.
 - [x] Fixed developer ping notifications for critical runtime errors, which never triggered.
-- [x] Fixed Hall of Fame posts failing when the message that was replied to has been deleted, or when a reply has no text.
-- [x] Reaction events now serve the server configuration from memory, removing the database lookups from the path that runs most often.
-- [x] Reactions arriving at the same time on one message are queued instead of dropped, so the newest count always wins.
+- [x] Fixed Hall of Fame posts failing when the message that was replied to had been deleted, or when a reply had no text of its own.
+- [x] Fixed reactions being dropped when several arrived on the same message at once; they now queue so the newest count wins.
+- [x] Fixed the daily post limit allowing one more post than the limit it announced.
+- [x] Fixed /get_server_config failing in servers that are not set up yet.
+- [x] Commands now answer with a loading notice while the bot is still starting up, instead of timing out silently.
+- [x] Reaction events serve the server configuration from memory, removing the database lookups from the path that runs most often.
+- [x] The daily member statistics are aggregated and ranked by the database in one statement per server, instead of reading every Hall of Fame message into the bot.
+- [x] The leaderboard updates each post in a single edit instead of three, cutting its daily rate limit cost.
 - [x] Duplicate log messages are filtered in memory instead of re-reading the log channel on every single log line.
 - [x] Switched to a thread safe database connection pool, since the daily snapshot runs on a worker thread.
-- [x] The leaderboard updates each post in one edit instead of three, cutting the daily rate limit cost.
-- [x] Commands now answer with a loading notice while the bot is still starting up instead of timing out silently.
+- [x] Hall of Fame posts no longer break the Discord message cache when truncating long messages.
+- [x] Added a unit test suite and a Tests workflow that runs on every pull request.
+- [x] Added psycopg2-binary to requirements.txt, which the bot has always needed in order to start, and pinned Python 3.13.
+- [x] Rewrote the README and the Top.gg description around recognition rather than archiving, and documented /hof_wrapped, /server_hof_wrapped, /require_image_or_video and /set_post_due_date, which were missing.
+
+### 2.0
 - [x] Added require_image_or_video server option to enforce media presence in embeds.
 - [x] Added welcome message for the support server.
 - [x]  Fixed images not appearing in embeds when using links.
