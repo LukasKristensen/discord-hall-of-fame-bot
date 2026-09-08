@@ -1,51 +1,255 @@
-# Discord Hall Of Fame Bot
-![](Assets/hof_cover.jpg)
-The purpose of the bot is to monitor the maximum amount of message reactions and repost the message to a board if it surpasses a threshold value. Unlike star bots, this bot is not limited to one emoji but will prompt any emoji reactions.
+# Hall of Fame - Celebrate Your Discord Server's Best Moments
+
+![Hall of Fame Discord bot, showcasing a server's most reacted messages and the members behind them](Assets/hof_cover.jpg)
+
+[![Servers](https://top.gg/api/widget/servers/1177041673352663070.svg)](https://top.gg/bot/1177041673352663070)
+[![Tests](https://github.com/LukasKristensen/discord-hall-of-fame-bot/actions/workflows/tests.yml/badge.svg)](https://github.com/LukasKristensen/discord-hall-of-fame-bot/actions/workflows/tests.yml)
+[![Python](https://img.shields.io/badge/python-3.13-blue)](https://www.python.org/)
+[![Support server](https://img.shields.io/discord/1180006529575960616?label=support&logo=discord)](https://discord.gg/r98WC5GHcn)
+
+**Hall of Fame turns your server's best moments into a permanent highlight reel, and gives the credit
+to the members who created them.** Any emoji your community actually reacts with can send a message to
+the hall of fame, and the members who land there get leaderboards, profiles and a yearly wrapped for it.
+
+It is a recognition bot, not an archive. The board is where the moments live; the leaderboards, member
+profiles and Hall of Fame Wrapped are what make landing on it worth something.
+
+[Add the bot to your server](https://discord.com/oauth2/authorize?client_id=1177041673352663070) ·
+[Join the support server](https://discord.gg/r98WC5GHcn) ·
+[Vote on top.gg](https://top.gg/bot/1177041673352663070/vote)
 
 <br>
 
-## Configuring
 
-Add the bot to your discord server: https://discord.com/oauth2/authorize?client_id=1177041673352663070
+## Contents
 
-Join the Hall of Fame community server: https://discord.gg/r98WC5GHcn
+- [What Hall of Fame does](#what-hall-of-fame-does)
+- [How it differs from a starboard](#how-it-differs-from-a-starboard)
+- [Quick start](#quick-start)
+- [Commands](#commands)
+- [Custom Emoji Whitelist](#custom-emoji-whitelist)
+- [How reactions are counted](#how-reactions-are-counted)
+- [Recognition: leaderboards, profiles and Wrapped](#recognition-leaderboards-profiles-and-wrapped)
+- [Frequently asked questions](#frequently-asked-questions)
+- [Tests](#tests)
+- [Development Log](#development-log)
+
+<br>
+
+
+## What Hall of Fame does
+
+**The board.** The bot watches every channel it can read. When a message picks up enough reactions, it
+is reposted to your hall of fame channel with its images, videos and the message it was replying to, so
+the moment still makes sense months later. Any emoji counts, and you choose how reactions are counted
+and how many are needed.
+
+**The recognition.** Every featured message is credited to its author. `/leaderboard` ranks the server,
+`/user_profile` shows a member's all time and monthly standing, and `/hof_wrapped` gives each member
+their year in review. That is the half a plain message archive does not have.
+
+<br>
+
+
+## How it differs from a starboard
+
+Hall of Fame is often found by people searching for a starboard, so it is worth being precise about the
+difference. A starboard is an archive: react with a star, and once enough people do, the message is
+copied to a channel. That is the whole feature.
+
+| | Hall of Fame | A starboard |
+|:---|:---|:---|
+| The point | Recognising your members and their best moments | Archiving messages that passed a threshold |
+| Which emoji counts | Every emoji, or a whitelist you pick | The one star emoji it was configured with |
+| Counting | Top emoji, total reactions, or unique people | A single fixed count |
+| Media | Images and videos are reposted with the message | Frequently links only |
+| Reply context | The message being replied to is included | Usually dropped |
+| Credit | Leaderboards, member profiles, monthly and all time ranks | None |
+| Year in review | Hall of Fame Wrapped, per member and per server | None |
+| Threshold | Starting value picked from your member count, then yours to set | Fixed default you tune yourself |
+
+If all you want is a star archive, a starboard bot will do. If you want your server to compete over who
+gets immortalised, that is what this is for.
+
+<br>
+
+
+## Quick start
+
+1. [Invite the bot](https://discord.com/oauth2/authorize?client_id=1177041673352663070) and accept the
+   permissions it asks for. Granting them afterwards does not work, so accept them up front.
+2. The bot creates a `#hall-of-fame` channel, and picks a starting reaction threshold once from your
+   member count so the board works before you configure anything.
+3. React to messages as normal. Anything that passes the threshold is reposted automatically.
+4. Tune it with `/set_reaction_threshold`, or point it at an existing channel with
+   `/set_hall_of_fame_channel`.
+
+If most of your channels are hidden behind a role, give the bot that role, otherwise it cannot see the
+messages being reacted to.
 
 <br>
 
 ## Commands
 
-| Command                        | Parameters                                                             | Action                                                                                                                                     | Example                                 |
-|:-------------------------------|:-----------------------------------------------------------------------|:-------------------------------------------------------------------------------------------------------------------------------------------|:----------------------------------------|
-| /help                          |                                                                        | List of commands                                                                                                                           | /help                                   |
-| /set_reaction_threshold        | :int                                                                   | Set the amount of reactions needed for a post to reach hall of fame                                                                        | /set_reaction_threshold 5               |
-| /include_authors_reaction      | :bool                                                                  | Should the author of a message be included in the reaction count?                                                                          | /include_authors_reaction               |
-| /allow_messages_in_hof_channel | :bool                                                                  | Allow anyone to type in the Hall of Fame channel                                                                                           | /allow_messages_in_hof_channel          |
-| /custom_emoji_check_logic      | All emojis or Only whitelisted emojis                                  | Use only whitelisted emojis for the reaction count                                                                                         | /custom_emoji_check_logic               |
-| /whitelist_emoji               | :emoji                                                                 | Add a whitelisted emoji to the list [custom_emoji_check_logic]                                                                             | /whitelist_emoji 👍                     |
-| /unwhitelist_emoji             | :emoji                                                                 | Remove a whitelisted emoji from the list [custom_emoji_check_logic]                                                                        | /unwhitelist_emoji 👍                   |
-| /clear_whitelist               |                                                                        | Clear the whitelist of emojis [custom_emoji_check_logic]                                                                                   | /clear_whitelist                        |
-| /get_server_config             |                                                                        | Get the current bot configuration for the server                                                                                           | /get_server_config                      |
-| /calculation_method            | :string ["most_reactions_on_emoji", "total_reactions", "unique_users"] | Change the calculation method for reactions                                                                                                | /calculation_method                     |
-| /hide_hof_post_below_threshold | :bool                                                                  | Should hall of fame posts be hidden when they go below the reaction threshold? (Will be visible again when they reach the threshold again) | /hide_hof_post_below_threshold          |
-| /ignore_bot_messages           | :bool                                                                  | Should the bot ignore messages from other bots?                                                                                            | /get_server_config                      |
-| /user_profile                  | :user                                                                  | Get the Hall of Fame profile for a user                                                                                                    | /user_profile @HallOfFame               |
-| /leaderboard                   |                                                                        | View the Hall of Fame leaderboard for the server                                                                                           | /leaderboard                            |
-| /set_hall_of_fame_channel      | :channel                                                               | Manually set the Hall of Fame channel for the server                                                                                       | /set_hall_of_fame_channel #hall-of-fame |
-| /feedback                      | :forms                                                                 | Got a feature request or bug report? Let us know!                                                                                          | /feedback                               |
-| /vote                          |                                                                        | Support the bot by voting for it on top.gg: https://top.gg/bot/1177041673352663070/vote                                                    | /vote                                   |
-| /invite                        |                                                                        | Invite the bot to your server: https://discord.com/oauth2/authorize?client_id=1177041673352663070!                                         | /invite                                 |
+All commands are slash commands. The configuration ones need the **Manage Server** permission, and
+say so on each group; everything under [Recognition](#recognition-commands) and
+[Bot and help](#bot-and-help) is open to every member.
 
+### Setting up the board
+
+Requires **Manage Server**.
+
+| Command | Parameters | What it does |
+|:---|:---|:---|
+| `/set_hall_of_fame_channel` | `channel` | Point the bot at the channel it should post to. Checks its own permissions first and tells you what is missing. |
+| `/set_reaction_threshold` | `reaction_threshold` (number) | How many reactions a message needs. Seeded once on join from your member count, and fixed at that value until you change it here. |
+| `/allow_messages_in_hof_channel` | `allow` (true/false) | Let members chat in the hall of fame channel. Off by default, so the board stays clean. |
+
+### Choosing what qualifies
+
+Requires **Manage Server**.
+
+| Command | Parameters | What it does |
+|:---|:---|:---|
+| `/calculation_method` | `most_reactions_on_emoji`, `total_reactions` or `unique_users` | How reactions are counted. See [How reactions are counted](#how-reactions-are-counted). |
+| `/include_authors_reaction` | `include` (true/false) | Whether reacting to your own message counts toward the threshold. |
+| `/set_post_due_date` | `post_due_date` (days) | How old a message can be and still qualify. |
+| `/require_image_or_video` | `require` (true/false) | Only feature messages that contain an image or a video. |
+| `/hide_hof_post_below_threshold` | `hide` (true/false) | Hide a post again if it drops back under the threshold, and restore it if it climbs back. |
+| `/ignore_bot_messages` | `should_ignore_bot_messages` (true/false) | Whether messages from other bots can be featured. |
+
+### Emoji whitelist
+
+Requires **Manage Server**. Every emoji counts until you turn this on, see
+[Custom Emoji Whitelist](#custom-emoji-whitelist).
+
+| Command | Parameters | What it does |
+|:---|:---|:---|
+| `/custom_emoji_check_logic` | `All emojis` or `Only whitelisted emojis` | Switch whitelist mode on or off. |
+| `/whitelist_emoji` | `emoji` | Add one emoji to the whitelist. |
+| `/unwhitelist_emoji` | `emoji` | Remove one emoji from the whitelist. |
+| `/clear_whitelist` | | Empty the whitelist. |
+
+### Recognition commands
+
+Open to everyone.
+
+| Command | Parameters | What it does |
+|:---|:---|:---|
+| `/leaderboard` | | Rank the server by hall of fame posts and reactions earned. Refreshed daily. |
+| `/user_profile` | `specific_user` (optional) | All time and monthly totals and ranks for a member. Defaults to you. |
+| `/hof_wrapped` | | Your personal Hall of Fame Wrapped for the year. |
+| `/server_hof_wrapped` | | The Hall of Fame Wrapped for the whole server. |
+
+### Bot and help
+
+Open to everyone.
+
+| Command | Parameters | What it does |
+|:---|:---|:---|
+| `/help` | | List every command. |
+| `/get_server_config` | | Show the current configuration for this server. |
+| `/invite` | | Invite link for adding the bot elsewhere. |
+| `/vote` | | Vote for the bot on top.gg. |
+| `/feedback` | | Send a feature request or bug report to the developer. |
 
 <br>
+
 
 ## Custom Emoji Whitelist
-A custom emoji filter can be applied to the bot, so that it will only look for emojis configured to the server.
-  - To enable it: ``/custom_emoji_check_logic``
-  - Adding emojis to the whitelist: ``/whitelist_emoji``
-  - Removing emojis from the whitelist: ``/unwhitelist_emoji`` or ``/clear_whitelist``
+
+By default every emoji counts toward the threshold, including custom server emojis. Turning on the
+whitelist narrows that down to a set you choose, which is how you run a board driven by one specific
+reaction, a small set of in-joke emojis, or a classic star only board.
+
+Enable it with `/custom_emoji_check_logic`, then manage the list with `/whitelist_emoji`,
+`/unwhitelist_emoji` and `/clear_whitelist`. `/get_server_config` shows the current whitelist.
 
 <br>
 
+
+
+## How reactions are counted
+
+Different servers mean different things by "popular", so `/calculation_method` picks between three ways
+of counting a message:
+
+| Method | What it counts | Good for |
+|:---|:---|:---|
+| `most_reactions_on_emoji` (default) | The highest count on any single emoji | Servers where one reaction should carry a message |
+| `total_reactions` | Every reaction on the message added together | Servers that react with many different emojis |
+| `unique_users` | How many different people reacted, counted once each | Stopping one person from pushing a message through |
+
+`/include_authors_reaction` decides whether the author reacting to their own message counts, and
+`/hide_hof_post_below_threshold` hides a post again if reactions are later removed.
+
+<br>
+
+
+## Recognition: leaderboards, profiles and Wrapped
+
+Getting featured is meant to be worth something, so the bot keeps score.
+
+- **`/leaderboard`** ranks the server by hall of fame posts and by reactions earned, refreshed daily.
+- **`/user_profile`** shows one member's all time and monthly totals, and where they sit in the server
+  for each. Call it on someone else to compare.
+- **`/hof_wrapped`** gives a member their year in review, and **`/server_hof_wrapped`** does the same
+  for the whole server.
+
+<br>
+
+
+## Frequently asked questions
+
+### Does it only work with the star emoji?
+
+No, and that is the main difference from a starboard. Every emoji counts by default, custom server
+emojis included. If you want only specific ones to count, turn on `/custom_emoji_check_logic` and add
+them with `/whitelist_emoji`.
+
+### How many reactions does a message need?
+
+Whatever you set with `/set_reaction_threshold`. So that the board works before anyone configures it,
+the bot picks a starting value from your member count when it joins, between 1 for a tiny server and 7
+for a large one. That happens once, on join. It is not recalculated as the server grows, so revisit it
+yourself if your membership changes a lot.
+
+### Does it repost images and videos?
+
+Yes. Images, videos and stickers are carried over into the hall of fame post, and videos are posted so
+that they stay playable rather than becoming a bare link.
+
+### What happens when someone removes their reaction?
+
+The post updates its reaction count live. If it drops back below the threshold it is hidden, and it
+reappears if the message climbs back over the line. Turn that off with
+`/hide_hof_post_below_threshold`.
+
+### Does it keep the conversation context?
+
+Yes. If the featured message was a reply, the message it replied to is shown alongside it, so a
+punchline still makes sense out of context.
+
+### Can I see who gets featured most?
+
+Yes, that is the point of it. `/leaderboard` ranks the server, `/user_profile` shows a member's all time
+and monthly standing, and `/hof_wrapped` gives them a year in review.
+
+### Can I limit it to only images and videos?
+
+Yes, with `/require_image_or_video`, which suits servers where the board is meant to be a gallery rather
+than a quote wall.
+
+### Is the bot free?
+
+Yes, free and open source. There is no paid tier and no feature held back behind voting.
+
+### Which channels does it watch?
+
+Every channel it has permission to read. Channels restricted to a role stay invisible to the bot unless
+it is given that role.
+
+<br>
 
 ## Tests
 
@@ -69,7 +273,11 @@ The same command runs on every pull request through the ``Tests`` workflow.
 - [x] Fixed the total reactions calculation method discarding a whole reaction instead of a single vote when the author is excluded.
 - [x] Fixed developer ping notifications for critical runtime errors, which never triggered.
 - [x] Fixed Hall of Fame posts failing when the message that was replied to has been deleted, or when a reply has no text.
-- [x] Reduced the database and Discord API calls needed per reaction, making reaction handling noticeably lighter.
+- [x] Reaction events now serve the server configuration from memory, removing the database lookups from the path that runs most often.
+- [x] Reactions arriving at the same time on one message are queued instead of dropped, so the newest count always wins.
+- [x] Duplicate log messages are filtered in memory instead of re-reading the log channel on every single log line.
+- [x] Switched to a thread safe database connection pool, since the daily snapshot runs on a worker thread.
+- [x] The leaderboard updates each post in one edit instead of three, cutting the daily rate limit cost.
 - [x] Commands now answer with a loading notice while the bot is still starting up instead of timing out silently.
 - [x] Added require_image_or_video server option to enforce media presence in embeds.
 - [x] Added welcome message for the support server.
