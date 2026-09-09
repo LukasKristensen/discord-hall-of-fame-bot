@@ -39,8 +39,8 @@ if dev_test:
         maxconn=10,
         host=os.getenv('POSTGRES_HOST_LOCAL'),
         database=os.getenv('POSTGRES_DB_LOCAL'),
-        user=os.getenv('POSTGRES_USER'),
-        password=os.getenv('POSTGRES_PASSWORD'))
+        user=os.getenv('POSTGRES_USER_LOCAL'),
+        password=os.getenv('POSTGRES_PASSWORD_LOCAL'))
 else:
     TOKEN = os.getenv('KEY')
     connection_pool = psycopg2.pool.ThreadedConnectionPool(

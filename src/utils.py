@@ -14,19 +14,19 @@ duplicate_log_window_seconds = 600
 recently_logged_messages = ExpiringSet(ttl_seconds=duplicate_log_window_seconds)
 
 
-async def validate_message(discord_message: discord.RawReactionActionEvent, bot: discord.Client, connection,
+async def validate_message(reaction_event: discord.RawReactionActionEvent, bot: discord.Client, connection,
                            server_config: server_class.Server):
     """
     Check if the message is valid for posting based on the reaction count, date and origin of the message
-    :param discord_message: The message to validate
+    :param reaction_event: The raw reaction event that triggered the check
     :param bot: The Discord bot
     :param connection: The database connection
     :param server_config: The in memory configuration of the server the reaction happened in
     :return: None
     """
-    channel_id: int = discord_message.channel_id
-    message_id: int = discord_message.message_id
-    guild_id: int = discord_message.guild_id
+    channel_id: int = reaction_event.channel_id
+    message_id: int = reaction_event.message_id
+    guild_id: int = reaction_event.guild_id
 
     reaction_threshold = server_config.reaction_threshold
     post_due_date = server_config.post_due_date
@@ -43,29 +43,30 @@ async def validate_message(discord_message: discord.RawReactionActionEvent, bot:
         await logging(bot, f"Bot does not have read message permissions in channel {channel.id} of guild {channel.guild.id}", channel.guild.id)
         return
 
-    discord_message = await channel.fetch_message(message_id)
+    # The event only carries ids, so the message itself is fetched under a name that says what it is
+    source_message = await channel.fetch_message(message_id)
     db_message = hall_of_fame_message_repo.find_hall_of_fame_message(connection, guild_id, channel_id, message_id)
 
     # Checks if the post is older than the due date and has not been added to the database
-    if (datetime.datetime.now(timezone.utc) - discord_message.created_at).days > post_due_date and not db_message:
+    if (datetime.datetime.now(timezone.utc) - source_message.created_at).days > post_due_date and not db_message:
         return
 
     # Checks if the message is from a bot
-    if discord_message.author.bot and ignore_bot_messages:
+    if source_message.author.bot and ignore_bot_messages:
         return
 
     # Checks if message is required to have an image or video
     if require_image_or_video:
         has_media = False
-        if discord_message.attachments:
-            for attachment in discord_message.attachments:
+        if source_message.attachments:
+            for attachment in source_message.attachments:
                 content_type = getattr(attachment, 'content_type', '')
                 if content_type and (content_type.startswith('image/') or content_type.startswith('video/')):
                     has_media = True
                     break
 
-        if not has_media and discord_message.embeds:
-            for embed in discord_message.embeds:
+        if not has_media and source_message.embeds:
+            for embed in source_message.embeds:
                 if embed.type in ['image', 'video'] or embed.image or embed.video:
                     has_media = True
                     break
@@ -80,14 +81,14 @@ async def validate_message(discord_message: discord.RawReactionActionEvent, bot:
         return
 
     if hall_of_fame_message_repo.guild_message_count_today(connection, guild_id) >= daily_post_limit:
-        await logging(bot, f"Guild {guild_id} has exceeded the daily limit for hall of fame posts.", discord_message.guild.id, log_level=log_type.CRITICAL, validate_for_duplicates=True)
+        await logging(bot, f"Guild {guild_id} has exceeded the daily limit for hall of fame posts.", source_message.guild.id, log_level=log_type.CRITICAL, validate_for_duplicates=True)
         existing_messages = [message async for message in target_channel.history(limit=30)]
         for existing_message in existing_messages:
             if existing_message.author.id == bot.user.id and "has hit the daily limit of" in existing_message.content:
                 return
         await target_channel.send(
             f"⚠️ **Hall of Fame limit reached**\n"
-            f"Server **{discord_message.guild.name}** has hit the daily limit of **{daily_post_limit} posts**.\n"
+            f"Server **{source_message.guild.name}** has hit the daily limit of **{daily_post_limit} posts**.\n"
             f"No more messages will be added until tomorrow."
         )
         return
@@ -96,11 +97,11 @@ async def validate_message(discord_message: discord.RawReactionActionEvent, bot:
     reaction_config = server_config.reaction_config()
 
     # Gets the adjusted reaction count corrected for not accounting the author
-    corrected_reactions = await reaction_count(discord_message, connection, reaction_config)
+    corrected_reactions = await reaction_count(source_message, connection, reaction_config)
     if corrected_reactions < reaction_threshold:
         if hide_hof_post_below_threshold and db_message:
             await remove_embed(db_message, bot, target_channel_id)
-            if "video_link_message_id" in db_message and discord_message.attachments:
+            if "video_link_message_id" in db_message and source_message.attachments:
                 video_link_message = db_message["video_link_message_id"]
                 if video_link_message is not None:
                     video_link_message = await target_channel.fetch_message(int(video_link_message))
@@ -112,16 +113,16 @@ async def validate_message(discord_message: discord.RawReactionActionEvent, bot:
         if len(message_to_update.embeds) > 0:
             hall_of_fame_message_repo.update_field_for_message(connection, guild_id, channel_id, message_id, "reaction_count", corrected_reactions)
             await update_reaction_counter(db_message, bot, target_channel_id, reaction_threshold, connection,
-                                          discord_message, corrected_reactions, reaction_config)
+                                          source_message, corrected_reactions, reaction_config)
             return
         else:
-            await message_to_update.edit(embed=await create_embed(discord_message, reaction_threshold, connection, reaction_config))
-            if "video_link_message_id" in db_message and discord_message.attachments:
-                message_attachment = discord_message.attachments[0]
+            await message_to_update.edit(embed=await create_embed(source_message, reaction_threshold, connection, reaction_config))
+            if "video_link_message_id" in db_message and source_message.attachments:
+                message_attachment = source_message.attachments[0]
                 video_link_message = await target_channel.fetch_message(db_message["video_link_message_id"])
                 await video_link_message.edit(content=message_attachment.url, embed=None)
             return
-    await post_hall_of_fame_message(discord_message, bot, connection, target_channel_id, reaction_threshold, reaction_config)
+    await post_hall_of_fame_message(source_message, bot, connection, target_channel_id, reaction_threshold, reaction_config)
 
 
 async def update_reaction_counter(db_message, bot: discord.Client, target_channel_id: int, reaction_threshold: int,
@@ -715,7 +716,7 @@ async def logging(bot: discord.Client, message, server_id=None, new_value=None, 
 
         # Checked in memory rather than by reading the channel history, which cost an API call per
         # log line and grew worst during the incidents that produce the most logging
-        if validate_for_duplicates and not recently_logged_messages.add_if_absent(f"{log_level}:{message}"):
+        if validate_for_duplicates and not recently_logged_messages.add_if_absent(f"{log_level}:{server_id}:{message}"):
             return  # Do not send duplicate error message
 
         message_prefix = "<@230698327589650432> " if log_level == log_type.CRITICAL else ""

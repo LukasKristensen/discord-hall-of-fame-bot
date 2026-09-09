@@ -1,579 +1,105 @@
-import os
-from dotenv import load_dotenv
-import matplotlib.pyplot as plt
-import numpy as np
-from datetime import datetime, timezone
-import psycopg2
-from repositories import (
-    server_config_repo,
-    hall_of_fame_message_repo,
-    guild_lifecycle_event_repo,
-    guild_monthly_snapshot_repo,
-)
+"""Export the server statistics report.
 
-# Make exports deterministic regardless of the current working directory.
+Run from the ``src`` directory:
+
+    python server_stats.py                  # read Postgres, export to ../graphs/<timestamp>
+    python server_stats.py --synthetic      # no database, generated data at production scale
+    python server_stats.py --out ./somewhere
+
+The figures themselves live in ``stats/``; this file only decides where the data
+comes from and where the export goes.
+
+Rendering needs ``matplotlib`` and ``numpy``. They are deliberately not in
+``requirements.txt``: the bot never plots anything, and this is a developer tool
+run by hand, so the deployment does not carry a plotting stack. Install them into
+the working environment before running the report::
+
+    pip install matplotlib numpy
+
+``stats.metrics``, which holds every calculation the figures rest on, imports
+neither, so the unit tests cover the maths without them.
+"""
+
+import argparse
+import os
+import sys
+
+from dotenv import load_dotenv
+
+from stats import report
+
+# Make the export location independent of the current working directory.
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.abspath(os.path.join(SCRIPT_DIR, os.pardir))
-
-load_dotenv('../.env')
-connection = psycopg2.connect(host=os.getenv('POSTGRES_HOST'),
-                              database=os.getenv('POSTGRES_DB'),
-                              user=os.getenv('POSTGRES_USER'),
-                              password=os.getenv('POSTGRES_PASSWORD'))
-
-server_graph_folder = os.path.join(PROJECT_ROOT, 'graphs')
-show_plots = False
-
-server_stats = []
-
-for config in server_config_repo.get_all_server_configs(connection):
-    if config:
-        message_count = hall_of_fame_message_repo.count_messages_for_guild(connection, config.guild_id)
-        joined_date = server_config_repo.get_parameter_value(connection, config.guild_id, "joined_date")
-        server_stats.append({
-            'server': config,
-            'guild_id': config.guild_id,
-            'reaction_threshold': config.reaction_threshold,
-            'include_author_in_reaction_calculation': config.include_author_in_reaction_calculation,
-            'allow_messages_in_hof_channel': config.allow_messages_in_hof_channel,
-            'message_count': message_count,
-            'server_member_count': config.server_member_count,
-            'joined_date': joined_date
-        })
+DEFAULT_GRAPH_ROOT = os.path.join(PROJECT_ROOT, "graphs")
 
 
-def fetch_time_series(connection, table_name: str, value_column: str):
-    """Fetch (timestamp,value) from a Postgres bot-stats style table.
+def parse_args(argv=None):
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument(
+        "--synthetic",
+        action="store_true",
+        help="Generate the report from seeded synthetic data instead of Postgres.",
+    )
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=20260908,
+        help="Seed for --synthetic, so a run can be reproduced exactly.",
+    )
+    parser.add_argument(
+        "--out",
+        default=DEFAULT_GRAPH_ROOT,
+        help="Root folder for exports. A timestamped subfolder is created inside it.",
+    )
+    return parser.parse_args(argv)
 
-    This script used to read from MongoDB `bot_stats.*` collections. In Postgres we expect
-    equivalent tables with a `timestamp` column and a numeric value column (e.g. `total_messages`).
-    If the table doesn't exist, return an empty list.
-    """
-    cursor = connection.cursor()
+
+def connect():
+    """Open the Postgres connection the report reads from."""
+    import psycopg2
+
+    load_dotenv(os.path.join(PROJECT_ROOT, ".env"))
+    return psycopg2.connect(
+        host=os.getenv("POSTGRES_HOST"),
+        database=os.getenv("POSTGRES_DB"),
+        user=os.getenv("POSTGRES_USER"),
+        password=os.getenv("POSTGRES_PASSWORD"),
+    )
+
+
+def load_dataset(args):
+    """Either the live fleet or a seeded stand-in for it."""
+    if args.synthetic:
+        from stats import synthetic
+
+        print("Building synthetic dataset (no database connection)")
+        return synthetic.build_dataset(seed=args.seed)
+
+    from stats import queries
+
+    connection = connect()
     try:
-        cursor.execute(
-            f"SELECT timestamp, {value_column} FROM {table_name} ORDER BY timestamp ASC"
-        )
-        rows = cursor.fetchall()
-        return [(row[0], row[1]) for row in rows]
-    except psycopg2.Error:
-        # Missing table/column etc. Keep the script usable for installations that don't track bot stats.
-        connection.rollback()
-        return []
+        print("Loading dataset from Postgres")
+        return queries.load_dataset(connection)
     finally:
-        cursor.close()
+        connection.close()
 
 
-# Update the plot function to include server_member_count
-def create_plot(file_name, filtered_stats=None):
-    filtered_stats = filtered_stats or [
-        stat for stat in server_stats
-        if isinstance(stat['reaction_threshold'], (int, float))
-        and isinstance(stat['server_member_count'], (int, float))
-        and stat['reaction_threshold'] <= stat['server_member_count']
-    ]
+def main(argv=None):
+    args = parse_args(argv)
+    dataset = load_dataset(args)
 
-    servers = [stat['guild_id'] for stat in filtered_stats]
-    reaction_thresholds = [stat['reaction_threshold'] for stat in filtered_stats]
-    message_counts = [stat['message_count'] for stat in filtered_stats]
-    member_counts = [int(stat['server_member_count'] or 0) for stat in filtered_stats]
+    if not dataset.servers:
+        print("No servers found; nothing to export.")
+        return 1
 
-    x = np.arange(len(servers))
-    width = 0.25
-
-    fig, ax1 = plt.subplots()
-
-    ax1.bar(x - width, reaction_thresholds, width, label='Reaction Thresholds')
-    ax1.set_xlabel('Servers (guild_id)')
-    ax1.set_ylabel('Reaction Thresholds')
-    ax1.set_title('Reaction Thresholds, Message Counts, and Member Counts')
-
-    ax2 = ax1.twinx()
-    ax2.bar(x, message_counts, width, label='Message Counts', color='orange')
-    ax2.set_ylabel('Message Counts')
-
-    ax3 = ax1.twinx()
-    ax3.bar(x + width, member_counts, width, label='Member Counts', color='green')
-    ax3.set_ylabel('Member Counts')
-    ax3.spines['right'].set_position(('outward', 60))  # Offset the third axis
-
-    fig.tight_layout()
-    fig.legend(loc='upper left', bbox_to_anchor=(0.1, 0.9))
-    plt.savefig(os.path.join(folder_path, file_name))
-    if show_plots:
-        plt.show()
-
-
-def create_plot_where_msg_count_greater_than_zero():
-    filtered_stats = [stat for stat in server_stats if stat['message_count'] > 0]
-    create_plot('server_stats_msg_count_gt_zero.png', filtered_stats)
-
-
-def create_bot_stats_plot():
-    """Export total messages over time.
-
-    Source priority:
-      1) Postgres time-series table `bot_stats_total_messages(timestamp, total_messages)` if present.
-      2) Otherwise compute a cumulative series from `hall_of_fame_message.created_at`.
-
-    This ensures the graph is *always* exported and reflects Postgres data.
-    """
-    series = fetch_time_series(connection, 'bot_stats_total_messages', 'total_messages')
-
-    if series:
-        timestamps = [ts for ts, _ in series]
-        total_messages_list = [val for _, val in series]
-        source_note = "source: bot_stats_total_messages"
-    else:
-        # Build a cumulative time series from hall_of_fame_message.
-        cursor = connection.cursor()
-        try:
-            cursor.execute(
-                """
-                SELECT date_trunc('day', created_at) AS day, COUNT(*)
-                FROM hall_of_fame_message
-                WHERE created_at >= TIMESTAMP '2000-01-01'
-                GROUP BY day
-                ORDER BY day ASC
-                """
-            )
-            rows = cursor.fetchall()
-        finally:
-            cursor.close()
-
-        if not rows:
-            print("Skipping bot_total_messages.png (no hall_of_fame_message rows found)")
-            return
-
-        timestamps = [r[0] for r in rows]
-        counts = [r[1] for r in rows]
-        total_messages_list = np.cumsum(counts).tolist()
-        source_note = "source: hall_of_fame_message cumulative"
-
-    fig, ax = plt.subplots()
-    ax.plot(timestamps, total_messages_list, label='Total Messages')
-    ax.set_xlabel('Timestamp')
-    ax.set_ylabel('Total Messages')
-
-    ax.plot(timestamps[-1], total_messages_list[-1], 'ro')
-    ax.annotate(
-        str(total_messages_list[-1]),
-        xy=(timestamps[-1], total_messages_list[-1]),
-        xytext=(5, 5),
-        textcoords='offset points',
-        color='red',
-    )
-
-    ax.set_title(f'Total Messages Over Time ({source_note})')
-    ax.legend()
-
-    out_path = os.path.abspath(os.path.join(folder_path, 'bot_total_messages.png'))
-    fig.savefig(out_path)
-    plt.close(fig)
-
-    if os.path.exists(out_path):
-        print(f"Wrote: {out_path}")
-    else:
-        print(f"WARNING: savefig returned but file not found: {out_path}")
-
-
-def create_plot_server_count_and_total_members():
-    # Expected tables:
-    # - bot_stats_server_count(timestamp TIMESTAMP, server_count INT)
-    # - bot_stats_total_users(timestamp TIMESTAMP, total_users BIGINT)
-    server_series = fetch_time_series(connection, 'bot_stats_server_count', 'server_count')
-    users_series = fetch_time_series(connection, 'bot_stats_total_users', 'total_users')
-    if not server_series or not users_series:
-        return
-
-    server_counts = [val for _, val in server_series]
-    timestamps = [ts for ts, _ in server_series]
-    fig, ax1 = plt.subplots()
-    ax1.plot(timestamps, server_counts, label='Server Count', color='blue')
-    ax1.set_xlabel('Timestamp')
-    ax1.set_ylabel('Server Count', color='blue')
-    ax1.tick_params(axis='y', labelcolor='blue')
-    ax1.set_title('Server Count Over Time')
-    ax1.legend(loc='upper left')
-    ax1.grid()
-
-    timestamps2 = [ts for ts, _ in users_series]
-    total_members = [val for _, val in users_series]
-    ax2 = ax1.twinx()
-    ax2.plot(timestamps2, total_members, label='Total Members', color='orange')
-    ax2.set_ylabel('Total Members', color='orange')
-    ax2.tick_params(axis='y', labelcolor='orange')
-    ax2.legend(loc='upper right')
-    plt.savefig(os.path.join(folder_path, 'server_count_and_total_members.png'))
-    if show_plots:
-        plt.show()
-
-
-def create_bubble_chart():
-    filtered_stats = [
-        stat for stat in server_stats
-        if isinstance(stat['reaction_threshold'], (int, float))
-        and isinstance(stat['server_member_count'], (int, float))
-        and stat['reaction_threshold'] <= stat['server_member_count']
-    ]
-
-    reaction_thresholds = [stat['reaction_threshold'] for stat in filtered_stats]
-    member_counts = [int(stat['server_member_count'] or 0) for stat in filtered_stats]
-    message_counts = [stat['message_count'] for stat in filtered_stats]
-
-    plt.figure(figsize=(10, 6))
-    scatter = plt.scatter(reaction_thresholds, member_counts, s=[count * 3 for count in message_counts], alpha=0.5)
-    for i, count in enumerate(message_counts):
-        overlap = False
-        for j in range(i):
-            if abs(reaction_thresholds[i] - reaction_thresholds[j]) < 5 and abs(member_counts[i] - member_counts[j]) < 5:
-                overlap = True
-                break
-        if not overlap:
-            plt.text(reaction_thresholds[i], member_counts[i], str(count), fontsize=8, ha='center', va='center')
-
-    plt.xlabel('Reaction Thresholds')
-    plt.legend(*scatter.legend_elements(), title="Message Count")
-    plt.ylabel('Member Counts')
-    plt.title('Bubble Chart of Reaction Thresholds vs Member Counts (Bubble Size = Message Count)')
-    plt.grid(True)
-    plt.savefig(os.path.join(folder_path, 'bubble_chart.png'))
-    if show_plots:
-        plt.show()
-
-
-def create_average_messages_per_day_compared_to_member_count():
-    avg_messages_per_day = []
-    member_counts = []
-    for stat in server_stats:
-        if stat['message_count'] > 0:
-            join_date = stat.get('joined_date')
-            if not join_date:
-                continue
-            messages_per_day_value = stat['message_count'] / ((datetime.now() - join_date).days + 1)
-            if messages_per_day_value > 0:
-                avg_messages_per_day.append(messages_per_day_value)
-                member_counts.append(int(stat['server_member_count'] or 0))
-
-    if not avg_messages_per_day:
-        return
-
-    plt.figure(figsize=(10, 6))
-    plt.scatter(member_counts, avg_messages_per_day, alpha=0.7)
-    plt.xlabel('Server Member Count')
-    plt.ylabel('Average Messages per Day')
-    plt.title('Average Messages per Day vs Server Member Count')
-    plt.grid(True)
-    plt.savefig(os.path.join(folder_path, 'avg_messages_per_day_vs_member_count.png'))
-    if show_plots:
-        plt.show()
-
-
-def create_histogram_messages_per_day():
-    messages_per_day = []
-    for stat in server_stats:
-        if stat['message_count'] > 0:
-            join_date = stat.get('joined_date')
-            if not join_date:
-                continue
-            messages_per_day_value = stat['message_count'] / ((datetime.now() - join_date).days + 1)
-            if messages_per_day_value > 0:
-                messages_per_day.append(messages_per_day_value)
-
-    if not messages_per_day:
-        return
-
-    plt.figure(figsize=(10, 6))
-    plt.hist(messages_per_day, bins=20, color='blue', alpha=0.7)
-    plt.xlabel('Average Messages per Day')
-    plt.ylabel('Number of Servers')
-    plt.title('Histogram of Average Messages per Day Across All Servers')
-    plt.grid(True)
-    plt.savefig(os.path.join(folder_path, 'histogram_messages_per_day.png'))
-    if show_plots:
-        plt.show()
-
-
-def create_histogram_of_messages_per_month():
-    # Uses hall_of_fame_message.created_at in Postgres
-    cursor = connection.cursor()
-    try:
-        # Filter out epoch/placeholder timestamps (common when legacy data used 1970-01-01).
-        cursor.execute(
-            """
-            SELECT MIN(created_at), MAX(created_at)
-            FROM hall_of_fame_message
-            WHERE created_at >= TIMESTAMP '2000-01-01'
-            """
-        )
-        row = cursor.fetchone()
-        if not row or not row[0] or not row[1]:
-            return
-        start_date = row[0].replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-        end_max = row[1]
-
-        messages_per_month = {}
-        current = start_date
-        while current <= end_max:
-            # next month
-            next_month = datetime(current.year + (current.month // 12), ((current.month % 12) + 1), 1)
-            cursor.execute(
-                """
-                SELECT COUNT(*) AS message_count,
-                       COUNT(DISTINCT guild_id) AS server_count
-                FROM hall_of_fame_message
-                WHERE created_at >= %s AND created_at < %s
-                  AND created_at >= TIMESTAMP '2000-01-01'
-                """,
-                (current, next_month),
-            )
-            count, server_count = cursor.fetchone()
-            month_str = current.strftime("%Y-%m")
-            messages_per_month[month_str] = {'count': count or 0, 'server_count': server_count or 0}
-            current = next_month
-
-    finally:
-        cursor.close()
-
-    if not messages_per_month:
-        return
-
-    months = list(messages_per_month.keys())
-    message_counts = [messages_per_month[month]['count'] for month in months]
-    server_counts = [messages_per_month[month]['server_count'] for month in months]
-    message_per_server = [
-        message_counts[i] / server_counts[i] if server_counts[i] > 0 else 0
-        for i in range(len(months))
-    ]
-
-    bar_width = 0.35
-    x = np.arange(len(months))
-
-    fig, ax1 = plt.subplots(figsize=(12, 6))
-
-    ax1.bar(x - bar_width / 2, message_counts, bar_width, label='Message Counts', color='green', alpha=0.7)
-    ax1.set_xlabel('Month')
-    ax1.set_ylabel('Message Counts', color='green')
-    ax1.tick_params(axis='y', labelcolor='green')
-    ax1.set_xticks(x)
-    # Downsample tick labels so the chart stays readable for long time ranges
-    if len(months) > 24:
-        step = max(1, len(months) // 24)
-        tick_positions = x[::step]
-        tick_labels = [months[i] for i in range(0, len(months), step)]
-        ax1.set_xticks(tick_positions)
-        ax1.set_xticklabels(tick_labels, rotation=45, ha='right')
-    else:
-        ax1.set_xticklabels(months, rotation=45, ha='right')
-
-    ax2 = ax1.twinx()
-    ax2.bar(x + bar_width / 2, message_per_server, bar_width, label='Messages per Server', color='blue', alpha=0.7)
-    ax2.set_ylabel('Messages per Server', color='blue')
-    ax2.tick_params(axis='y', labelcolor='blue')
-
-    fig.suptitle('Histogram of Hall of Fame Messages and Messages per Server Per Month')
-    ax1.grid(True, which='both', axis='y', linestyle='--', alpha=0.5)
-
-    fig.legend(loc='upper left', bbox_to_anchor=(0.1, 0.9))
-
-    plt.tight_layout()
-    plt.savefig(os.path.join(folder_path, 'histogram_messages_and_per_server.png'))
-    if show_plots:
-        plt.show()
-
-
-def get_month_window(reference_dt=None):
-    if reference_dt is None:
-        now = datetime.now(timezone.utc)
-    elif reference_dt.tzinfo is None:
-        now = reference_dt.replace(tzinfo=timezone.utc)
-    else:
-        now = reference_dt.astimezone(timezone.utc)
-    month_start = datetime(now.year, now.month, 1, tzinfo=timezone.utc)
-    if now.month == 12:
-        next_month_start = datetime(now.year + 1, 1, 1, tzinfo=timezone.utc)
-    else:
-        next_month_start = datetime(now.year, now.month + 1, 1, tzinfo=timezone.utc)
-    return month_start, next_month_start
-
-
-def create_monthly_members_per_server_plot(reference_dt=None):
-    month_start, _ = get_month_window(reference_dt)
-    rows = guild_monthly_snapshot_repo.get_monthly_members_per_server(connection, month_start.date())
-    if not rows:
-        return
-
-    guild_ids = [str(r["guild_id"]) for r in rows]
-    member_counts = [int(r["member_count"] or 0) for r in rows]
-
-    plt.figure(figsize=(12, 6))
-    plt.bar(guild_ids, member_counts, color="teal", alpha=0.8)
-    plt.xlabel("Guild ID")
-    plt.ylabel("Member Count")
-    plt.title(f"Members per Server ({month_start.strftime('%Y-%m')})")
-    if len(guild_ids) > 20:
-        step = max(1, len(guild_ids) // 20)
-        plt.xticks(range(0, len(guild_ids), step), [guild_ids[i] for i in range(0, len(guild_ids), step)], rotation=45, ha="right")
-    else:
-        plt.xticks(rotation=45, ha="right")
-    plt.tight_layout()
-    plt.savefig(os.path.join(folder_path, "monthly_members_per_server.png"))
-    if show_plots:
-        plt.show()
-
-
-def create_monthly_messages_per_server_plot(reference_dt=None):
-    month_start, _ = get_month_window(reference_dt)
-    rows = guild_monthly_snapshot_repo.get_monthly_messages_per_server(connection, month_start.date())
-    if not rows:
-        return
-
-    guild_ids = [str(r["guild_id"]) for r in rows]
-    message_counts = [int(r["message_count"] or 0) for r in rows]
-
-    plt.figure(figsize=(12, 6))
-    plt.bar(guild_ids, message_counts, color="purple", alpha=0.8)
-    plt.xlabel("Guild ID")
-    plt.ylabel("Message Count")
-    plt.title(f"Messages per Server ({month_start.strftime('%Y-%m')})")
-    if len(guild_ids) > 20:
-        step = max(1, len(guild_ids) // 20)
-        plt.xticks(range(0, len(guild_ids), step), [guild_ids[i] for i in range(0, len(guild_ids), step)], rotation=45, ha="right")
-    else:
-        plt.xticks(rotation=45, ha="right")
-    plt.tight_layout()
-    plt.savefig(os.path.join(folder_path, "monthly_messages_per_server.png"))
-    if show_plots:
-        plt.show()
-
-
-def create_monthly_messages_per_1k_members_plot(reference_dt=None):
-    month_start, _ = get_month_window(reference_dt)
-    rows = guild_monthly_snapshot_repo.get_monthly_messages_vs_members(connection, month_start.date())
-    if not rows:
-        return
-
-    guild_ids = [str(r["guild_id"]) for r in rows]
-    values = [float(r["messages_per_1k_members"] or 0) for r in rows]
-
-    plt.figure(figsize=(12, 6))
-    plt.bar(guild_ids, values, color="orange", alpha=0.85)
-    plt.xlabel("Guild ID")
-    plt.ylabel("Messages per 1k Members")
-    plt.title(f"Messages per 1k Members ({month_start.strftime('%Y-%m')})")
-    if len(guild_ids) > 20:
-        step = max(1, len(guild_ids) // 20)
-        plt.xticks(range(0, len(guild_ids), step), [guild_ids[i] for i in range(0, len(guild_ids), step)], rotation=45, ha="right")
-    else:
-        plt.xticks(rotation=45, ha="right")
-    plt.tight_layout()
-    plt.savefig(os.path.join(folder_path, "monthly_messages_per_1k_members.png"))
-    if show_plots:
-        plt.show()
-
-
-def create_monthly_messages_vs_members_scatter(reference_dt=None):
-    month_start, _ = get_month_window(reference_dt)
-    rows = guild_monthly_snapshot_repo.get_monthly_messages_vs_members(connection, month_start.date())
-    if not rows:
-        return
-
-    members = [int(r["member_count"] or 0) for r in rows]
-    messages = [int(r["message_count"] or 0) for r in rows]
-
-    plt.figure(figsize=(10, 6))
-    plt.scatter(members, messages, alpha=0.7)
-    plt.xlabel("Member Count")
-    plt.ylabel("Message Count")
-    plt.title(f"Messages vs Members ({month_start.strftime('%Y-%m')})")
-    plt.grid(True)
-    plt.tight_layout()
-    plt.savefig(os.path.join(folder_path, "monthly_messages_vs_members.png"))
-    if show_plots:
-        plt.show()
-
-
-def create_joins_leaves_per_month_plot():
-    rows = guild_lifecycle_event_repo.get_monthly_join_leave_counts(
-        connection,
-        datetime(2000, 1, 1, tzinfo=timezone.utc),
-        datetime.now(timezone.utc),
-    )
-    if not rows:
-        return
-
-    months = [row["month_start"].strftime("%Y-%m") for row in rows]
-    joined = [int(row["joined_count"] or 0) for row in rows]
-    left = [int(row["left_count"] or 0) for row in rows]
-
-    x = np.arange(len(months))
-    width = 0.4
-
-    plt.figure(figsize=(12, 6))
-    plt.bar(x - width / 2, joined, width=width, label="Joined", color="green", alpha=0.8)
-    plt.bar(x + width / 2, left, width=width, label="Left", color="red", alpha=0.8)
-    plt.xlabel("Month")
-    plt.ylabel("Server Count")
-    plt.title("Servers Joined vs Left per Month")
-    if len(months) > 24:
-        step = max(1, len(months) // 24)
-        tick_positions = x[::step]
-        tick_labels = [months[i] for i in range(0, len(months), step)]
-        plt.xticks(tick_positions, tick_labels, rotation=45, ha="right")
-    else:
-        plt.xticks(x, months, rotation=45, ha="right")
-    plt.legend()
-    plt.tight_layout()
-    plt.savefig(os.path.join(folder_path, "servers_joined_vs_left_per_month.png"))
-    if show_plots:
-        plt.show()
-
-
-def create_active_servers_over_time_plot():
-    rows = guild_lifecycle_event_repo.get_active_servers_timeseries(
-        connection,
-        datetime(2000, 1, 1, tzinfo=timezone.utc),
-        datetime.now(timezone.utc),
-    )
-    if not rows:
-        return
-
-    months = [row["month_start"] for row in rows]
-    active_counts = [int(row["active_servers"] or 0) for row in rows]
-
-    plt.figure(figsize=(12, 6))
-    plt.plot(months, active_counts, color="blue", marker="o", linewidth=2)
-    plt.xlabel("Month")
-    plt.ylabel("Active Servers")
-    plt.title("Active Servers Over Time")
-    plt.grid(True, linestyle="--", alpha=0.5)
-    plt.tight_layout()
-    plt.savefig(os.path.join(folder_path, "active_servers_over_time.png"))
-    if show_plots:
-        plt.show()
+    out_dir = report.create_output_dir(args.out)
+    print(f"Exporting {len(dataset.servers):,} servers to {out_dir}")
+    outputs = report.render(dataset, out_dir)
+    print(f"Done: {len(outputs)} figures plus {report.INDEX_FILENAME}")
+    return 0
 
 
 if __name__ == "__main__":
-    timestamp_str = datetime.now().strftime("%Y%m%d_%H%M%S")
-    if not os.path.exists(server_graph_folder):
-        os.makedirs(server_graph_folder)
-    folder_path = os.path.join(server_graph_folder, timestamp_str)
-    if not os.path.exists(folder_path):
-        os.makedirs(folder_path)
-
-    print(f"Exporting graphs to: {os.path.abspath(folder_path)}")
-
-    create_histogram_of_messages_per_month()
-    create_average_messages_per_day_compared_to_member_count()
-    create_histogram_messages_per_day()
-    create_plot_server_count_and_total_members()
-    create_bot_stats_plot()
-    create_bubble_chart()
-    create_plot('server_stats_all.png')
-    create_plot_where_msg_count_greater_than_zero()
-    create_joins_leaves_per_month_plot()
-    create_active_servers_over_time_plot()
-    create_monthly_members_per_server_plot()
-    create_monthly_messages_per_server_plot()
-    create_monthly_messages_vs_members_scatter()
-    create_monthly_messages_per_1k_members_plot()
+    sys.exit(main())

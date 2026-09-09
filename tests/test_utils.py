@@ -132,9 +132,6 @@ class CreateEmbedTests(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(field.value, f"Field {field.name} has an empty value")
 
 
-if __name__ == "__main__":
-    unittest.main()
-
 
 class FakeSticker:
     def __init__(self, url):
@@ -269,3 +266,7 @@ class SetFooterTests(unittest.IsolatedAsyncioTestCase):
             embed = await utils.set_footer(embed_with_image)
 
         self.assertEqual([], embed.fields)
+
+
+if __name__ == "__main__":
+    unittest.main()

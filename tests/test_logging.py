@@ -61,6 +61,22 @@ class LoggingTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(2, len(self.sent_to(ERROR_CHANNEL_ID)))
 
+    async def test_the_same_text_from_a_different_server_is_not_a_duplicate(self):
+        # Two servers hitting the same error must both be visible, not silently collapsed into one
+        await utils.logging(self.bot, "channel is gone", server_id=200, validate_for_duplicates=True)
+        await utils.logging(self.bot, "channel is gone", server_id=201, validate_for_duplicates=True)
+
+        logged = self.sent_to(ERROR_CHANNEL_ID)
+        self.assertEqual(2, len(logged))
+        self.assertIn("[Server ID: 200]", logged[0])
+        self.assertIn("[Server ID: 201]", logged[1])
+
+    async def test_the_same_text_from_the_same_server_is_a_duplicate(self):
+        await utils.logging(self.bot, "channel is gone", server_id=200, validate_for_duplicates=True)
+        await utils.logging(self.bot, "channel is gone", server_id=200, validate_for_duplicates=True)
+
+        self.assertEqual(1, len(self.sent_to(ERROR_CHANNEL_ID)))
+
     async def test_the_same_text_at_a_different_level_is_not_a_duplicate(self):
         await utils.logging(self.bot, "shared text", log_level=log_type.ERROR, validate_for_duplicates=True)
         await utils.logging(self.bot, "shared text", log_level=log_type.CRITICAL, validate_for_duplicates=True)

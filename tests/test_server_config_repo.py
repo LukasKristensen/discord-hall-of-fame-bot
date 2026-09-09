@@ -45,9 +45,6 @@ class ReactionConfigTests(unittest.TestCase):
         self.assertTrue(all(value is None for value in config.values()))
 
 
-if __name__ == "__main__":
-    unittest.main()
-
 
 def config_row(guild_id=200, hall_of_fame_channel_id=100, channel_first=True):
     """A server_configs row in the column order the two queries select."""
@@ -120,3 +117,7 @@ class ServerClassMappingTests(unittest.TestCase):
             "custom_emoji_check_logic": True,
             "whitelisted_emojis": ["👍"]
         }, server.reaction_config())
+
+
+if __name__ == "__main__":
+    unittest.main()

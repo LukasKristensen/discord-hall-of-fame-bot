@@ -115,9 +115,6 @@ class ReactionCountTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(1, len(connection.queries))
 
 
-if __name__ == "__main__":
-    unittest.main()
-
 
 class CustomEmoji:
     """A server emoji, which discord.py represents as an object rather than a string."""
@@ -201,3 +198,7 @@ class AuthorInclusionTests(unittest.IsolatedAsyncioTestCase):
     async def test_excluding_the_author_can_empty_a_reaction(self):
         message = FakeMessage(author_id=10, reactions=[FakeReaction("👍", [10])])
         self.assertEqual(0, await message_reactions.reaction_count(message, None, config(include_author=False)))
+
+
+if __name__ == "__main__":
+    unittest.main()
