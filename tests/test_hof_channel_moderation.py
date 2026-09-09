@@ -1,12 +1,11 @@
 import unittest
 from unittest import mock
 
-from tests.fakes import (FakeChannelMessage, FakeMemberGuild, FakePermissions, FakeTextChannel)
+from tests.fakes import (FakeBotWithGuildLookup, FakeChannelMessage, FakeGuildWithChannels, FakeMemberGuild,
+                         FakePermissions, FakeTextChannel)
 from tests.test_server_class import build_server
 
 import events
-from caches import ExpiringSet
-from translations import messages
 
 
 class OnMessageTests(unittest.IsolatedAsyncioTestCase):
@@ -14,7 +13,6 @@ class OnMessageTests(unittest.IsolatedAsyncioTestCase):
 
     def setUp(self):
         self.guild = FakeMemberGuild(guild_id=200)
-        self.warnings = []
 
         # No real sleeping between posting the reminder and removing it again
         sleep = mock.patch("events.asyncio.sleep", new=self.no_sleep)
@@ -25,12 +23,6 @@ class OnMessageTests(unittest.IsolatedAsyncioTestCase):
         logging.start()
         self.addCleanup(logging.stop)
 
-        notify = mock.patch("events.utils.send_message_to_highest_prio_channel", new=self.record_warning)
-        notify.start()
-        self.addCleanup(notify.stop)
-
-        events.missing_delete_permission_warnings = ExpiringSet(ttl_seconds=60)
-
     @staticmethod
     async def no_sleep(_seconds):
         return None
@@ -38,9 +30,6 @@ class OnMessageTests(unittest.IsolatedAsyncioTestCase):
     @staticmethod
     async def record_nothing(*_args, **_kwargs):
         return None
-
-    async def record_warning(self, _bot, guild, content, _history_limit):
-        self.warnings.append((guild.id, content))
 
     def build(self, manage_messages=True, send_messages=True, channel_id=HOF_CHANNEL_ID,
               author_is_bot=False, allow_messages=False):
@@ -100,20 +89,63 @@ class OnMessageTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(message.deleted)
         self.assertEqual([], channel.sent)
 
-    async def test_does_not_warn_when_the_permission_is_present(self):
-        message, _, server = self.build()
-        await events.on_message(message, None, server)
 
-        self.assertEqual([], self.warnings)
+class DailyPermissionCheckTests(unittest.IsolatedAsyncioTestCase):
+    """The daily sweep is where a server is told about a permission it is missing."""
 
+    HOF_CHANNEL_ID = 100
 
-class MissingPermissionMessageTests(unittest.TestCase):
-    def test_names_the_channel_and_the_way_out(self):
-        content = messages.MISSING_MANAGE_MESSAGES.format(channel="<#100>")
+    def setUp(self):
+        self.warnings = []
 
-        self.assertIn("<#100>", content)
+        logging = mock.patch("events.utils.logging", new=self.record_nothing)
+        logging.start()
+        self.addCleanup(logging.stop)
+
+        notify = mock.patch("events.utils.send_message_to_highest_prio_channel", new=self.record_warning)
+        notify.start()
+        self.addCleanup(notify.stop)
+
+    @staticmethod
+    async def record_nothing(*_args, **_kwargs):
+        return None
+
+    async def record_warning(self, _bot, guild, content):
+        self.warnings.append((guild.id, content))
+
+    async def sweep(self, permissions, allow_messages=False):
+        channel = FakeTextChannel(channel_id=self.HOF_CHANNEL_ID, permissions=permissions)
+        guild = FakeGuildWithChannels(guild_id=200, channels={self.HOF_CHANNEL_ID: channel})
+        bot = FakeBotWithGuildLookup({200: guild})
+        server = build_server(guild_id=200, hall_of_fame_channel_id=self.HOF_CHANNEL_ID,
+                              allow_messages_in_hof_channel=allow_messages)
+        await events.check_write_permissions_to_hall_of_fame_channel(bot, {200: server})
+        return self.warnings
+
+    async def test_says_nothing_when_every_permission_is_present(self):
+        self.assertEqual([], await self.sweep(FakePermissions()))
+
+    async def test_reports_manage_messages_when_the_channel_is_reserved(self):
+        warnings = await self.sweep(FakePermissions(manage_messages=False))
+
+        self.assertEqual(1, len(warnings))
+        self.assertIn("Manage Messages", warnings[0][1])
+
+    async def test_ignores_manage_messages_when_members_may_chat(self):
+        # Nothing needs deleting, so the permission is not required
+        self.assertEqual([], await self.sweep(FakePermissions(manage_messages=False), allow_messages=True))
+
+    async def test_reports_manage_messages_alongside_the_others(self):
+        warnings = await self.sweep(FakePermissions(manage_messages=False, send_messages=False))
+
+        content = warnings[0][1]
+        self.assertIn("Send Messages", content)
         self.assertIn("Manage Messages", content)
-        self.assertIn("allow_messages_in_hof_channel", content)
+
+    async def test_names_the_channel_it_is_missing_in(self):
+        warnings = await self.sweep(FakePermissions(manage_messages=False))
+
+        self.assertIn(f"<#{self.HOF_CHANNEL_ID}>", warnings[0][1])
 
 
 if __name__ == "__main__":

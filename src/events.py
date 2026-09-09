@@ -2,13 +2,9 @@ import discord
 import asyncio
 import datetime
 import utils
-from caches import ExpiringSet
 from translations import messages
 from enums import command_refs
 from repositories import server_config_repo, hall_of_fame_message_repo
-
-# One nag per server per day, rather than one per message posted in the channel
-missing_delete_permission_warnings = ExpiringSet(ttl_seconds=24 * 60 * 60)
 
 
 async def post_wrapped():
@@ -86,6 +82,8 @@ async def on_message(message: discord.Message, bot: discord.Client, server_confi
 
     permissions = message.channel.permissions_for(message.guild.me)
     if not permissions.manage_messages:
+        # Deliberately quiet on the message path, which would fire once per message posted. The daily
+        # permission check reports Manage Messages to the server instead, once, alongside the others
         return
 
     await message.delete()
@@ -174,13 +172,15 @@ async def check_write_permissions_to_hall_of_fame_channel(bot: discord.Client, s
             await utils.logging(bot, f"Could not find Hall of Fame channel for server {guild.name}", guild.id)
             # await utils.send_message_to_highest_prio_channel(bot, guild, messages.FAILED_TO_FIND_HOF_CHANNEL)
             continue
+        permissions = channel.permissions_for(guild.me)
         missing_permissions = []
-        if not channel.permissions_for(guild.me).view_channel:
+        if not permissions.view_channel:
             missing_permissions.append("View Channel")
-        if not channel.permissions_for(guild.me).send_messages:
+        if not permissions.send_messages:
             missing_permissions.append("Send Messages")
-        if not channel.permissions_for(guild.me).read_message_history:
+        if not permissions.read_message_history:
             missing_permissions.append("Read Message History")
+
         if not missing_permissions:
             continue
         channel_ref = f"<#{channel.id}>"

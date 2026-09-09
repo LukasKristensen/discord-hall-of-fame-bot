@@ -47,10 +47,6 @@ MISSING_HOF_CHANNEL_PERMISSIONS = ("The bot is missing the required permissions 
                                    "Update the channel permission for the bot to have: ``{missing_permissions}``\n"
                                    f"If the hall of channel does not exist, set it up using </set_hall_of_fame_channel:1393576242237804768> "
                                    "and ensure the bot has the required permissions.")
-MISSING_MANAGE_MESSAGES = ("The bot is keeping {channel} for Hall of Fame posts only, but it cannot remove the "
-                           "messages people send there without the ``Manage Messages`` permission.\n"
-                           "Either grant that permission in the channel, or let members talk there with "
-                           "</allow_messages_in_hof_channel:1348428694007316571>.")
 FAILED_TO_FIND_HOF_CHANNEL = (
     "Failed to find the Hall of Fame channel - Ensure the bot has access with "
     "``View Channel, Send Messages, and Read Message History`` permissions.\n"

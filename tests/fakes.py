@@ -174,3 +174,24 @@ class FakeChannelMessage:
 
     async def delete(self):
         self.deleted = True
+
+
+class FakeGuildWithChannels(FakeMemberGuild):
+    """A guild that can hand back its channels, for the daily permission sweep."""
+
+    def __init__(self, guild_id=200, name="Test Server", channels=None):
+        super().__init__(guild_id=guild_id, name=name)
+        self.channels = channels if channels is not None else {}
+
+    def get_channel(self, channel_id):
+        return self.channels.get(channel_id)
+
+
+class FakeBotWithGuildLookup:
+    def __init__(self, guilds_by_id=None):
+        self.guilds_by_id = guilds_by_id if guilds_by_id is not None else {}
+        self.guilds = list(self.guilds_by_id.values())
+        self.user = FakeUser(1)
+
+    def get_guild(self, guild_id):
+        return self.guilds_by_id.get(guild_id)
