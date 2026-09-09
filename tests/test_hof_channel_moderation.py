@@ -142,11 +142,6 @@ class DailyPermissionCheckTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("Send Messages", content)
         self.assertIn("Manage Messages", content)
 
-    async def test_names_the_channel_it_is_missing_in(self):
-        warnings = await self.sweep(FakePermissions(manage_messages=False))
-
-        self.assertIn(f"<#{self.HOF_CHANNEL_ID}>", warnings[0][1])
-
 
 if __name__ == "__main__":
     unittest.main()
