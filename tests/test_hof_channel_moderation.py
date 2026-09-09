@@ -135,12 +135,12 @@ class DailyPermissionCheckTests(unittest.IsolatedAsyncioTestCase):
         # Nothing needs deleting, so the permission is not required
         self.assertEqual([], await self.sweep(FakePermissions(manage_messages=False), allow_messages=True))
 
-    async def test_reports_manage_messages_alongside_the_others(self):
-        warnings = await self.sweep(FakePermissions(manage_messages=False, send_messages=False))
+    async def test_reports_view_channel_alongside_the_others(self):
+        warnings = await self.sweep(FakePermissions(manage_messages=False, view_channel=False))
 
         content = warnings[0][1]
         self.assertIn("Send Messages", content)
-        self.assertIn("Manage Messages", content)
+        self.assertIn("View Channel", content)
 
 
 if __name__ == "__main__":
