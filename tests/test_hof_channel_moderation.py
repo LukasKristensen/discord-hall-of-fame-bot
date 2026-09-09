@@ -125,11 +125,11 @@ class DailyPermissionCheckTests(unittest.IsolatedAsyncioTestCase):
     async def test_says_nothing_when_every_permission_is_present(self):
         self.assertEqual([], await self.sweep(FakePermissions()))
 
-    async def test_reports_manage_messages_when_the_channel_is_reserved(self):
-        warnings = await self.sweep(FakePermissions(manage_messages=False))
+    async def test_reports_send_messages_when_the_channel_is_reserved(self):
+        warnings = await self.sweep(FakePermissions(send_messages=False))
 
         self.assertEqual(1, len(warnings))
-        self.assertIn("Manage Messages", warnings[0][1])
+        self.assertIn("Send Messages", warnings[0][1])
 
     async def test_ignores_manage_messages_when_members_may_chat(self):
         # Nothing needs deleting, so the permission is not required
