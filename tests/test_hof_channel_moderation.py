@@ -136,7 +136,7 @@ class DailyPermissionCheckTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual([], await self.sweep(FakePermissions(manage_messages=False), allow_messages=True))
 
     async def test_reports_view_channel_alongside_the_others(self):
-        warnings = await self.sweep(FakePermissions(manage_messages=False, view_channel=False))
+        warnings = await self.sweep(FakePermissions(send_messages=False, view_channel=False))
 
         content = warnings[0][1]
         self.assertIn("Send Messages", content)
