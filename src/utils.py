@@ -117,9 +117,12 @@ async def validate_message(reaction_event: discord.RawReactionActionEvent, bot: 
             return
         else:
             await message_to_update.edit(embed=await create_embed(source_message, reaction_threshold, connection, reaction_config))
-            if "video_link_message_id" in db_message and source_message.attachments:
+            # The column is present and null for every post that is not a video, so the id itself
+            # is what decides whether there is a link message to restore
+            video_link_message_id = db_message.get("video_link_message_id")
+            if video_link_message_id is not None and source_message.attachments:
                 message_attachment = source_message.attachments[0]
-                video_link_message = await target_channel.fetch_message(db_message["video_link_message_id"])
+                video_link_message = await target_channel.fetch_message(int(video_link_message_id))
                 await video_link_message.edit(content=message_attachment.url, embed=None)
             return
     await post_hall_of_fame_message(source_message, bot, connection, target_channel_id, reaction_threshold, reaction_config)
