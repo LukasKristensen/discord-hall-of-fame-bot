@@ -82,8 +82,8 @@ async def on_message(message: discord.Message, bot: discord.Client, server_confi
 
     permissions = message.channel.permissions_for(message.guild.me)
     if not permissions.manage_messages:
-        # Deliberately quiet on the message path, which would fire once per message posted. The daily
-        # permission check reports Manage Messages to the server instead, once, alongside the others
+        # Nothing can be removed without this. Left silent on purpose: warning from here would fire
+        # once per message posted, which is exactly the situation the permission is missing in
         return
 
     await message.delete()

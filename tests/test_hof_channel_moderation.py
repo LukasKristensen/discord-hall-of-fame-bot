@@ -131,8 +131,10 @@ class DailyPermissionCheckTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(1, len(warnings))
         self.assertIn("Send Messages", warnings[0][1])
 
-    async def test_ignores_manage_messages_when_members_may_chat(self):
-        # Nothing needs deleting, so the permission is not required
+    async def test_does_not_require_manage_messages(self):
+        # The sweep deliberately reports only the three permissions the bot needs to post. Missing
+        # Manage Messages leaves chat in the channel undeleted, and the server is not told about it
+        self.assertEqual([], await self.sweep(FakePermissions(manage_messages=False)))
         self.assertEqual([], await self.sweep(FakePermissions(manage_messages=False), allow_messages=True))
 
     async def test_reports_view_channel_alongside_the_others(self):
