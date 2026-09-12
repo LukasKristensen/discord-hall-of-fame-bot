@@ -17,7 +17,7 @@ import utils
 from caches import ExpiringSet
 from translations import messages
 
-from tests.fakes import FakeConnection
+from tests.fakes import FakeConnection, FakePermissions
 from tests.test_server_class import build_server
 
 GUILD_ID = 200
@@ -32,9 +32,11 @@ class FakeResponse:
 
 
 class FakeUser:
-    def __init__(self, manage_guild=True, name="Member", user_id=77):
+    def __init__(self, manage_guild=True, name="Member", user_id=77, bot=False):
         self.id = user_id
         self.name = name
+        self.bot = bot
+        self.mention = f"<@{user_id}>"
         self.guild_permissions = types.SimpleNamespace(manage_guild=manage_guild)
 
 
@@ -320,3 +322,106 @@ class PostApiBotStatsTests(MainTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class OnMessageMentionTests(MainTestCase):
+    """Where a ping is answered relative to the checks that were already in on_message."""
+
+    def setUp(self):
+        super().setUp()
+        self.answered = []
+
+        async def record_answer(message, _bot_user, server_config):
+            self.answered.append((message.channel.id, server_config))
+            return True
+
+        self.patch(main.commands, "answer_bot_mention", record_answer)
+
+        self.moderated = []
+
+        async def record_moderation(message, _bot, _server_config):
+            self.moderated.append(message.channel.id)
+
+        self.patch(main.events, "on_message", record_moderation)
+        self.patch(main, "bot", types.SimpleNamespace(user=FakeUser(user_id=1)))
+
+    def message(self, channel_id=555, mentions_bot=True, content="<@1>", manage_messages=True):
+        permissions = FakePermissions(manage_messages=manage_messages)
+        guild = FakeGuild()
+        guild.me = FakeUser(user_id=1, bot=True)
+        return types.SimpleNamespace(
+            author=FakeUser(user_id=77),
+            guild=guild,
+            channel=types.SimpleNamespace(id=channel_id, permissions_for=lambda _member: permissions),
+            content=content,
+            mentions=[FakeUser(user_id=1)] if mentions_bot else [],
+            reference=None,
+            type=None)
+
+    async def test_answers_a_ping(self):
+        self.set_server_classes([GUILD_ID])
+        await main.on_message(self.message())
+
+        self.assertEqual(1, len(self.answered))
+
+    async def test_answers_a_ping_in_a_server_that_is_not_set_up(self):
+        """This is the case a ping is most often for, so the usual guard must not swallow it."""
+        self.set_server_classes([201])
+        await main.on_message(self.message())
+
+        self.assertEqual(1, len(self.answered))
+        self.assertIsNone(self.answered[0][1])
+
+    async def test_hands_the_answer_the_configuration_of_the_server(self):
+        self.set_server_classes([GUILD_ID])
+        await main.on_message(self.message())
+
+        self.assertEqual(GUILD_ID, self.answered[0][1].guild_id)
+
+    async def test_leaves_a_ping_in_a_moderated_board_to_be_deleted(self):
+        """Answering there would leave the bot replying to a message that is about to vanish."""
+        self.patch(main, "server_classes", {GUILD_ID: build_server(
+            guild_id=GUILD_ID, hall_of_fame_channel_id=100, allow_messages_in_hof_channel=False)})
+        await main.on_message(self.message(channel_id=100))
+
+        self.assertEqual([], self.answered)
+        self.assertEqual([100], self.moderated)
+
+    async def test_answers_a_ping_in_a_board_that_allows_chat(self):
+        self.patch(main, "server_classes", {GUILD_ID: build_server(
+            guild_id=GUILD_ID, hall_of_fame_channel_id=100, allow_messages_in_hof_channel=True)})
+        await main.on_message(self.message(channel_id=100))
+
+        self.assertEqual(1, len(self.answered))
+
+    async def test_answers_a_ping_in_a_closed_board_it_cannot_clear_up_after(self):
+        """Without Manage Messages the ping is not deleted either, so silence would just ignore it."""
+        self.patch(main, "server_classes", {GUILD_ID: build_server(
+            guild_id=GUILD_ID, hall_of_fame_channel_id=100, allow_messages_in_hof_channel=False)})
+        await main.on_message(self.message(channel_id=100, manage_messages=False))
+
+        self.assertEqual(1, len(self.answered))
+        self.assertEqual([], self.moderated)
+
+    async def test_leaves_an_ordinary_message_alone(self):
+        self.set_server_classes([GUILD_ID])
+        await main.on_message(self.message(mentions_bot=False, content="just chatting"))
+
+        self.assertEqual([], self.answered)
+        self.assertEqual([555], self.moderated)
+
+    async def test_does_not_moderate_the_message_it_answered(self):
+        self.set_server_classes([GUILD_ID])
+        await main.on_message(self.message())
+
+        self.assertEqual([], self.moderated)
+
+    async def test_a_failure_to_answer_does_not_escape(self):
+        async def fail(*_args, **_kwargs):
+            raise RuntimeError("discord said no")
+
+        self.patch(main.commands, "answer_bot_mention", fail)
+        self.set_server_classes([GUILD_ID])
+        await main.on_message(self.message())
+
+        self.assertTrue(any("Error answering a mention" in entry for entry in self.logged))

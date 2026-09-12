@@ -201,7 +201,31 @@ async def on_raw_reaction_remove(payload: discord.RawReactionActionEvent):
 
 @bot.event
 async def on_message(message: discord.Message):
-    if message.author == bot.user or message.guild is None or message.guild.id not in server_classes:
+    if message.author == bot.user or message.guild is None:
+        return
+
+    # A ping is how somebody asks an unfamiliar bot what it is, which is most often in a server that
+    # has not been set up yet, so it is answered before the check for a configured server below
+    if commands.is_bot_mention(message, bot.user):
+        server_class = server_classes.get(message.guild.id)
+        # A ping in a board members may not post in is about to be deleted, and answering it would
+        # leave the bot talking to a message that is no longer there. That only holds when the bot
+        # can actually delete it: without Manage Messages the ping stays, and staying silent would
+        # mean ignoring it entirely
+        in_closed_board = (server_class is not None
+                           and message.channel.id == server_class.hall_of_fame_channel_id
+                           and not server_class.allow_messages_in_hof_channel)
+        will_be_deleted = (in_closed_board
+                           and message.channel.permissions_for(message.guild.me).manage_messages)
+        if not will_be_deleted:
+            try:
+                await commands.answer_bot_mention(message, bot.user, server_class)
+            except Exception as e:
+                await utils.logging(bot, f"Error answering a mention: {e}", message.guild.id,
+                                    validate_for_duplicates=True)
+            return
+
+    if message.guild.id not in server_classes:
         return
 
     if message.guild.id == 1180006529575960616 and message.type in (discord.MessageType.new_member, 7):
