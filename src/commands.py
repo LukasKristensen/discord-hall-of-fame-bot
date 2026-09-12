@@ -3,6 +3,7 @@ import utils
 from constants import version
 from enums import command_refs
 from repositories import server_config_repo, server_user_repo
+from caches import ExpiringSet
 
 async def get_help(interaction: discord.Interaction):
     """
@@ -196,3 +197,116 @@ async def server_leaderboard(interaction, connection, month_emoji: str, all_time
     embed.add_field(name="Leaderboard", value=leaderboard, inline=False)
     embed.set_footer(text="Note that this is calculated every 24 hours, so it may not be up to date.")
     await interaction.followup.send(embed=embed)
+
+
+# A ping is answered at most once per channel in this window, so that it cannot be used to make the
+# bot flood a channel
+mention_cooldown_seconds = 30
+recently_answered_mentions = ExpiringSet(ttl_seconds=mention_cooldown_seconds)
+
+
+def is_bot_mention(message: discord.Message, bot_user) -> bool:
+    """
+    Decide whether a message is somebody pinging the bot to ask what it is.
+
+    Deliberately narrow. A role ping or an @everyone is not addressed to the bot, a reply carries a
+    mention of the author it is replying to, and a message that mentions the bot in passing is a
+    conversation rather than a question. Answering any of those turns the bot into a nuisance.
+    :param message: The message that was sent
+    :param bot_user: The bot's own user
+    :return: True when the message is a bare mention of the bot
+    """
+    if bot_user is None or message.author.bot:
+        return False
+    if not any(user.id == bot_user.id for user in message.mentions):
+        return False
+    if message.reference is not None:
+        return False
+
+    remaining = message.content
+    for mention in (f"<@{bot_user.id}>", f"<@!{bot_user.id}>"):
+        remaining = remaining.replace(mention, "")
+    return remaining.strip() == ""
+
+
+def build_bot_info_embed(guild, bot_user, server_config) -> discord.Embed:
+    """
+    The card the bot answers a ping with: what it is, how this server has it set up, and where to go
+    :param guild: The server the ping came from
+    :param bot_user: The bot's own user, for the thumbnail
+    :param server_config: The server's configuration, or None when it has not been set up
+    :return: The embed to send
+    """
+    embed = discord.Embed(
+        title="🏆 Hall of Fame",
+        description="Your server's best moments, and the members behind them. React to a message, "
+                    "and once it passes the threshold it is reposted to the hall of fame channel "
+                    "and credited to whoever posted it.\n\n"
+                    "Landing there is meant to be worth something, so the bot keeps score: "
+                    "leaderboards, member profiles and a yearly wrapped.",
+        color=discord.Color.gold()
+    )
+
+    if server_config is not None:
+        method = str(server_config.reaction_count_calculation_method).replace("_", " ")
+        embed.add_field(
+            name="Set up in this server",
+            value=f"Board: <#{server_config.hall_of_fame_channel_id}>\n"
+                  f"Reactions needed: **{server_config.reaction_threshold}**\n"
+                  f"Counting: {method}\n"
+                  f"Full configuration with {command_refs.GET_SERVER_CONFIG}",
+            inline=False)
+    else:
+        embed.add_field(
+            name="Not set up in this server yet",
+            value=f"Point the bot at a channel with {command_refs.SET_HALL_OF_FAME_CHANNEL}, then "
+                  f"pick how many reactions a message needs with {command_refs.SET_REACTION_THRESHOLD}. "
+                  f"Both need the Manage Server permission.",
+            inline=False)
+
+    embed.add_field(
+        name="For everyone",
+        value=f"{command_refs.LEADERBOARD} rank the server\n"
+              f"{command_refs.USER_PROFILE} a member's standing\n"
+              f"{command_refs.HOF_WRAPPED} your year in review\n"
+              f"{command_refs.HELP} every command",
+        inline=True)
+    embed.add_field(
+        name="Links",
+        value="[Add to a server](https://discord.com/oauth2/authorize?client_id=1177041673352663070)\n"
+              "[Support server](https://discord.gg/r98WC5GHcn)\n"
+              "[Vote](https://top.gg/bot/1177041673352663070/vote)\n"
+              "[Source](https://github.com/LukasKristensen/discord-hall-of-fame-bot)",
+        inline=True)
+
+    if bot_user is not None and getattr(bot_user, "display_avatar", None) is not None:
+        embed.set_thumbnail(url=bot_user.display_avatar.url)
+    embed.set_footer(text=f"Hall of Fame {version.VERSION}")
+    return embed
+
+
+async def answer_bot_mention(message: discord.Message, bot_user, server_config) -> bool:
+    """
+    Answer a ping with the information card, when the bot is able and has not just answered.
+    :param message: The message that pinged the bot
+    :param bot_user: The bot's own user
+    :param server_config: The server's configuration, or None when it has not been set up
+    :return: True when something was sent
+    """
+    permissions = message.channel.permissions_for(message.guild.me)
+    if not permissions.send_messages:
+        return False
+
+    if not recently_answered_mentions.add_if_absent(message.channel.id):
+        return False
+
+    if not permissions.embed_links:
+        # Without this permission an embed is dropped silently, so the answer is given as text
+        await message.channel.send(
+            f"**Hall of Fame** turns your server's best moments into a highlight reel and credits "
+            f"the members behind them. Use {command_refs.HELP} for the commands. "
+            f"(Grant the bot the Embed Links permission for the full card.)")
+        return True
+
+    await message.channel.send(embed=build_bot_info_embed(message.guild, bot_user, server_config))
+    return True

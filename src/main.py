@@ -5,6 +5,8 @@ from discord.ext import commands as discord_commands
 from discord.ext import tasks
 from dotenv import load_dotenv
 import commands
+import concurrency
+import environment
 import events
 import utils
 from constants import version
@@ -30,28 +32,32 @@ from scripts import monthly_guild_snapshot
 import asyncio
 
 load_dotenv()
-dev_test = os.getenv('DEV_TEST') == "True"
-if dev_test:
-    TOKEN = os.getenv('DEV_KEY')
-    connection_pool = psycopg2.pool.SimpleConnectionPool(
-        minconn=1,
-        maxconn=10,
-        host=os.getenv('POSTGRES_HOST_LOCAL'),
-        database=os.getenv('POSTGRES_DB_LOCAL'),
-        user=os.getenv('POSTGRES_USER'),
-        password=os.getenv('POSTGRES_PASSWORD'))
-else:
-    TOKEN = os.getenv('KEY')
-    connection_pool = psycopg2.pool.SimpleConnectionPool(
-        minconn=1,
-        maxconn=10,
-        host=os.getenv('POSTGRES_HOST'),
-        database=os.getenv('POSTGRES_DB'),
-        user=os.getenv('POSTGRES_USER'),
-        password=os.getenv('POSTGRES_PASSWORD'))
-topgg_api_key = os.getenv('TOPGG_API_KEY')
+dev_test = environment.is_development()
+TOKEN = os.getenv('DEV_KEY') if dev_test else os.getenv('KEY')
+# Only the live bot reports to the listing sites, so the development bot never reads their keys
+topgg_api_key = environment.production_secret('TOPGG_API_KEY')
 
-messages_processing = []
+# Opened when the bot starts rather than when this module is imported, so that importing it does
+# not reach for a database. Nothing outside the running bot needs a pool, and a module that opens
+# one on import cannot be loaded by anything else, tests included
+connection_pool = None
+
+
+def create_connection_pool():
+    """
+    Open the pool the bot serves every command and reaction from
+    :return: A thread safe connection pool for the configured database
+    """
+    prefix = "_LOCAL" if dev_test else ""
+    return psycopg2.pool.ThreadedConnectionPool(
+        minconn=1,
+        maxconn=10,
+        host=os.getenv(f'POSTGRES_HOST{prefix}'),
+        database=os.getenv(f'POSTGRES_DB{prefix}'),
+        user=os.getenv(f'POSTGRES_USER{prefix}'),
+        password=os.getenv(f'POSTGRES_PASSWORD{prefix}'))
+
+message_locks = concurrency.KeyedLocks()
 daily_command_cooldowns = {}
 
 intents = discord.Intents.default()
@@ -65,8 +71,20 @@ month_emoji = "<:month_most_hof_messages:1380272332609683517>" if not dev_test e
 all_time_emoji = "<:all_time_most_hof_messages:1380272422842007622>" if not dev_test else "<:all_time_most_hof_messages:1380272953098244166>"
 
 bot_loaded = False
-def bot_is_loaded():
-    return bot_loaded
+
+
+async def ensure_bot_is_loaded(interaction: discord.Interaction) -> bool:
+    """
+    Check that the bot has finished loading and let the user know when it has not,
+    as staying silent leaves them with a failed interaction
+    :param interaction: The interaction to respond to
+    :return: True when the bot is ready to handle the command
+    """
+    if bot_loaded:
+        return True
+    # noinspection PyUnresolvedReferences
+    await interaction.response.send_message(messages.BOT_LOADING, ephemeral=True)
+    return False
 
 @asynccontextmanager
 async def get_db_connection(connection_pool):
@@ -152,50 +170,62 @@ def setup_databases(connection):
     print("Creating guild monthly snapshot table...")
     guild_monthly_snapshot_repo.create_guild_monthly_snapshot_table(connection)
 
+async def handle_raw_reaction(payload: discord.RawReactionActionEvent, event_name: str):
+    """
+    Shared handler for reactions being added and removed
+    :param payload: The reaction event payload
+    :param event_name: The name of the event, used for logging
+    """
+    if payload.guild_id not in server_classes or (payload.member is not None and payload.member.bot):
+        return
+
+    # Reactions on the same message queue up instead of being dropped, so the newest count still wins
+    async with message_locks.acquire(payload.message_id):
+        try:
+            server_class = server_classes[payload.guild_id]
+
+            async with get_db_connection(connection_pool) as connection:
+                await events.on_raw_reaction(payload, bot, connection, server_class)
+        except Exception as e:
+            await utils.logging(bot, f"Error in {event_name}: {e}", payload.guild_id, validate_for_duplicates=True)
+
+
 @bot.event
 async def on_raw_reaction_add(payload: discord.RawReactionActionEvent):
-    if payload.guild_id not in server_classes or payload.member is not None and payload.member.bot:
-        return
-    try:
-        server_class = server_classes[payload.guild_id]
-
-        if payload.message_id not in messages_processing:
-            messages_processing.append(payload.message_id)
-            async with get_db_connection(connection_pool) as connection:
-                await events.on_raw_reaction(payload, bot, connection, server_class.reaction_threshold,
-                                             server_class.post_due_date, server_class.hall_of_fame_channel_id,
-                                             server_class.ignore_bot_messages, server_class.hide_hof_post_below_threshold,
-                                             server_class.require_image_or_video)
-            messages_processing.remove(payload.message_id)
-    except Exception as e:
-        await utils.logging(bot, f"Error in on_raw_reaction_add: {e}", payload.guild_id, validate_for_duplicates=True)
-        if payload.message_id in messages_processing:
-            messages_processing.remove(payload.message_id)
+    await handle_raw_reaction(payload, "on_raw_reaction_add")
 
 
 @bot.event
 async def on_raw_reaction_remove(payload: discord.RawReactionActionEvent):
-    if payload.guild_id not in server_classes or payload.member is not None and payload.member.bot:
-        return
-    try:
-        server_class = server_classes[payload.guild_id]
-
-        if payload.message_id not in messages_processing:
-            messages_processing.append(payload.message_id)
-            async with get_db_connection(connection_pool) as connection:
-                await events.on_raw_reaction(payload, bot, connection, server_class.reaction_threshold,
-                                             server_class.post_due_date, server_class.hall_of_fame_channel_id,
-                                             server_class.ignore_bot_messages, server_class.hide_hof_post_below_threshold,
-                                             server_class.require_image_or_video)
-            messages_processing.remove(payload.message_id)
-    except Exception as e:
-        await utils.logging(bot, f"Error in on_raw_reaction_remove: {e}", payload.guild_id, validate_for_duplicates=True)
-        if payload.message_id in messages_processing:
-            messages_processing.remove(payload.message_id)
+    await handle_raw_reaction(payload, "on_raw_reaction_remove")
 
 @bot.event
 async def on_message(message: discord.Message):
-    if message.author == bot.user or message.guild is None or message.guild.id not in server_classes:
+    if message.author == bot.user or message.guild is None:
+        return
+
+    # A ping is how somebody asks an unfamiliar bot what it is, which is most often in a server that
+    # has not been set up yet, so it is answered before the check for a configured server below
+    if commands.is_bot_mention(message, bot.user):
+        server_class = server_classes.get(message.guild.id)
+        # A ping in a board members may not post in is about to be deleted, and answering it would
+        # leave the bot talking to a message that is no longer there. That only holds when the bot
+        # can actually delete it: without Manage Messages the ping stays, and staying silent would
+        # mean ignoring it entirely
+        in_closed_board = (server_class is not None
+                           and message.channel.id == server_class.hall_of_fame_channel_id
+                           and not server_class.allow_messages_in_hof_channel)
+        will_be_deleted = (in_closed_board
+                           and message.channel.permissions_for(message.guild.me).manage_messages)
+        if not will_be_deleted:
+            try:
+                await commands.answer_bot_mention(message, bot.user, server_class)
+            except Exception as e:
+                await utils.logging(bot, f"Error answering a mention: {e}", message.guild.id,
+                                    validate_for_duplicates=True)
+            return
+
+    if message.guild.id not in server_classes:
         return
 
     if message.guild.id == 1180006529575960616 and message.type in (discord.MessageType.new_member, 7):
@@ -206,10 +236,7 @@ async def on_message(message: discord.Message):
         return
 
     try:
-        server_class = server_classes[message.guild.id]
-        target_channel_id = server_class.hall_of_fame_channel_id
-        allow_messages_in_hof = server_class.allow_messages_in_hof_channel
-        await events.on_message(message, target_channel_id, allow_messages_in_hof)
+        await events.on_message(message, bot, server_classes[message.guild.id])
     except Exception as e:
         await utils.logging(bot, f"Error in on_message: {e}", message.guild.id, validate_for_duplicates=True)
 
@@ -257,7 +284,7 @@ async def get_help(interaction: discord.Interaction):
 
 @tree.command(name="set_reaction_threshold", description="Configure the amount of reactions needed to post a message in the Hall of Fame")
 async def configure_bot(interaction: discord.Interaction, reaction_threshold: int):
-    if not bot_is_loaded():
+    if not await ensure_bot_is_loaded(interaction):
         return
 
     if not await check_if_user_has_manage_server_permission(interaction):
@@ -276,7 +303,7 @@ async def send_feedback(interaction: discord.Interaction):
 
 @tree.command(name="include_authors_reaction", description="Should the author's own reaction be included in the reaction threshold calculation?")
 async def include_author_own_reaction_in_threshold(interaction: discord.Interaction, include: bool):
-    if not bot_is_loaded():
+    if not await ensure_bot_is_loaded(interaction):
         return
 
     if not await check_if_user_has_manage_server_permission(interaction):
@@ -291,7 +318,7 @@ async def include_author_own_reaction_in_threshold(interaction: discord.Interact
 
 @tree.command(name="allow_messages_in_hof_channel", description="Should people be allowed to send messages in the Hall of Fame channel?")
 async def allow_messages_in_hof_channel(interaction: discord.Interaction, allow: bool):
-    if not bot_is_loaded():
+    if not await ensure_bot_is_loaded(interaction):
         return
 
     if not await check_if_user_has_manage_server_permission(interaction):
@@ -307,7 +334,7 @@ async def allow_messages_in_hof_channel(interaction: discord.Interaction, allow:
 
 @tree.command(name="require_image_or_video", description="Should only messages with images or videos be allowed in the Hall of Fame?")
 async def require_image_or_video(interaction: discord.Interaction, require: bool):
-    if not bot_is_loaded():
+    if not await ensure_bot_is_loaded(interaction):
         return
 
     if not await check_if_user_has_manage_server_permission(interaction):
@@ -337,7 +364,7 @@ async def vote(interaction: discord.Interaction):
     ]
 )
 async def custom_emoji_check_logic(interaction: discord.Interaction, config_option: app_commands.Choice[str]):
-    if not bot_is_loaded():
+    if not await ensure_bot_is_loaded(interaction):
         return
 
     if not await check_if_user_has_manage_server_permission(interaction):
@@ -361,7 +388,7 @@ async def custom_emoji_check_logic(interaction: discord.Interaction, config_opti
 
 @tree.command(name="whitelist_emoji", description="Whitelist an emoji for the server if custom emoji check logic is enabled")
 async def whitelist_emoji(interaction: discord.Interaction, emoji: str):
-    if not bot_is_loaded():
+    if not await ensure_bot_is_loaded(interaction):
         return
 
     if not await check_if_user_has_manage_server_permission(interaction):
@@ -398,7 +425,7 @@ async def whitelist_emoji(interaction: discord.Interaction, emoji: str):
     name="unwhitelist_emoji",
     description="Unwhitelist an emoji for the server if custom emoji check logic is enabled")
 async def unwhitelist_emoji(interaction: discord.Interaction, emoji: str):
-    if not bot_is_loaded():
+    if not await ensure_bot_is_loaded(interaction):
         return
 
     if not await check_if_user_has_manage_server_permission(interaction):
@@ -428,7 +455,7 @@ async def unwhitelist_emoji(interaction: discord.Interaction, emoji: str):
 
 @tree.command(name="clear_whitelist", description="Clear the whitelist for the server if custom emoji check logic is enabled")
 async def clear_whitelist(interaction: discord.Interaction):
-    if not bot_is_loaded():
+    if not await ensure_bot_is_loaded(interaction):
         return
 
     if not await check_if_user_has_manage_server_permission(interaction):
@@ -449,6 +476,14 @@ async def clear_whitelist(interaction: discord.Interaction):
 
 @tree.command(name="get_server_config", description="Get the server config")
 async def get_server_config(interaction: discord.Interaction):
+    if not await ensure_bot_is_loaded(interaction):
+        return
+
+    if interaction.guild_id not in server_classes:
+        # noinspection PyUnresolvedReferences
+        await interaction.response.send_message(messages.ERROR_SERVER_NOT_SETUP)
+        return
+
     server_class = server_classes[interaction.guild_id]
     config_message = messages.SERVER_CONFIG.format(
         reaction_threshold=server_class.reaction_threshold,
@@ -476,7 +511,7 @@ async def get_server_config(interaction: discord.Interaction):
     name="set_post_due_date",
     description="How many days ago should the post be to be considered old and not valid?")
 async def set_post_due_date(interaction: discord.Interaction, post_due_date: int):
-    if not bot_is_loaded():
+    if not await ensure_bot_is_loaded(interaction):
         return
 
     if not await check_if_user_has_manage_server_permission(interaction):
@@ -499,7 +534,7 @@ async def invite(interaction: discord.Interaction):
 
 @tree.command(name="ignore_bot_messages", description="Should the bot ignore messages from other bots?")
 async def ignore_bot_messages(interaction: discord.Interaction, should_ignore_bot_messages: bool):
-    if not bot_is_loaded():
+    if not await ensure_bot_is_loaded(interaction):
         return
 
     if not await check_if_user_has_manage_server_permission(interaction):
@@ -522,7 +557,7 @@ async def ignore_bot_messages(interaction: discord.Interaction, should_ignore_bo
     ]
 )
 async def calculation_method(interaction: discord.Interaction, method: app_commands.Choice[str]):
-    if not bot_is_loaded():
+    if not await ensure_bot_is_loaded(interaction):
         return
 
     if not await check_if_user_has_manage_server_permission(interaction):
@@ -544,7 +579,7 @@ async def hide_hall_of_fame_posts_when_they_are_below_threshold(interaction: dis
     :param hide: True to hide, False to not hide
     :return:
     """
-    if not bot_is_loaded():
+    if not await ensure_bot_is_loaded(interaction):
         return
 
     if not await check_if_user_has_manage_server_permission(interaction):
@@ -566,7 +601,7 @@ async def user_server_profile(interaction: discord.Interaction, specific_user: d
     :param specific_user: The user to get the profile of, defaults to the interaction user
     :return: The server profile of the user
     """
-    if not bot_is_loaded():
+    if not await ensure_bot_is_loaded(interaction):
         return
 
     user = specific_user or interaction.user
@@ -592,7 +627,7 @@ async def leaderboard(interaction: discord.Interaction):
     :param interaction: The interaction object
     :return: The server stats
     """
-    if not bot_is_loaded():
+    if not await ensure_bot_is_loaded(interaction):
         return
 
     if interaction.guild_id not in server_classes:
@@ -600,23 +635,22 @@ async def leaderboard(interaction: discord.Interaction):
         await interaction.response.send_message(messages.ERROR_SERVER_NOT_SETUP)
         return
 
+    if "leaderboard" in daily_command_cooldowns.get(interaction.user.id, []):
+        # noinspection PyUnresolvedReferences
+        await interaction.response.send_message(messages.COMMAND_ON_COOLDOWN)
+        await utils.logging(bot, f"Leaderboard command on cooldown for {interaction.user.name} in {interaction.guild.name}",
+                            interaction.guild.id, log_level=log_type.COMMAND)
+        return
+
     async with get_db_connection(connection_pool) as connection:
-        if interaction.user.id in daily_command_cooldowns and "leaderboard" in daily_command_cooldowns[interaction.user.id]:
-            # noinspection PyUnresolvedReferences
-            await interaction.response.send_message(messages.COMMAND_ON_COOLDOWN)
-            await utils.logging(bot, f"Leaderboard command on cooldown for {interaction.user.name} in {interaction.guild.name}",
-                                interaction.guild.id, log_level=log_type.COMMAND)
-            return
-
-        if interaction.user.id not in daily_command_cooldowns:
-            daily_command_cooldowns[interaction.user.id] = []
-        daily_command_cooldowns[interaction.user.id].append("leaderboard")
-
         try:
             await commands.server_leaderboard(interaction, connection, month_emoji, all_time_emoji)
         except Exception as e:
             await utils.logging(bot, f"Error in leaderboard command: {e}", interaction.guild_id)
             return
+
+    # Only put the command on cooldown once it actually produced a leaderboard
+    daily_command_cooldowns.setdefault(interaction.user.id, []).append("leaderboard")
 
     await utils.logging(bot, f"Leaderboard command used by {interaction.user.name} in {interaction.guild.name}",
                         interaction.guild.id, log_level=log_type.COMMAND)
@@ -628,7 +662,7 @@ async def set_hall_of_fame_channel(interaction: discord.Interaction, channel: di
     :param interaction: The interaction object
     :param channel: The channel to set as the Hall of Fame channel
     """
-    if not bot_is_loaded():
+    if not await ensure_bot_is_loaded(interaction):
         return
 
     if not await check_if_user_has_manage_server_permission(interaction, False):
@@ -668,7 +702,7 @@ async def set_hall_of_fame_channel(interaction: discord.Interaction, channel: di
 
 @tree.command(name="hof_wrapped", description="Get your Hall of Fame Wrapped for the year")
 async def hof_wrapped_command(interaction: discord.Interaction):
-    if not bot_is_loaded():
+    if not await ensure_bot_is_loaded(interaction):
         return
 
     if not (interaction.guild_id in server_classes and server_classes[interaction.guild_id] is not None):
@@ -694,7 +728,7 @@ async def hof_wrapped_command(interaction: discord.Interaction):
 
 @tree.command(name="server_hof_wrapped", description="Get your Hall of Fame Wrapped for the year")
 async def server_hof_wrapped_command(interaction: discord.Interaction):
-    if not bot_is_loaded():
+    if not await ensure_bot_is_loaded(interaction):
         return
 
     if not (interaction.guild_id in server_classes and server_classes[interaction.guild_id] is not None):
@@ -755,6 +789,7 @@ if __name__ == "__main__":
     import time
     if TOKEN is None:
         raise ValueError("TOKEN environment variable is not set in the .env file")
+    connection_pool = create_connection_pool()
     while True:
         try:
             bot.run(TOKEN)
