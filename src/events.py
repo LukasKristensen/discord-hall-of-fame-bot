@@ -1,10 +1,17 @@
 import discord
 import asyncio
 import datetime
+import concurrency
 import utils
 from translations import messages
 from enums import command_refs
 from repositories import server_config_repo, hall_of_fame_message_repo
+
+# The daily sweep runs once per server the bot is in, so it is paced rather than run all at once:
+# a bounded number of servers are handled together, and any single one that hangs is abandoned so
+# that it cannot cost the remaining servers their update
+daily_task_concurrency = 5
+daily_task_guild_timeout_seconds = 120
 
 
 async def post_wrapped():
@@ -136,14 +143,31 @@ async def daily_task(bot, connection, server_classes, dev_testing):
     """
     await utils.logging(bot, f"Starting daily task for {len(server_classes)} servers")
 
-    bot_guild_ids = [guild.id for guild in bot.guilds]
-    for server_class in list(server_classes.values()):
-        if server_class.guild_id not in bot_guild_ids or not server_config_repo.get_parameter_value(connection, server_class.guild_id, "leaderboard_setup"):
-            continue
-        try:
-            await utils.update_leaderboard(connection, bot, server_class)
-        except Exception as e:
-            await utils.logging(bot, f"Error updating leaderboard for server {server_class.guild_id}: {e}")
+    bot_guild_ids = {guild.id for guild in bot.guilds}
+    due_for_leaderboard = [
+        server_class for server_class in list(server_classes.values())
+        if server_class.guild_id in bot_guild_ids
+        and server_config_repo.get_parameter_value(connection, server_class.guild_id, "leaderboard_setup")
+    ]
+
+    async def update_one_leaderboard(server_class):
+        await utils.update_leaderboard(connection, bot, server_class)
+
+    async def report_leaderboard_failure(server_class, error):
+        if isinstance(error, asyncio.TimeoutError):
+            await utils.logging(bot, f"Timed out updating leaderboard for server {server_class.guild_id} "
+                                     f"after {daily_task_guild_timeout_seconds} seconds", server_class.guild_id)
+            return
+        await utils.logging(bot, f"Error updating leaderboard for server {server_class.guild_id}: {error}")
+
+    leaderboards = await concurrency.run_in_batches(
+        due_for_leaderboard,
+        update_one_leaderboard,
+        limit=daily_task_concurrency,
+        timeout=daily_task_guild_timeout_seconds,
+        on_error=report_leaderboard_failure)
+    await utils.logging(bot, f"Updated {len(leaderboards.completed)} leaderboards, "
+                             f"{len(leaderboards.failed)} failed")
 
     await utils.logging(bot, f"Checking for db entries that are not in the guilds")
     for server in server_classes.values():
@@ -163,15 +187,15 @@ async def check_write_permissions_to_hall_of_fame_channel(bot: discord.Client, s
     :param server_classes: The server classes
     :return: None
     """
-    for server_class in list(server_classes.values()):
+    async def check_one_server(server_class):
         guild = bot.get_guild(server_class.guild_id)
         if not guild:
-            continue
+            return
         channel = guild.get_channel(server_class.hall_of_fame_channel_id)
         if not channel:
             await utils.logging(bot, f"Could not find Hall of Fame channel for server {guild.name}", guild.id)
             # await utils.send_message_to_highest_prio_channel(bot, guild, messages.FAILED_TO_FIND_HOF_CHANNEL)
-            continue
+            return
         permissions = channel.permissions_for(guild.me)
         missing_permissions = []
         if not permissions.view_channel:
@@ -182,10 +206,21 @@ async def check_write_permissions_to_hall_of_fame_channel(bot: discord.Client, s
             missing_permissions.append("Read Message History")
 
         if not missing_permissions:
-            continue
+            return
         channel_ref = f"<#{channel.id}>"
         await utils.send_message_to_highest_prio_channel(bot, guild, messages.MISSING_HOF_CHANNEL_PERMISSIONS.format(
                         missing_permissions=", ".join(missing_permissions), channel=channel_ref))
+
+    async def report_permission_failure(server_class, error):
+        await utils.logging(bot, f"Error checking Hall of Fame channel permissions for server "
+                                 f"{server_class.guild_id}: {error}", server_class.guild_id)
+
+    await concurrency.run_in_batches(
+        list(server_classes.values()),
+        check_one_server,
+        limit=daily_task_concurrency,
+        timeout=daily_task_guild_timeout_seconds,
+        on_error=report_permission_failure)
 
 
 async def update_user_database(bot: discord.Client, connection):

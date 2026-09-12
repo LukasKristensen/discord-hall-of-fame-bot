@@ -6,6 +6,7 @@ from discord.ext import tasks
 from dotenv import load_dotenv
 import commands
 import concurrency
+import environment
 import events
 import utils
 from constants import version
@@ -31,26 +32,30 @@ from scripts import monthly_guild_snapshot
 import asyncio
 
 load_dotenv()
-dev_test = os.getenv('DEV_TEST') == "True"
-if dev_test:
-    TOKEN = os.getenv('DEV_KEY')
-    connection_pool = psycopg2.pool.ThreadedConnectionPool(
+dev_test = environment.is_development()
+TOKEN = os.getenv('DEV_KEY') if dev_test else os.getenv('KEY')
+# Only the live bot reports to the listing sites, so the development bot never reads their keys
+topgg_api_key = environment.production_secret('TOPGG_API_KEY')
+
+# Opened when the bot starts rather than when this module is imported, so that importing it does
+# not reach for a database. Nothing outside the running bot needs a pool, and a module that opens
+# one on import cannot be loaded by anything else, tests included
+connection_pool = None
+
+
+def create_connection_pool():
+    """
+    Open the pool the bot serves every command and reaction from
+    :return: A thread safe connection pool for the configured database
+    """
+    prefix = "_LOCAL" if dev_test else ""
+    return psycopg2.pool.ThreadedConnectionPool(
         minconn=1,
         maxconn=10,
-        host=os.getenv('POSTGRES_HOST_LOCAL'),
-        database=os.getenv('POSTGRES_DB_LOCAL'),
-        user=os.getenv('POSTGRES_USER_LOCAL'),
-        password=os.getenv('POSTGRES_PASSWORD_LOCAL'))
-else:
-    TOKEN = os.getenv('KEY')
-    connection_pool = psycopg2.pool.ThreadedConnectionPool(
-        minconn=1,
-        maxconn=10,
-        host=os.getenv('POSTGRES_HOST'),
-        database=os.getenv('POSTGRES_DB'),
-        user=os.getenv('POSTGRES_USER'),
-        password=os.getenv('POSTGRES_PASSWORD'))
-topgg_api_key = os.getenv('TOPGG_API_KEY')
+        host=os.getenv(f'POSTGRES_HOST{prefix}'),
+        database=os.getenv(f'POSTGRES_DB{prefix}'),
+        user=os.getenv(f'POSTGRES_USER{prefix}'),
+        password=os.getenv(f'POSTGRES_PASSWORD{prefix}'))
 
 message_locks = concurrency.KeyedLocks()
 daily_command_cooldowns = {}
@@ -760,6 +765,7 @@ if __name__ == "__main__":
     import time
     if TOKEN is None:
         raise ValueError("TOKEN environment variable is not set in the .env file")
+    connection_pool = create_connection_pool()
     while True:
         try:
             bot.run(TOKEN)

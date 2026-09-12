@@ -227,8 +227,12 @@ async def update_leaderboard(connection, bot: discord.Client, server_config: ser
 
     # Update the top 20 messages in the leaderboard
     for i in range(min(20, len(most_reacted_messages), len(msg_id_array))):
-        hall_of_fame_message = await hall_of_fame_channel.fetch_message(int(msg_id_array[i]))
         original_channel = bot.get_channel(int(most_reacted_messages[i]["channel_id"]))
+        if not original_channel:
+            # The channel was deleted or hidden from the bot since the message was featured.
+            # Its place is left as it was, rather than losing the rest of the leaderboard with it
+            continue
+        hall_of_fame_message = await hall_of_fame_channel.fetch_message(int(msg_id_array[i]))
         original_message = await original_channel.fetch_message(int(most_reacted_messages[i]["message_id"]))
 
         leaderboard_content = f"**HallOfFame#{i+1}**"
@@ -817,6 +821,9 @@ async def create_custom_profile_picture_and_cover_form(interaction: discord.Inte
 
 monthly_stats_window_days = 30
 
+# How many guilds are rebuilt before the sweep hands control back to the event loop
+user_stats_guilds_per_yield = 25
+
 
 def monthly_window_start(now=None):
     """
@@ -834,7 +841,14 @@ def monthly_window_start(now=None):
 
 async def update_user_database(bot: discord.Client, connection):
     """
-    Recompute the hall of fame totals and ranks for every guild the bot is in
+    Recompute the hall of fame totals and ranks for every guild the bot is in.
+
+    Every guild is measured against the same window, taken once here, so that the monthly counters
+    are comparable across servers and a guild is not judged against a window a few seconds newer
+    than its neighbour. The rebuild itself is one statement per guild and is left serial: it runs
+    on a single database connection, so doing several at once would win nothing. What it does do
+    is hand the event loop back between batches, since a run of synchronous rebuilds would
+    otherwise hold the loop for the whole sweep and leave reactions queueing behind it.
     :param bot: The Discord bot
     :param connection: The database connection
     :return: None
@@ -842,12 +856,18 @@ async def update_user_database(bot: discord.Client, connection):
     await logging(bot, f"Updating user database...")
     window_start = monthly_window_start()
 
-    for guild in bot.guilds:
+    rebuilt = 0
+    failed = 0
+    for position, guild in enumerate(bot.guilds, start=1):
         try:
             server_user_repo.rebuild_user_stats_for_guild(connection, guild.id, window_start)
+            rebuilt += 1
         except Exception as e:
+            failed += 1
             await logging(bot, f"Failed to update user stats for guild {guild.id}: {e}", guild.id)
-    await logging(bot, f"Finished updating user database...")
+        if position % user_stats_guilds_per_yield == 0:
+            await asyncio.sleep(0)
+    await logging(bot, f"Finished updating user database: {rebuilt} rebuilt, {failed} failed")
 
 
 async def fix_write_hall_of_fame_channel_permissions(bot, db_client):

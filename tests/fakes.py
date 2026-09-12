@@ -40,11 +40,14 @@ class FakeAttachment:
 
 
 class FakeCursor:
-    def __init__(self, row, rows=None):
+    def __init__(self, row, rows=None, description=None):
         self.row = row
         self.rows = rows if rows is not None else []
         self.executed = []
         self.rowcount = 0
+        # Column names, in the shape psycopg2 reports them, for the queries that map rows to dicts
+        self.description = [(name,) for name in description] if description is not None else None
+        self.closed = False
 
     def execute(self, query, params=None):
         self.executed.append((query, params))
@@ -56,28 +59,34 @@ class FakeCursor:
         return self.rows
 
     def close(self):
-        pass
+        self.closed = True
 
 
 class FakeConnection:
     """Connection that hands out cursors returning a single canned row."""
 
-    def __init__(self, row=None, rows=None):
+    def __init__(self, row=None, rows=None, description=None):
         self.row = row
         self.rows = rows
+        self.description = description
         self.cursors = []
+        self.commits = 0
 
     def cursor(self):
-        cursor = FakeCursor(self.row, self.rows)
+        cursor = FakeCursor(self.row, self.rows, self.description)
         self.cursors.append(cursor)
         return cursor
 
     def commit(self):
-        pass
+        self.commits += 1
 
     @property
     def queries(self):
         return [query for cursor in self.cursors for query, _ in cursor.executed]
+
+    @property
+    def parameters(self):
+        return [params for cursor in self.cursors for _, params in cursor.executed]
 
 
 class FakeLogChannel:
@@ -119,13 +128,29 @@ class FakeBotWithGuilds(FakeBot):
 
 
 class FakePermissions:
+    """
+    Every permission the bot inspects, channel level and guild level, granted unless a test says
+    otherwise. Keeping them in one place means a test only has to name what it takes away.
+    """
+
     def __init__(self, manage_messages=True, send_messages=True, view_channel=True,
-                 read_message_history=True, read_messages=True):
+                 read_message_history=True, read_messages=True, manage_channels=True,
+                 manage_roles=True, manage_guild=True, send_messages_in_threads=True,
+                 embed_links=True, attach_files=True, add_reactions=True,
+                 use_external_emojis=True):
         self.manage_messages = manage_messages
         self.send_messages = send_messages
         self.view_channel = view_channel
         self.read_message_history = read_message_history
         self.read_messages = read_messages
+        self.manage_channels = manage_channels
+        self.manage_roles = manage_roles
+        self.manage_guild = manage_guild
+        self.send_messages_in_threads = send_messages_in_threads
+        self.embed_links = embed_links
+        self.attach_files = attach_files
+        self.add_reactions = add_reactions
+        self.use_external_emojis = use_external_emojis
 
 
 class FakeSentMessage:
