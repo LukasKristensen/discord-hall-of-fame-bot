@@ -50,7 +50,13 @@ Beyond throughput and latency it asserts four invariants, and exits non-zero if 
 | No locks still held | `KeyedLocks` deletes a lock once nobody waits on it. A leak means unbounded memory growth, one entry per message ever reacted to. |
 | No connections unreturned | A connection that is never put back is gone from the pool for the life of the process. Ten of those and the bot stops working entirely. |
 | No stale counts on the board | After the storm settles, the count stored for a featured message must equal its real reaction count. This is the guarantee the locks exist to provide. |
+| Nothing missed the board | A message that ended up over the threshold must have reached the board. Nothing revisits a message until somebody reacts to it again, so one that is skipped is not late, it is gone. |
 | No dropped events | An event the bot failed to process is a reaction the member made that the board never reflects. |
+
+The last three fail together, and the order matters when reading a failure: dropped events are the
+cause, stale counts and missed messages are what the members of a server actually see. Confirm which
+you are looking at by running the same load again with `--pool-size` well above `--concurrency`. If
+the last two clear, the locks are fine and the pool is the problem.
 
 ### Reading the output
 

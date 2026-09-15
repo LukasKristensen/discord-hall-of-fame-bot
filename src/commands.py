@@ -1,7 +1,7 @@
 import discord
 import utils
 from constants import version
-from enums import command_refs
+from enums import command_refs, calculation_method_type
 from repositories import server_config_repo, server_user_repo
 from caches import ExpiringSet
 
@@ -281,6 +281,103 @@ def build_bot_info_embed(guild, bot_user, server_config) -> discord.Embed:
 
     if bot_user is not None and getattr(bot_user, "display_avatar", None) is not None:
         embed.set_thumbnail(url=bot_user.display_avatar.url)
+    embed.set_footer(text=f"Hall of Fame {version.VERSION}")
+    return embed
+
+
+calculation_method_labels = {
+    calculation_method_type.MOST_REACTIONS_ON_EMOJI: "Most reactions on a single emoji",
+    calculation_method_type.TOTAL_REACTIONS: "Total reactions across all emojis",
+    calculation_method_type.UNIQUE_USERS: "Unique members who reacted",
+}
+
+# Discord rejects an embed field value longer than 1024 characters, and a whitelist of custom emojis
+# can pass that
+embed_field_value_limit = 1024
+
+
+def _toggle(enabled: bool, label: str, command: str) -> str:
+    return f"{'✅' if enabled else '❌'} {label} · {command}"
+
+
+def _whitelist_value(emojis) -> str:
+    if not emojis:
+        return f"Empty, so nothing counts yet. Add one with {command_refs.WHITELIST_EMOJI}"
+
+    footer = f"\nManage with {command_refs.WHITELIST_EMOJI} {command_refs.UNWHITELIST_EMOJI} {command_refs.CLEAR_WHITELIST}"
+    shown = []
+    for index, emoji in enumerate(emojis):
+        remaining = len(emojis) - index
+        overflow = f" and {remaining} more"
+        if len(" ".join(shown + [emoji])) + len(overflow) + len(footer) > embed_field_value_limit:
+            return " ".join(shown) + overflow + footer
+        shown.append(emoji)
+    return " ".join(shown) + footer
+
+
+def build_server_config_embed(guild, server_config) -> discord.Embed:
+    """
+    The card /get_server_config answers with: every setting, grouped by what it affects, with the
+    command that changes it next to it
+    :param guild: The server the command was used in
+    :param server_config: The server's configuration
+    :return: The embed to send
+    """
+    embed = discord.Embed(
+        title="⚙️ Hall of Fame Configuration",
+        description=f"How the bot is set up in **{guild.name}**. "
+                    f"Changing a setting needs the Manage Server permission.",
+        color=discord.Color.gold()
+    )
+
+    channel = (f"<#{server_config.hall_of_fame_channel_id}>" if server_config.hall_of_fame_channel_id
+               else "Not set")
+    method = server_config.reaction_count_calculation_method
+    method_label = calculation_method_labels.get(method, str(method).replace("_", " "))
+    embed.add_field(
+        name="🏆 Board",
+        value=f"**Channel:** {channel} · {command_refs.SET_HALL_OF_FAME_CHANNEL}\n"
+              f"**Reactions needed:** {server_config.reaction_threshold} · {command_refs.SET_REACTION_THRESHOLD}\n"
+              f"**Counting:** {method_label} · {command_refs.CALCULATION_METHOD}",
+        inline=False)
+
+    embed.add_field(
+        name="🎯 What qualifies",
+        value=f"**Post age:** last {server_config.post_due_date} days · {command_refs.SET_POST_DUE_DATE}\n"
+              + "\n".join([
+                  _toggle(server_config.include_author_in_reaction_calculation,
+                          "Author's own reaction counts", command_refs.INCLUDE_AUTHORS_REACTION),
+                  _toggle(server_config.ignore_bot_messages,
+                          "Ignore messages from bots", command_refs.IGNORE_BOT_MESSAGES),
+                  _toggle(server_config.require_image_or_video,
+                          "Only posts with an image or video", command_refs.REQUIRE_IMAGE_OR_VIDEO),
+              ]),
+        inline=False)
+
+    embed.add_field(
+        name="📋 Board behaviour",
+        value="\n".join([
+            _toggle(server_config.allow_messages_in_hof_channel,
+                    "Members can chat in the board channel", command_refs.ALLOW_MESSAGES_IN_HOF_CHANNEL),
+            _toggle(server_config.hide_hof_post_below_threshold,
+                    "Hide posts that drop below the threshold", command_refs.HIDE_HOF_POST_BELOW_THRESHOLD),
+        ]),
+        inline=False)
+
+    if server_config.custom_emoji_check_logic:
+        embed.add_field(
+            name="😀 Emoji whitelist · on",
+            value=_whitelist_value(server_config.whitelisted_emojis),
+            inline=False)
+    else:
+        embed.add_field(
+            name="😀 Emoji whitelist · off",
+            value=f"Every emoji counts. Restrict it with {command_refs.CUSTOM_EMOJI_CHECK_LOGIC}",
+            inline=False)
+
+    icon = getattr(guild, "icon", None)
+    if icon is not None:
+        embed.set_thumbnail(url=icon.url)
     embed.set_footer(text=f"Hall of Fame {version.VERSION}")
     return embed
 

@@ -67,11 +67,16 @@ async def on_raw_reaction(message: discord.RawReactionActionEvent, bot: discord.
     try:
         await utils.validate_message(message, bot, connection, server_config)
     except Exception as e:
-        if "Unknown Message" in str(e) or "object has no attribute" in str(e):
+        # A message that has been deleted since it was reacted to is ordinary, and reporting it
+        # would bury everything else
+        if "Unknown Message" in str(e):
             return
-        if hall_of_fame_message_repo.find_hall_of_fame_message(connection, message.guild_id, message.channel_id, message.message_id):
-            await utils.logging(bot, f"Error in reaction event: {e}", message.guild_id, validate_for_duplicates=True)
-            return
+        # Everything else is reported. This used to stay quiet unless the message was already on the
+        # board, and to discard every error reading "object has no attribute" outright, which is
+        # every AttributeError there is: a bug in the posting path left no trace at all. Repeats are
+        # collapsed per server, so one message failing over and over cannot flood the log
+        await utils.logging(bot, f"Error in reaction event: {e}", message.guild_id,
+                            validate_for_duplicates=True)
 
 
 async def on_message(message: discord.Message, bot: discord.Client, server_config):

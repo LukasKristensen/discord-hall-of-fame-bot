@@ -8,6 +8,7 @@ Importing ``main`` is what these tests need, and it is only possible because the
 opened when the bot starts rather than when the module loads.
 """
 
+import asyncio
 import types
 import unittest
 from unittest import mock
@@ -272,7 +273,9 @@ class GetServerConfigCommandTests(MainTestCase):
         interaction = FakeInteraction()
         await main.get_server_config.callback(interaction)
 
-        self.assertIn("Reaction Threshold", interaction.response.messages[0])
+        embed = interaction.response.messages[0]
+        self.assertIsInstance(embed, discord.Embed)
+        self.assertIn("Reactions needed", " ".join(field.value for field in embed.fields))
 
     async def test_says_a_server_is_not_set_up_rather_than_failing(self):
         """Answering a command with an error is worse than answering it with the reason."""
@@ -289,7 +292,7 @@ class GetServerConfigCommandTests(MainTestCase):
         interaction = FakeInteraction()
         await main.get_server_config.callback(interaction)
 
-        self.assertIn("😂", interaction.response.messages[0])
+        self.assertIn("😂", " ".join(field.value for field in interaction.response.messages[0].fields))
 
 
 class PostApiBotStatsTests(MainTestCase):
@@ -425,3 +428,120 @@ class OnMessageMentionTests(MainTestCase):
         await main.on_message(self.message())
 
         self.assertTrue(any("Error answering a mention" in entry for entry in self.logged))
+
+
+class ConnectionSlotTests(MainTestCase):
+    """
+    psycopg2 raises when the pool is empty rather than waiting, so the waiting is done in front of
+    it. These pin that a burst queues instead of being dropped, and that a slot is always given back.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.pool = FakePool()
+        self.patch(main, "connection_pool", self.pool)
+        self.patch(main, "bot", None)
+
+    def size_the_pool(self, size):
+        self.patch(main, "connection_slots", asyncio.Semaphore(size))
+
+    async def borrow(self, hold=0.01, in_flight=None):
+        async with main.get_db_connection(self.pool):
+            if in_flight is not None:
+                in_flight.append(self.pool.handed_out - self.pool.returned)
+            await asyncio.sleep(hold)
+
+    async def test_hands_out_a_connection(self):
+        self.size_the_pool(2)
+        async with main.get_db_connection(self.pool) as connection:
+            self.assertIsNotNone(connection)
+
+        self.assertEqual(1, self.pool.handed_out)
+
+    async def test_never_asks_the_pool_for_more_than_it_has(self):
+        """This is the condition psycopg2 raises on, so it must never be reached."""
+        self.size_the_pool(3)
+        in_flight = []
+        await asyncio.gather(*(self.borrow(in_flight=in_flight) for _ in range(20)))
+
+        self.assertLessEqual(max(in_flight), 3)
+
+    async def test_serves_every_caller_in_a_burst(self):
+        self.size_the_pool(3)
+        await asyncio.gather(*(self.borrow() for _ in range(20)))
+
+        self.assertEqual(20, self.pool.handed_out)
+        self.assertEqual(20, self.pool.returned)
+
+    async def test_gives_the_slot_back_when_the_body_fails(self):
+        self.size_the_pool(1)
+        with self.assertRaises(RuntimeError):
+            async with main.get_db_connection(self.pool):
+                raise RuntimeError("the query failed")
+
+        # A slot that is not returned would take a connection out of circulation permanently
+        async with main.get_db_connection(self.pool):
+            pass
+        self.assertEqual(2, self.pool.returned)
+
+    async def test_gives_the_slot_back_when_the_pool_itself_fails(self):
+        self.size_the_pool(1)
+
+        def refuse():
+            raise RuntimeError("connection pool exhausted")
+
+        self.pool.getconn = refuse
+        with self.assertRaises(RuntimeError):
+            async with main.get_db_connection(self.pool):
+                pass
+
+        self.assertFalse(main.connection_slots.locked())
+
+    async def test_gives_up_rather_than_waiting_for_ever(self):
+        self.size_the_pool(1)
+        self.patch(main, "connection_wait_timeout_seconds", 0.02)
+
+        async def hold_it():
+            async with main.get_db_connection(self.pool):
+                await asyncio.sleep(0.5)
+
+        holder = asyncio.create_task(hold_it())
+        await asyncio.sleep(0)
+        with self.assertRaises(asyncio.TimeoutError):
+            async with main.get_db_connection(self.pool):
+                pass
+        holder.cancel()
+
+    async def test_reports_giving_up(self):
+        self.size_the_pool(1)
+        self.patch(main, "connection_wait_timeout_seconds", 0.02)
+
+        async def hold_it():
+            async with main.get_db_connection(self.pool):
+                await asyncio.sleep(0.5)
+
+        holder = asyncio.create_task(hold_it())
+        await asyncio.sleep(0)
+        try:
+            async with main.get_db_connection(self.pool):
+                pass
+        except asyncio.TimeoutError:
+            pass
+        holder.cancel()
+
+        self.assertTrue(any("gave up" in entry for entry in self.logged))
+
+    async def test_the_queue_is_sized_to_the_pool_behind_it(self):
+        """Longer than the pool and psycopg2 raises again; shorter and connections sit unused."""
+        acquired = 0
+        try:
+            for _ in range(main.database_pool_size):
+                await asyncio.wait_for(main.connection_slots.acquire(), 0.1)
+                acquired += 1
+            with self.assertRaises(asyncio.TimeoutError):
+                await asyncio.wait_for(main.connection_slots.acquire(), 0.02)
+        finally:
+            for _ in range(acquired):
+                main.connection_slots.release()
+
+        self.assertEqual(main.database_pool_size, acquired)

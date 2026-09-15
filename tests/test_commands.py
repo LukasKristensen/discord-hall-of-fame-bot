@@ -108,6 +108,63 @@ class GetHelpTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("discord.gg", values)
 
 
+def server_config(**overrides):
+    config = {
+        "hall_of_fame_channel_id": 555,
+        "reaction_threshold": 7,
+        "post_due_date": 30,
+        "include_author_in_reaction_calculation": True,
+        "allow_messages_in_hof_channel": False,
+        "custom_emoji_check_logic": False,
+        "whitelisted_emojis": [],
+        "ignore_bot_messages": True,
+        "reaction_count_calculation_method": "unique_users",
+        "hide_hof_post_below_threshold": False,
+        "require_image_or_video": False,
+    }
+    config.update(overrides)
+    return types.SimpleNamespace(**config)
+
+
+class BuildServerConfigEmbedTests(unittest.TestCase):
+    def test_shows_the_board_channel_threshold_and_counting_method(self):
+        embed = commands.build_server_config_embed(FakeGuild(), server_config())
+        board = field_named(embed, "Board").value
+
+        self.assertIn("<#555>", board)
+        self.assertIn("7", board)
+        self.assertIn("Unique members who reacted", board)
+
+    def test_marks_each_toggle_on_or_off(self):
+        embed = commands.build_server_config_embed(FakeGuild(), server_config())
+        qualifies = field_named(embed, "What qualifies").value
+
+        self.assertIn("✅ Author's own reaction counts", qualifies)
+        self.assertIn("❌ Only posts with an image or video", qualifies)
+
+    def test_says_the_whitelist_is_off_when_every_emoji_counts(self):
+        embed = commands.build_server_config_embed(FakeGuild(), server_config(whitelisted_emojis=["😂"]))
+
+        self.assertIsNotNone(field_named(embed, "whitelist · off"))
+        self.assertNotIn("😂", field_named(embed, "whitelist").value)
+
+    def test_lists_the_whitelisted_emojis_when_the_whitelist_is_on(self):
+        embed = commands.build_server_config_embed(
+            FakeGuild(), server_config(custom_emoji_check_logic=True, whitelisted_emojis=["😂", "🔥"]))
+
+        self.assertIn("😂 🔥", field_named(embed, "whitelist · on").value)
+
+    def test_keeps_a_long_whitelist_within_discords_field_limit(self):
+        """Discord rejects the whole reply when one field is too long, so the command would fail."""
+        emojis = [f"<:custom_emoji_{index}:{10**17 + index}>" for index in range(100)]
+        embed = commands.build_server_config_embed(
+            FakeGuild(), server_config(custom_emoji_check_logic=True, whitelisted_emojis=emojis))
+        value = field_named(embed, "whitelist").value
+
+        self.assertLessEqual(len(value), 1024)
+        self.assertIn("more", value)
+
+
 class SetReactionThresholdTests(unittest.IsolatedAsyncioTestCase):
     async def test_writes_the_threshold_for_the_server_it_was_used_in(self):
         interaction = FakeInteraction()

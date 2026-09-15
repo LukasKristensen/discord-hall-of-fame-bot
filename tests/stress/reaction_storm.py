@@ -244,6 +244,22 @@ class PostedMessage:
             self.embeds = [kwargs["embed"]] if kwargs["embed"] else []
 
 
+class StubField:
+    def __init__(self, name, value):
+        self.name = name
+        self.value = value
+
+
+class StubEmbed:
+    """Enough of an embed for the counter update path, without the cost of building a real one."""
+
+    def __init__(self):
+        self.fields = [StubField("Reactions", "0")]
+
+    def set_field_at(self, index, name, value, inline=True):
+        self.fields[index] = StubField(name, value)
+
+
 class FakePermissions:
     def __init__(self):
         self.read_messages = True
@@ -342,12 +358,11 @@ class Harness:
                 self.errors[text.split(":")[0][:60]] += 1
 
         async def build_embed(*_args, **_kwargs):
-            # Embed rendering is covered by the unit suite and is pure formatting. Standing in for
-            # it keeps the run measuring what it is here to measure, and keeps the posting path
-            # reachable: on_raw_reaction discards any error containing "object has no attribute",
-            # so a stand-in message that create_embed cannot read would be silently dropped
+            # Embed rendering is covered by the unit suite and is pure formatting, so standing in
+            # for it keeps the run measuring what it is here to measure. It still has to carry a
+            # Reactions field, because the counter update path reads and rewrites one
             self.stats["embeds_built"] += 1
-            return object()
+            return StubEmbed()
 
         self.patched = [
             (utils, "logging", utils.logging),
@@ -364,6 +379,10 @@ class Harness:
         main.server_classes = self.server_classes
         main.connection_pool = self.pool
         main.message_locks = concurrency.KeyedLocks()
+        # The bot waits for a free connection rather than failing, so the thing being sized here is
+        # the queue in front of the pool, not just the pool
+        main.connection_slots = asyncio.Semaphore(self.options.pool_size)
+        main.connection_wait_timeout_seconds = self.options.connection_timeout
 
     def restore(self):
         for module, name, original in self.patched:
@@ -469,17 +488,25 @@ def report(harness):
         failures.append(f"{harness.pool.in_flight} connections were never returned to the pool")
     print(f"  connections not returned {harness.pool.in_flight}")
 
-    stale = []
+    stale, missed = [], []
     for message in harness.messages:
         row = harness.store.rows.get((message.guild.id, message.channel.id, message.id))
-        if row is None:
+        if message.live_count < options.threshold:
             continue
-        if message.live_count >= options.threshold and row["reaction_count"] != message.live_count:
+        if row is None:
+            # Nothing will ever revisit this message until somebody reacts to it again, so the
+            # moment is not late, it is gone
+            missed.append((message.id, message.live_count))
+        elif row["reaction_count"] != message.live_count:
             stale.append((message.id, row["reaction_count"], message.live_count))
     print(f"  stale counts on board   {len(stale)}")
+    print(f"  never reached the board  {len(missed)}")
     if stale:
         failures.append(f"{len(stale)} featured messages recorded a count that is not the final one "
                         f"(for example message {stale[0][0]}: stored {stale[0][1]}, actual {stale[0][2]})")
+    if missed:
+        failures.append(f"{len(missed)} messages passed the threshold and never reached the board "
+                        f"(for example message {missed[0][0]}, at {missed[0][1]} reactions)")
 
     if harness.errors:
         print()
@@ -521,6 +548,8 @@ def parse_args(argv=None):
                         help="seconds per database call, which really blocks the event loop")
     parser.add_argument("--add-ratio", type=float, default=0.7,
                         help="share of events that add a reaction rather than remove one")
+    parser.add_argument("--connection-timeout", type=float, default=30.0,
+                        help="seconds an event waits for a free connection before giving up")
     parser.add_argument("--seed", type=int, default=1, help="seed, so a run can be repeated")
     return parser.parse_args(argv)
 

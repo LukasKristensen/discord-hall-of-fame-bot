@@ -42,6 +42,19 @@ topgg_api_key = environment.production_secret('TOPGG_API_KEY')
 # one on import cannot be loaded by anything else, tests included
 connection_pool = None
 
+database_pool_size = 20
+
+# psycopg2 raises when every connection is checked out rather than waiting for one, and a reaction
+# holds its connection for the whole handler, Discord round trips included. Under a burst that
+# turned into reactions being dropped, and a dropped reaction is a message that never reaches the
+# board at all, since nothing revisits it until somebody reacts again. So the waiting happens here:
+# a caller queues for a slot, and the pool is never asked for more connections than it has
+connection_slots = asyncio.Semaphore(database_pool_size)
+
+# How long a caller waits for a slot before giving up. Waiting forever would let a burst queue
+# without limit; giving up is still visible in the log, where waiting quietly would not be
+connection_wait_timeout_seconds = 30
+
 
 def create_connection_pool():
     """
@@ -51,7 +64,7 @@ def create_connection_pool():
     prefix = "_LOCAL" if dev_test else ""
     return psycopg2.pool.ThreadedConnectionPool(
         minconn=1,
-        maxconn=10,
+        maxconn=database_pool_size,
         host=os.getenv(f'POSTGRES_HOST{prefix}'),
         database=os.getenv(f'POSTGRES_DB{prefix}'),
         user=os.getenv(f'POSTGRES_USER{prefix}'),
@@ -88,7 +101,24 @@ async def ensure_bot_is_loaded(interaction: discord.Interaction) -> bool:
 
 @asynccontextmanager
 async def get_db_connection(connection_pool):
-    conn = connection_pool.getconn()
+    """
+    Borrow a connection, waiting for a free one rather than failing when they are all in use
+    :param connection_pool: The pool to borrow from
+    """
+    try:
+        await asyncio.wait_for(connection_slots.acquire(), connection_wait_timeout_seconds)
+    except asyncio.TimeoutError:
+        await utils.logging(bot, f"Waited {connection_wait_timeout_seconds} seconds for a database "
+                                 f"connection and gave up, so this event was not handled",
+                            log_level=log_type.CRITICAL, validate_for_duplicates=True)
+        raise
+
+    try:
+        conn = connection_pool.getconn()
+    except Exception:
+        connection_slots.release()
+        raise
+
     try:
         try:
             yield conn
@@ -98,6 +128,7 @@ async def get_db_connection(connection_pool):
             raise
     finally:
         connection_pool.putconn(conn)
+        connection_slots.release()
 
 @bot.event
 async def on_ready():
@@ -484,26 +515,9 @@ async def get_server_config(interaction: discord.Interaction):
         await interaction.response.send_message(messages.ERROR_SERVER_NOT_SETUP)
         return
 
-    server_class = server_classes[interaction.guild_id]
-    config_message = messages.SERVER_CONFIG.format(
-        reaction_threshold=server_class.reaction_threshold,
-        allow_messages_in_hof_channel=server_class.allow_messages_in_hof_channel,
-        include_author_in_reaction_calculation=server_class.include_author_in_reaction_calculation,
-        custom_emoji_check_logic=server_class.custom_emoji_check_logic,
-        ignore_bot_messages=server_class.ignore_bot_messages,
-        post_due_date=server_class.post_due_date,
-        calculation_method=server_class.reaction_count_calculation_method,
-        hide_hof_post_below_threshold=server_class.hide_hof_post_below_threshold,
-        whitelisted_emojis=', '.join(server_class.whitelisted_emojis) if server_class.custom_emoji_check_logic else '',
-        require_image_or_video=server_class.require_image_or_video
-    )
-
-    if server_class.custom_emoji_check_logic:
-        config_message += f"Whitelisted Emojis: {', '.join(server_class.whitelisted_emojis)}\n"
-    config_message += f"```"
-
+    embed = commands.build_server_config_embed(interaction.guild, server_classes[interaction.guild_id])
     # noinspection PyUnresolvedReferences
-    await interaction.response.send_message(config_message)
+    await interaction.response.send_message(embed=embed)
     await utils.logging(bot, f"Get server config command used by {interaction.user.name} in {interaction.guild.name}",
                         interaction.guild.id, log_level=log_type.COMMAND)
 
