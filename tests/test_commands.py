@@ -142,6 +142,16 @@ class BuildServerConfigEmbedTests(unittest.TestCase):
         self.assertIn("✅ Author's own reaction counts", qualifies)
         self.assertIn("❌ Only posts with an image or video", qualifies)
 
+    def test_keeps_the_values_in_a_single_column(self):
+        """A thumbnail narrows the text and a command link per row wraps the values, so the reply
+        reads worse than the plain code block it replaced. Both are deliberately left out."""
+        embed = commands.build_server_config_embed(FakeGuild(), server_config())
+
+        self.assertIsNone(embed.thumbnail.url)
+        for field in embed.fields[:3]:
+            with self.subTest(field=field.name):
+                self.assertNotIn("</", field.value)
+
     def test_says_the_whitelist_is_off_when_every_emoji_counts(self):
         embed = commands.build_server_config_embed(FakeGuild(), server_config(whitelisted_emojis=["😂"]))
 

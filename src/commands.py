@@ -296,29 +296,32 @@ calculation_method_labels = {
 embed_field_value_limit = 1024
 
 
-def _toggle(enabled: bool, label: str, command: str) -> str:
-    return f"{'✅' if enabled else '❌'} {label} · {command}"
+def _toggle(enabled: bool, label: str) -> str:
+    return f"{'✅' if enabled else '❌'} {label}"
 
 
 def _whitelist_value(emojis) -> str:
     if not emojis:
         return f"Empty, so nothing counts yet. Add one with {command_refs.WHITELIST_EMOJI}"
 
-    footer = f"\nManage with {command_refs.WHITELIST_EMOJI} {command_refs.UNWHITELIST_EMOJI} {command_refs.CLEAR_WHITELIST}"
     shown = []
     for index, emoji in enumerate(emojis):
         remaining = len(emojis) - index
         overflow = f" and {remaining} more"
-        if len(" ".join(shown + [emoji])) + len(overflow) + len(footer) > embed_field_value_limit:
-            return " ".join(shown) + overflow + footer
+        if len(" ".join(shown + [emoji])) + len(overflow) > embed_field_value_limit:
+            return " ".join(shown) + overflow
         shown.append(emoji)
-    return " ".join(shown) + footer
+    return " ".join(shown)
 
 
 def build_server_config_embed(guild, server_config) -> discord.Embed:
     """
-    The card /get_server_config answers with: every setting, grouped by what it affects, with the
-    command that changes it next to it
+    The card /get_server_config answers with: every setting, grouped by what it affects.
+
+    Deliberately plain. The settings are what the reader came for, so the values are kept in one
+    column with nothing between them: no thumbnail narrowing the text, and no command link on every
+    row. Both of those wrap the values onto a second line and cost more in scanning than they give
+    back, which is why the command that changes a setting is named once at the bottom instead.
     :param guild: The server the command was used in
     :param server_config: The server's configuration
     :return: The embed to send
@@ -336,21 +339,19 @@ def build_server_config_embed(guild, server_config) -> discord.Embed:
     method_label = calculation_method_labels.get(method, str(method).replace("_", " "))
     embed.add_field(
         name="🏆 Board",
-        value=f"**Channel:** {channel} · {command_refs.SET_HALL_OF_FAME_CHANNEL}\n"
-              f"**Reactions needed:** {server_config.reaction_threshold} · {command_refs.SET_REACTION_THRESHOLD}\n"
-              f"**Counting:** {method_label} · {command_refs.CALCULATION_METHOD}",
+        value=f"**Channel:** {channel}\n"
+              f"**Reactions needed:** {server_config.reaction_threshold}\n"
+              f"**Counting:** {method_label}",
         inline=False)
 
     embed.add_field(
         name="🎯 What qualifies",
-        value=f"**Post age:** last {server_config.post_due_date} days · {command_refs.SET_POST_DUE_DATE}\n"
+        value=f"**Post age:** last {server_config.post_due_date} days\n"
               + "\n".join([
                   _toggle(server_config.include_author_in_reaction_calculation,
-                          "Author's own reaction counts", command_refs.INCLUDE_AUTHORS_REACTION),
-                  _toggle(server_config.ignore_bot_messages,
-                          "Ignore messages from bots", command_refs.IGNORE_BOT_MESSAGES),
-                  _toggle(server_config.require_image_or_video,
-                          "Only posts with an image or video", command_refs.REQUIRE_IMAGE_OR_VIDEO),
+                          "Author's own reaction counts"),
+                  _toggle(server_config.ignore_bot_messages, "Ignore messages from bots"),
+                  _toggle(server_config.require_image_or_video, "Only posts with an image or video"),
               ]),
         inline=False)
 
@@ -358,9 +359,9 @@ def build_server_config_embed(guild, server_config) -> discord.Embed:
         name="📋 Board behaviour",
         value="\n".join([
             _toggle(server_config.allow_messages_in_hof_channel,
-                    "Members can chat in the board channel", command_refs.ALLOW_MESSAGES_IN_HOF_CHANNEL),
+                    "Members can chat in the board channel"),
             _toggle(server_config.hide_hof_post_below_threshold,
-                    "Hide posts that drop below the threshold", command_refs.HIDE_HOF_POST_BELOW_THRESHOLD),
+                    "Hide posts that drop below the threshold"),
         ]),
         inline=False)
 
@@ -375,9 +376,10 @@ def build_server_config_embed(guild, server_config) -> discord.Embed:
             value=f"Every emoji counts. Restrict it with {command_refs.CUSTOM_EMOJI_CHECK_LOGIC}",
             inline=False)
 
-    icon = getattr(guild, "icon", None)
-    if icon is not None:
-        embed.set_thumbnail(url=icon.url)
+    embed.add_field(
+        name="",
+        value=f"Change any setting with its own command · {command_refs.HELP}",
+        inline=False)
     embed.set_footer(text=f"Hall of Fame {version.VERSION}")
     return embed
 
