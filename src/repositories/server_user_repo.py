@@ -100,6 +100,73 @@ def update_user_stats(connection, stats, user_id, guild_id):
     cursor.close()
 
 
+def rebuild_user_stats_for_guild(connection, guild_id, monthly_window_start) -> int:
+    """
+    Recompute every member's hall of fame totals and ranks for one guild in a single statement.
+
+    Counting and ranking happen in Postgres so that the guild's whole hall of fame history stays in
+    the database. Reading it into the bot cost time proportional to all history ever recorded, every
+    day, rather than to what actually changed.
+
+    Ranks are assigned with ROW_NUMBER, so every member gets a distinct position and members on equal
+    counts are ordered by user id. Swap it for RANK if tied members should share a position instead.
+
+    :param connection: The database connection
+    :param guild_id: The guild to recompute
+    :param monthly_window_start: Naive UTC timestamp the monthly counters reach back to
+    :return: The number of members whose stats were written
+    """
+    cursor = connection.cursor()
+    cursor.execute("""
+        INSERT INTO server_user (
+            user_id, guild_id,
+            total_hall_of_fame_messages, this_month_hall_of_fame_messages,
+            total_hall_of_fame_message_reactions, this_month_hall_of_fame_message_reactions,
+            total_message_rank, monthly_message_rank,
+            total_reaction_rank, monthly_reaction_rank
+        )
+        SELECT
+            author_id,
+            %(guild_id)s,
+            total_messages,
+            monthly_messages,
+            total_reactions,
+            monthly_reactions,
+            ROW_NUMBER() OVER (ORDER BY total_messages DESC, author_id),
+            ROW_NUMBER() OVER (ORDER BY monthly_messages DESC, author_id),
+            ROW_NUMBER() OVER (ORDER BY total_reactions DESC, author_id),
+            ROW_NUMBER() OVER (ORDER BY monthly_reactions DESC, author_id)
+        FROM (
+            SELECT
+                author_id,
+                COUNT(*) AS total_messages,
+                COALESCE(SUM(reaction_count), 0) AS total_reactions,
+                COUNT(*) FILTER (WHERE created_at >= %(monthly_window_start)s) AS monthly_messages,
+                COALESCE(SUM(reaction_count) FILTER (WHERE created_at >= %(monthly_window_start)s), 0)
+                    AS monthly_reactions
+            FROM hall_of_fame_message
+            WHERE guild_id = %(guild_id)s
+              AND author_id IS NOT NULL
+              AND created_at IS NOT NULL
+              AND EXISTS (SELECT 1 FROM server_configs WHERE server_configs.guild_id = %(guild_id)s)
+            GROUP BY author_id
+        ) AS totals
+        ON CONFLICT (user_id, guild_id) DO UPDATE SET
+            total_hall_of_fame_messages = EXCLUDED.total_hall_of_fame_messages,
+            this_month_hall_of_fame_messages = EXCLUDED.this_month_hall_of_fame_messages,
+            total_hall_of_fame_message_reactions = EXCLUDED.total_hall_of_fame_message_reactions,
+            this_month_hall_of_fame_message_reactions = EXCLUDED.this_month_hall_of_fame_message_reactions,
+            total_message_rank = EXCLUDED.total_message_rank,
+            monthly_message_rank = EXCLUDED.monthly_message_rank,
+            total_reaction_rank = EXCLUDED.total_reaction_rank,
+            monthly_reaction_rank = EXCLUDED.monthly_reaction_rank
+    """, {"guild_id": guild_id, "monthly_window_start": monthly_window_start})
+    written = cursor.rowcount
+    connection.commit()
+    cursor.close()
+    return written
+
+
 ALLOWED_STAT_FIELDS = {
     "monthly_reaction_rank",
     "total_message_rank",

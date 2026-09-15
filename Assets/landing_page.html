@@ -53,6 +53,13 @@
     color: #1a1a1a;
   }
 
+  #hof-description-block h3 {
+    margin-top: 25px;
+    margin-bottom: 8px;
+    font-size: 1.1rem;
+    color: #1a1a1a;
+  }
+
   #hof-description-block code {
     background: #eeeeee;
     padding: 2px 6px;
@@ -65,47 +72,145 @@
     margin-bottom: 10px;
     font-size: 0.95rem;
   }
+
+  #hof-description-block .comparison {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 15px 0;
+    font-size: 0.95rem;
+  }
+
+  #hof-description-block .comparison th,
+  #hof-description-block .comparison td {
+    text-align: left;
+    padding: 10px 12px;
+    border-bottom: 1px solid #eaeaea;
+    vertical-align: top;
+  }
+
+  #hof-description-block .comparison th {
+    color: #1a1a1a;
+  }
+
+  #hof-description-block .faq p {
+    margin: 0 0 16px 0;
+  }
 </style>
 
 <div id="hof-description-block">
   <p style="font-size: 1.15em; margin-bottom: 20px; color: #444;">
-    <strong>Turn your server's best reactions into legends.</strong> Automatically save and showcase your community's top moments with full media support and conversation context.
+    <strong>Turn your server's best moments into legends, and give the credit to the members who made
+    them.</strong> Hall of Fame reposts your most reacted messages to a hall of fame channel with their
+    images, videos and reply context, then ranks the people who keep landing there.
   </p>
 
   <div class="video-wrapper">
     <iframe src="https://www.youtube.com/embed/D4onxYa7Ikw" allowfullscreen></iframe>
   </div>
 
-  <h2>🌟 Features that Shine</h2>
+  <h2>🏆 A hall of fame, not an archive</h2>
+  <p>
+    Any emoji your community actually reacts with can immortalise a message, not just ⭐. The board is
+    only half of it: every featured message is credited to its author, so the server gets leaderboards,
+    member profiles with monthly and all time ranks, and a yearly Hall of Fame Wrapped. Getting featured
+    is meant to be worth something.
+  </p>
+
+  <img class="promo-image"
+       src="https://raw.githubusercontent.com/LukasKristensen/discord-hall-of-fame-bot/refs/heads/main/Assets/main_context_2.png"
+       alt="Hall of Fame post in Discord, showing a reacted message together with the reply it answered" />
+
+  <h2>🌟 What you get</h2>
   <div style="font-size: 1.05em;">
-    <p>🔹 <strong>Multi-Emoji Magic:</strong> Any emoji can trigger immortality.</p>
-    <p>🔹 <strong>Media Support:</strong> Images and videos travel with the post.</p>
+    <p>🔹 <strong>Multi-Emoji Magic:</strong> Any emoji can trigger immortality, custom server emojis included.</p>
+    <p>🔹 <strong>Media Support:</strong> Images and videos travel with the post, still playable.</p>
     <p>🔹 <strong>Context Preservation:</strong> Keeps replies visible for the full story.</p>
-    <p>🔹 <strong>Smart Scaling:</strong> Thresholds adjust to your server's size automatically.</p>
+    <p>🔹 <strong>Leaderboards and Profiles:</strong> See who gets featured most, this month and all time.</p>
+    <p>🔹 <strong>Hall of Fame Wrapped:</strong> A year in review for every member and for the server.</p>
+    <p>🔹 <strong>Sensible Default:</strong> The starting threshold is picked from your member count on join, then it is yours to set.</p>
   </div>
 
-  <img class="promo-image" src="https://raw.githubusercontent.com/LukasKristensen/discord-hall-of-fame-bot/refs/heads/main/Assets/main_context_2.png" alt="Context Feature Preview" />
+  <h2>🤔 Looking for a starboard?</h2>
+  <p>
+    People often arrive here searching for one, so here is the honest difference. A starboard archives
+    messages that collected enough ⭐. Hall of Fame is about recognition, and the board is how it shows.
+  </p>
+  <table class="comparison">
+    <tr>
+      <th></th>
+      <th>Hall of Fame</th>
+      <th>A starboard</th>
+    </tr>
+    <tr>
+      <td><strong>The point</strong></td>
+      <td>Recognising your members and their best moments</td>
+      <td>Archiving messages that passed a threshold</td>
+    </tr>
+    <tr>
+      <td><strong>Which emoji counts</strong></td>
+      <td>Every emoji, or a whitelist you pick</td>
+      <td>The one star emoji it was configured with</td>
+    </tr>
+    <tr>
+      <td><strong>Credit for members</strong></td>
+      <td>Leaderboards, profiles, monthly and all time ranks</td>
+      <td>None</td>
+    </tr>
+    <tr>
+      <td><strong>Year in review</strong></td>
+      <td>Hall of Fame Wrapped, per member and per server</td>
+      <td>None</td>
+    </tr>
+    <tr>
+      <td><strong>Price</strong></td>
+      <td>Free and open source</td>
+      <td>Best features often paywalled</td>
+    </tr>
+  </table>
 
   <h2>🚀 Quick Start Guide</h2>
   <div class="quick-start-card">
-    <p><strong>1. Invite:</strong> Add the bot to your server.</p>
-    <p><strong>2. Permissions:</strong> Ensure it can see your target Hall of Fame channel.</p>
-    <p><strong>3. Relax:</strong> The bot handles the rest! It sets a threshold based on your member count automatically.</p>
+    <p><strong>1. Invite:</strong> Add the bot and accept the permissions it asks for up front, granting them later does not work.</p>
+    <p><strong>2. Channel:</strong> It creates a <code>#hall-of-fame</code> channel for you, or point it at your own with <code>/set_hall_of_fame_channel</code>.</p>
+    <p><strong>3. Relax:</strong> A starting threshold is picked from your member count so the board works out of the box. Change it whenever you like with <code>/set_reaction_threshold</code>.</p>
   </div>
 
   <h2>⚙️ Advanced Configuration</h2>
   <div class="config-box">
-    <span class="command-line">🔸 <code>/set_reaction_threshold</code> — Override the auto-scaling goal.</span>
-    <span class="command-line">🔸 <code>/calculation_method</code> — Switch between unique users or total reactions.</span>
-    <span class="command-line">🔸 <code>/allow_messages_in_hof_channel</code> — Toggle channel posting.</span>
+    <span class="command-line">🔸 <code>/set_reaction_threshold</code> — How many reactions a message needs.</span>
+    <span class="command-line">🔸 <code>/calculation_method</code> — Count the top emoji, all reactions, or unique people.</span>
+    <span class="command-line">🔸 <code>/hide_hof_post_below_threshold</code> — Hide posts again when reactions are removed.</span>
+    <span class="command-line">🔸 <code>/require_image_or_video</code> — Only feature messages with media.</span>
+    <span class="command-line">🔸 <code>/leaderboard</code> — Rank the members who get featured most.</span>
     <span class="command-line">🔸 <code>/get_server_config</code> — See everything at a glance.</span>
   </div>
 
-  <h3 style="margin-top: 25px;">🔒 Emoji Whitelisting</h3>
+  <h3>🔒 Emoji Whitelisting</h3>
   <p>Control exactly which reactions count toward the Hall of Fame:</p>
   <div class="config-box" style="border-left-color: #7f8c8d;">
     <span class="command-line">🔸 <code>/custom_emoji_check_logic</code> — Toggle whitelist mode.</span>
     <span class="command-line">🔸 <code>/whitelist_emoji</code> — Add approved reactions.</span>
     <span class="command-line">🔸 <code>/unwhitelist_emoji</code> — Remove reactions.</span>
+  </div>
+
+  <h2>❓ Frequently asked questions</h2>
+  <div class="faq">
+    <h3>Does it only work with the star emoji?</h3>
+    <p>No. Every emoji counts by default, custom server emojis included. Narrow it down any time with the whitelist.</p>
+
+    <h3>How many reactions does a message need?</h3>
+    <p>Whatever you set with <code>/set_reaction_threshold</code>. When the bot joins it picks a starting value from your member count, once, so that the board works before you configure anything. It stays on that value until you change it.</p>
+
+    <h3>Does it repost images and videos?</h3>
+    <p>Yes. Images, videos and stickers travel with the post, and videos stay playable instead of becoming a bare link.</p>
+
+    <h3>What happens when someone removes a reaction?</h3>
+    <p>The count updates live, and a post that falls back under the threshold is hidden until it climbs over again.</p>
+
+    <h3>Can I see who gets featured most?</h3>
+    <p>Yes, that is the point of it. <code>/leaderboard</code> ranks the server and <code>/user_profile</code> shows a member's standing.</p>
+
+    <h3>Is it free?</h3>
+    <p>Yes, free and open source, with no paid tier and nothing locked behind voting.</p>
   </div>
 </div>

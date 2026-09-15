@@ -1,8 +1,9 @@
 import discord
 import utils
 from constants import version
-from enums import command_refs
+from enums import command_refs, calculation_method_type
 from repositories import server_config_repo, server_user_repo
+from caches import ExpiringSet
 
 async def get_help(interaction: discord.Interaction):
     """
@@ -196,3 +197,215 @@ async def server_leaderboard(interaction, connection, month_emoji: str, all_time
     embed.add_field(name="Leaderboard", value=leaderboard, inline=False)
     embed.set_footer(text="Note that this is calculated every 24 hours, so it may not be up to date.")
     await interaction.followup.send(embed=embed)
+
+
+# A ping is answered at most once per channel in this window, so that it cannot be used to make the
+# bot flood a channel
+mention_cooldown_seconds = 30
+recently_answered_mentions = ExpiringSet(ttl_seconds=mention_cooldown_seconds)
+
+
+def is_bot_mention(message: discord.Message, bot_user) -> bool:
+    """
+    Decide whether a message is somebody pinging the bot to ask what it is.
+
+    Deliberately narrow. A role ping or an @everyone is not addressed to the bot, a reply carries a
+    mention of the author it is replying to, and a message that mentions the bot in passing is a
+    conversation rather than a question. Answering any of those turns the bot into a nuisance.
+    :param message: The message that was sent
+    :param bot_user: The bot's own user
+    :return: True when the message is a bare mention of the bot
+    """
+    if bot_user is None or message.author.bot:
+        return False
+    if not any(user.id == bot_user.id for user in message.mentions):
+        return False
+    if message.reference is not None:
+        return False
+
+    remaining = message.content
+    for mention in (f"<@{bot_user.id}>", f"<@!{bot_user.id}>"):
+        remaining = remaining.replace(mention, "")
+    return remaining.strip() == ""
+
+
+def build_bot_info_embed(guild, bot_user, server_config) -> discord.Embed:
+    """
+    The card the bot answers a ping with: what it is, how this server has it set up, and where to go
+    :param guild: The server the ping came from
+    :param bot_user: The bot's own user, for the thumbnail
+    :param server_config: The server's configuration, or None when it has not been set up
+    :return: The embed to send
+    """
+    embed = discord.Embed(
+        title="🏆 Hall of Fame",
+        description="Your server's best moments, and the members behind them. React to a message, "
+                    "and once it passes the threshold it is reposted to the hall of fame channel "
+                    "and credited to whoever posted it.\n\n"
+                    "Landing there is meant to be worth something, so the bot keeps score: "
+                    "leaderboards, member profiles and a yearly wrapped.",
+        color=discord.Color.gold()
+    )
+
+    if server_config is not None:
+        method = str(server_config.reaction_count_calculation_method).replace("_", " ")
+        embed.add_field(
+            name="Set up in this server",
+            value=f"Board: <#{server_config.hall_of_fame_channel_id}>\n"
+                  f"Reactions needed: **{server_config.reaction_threshold}**\n"
+                  f"Counting: {method}\n"
+                  f"Full configuration with {command_refs.GET_SERVER_CONFIG}",
+            inline=False)
+    else:
+        embed.add_field(
+            name="Not set up in this server yet",
+            value=f"Point the bot at a channel with {command_refs.SET_HALL_OF_FAME_CHANNEL}, then "
+                  f"pick how many reactions a message needs with {command_refs.SET_REACTION_THRESHOLD}. "
+                  f"Both need the Manage Server permission.",
+            inline=False)
+
+    embed.add_field(
+        name="For everyone",
+        value=f"{command_refs.LEADERBOARD} rank the server\n"
+              f"{command_refs.USER_PROFILE} a member's standing\n"
+              f"{command_refs.HOF_WRAPPED} your year in review\n"
+              f"{command_refs.HELP} every command",
+        inline=True)
+    embed.add_field(
+        name="Links",
+        value="[Add to a server](https://discord.com/oauth2/authorize?client_id=1177041673352663070)\n"
+              "[Support server](https://discord.gg/r98WC5GHcn)\n"
+              "[Vote](https://top.gg/bot/1177041673352663070/vote)\n"
+              "[Source](https://github.com/LukasKristensen/discord-hall-of-fame-bot)",
+        inline=True)
+
+    if bot_user is not None and getattr(bot_user, "display_avatar", None) is not None:
+        embed.set_thumbnail(url=bot_user.display_avatar.url)
+    embed.set_footer(text=f"Hall of Fame {version.VERSION}")
+    return embed
+
+
+calculation_method_labels = {
+    calculation_method_type.MOST_REACTIONS_ON_EMOJI: "Most reactions on a single emoji",
+    calculation_method_type.TOTAL_REACTIONS: "Total reactions across all emojis",
+    calculation_method_type.UNIQUE_USERS: "Unique members who reacted",
+}
+
+# Discord rejects an embed field value longer than 1024 characters, and a whitelist of custom emojis
+# can pass that
+embed_field_value_limit = 1024
+
+
+def _toggle(enabled: bool, label: str) -> str:
+    return f"{'✅' if enabled else '❌'} {label}"
+
+
+def _whitelist_value(emojis) -> str:
+    if not emojis:
+        return f"Empty, so nothing counts yet. Add one with {command_refs.WHITELIST_EMOJI}"
+
+    shown = []
+    for index, emoji in enumerate(emojis):
+        remaining = len(emojis) - index
+        overflow = f" and {remaining} more"
+        if len(" ".join(shown + [emoji])) + len(overflow) > embed_field_value_limit:
+            return " ".join(shown) + overflow
+        shown.append(emoji)
+    return " ".join(shown)
+
+
+def build_server_config_embed(guild, server_config) -> discord.Embed:
+    """
+    The card /get_server_config answers with: every setting, grouped by what it affects.
+
+    Deliberately plain. The settings are what the reader came for, so the values are kept in one
+    column with nothing between them: no thumbnail narrowing the text, and no command link on every
+    row. Both of those wrap the values onto a second line and cost more in scanning than they give
+    back, which is why the command that changes a setting is named once at the bottom instead.
+    :param guild: The server the command was used in
+    :param server_config: The server's configuration
+    :return: The embed to send
+    """
+    embed = discord.Embed(
+        title="⚙️ Hall of Fame Configuration",
+        description=f"How the bot is set up in **{guild.name}**. "
+                    f"Changing a setting needs the Manage Server permission.",
+        color=discord.Color.gold()
+    )
+
+    channel = (f"<#{server_config.hall_of_fame_channel_id}>" if server_config.hall_of_fame_channel_id
+               else "Not set")
+    method = server_config.reaction_count_calculation_method
+    method_label = calculation_method_labels.get(method, str(method).replace("_", " "))
+    embed.add_field(
+        name="🏆 Board",
+        value=f"**Channel:** {channel}\n"
+              f"**Reactions needed:** {server_config.reaction_threshold}\n"
+              f"**Counting:** {method_label}",
+        inline=False)
+
+    embed.add_field(
+        name="🎯 What qualifies",
+        value=f"**Post age:** last {server_config.post_due_date} days\n"
+              + "\n".join([
+                  _toggle(server_config.include_author_in_reaction_calculation,
+                          "Author's own reaction counts"),
+                  _toggle(server_config.ignore_bot_messages, "Ignore messages from bots"),
+                  _toggle(server_config.require_image_or_video, "Only posts with an image or video"),
+              ]),
+        inline=False)
+
+    embed.add_field(
+        name="📋 Board behaviour",
+        value="\n".join([
+            _toggle(server_config.allow_messages_in_hof_channel,
+                    "Members can chat in the board channel"),
+            _toggle(server_config.hide_hof_post_below_threshold,
+                    "Hide posts that drop below the threshold"),
+        ]),
+        inline=False)
+
+    if server_config.custom_emoji_check_logic:
+        embed.add_field(
+            name="😀 Emoji whitelist · on",
+            value=_whitelist_value(server_config.whitelisted_emojis),
+            inline=False)
+    else:
+        embed.add_field(
+            name="😀 Emoji whitelist · off",
+            value=f"Every emoji counts. Restrict it with {command_refs.CUSTOM_EMOJI_CHECK_LOGIC}",
+            inline=False)
+
+    embed.add_field(
+        name="",
+        value=f"Change any setting with its own command · {command_refs.HELP}",
+        inline=False)
+    embed.set_footer(text=f"Hall of Fame {version.VERSION}")
+    return embed
+
+
+async def answer_bot_mention(message: discord.Message, bot_user, server_config) -> bool:
+    """
+    Answer a ping with the information card, when the bot is able and has not just answered.
+    :param message: The message that pinged the bot
+    :param bot_user: The bot's own user
+    :param server_config: The server's configuration, or None when it has not been set up
+    :return: True when something was sent
+    """
+    permissions = message.channel.permissions_for(message.guild.me)
+    if not permissions.send_messages:
+        return False
+
+    if not recently_answered_mentions.add_if_absent(message.channel.id):
+        return False
+
+    if not permissions.embed_links:
+        # Without this permission an embed is dropped silently, so the answer is given as text
+        await message.channel.send(
+            f"**Hall of Fame** turns your server's best moments into a highlight reel and credits "
+            f"the members behind them. Use {command_refs.HELP} for the commands. "
+            f"(Grant the bot the Embed Links permission for the full card.)")
+        return True
+
+    await message.channel.send(embed=build_bot_info_embed(message.guild, bot_user, server_config))
+    return True

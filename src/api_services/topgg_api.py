@@ -1,9 +1,12 @@
 import requests
-import os
-from dotenv import load_dotenv
+import environment
 
-load_dotenv()
-auth_key = os.getenv('TOPGG_API_KEY')
+
+def auth_key():
+    """
+    :return: The top.gg key in production, and None elsewhere, as only the live bot reports to top.gg
+    """
+    return environment.production_secret('TOPGG_API_KEY')
 
 
 def get_top_1000_votes(api_key: str):
@@ -74,5 +77,5 @@ def get_user_vote(api_key: str, user_id: int):
 
 
 if __name__ == "__main__":
-    print(get_top_1000_votes(auth_key))
-    print(get_user_vote(auth_key, 230698327589650432))
+    print(get_top_1000_votes(auth_key()))
+    print(get_user_vote(auth_key(), 230698327589650432))

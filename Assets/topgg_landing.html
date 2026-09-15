@@ -1,26 +1,35 @@
-<h2>Hall of Fame Bot 🏆✨</h2>
-<p><strong>Capture legendary moments in your Discord server!</strong></p>
+<!--
+  Short form description, kept in sync with landing_page.html which is the full Top.gg description.
+  If only one of the two is used, landing_page.html is the canonical copy.
+-->
+<h2>Hall of Fame 🏆✨</h2>
+<p><strong>Capture legendary moments in your Discord server, and credit the members who made them.</strong></p>
 
-<p>Hall of Fame Bot automatically tracks the most reacted messages and immortalizes them on a special board once they surpass a set reaction threshold. Unlike traditional starboard bots, this bot works with all emojis, making every reaction count!</p>
+<p>Hall of Fame automatically tracks your most reacted messages and immortalises them on a hall of fame board once they pass a reaction threshold. Any emoji counts, images and videos travel with the post, and the members who keep getting featured earn leaderboards, profiles and a yearly wrapped for it.</p>
 
-![test](https://raw.githubusercontent.com/LukasKristensen/discord-hall-of-fame-bot/refs/heads/main/Assets/main_context_2.png)
+<img src="https://raw.githubusercontent.com/LukasKristensen/discord-hall-of-fame-bot/refs/heads/main/Assets/main_context_2.png" alt="Hall of Fame post in Discord, showing a reacted message together with the reply it answered" />
 
 <h3>🌟 Features</h3>
 <ul>
-<li><strong>✅ Multi-Emoji Support</strong> – Not limited to one emoji like starboard bots.</li>
-<li><strong>✅ Includes images/videos from messages.</strong></li>
-<li><strong>✅ Includes replies to conversation for full context.</strong></li>
-<li><strong>✅ Custom Reaction Thresholds</strong> – Set the number of reactions needed for a post to be featured.</li>
-<li><strong>✅ Hall of Fame Board</strong> – Messages are automatically reposted once they reach the threshold.</li>
+<li><strong>✅ Every emoji counts</strong> – Not locked to a single reaction, custom server emojis included.</li>
+<li><strong>✅ Images and videos</strong> – Media is reposted with the message, not linked.</li>
+<li><strong>✅ Reply context</strong> – The message being replied to is included, so punchlines still land.</li>
+<li><strong>✅ Leaderboards and profiles</strong> – See who gets featured most, this month and all time.</li>
+<li><strong>✅ Hall of Fame Wrapped</strong> – A year in review for every member and for the server.</li>
+<li><strong>✅ Custom reaction thresholds</strong> – Choose how many reactions a message needs.</li>
+<li><strong>✅ Free and open source</strong> – No paid tier, no features held back behind voting.</li>
 </ul>
 
-<h3>How to Configure</h3>
-<p>By default, the reaction threshold is set to <strong>7 reactions</strong> for a post to reach the Hall of Fame.</p>
-<p>Use the command <code>/reaction_threshold_configure</code> to set a custom threshold for your server.</p>
+<h3>🤔 Looking for a starboard?</h3>
+<p>A starboard archives messages that collected enough ⭐. Hall of Fame is about recognition: any emoji can immortalise a message, and the members behind them get ranked for it. If a plain star archive is all you need, a starboard bot will do the job.</p>
+
+<h3>🚀 Getting started</h3>
+<p>Invite the bot, accept the permissions it asks for, and it creates a <code>#hall-of-fame</code> channel. Point it at an existing channel instead with <code>/set_hall_of_fame_channel</code>.</p>
+<p>So the board works straight away, the starting reaction threshold is picked once from your member count when the bot joins. Set it to whatever suits your server with <code>/set_reaction_threshold</code>, and it stays there.</p>
 
 <h3>🔒 Custom Emoji Whitelist</h3>
 <p>
-  By default, all emojis count but a custom emoji filter can be applied to the bot so that it will only look for emojis configured to the server.
+  All emojis count by default. To narrow the board down to a specific set of reactions, or to a single custom server emoji, switch on the whitelist:
 </p>
 <ul>
   <li>To enable it: <code>/custom_emoji_check_logic</code></li>
@@ -32,11 +41,20 @@
 <ul>
   <li><code>/help</code> – List of available commands and their descriptions.</li>
   <li><code>/set_reaction_threshold &lt;reaction_threshold:int&gt;</code> – Set the amount of reactions needed for a post to reach the Hall of Fame.</li>
+  <li><code>/set_hall_of_fame_channel &lt;channel&gt;</code> – Choose the channel the board posts to.</li>
+  <li><code>/calculation_method</code> – Count the top emoji, all reactions, or unique people.</li>
   <li><code>/include_authors_reaction</code> – Should the author of a message be included in the reaction count?</li>
+  <li><code>/hide_hof_post_below_threshold</code> – Hide posts again when reactions are removed.</li>
+  <li><code>/require_image_or_video</code> – Only feature messages that contain media.</li>
+  <li><code>/set_post_due_date</code> – How many days back a message can be and still qualify.</li>
   <li><code>/allow_messages_in_hof_channel</code> – Allow anyone to type in the Hall of Fame channel.</li>
   <li><code>/custom_emoji_check_logic &lt;All emojis | Only whitelisted emojis&gt;</code> – Use only whitelisted emojis for the reaction count.</li>
   <li><code>/whitelist_emoji &lt;emoji&gt;</code> – Add a whitelisted emoji to the list <em>(used with <code>/custom_emoji_check_logic</code>)</em>.</li>
   <li><code>/unwhitelist_emoji &lt;emoji&gt;</code> – Remove a whitelisted emoji from the list <em>(used with <code>/custom_emoji_check_logic</code>)</em>.</li>
   <li><code>/clear_whitelist</code> – Clear the whitelist of emojis <em>(used with <code>/custom_emoji_check_logic</code>)</em>.</li>
+  <li><code>/leaderboard</code> – View the Hall of Fame leaderboard for the server.</li>
+  <li><code>/user_profile &lt;user&gt;</code> – Get the Hall of Fame profile for a member.</li>
+  <li><code>/hof_wrapped</code> – Your personal Hall of Fame Wrapped for the year.</li>
+  <li><code>/server_hof_wrapped</code> – The Hall of Fame Wrapped for the whole server.</li>
   <li><code>/get_server_config</code> – Get the current bot configuration for the server.</li>
 </ul>

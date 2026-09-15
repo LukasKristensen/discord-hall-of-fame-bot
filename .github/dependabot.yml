@@ -1,0 +1,48 @@
+version: 2
+
+updates:
+  # Python dependencies from requirements.txt
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Europe/Copenhagen"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "deps"
+    groups:
+      # Everything except the Discord library is safe to review as one pull request,
+      # which keeps a weekly bump from arriving as four separate ones
+      python-dependencies:
+        patterns:
+          - "*"
+        exclude-patterns:
+          - "discord.py"
+        update-types:
+          - "minor"
+          - "patch"
+    ignore:
+      # A major bump of the database driver or the Discord library changes behaviour the bot
+      # depends on, so those are taken deliberately rather than as an automated pull request
+      - dependency-name: "discord.py"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "psycopg2-binary"
+        update-types: ["version-update:semver-major"]
+
+  # Actions used by the workflows in .github/workflows
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Europe/Copenhagen"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "ci"
+    groups:
+      github-actions:
+        patterns:
+          - "*"
