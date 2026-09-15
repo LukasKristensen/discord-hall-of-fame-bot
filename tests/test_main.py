@@ -12,6 +12,7 @@ import asyncio
 import types
 import unittest
 from unittest import mock
+import discord
 
 import main
 import utils
