@@ -1,0 +1,12 @@
+bare digit keycap no VS16 -> accepted=True | error=None
+pound keycap with VS16 -> accepted=True | error=None
+asterisk keycap no VS16 -> accepted=True | error=None
+lone regional indicator -> accepted=True | error=None
+three regional indicators -> accepted=False | error=Only one emoji can be added at a time. Run the command again for each one.
+handshake mixed skin tones -> accepted=False | error=`🫱🏻‍🫲🏿` is not an emoji. Send a single emoji, like 🔥 or a custom one from this server.
+couple mixed skin tones -> accepted=True | error=None
+math sum sign -> accepted=True | error=None
+plus minus -> accepted=True | error=None
+trademark -> accepted=True | error=None
+copyright -> accepted=True | error=None
+registered -> accepted=True | error=None

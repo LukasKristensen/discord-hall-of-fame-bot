@@ -9,6 +9,7 @@ import concurrency
 import environment
 import events
 import utils
+import validation
 from constants import version
 from enums import command_refs, log_type, calculation_method_type
 from classes.bot_stats import BotStats
@@ -75,7 +76,10 @@ daily_command_cooldowns = {}
 
 intents = discord.Intents.default()
 intents.message_content = True
-bot = discord_commands.Bot(command_prefix="/", intents=intents)
+# Every command works on a server's configuration or its members, so none of them is offered in DMs,
+# where they could only fail
+bot = discord_commands.Bot(command_prefix="/", intents=intents,
+                           allowed_contexts=app_commands.AppCommandContext(guild=True))
 tree = bot.tree
 server_classes = {}
 bot_stats = BotStats()
@@ -98,6 +102,66 @@ async def ensure_bot_is_loaded(interaction: discord.Interaction) -> bool:
     # noinspection PyUnresolvedReferences
     await interaction.response.send_message(messages.BOT_LOADING, ephemeral=True)
     return False
+
+
+async def send_error(interaction: discord.Interaction, content: str):
+    """
+    Tell only the member who ran the command that it did not go through. A refusal is of no use to
+    the rest of the channel, and answering in public turns a typo into clutter
+    :param interaction: The interaction to answer
+    :param content: What went wrong and what to do about it
+    """
+    # noinspection PyUnresolvedReferences
+    if interaction.response.is_done():
+        await interaction.followup.send(content, ephemeral=True)
+    else:
+        # noinspection PyUnresolvedReferences
+        await interaction.response.send_message(content, ephemeral=True)
+
+
+def on_off(value: bool) -> str:
+    return "On" if value else "Off"
+
+
+async def update_setting(interaction: discord.Interaction, parameter: str, value, label: str,
+                         shown_value: str = None, note: str = "") -> bool:
+    """
+    Store a server setting and confirm it, or say so when it already had that value instead of
+    writing it again
+    :param interaction: The command being answered
+    :param parameter: The configuration column, also the attribute on the server class
+    :param value: The new value
+    :param label: What the setting is called in the reply
+    :param shown_value: How the value reads in the reply, On or Off when left out
+    :param note: A line added to the confirmation, explaining what the change means
+    :return: True when the setting changed
+    """
+    server_class = server_classes.get(interaction.guild_id)
+    if server_class is None:
+        await send_error(interaction, messages.ERROR_SERVER_NOT_SETUP)
+        return False
+
+    shown_value = shown_value if shown_value is not None else on_off(value)
+    if getattr(server_class, parameter, None) == value:
+        # noinspection PyUnresolvedReferences
+        await interaction.response.send_message(
+            messages.SETTING_UNCHANGED.format(label=label, value=shown_value), ephemeral=True)
+        return False
+
+    async with get_db_connection(connection_pool) as connection:
+        server_config_repo.update_server_config_param(interaction.guild_id, parameter, value, connection)
+    setattr(server_class, parameter, value)
+
+    content = messages.SETTING_CHANGED.format(label=label, value=shown_value)
+    if note:
+        content += f"\n{note}"
+    # noinspection PyUnresolvedReferences
+    await interaction.response.send_message(content)
+    return True
+
+
+def plural(count: int) -> str:
+    return "" if count == 1 else "s"
 
 @asynccontextmanager
 async def get_db_connection(connection_pool):
@@ -221,6 +285,31 @@ async def handle_raw_reaction(payload: discord.RawReactionActionEvent, event_nam
             await utils.logging(bot, f"Error in {event_name}: {e}", payload.guild_id, validate_for_duplicates=True)
 
 
+@tree.error
+async def on_app_command_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
+    """
+    The last stop for a command that raised. Without an answer here Discord shows the member
+    "The application did not respond", which says nothing about what happened or what to do next
+    """
+    if isinstance(error, app_commands.NoPrivateMessage):
+        content = messages.GUILD_ONLY
+    elif isinstance(error, app_commands.TransformerError):
+        # A value the command picker would not have let through, such as a number out of range
+        content = f"`{error.value}` is not a valid value for this option."
+    else:
+        content = messages.COMMAND_FAILED
+        command_name = interaction.command.name if interaction.command is not None else "unknown"
+        original = getattr(error, "original", error)
+        await utils.logging(bot, f"Error in /{command_name}: {original}", interaction.guild_id,
+                            log_level=log_type.ERROR, validate_for_duplicates=True)
+
+    try:
+        await send_error(interaction, content)
+    except discord.HTTPException:
+        # The interaction expired, so there is nobody left to tell
+        pass
+
+
 @bot.event
 async def on_raw_reaction_add(payload: discord.RawReactionActionEvent):
     await handle_raw_reaction(payload, "on_raw_reaction_add")
@@ -314,17 +403,39 @@ async def get_help(interaction: discord.Interaction):
                         interaction.guild.id, log_level=log_type.COMMAND)
 
 @tree.command(name="set_reaction_threshold", description="Configure the amount of reactions needed to post a message in the Hall of Fame")
-async def configure_bot(interaction: discord.Interaction, reaction_threshold: int):
+@app_commands.describe(reaction_threshold=f"Reactions a message needs to reach the Hall of Fame "
+                                          f"({validation.REACTION_THRESHOLD_MIN}-{validation.REACTION_THRESHOLD_MAX})")
+async def configure_bot(interaction: discord.Interaction,
+                        reaction_threshold: app_commands.Range[int, validation.REACTION_THRESHOLD_MIN,
+                                                               validation.REACTION_THRESHOLD_MAX]):
     if not await ensure_bot_is_loaded(interaction):
         return
 
     if not await check_if_user_has_manage_server_permission(interaction):
         return
-    reaction_threshold = reaction_threshold if reaction_threshold > 0 else 1
 
+    # Refused rather than quietly raised to the minimum, so the member knows what was stored
+    error = validation.out_of_range_message("The reaction threshold", reaction_threshold,
+                                            validation.REACTION_THRESHOLD_MIN, validation.REACTION_THRESHOLD_MAX)
+    if error is not None:
+        await send_error(interaction, error)
+        return
+
+    server_class = server_classes.get(interaction.guild_id)
+    if server_class is None:
+        await send_error(interaction, messages.ERROR_SERVER_NOT_SETUP)
+        return
+    if server_class.reaction_threshold == reaction_threshold:
+        # noinspection PyUnresolvedReferences
+        await interaction.response.send_message(messages.SETTING_UNCHANGED.format(
+            label="The reaction threshold", value=reaction_threshold), ephemeral=True)
+        return
+
+    method = commands.calculation_method_labels.get(server_class.reaction_count_calculation_method,
+                                                    str(server_class.reaction_count_calculation_method))
     async with get_db_connection(connection_pool) as connection:
-        await commands.set_reaction_threshold(interaction, reaction_threshold, connection)
-    server_classes[interaction.guild_id].reaction_threshold = reaction_threshold
+        await commands.set_reaction_threshold(interaction, reaction_threshold, connection, method.lower())
+    server_class.reaction_threshold = reaction_threshold
     await utils.logging(bot, f"Reaction threshold configure command used by {interaction.user.name} in {interaction.guild.name}",
                         interaction.guild.id, reaction_threshold, log_level=log_type.COMMAND)
 
@@ -339,11 +450,8 @@ async def include_author_own_reaction_in_threshold(interaction: discord.Interact
 
     if not await check_if_user_has_manage_server_permission(interaction):
         return
-    async with get_db_connection(connection_pool) as connection:
-        server_config_repo.update_server_config_param(interaction.guild_id, "include_author_in_reaction_calculation", include, connection)
-    server_classes[interaction.guild_id].include_author_in_reaction_calculation = include
-    # noinspection PyUnresolvedReferences
-    await interaction.response.send_message(messages.AUTHOR_REACTION_INCLUDED.format(include=include))
+    await update_setting(interaction, "include_author_in_reaction_calculation", include,
+                         "Author's own reaction counts toward the threshold")
     await utils.logging(bot, f"Include author's own reaction in threshold command used by {interaction.user.name} in {interaction.guild.name}",
                         interaction.guild.id, include, log_level=log_type.COMMAND)
 
@@ -355,11 +463,9 @@ async def allow_messages_in_hof_channel(interaction: discord.Interaction, allow:
     if not await check_if_user_has_manage_server_permission(interaction):
         return
 
-    async with get_db_connection(connection_pool) as connection:
-        server_config_repo.update_server_config_param(interaction.guild_id, "allow_messages_in_hof_channel", allow, connection)
-    server_classes[interaction.guild_id].allow_messages_in_hof_channel = allow
-    # noinspection PyUnresolvedReferences
-    await interaction.response.send_message(messages.ALLOW_POST_IN_HOF.format(allow=allow))
+    note = "" if allow else "Messages members post in the Hall of Fame channel will be removed."
+    await update_setting(interaction, "allow_messages_in_hof_channel", allow,
+                         "Members can chat in the Hall of Fame channel", note=note)
     await utils.logging(bot, f"Allow messages in Hall of Fame channel command used by {interaction.user.name} in {interaction.guild.name}",
                         interaction.guild.id, allow, log_level=log_type.COMMAND)
 
@@ -371,11 +477,8 @@ async def require_image_or_video(interaction: discord.Interaction, require: bool
     if not await check_if_user_has_manage_server_permission(interaction):
         return
 
-    async with get_db_connection(connection_pool) as connection:
-        server_config_repo.update_server_config_param(interaction.guild_id, "require_image_or_video", require, connection)
-    server_classes[interaction.guild_id].require_image_or_video = require
-    # noinspection PyUnresolvedReferences
-    await interaction.response.send_message(f"Require image or video set to {require}")
+    await update_setting(interaction, "require_image_or_video", require,
+                         "Only posts with an image or video can reach the Hall of Fame")
     await utils.logging(bot, f"Require image or video command used by {interaction.user.name} in {interaction.guild.name}",
                         interaction.guild.id, str(require), log_level=log_type.COMMAND)
 
@@ -401,107 +504,119 @@ async def custom_emoji_check_logic(interaction: discord.Interaction, config_opti
     if not await check_if_user_has_manage_server_permission(interaction):
         return
 
-    custom_emoji_check = False
-    if config_option.value == "whitelisted_emojis":
-        custom_emoji_check = True
+    custom_emoji_check = config_option.value == "whitelisted_emojis"
+    note = ""
+    if custom_emoji_check:
+        note = (f"Manage the list with {command_refs.WHITELIST_EMOJI}, {command_refs.UNWHITELIST_EMOJI} "
+                f"and {command_refs.CLEAR_WHITELIST}.")
+        server_class = server_classes.get(interaction.guild_id)
+        if server_class is not None and not server_class.whitelisted_emojis:
+            note += messages.WHITELIST_EMPTY_NOTE.format(command=command_refs.WHITELIST_EMOJI)
 
-    async with get_db_connection(connection_pool) as connection:
-        server_config_repo.update_server_config_param(interaction.guild_id, "custom_emoji_check_logic", custom_emoji_check, connection)
-    server_classes[interaction.guild_id].custom_emoji_check_logic = custom_emoji_check
-
-    response = f"Custom emoji check logic set to {config_option.name}"
-    if config_option.value == "whitelisted_emojis":
-        response += f"\n\nYou can now use the commands {command_refs.WHITELIST_EMOJI}, {command_refs.UNWHITELIST_EMOJI} and {command_refs.CLEAR_WHITELIST} to manage the whitelist"
-    # noinspection PyUnresolvedReferences
-    await interaction.response.send_message(response)
+    await update_setting(interaction, "custom_emoji_check_logic", custom_emoji_check,
+                         "Emojis that count toward the threshold", shown_value=config_option.name, note=note)
     await utils.logging(bot, f"Custom emoji check logic command used by {interaction.user.name} in {interaction.guild.name}",
                         interaction.guild.id, str(config_option.value), log_level=log_type.COMMAND)
 
-@tree.command(name="whitelist_emoji", description="Whitelist an emoji for the server if custom emoji check logic is enabled")
-async def whitelist_emoji(interaction: discord.Interaction, emoji: str):
+
+async def get_whitelist_server_class(interaction: discord.Interaction):
+    """
+    The guards the whitelist commands share
+    :return: The server's configuration, or None when the command was turned away
+    """
     if not await ensure_bot_is_loaded(interaction):
-        return
+        return None
 
     if not await check_if_user_has_manage_server_permission(interaction):
-        return
+        return None
 
-    server_class = server_classes[interaction.guild_id]
+    server_class = server_classes.get(interaction.guild_id)
+    if server_class is None:
+        await send_error(interaction, messages.ERROR_SERVER_NOT_SETUP)
+        return None
+
     if not server_class.custom_emoji_check_logic:
-        # noinspection PyUnresolvedReferences
-        await interaction.response.send_message(messages.CUSTOM_EMOJI_CHECK_DISABLED)
+        await send_error(interaction, messages.CUSTOM_EMOJI_CHECK_DISABLED)
+        return None
+    return server_class
+
+
+@tree.command(name="whitelist_emoji", description="Whitelist an emoji for the server if custom emoji check logic is enabled")
+@app_commands.describe(emoji="A single emoji, either a standard one or a custom emoji from this server")
+async def whitelist_emoji(interaction: discord.Interaction, emoji: str):
+    server_class = await get_whitelist_server_class(interaction)
+    if server_class is None:
         return
 
-    if not emoji.startswith('<') and len(emoji) > 1:
-        # noinspection PyUnresolvedReferences
-        await interaction.response.send_message(messages.INVALID_EMOJI_FORMAT)
+    parsed, error = validation.parse_emoji(emoji, interaction.guild.emojis)
+    if error is not None:
+        await send_error(interaction, error)
+        await utils.logging(bot, f"Whitelist emoji command used by {interaction.user.name} in {interaction.guild.name} "
+                                 f"with an invalid emoji", interaction.guild.id, emoji, log_level=log_type.COMMAND)
         return
 
     async with get_db_connection(connection_pool) as connection:
-        whitelist = server_config_repo.get_parameter_value(connection, interaction.guild_id, "whitelisted_emojis")
+        whitelist = server_config_repo.get_parameter_value(connection, interaction.guild_id, "whitelisted_emojis") or []
 
-        if emoji not in whitelist:
-            whitelist.append(emoji)
+        if parsed in whitelist:
+            await send_error(interaction, messages.WHITELIST_ALREADY_EXISTS.format(emoji=parsed))
+        elif len(whitelist) >= validation.WHITELIST_MAX_SIZE:
+            await send_error(interaction, messages.WHITELIST_FULL.format(
+                limit=validation.WHITELIST_MAX_SIZE, command=command_refs.UNWHITELIST_EMOJI))
+        else:
+            whitelist.append(parsed)
             server_config_repo.update_server_config_param(interaction.guild_id, "whitelisted_emojis", whitelist, connection)
             server_class.whitelisted_emojis = whitelist
             # noinspection PyUnresolvedReferences
-            await interaction.response.send_message(messages.WHITELIST_ADDED.format(emoji=emoji))
-        else:
-            # noinspection PyUnresolvedReferences
-            await interaction.response.send_message(messages.WHITELIST_ALREADY_EXISTS.format(emoji=emoji))
+            await interaction.response.send_message(messages.WHITELIST_ADDED.format(emoji=parsed, count=len(whitelist)))
     await utils.logging(bot, f"Whitelist emoji command used by {interaction.user.name} in {interaction.guild.name}",
-                        interaction.guild.id, emoji, log_level=log_type.COMMAND)
+                        interaction.guild.id, parsed, log_level=log_type.COMMAND)
 
 
 @tree.command(
     name="unwhitelist_emoji",
     description="Unwhitelist an emoji for the server if custom emoji check logic is enabled")
+@app_commands.describe(emoji="The whitelisted emoji to remove")
 async def unwhitelist_emoji(interaction: discord.Interaction, emoji: str):
-    if not await ensure_bot_is_loaded(interaction):
-        return
-
-    if not await check_if_user_has_manage_server_permission(interaction):
-        return
-
-    server_class = server_classes[interaction.guild_id]
-    if not server_class.custom_emoji_check_logic:
-        # noinspection PyUnresolvedReferences
-        await interaction.response.send_message(messages.CUSTOM_EMOJI_CHECK_DISABLED)
+    server_class = await get_whitelist_server_class(interaction)
+    if server_class is None:
         return
 
     async with get_db_connection(connection_pool) as connection:
-        whitelist = server_config_repo.get_parameter_value(connection, interaction.guild_id, "whitelisted_emojis")
+        whitelist = server_config_repo.get_parameter_value(connection, interaction.guild_id, "whitelisted_emojis") or []
+        entry = validation.find_in_whitelist(whitelist, emoji, interaction.guild.emojis)
 
-        if emoji in whitelist:
-            whitelist.remove(emoji)
+        if entry is not None:
+            whitelist.remove(entry)
             server_config_repo.update_server_config_param(interaction.guild_id, "whitelisted_emojis", whitelist, connection)
             server_class.whitelisted_emojis = whitelist
+            content = messages.WHITELIST_REMOVED.format(emoji=entry, count=len(whitelist))
+            if not whitelist:
+                content += messages.WHITELIST_EMPTY_NOTE.format(command=command_refs.WHITELIST_EMOJI)
             # noinspection PyUnresolvedReferences
-            await interaction.response.send_message(messages.WHITELIST_REMOVED.format(emoji=emoji))
+            await interaction.response.send_message(content)
         else:
-            # noinspection PyUnresolvedReferences
-            await interaction.response.send_message(messages.WHITELIST_NOT_FOUND.format(emoji=emoji))
+            await send_error(interaction, messages.WHITELIST_NOT_FOUND.format(
+                emoji=emoji.strip(), command=command_refs.GET_SERVER_CONFIG))
     await utils.logging(bot, f"Unwhitelist emoji command used by {interaction.user.name} in {interaction.guild.name}",
                         interaction.guild.id, emoji, log_level=log_type.COMMAND)
 
 
 @tree.command(name="clear_whitelist", description="Clear the whitelist for the server if custom emoji check logic is enabled")
 async def clear_whitelist(interaction: discord.Interaction):
-    if not await ensure_bot_is_loaded(interaction):
+    server_class = await get_whitelist_server_class(interaction)
+    if server_class is None:
         return
 
-    if not await check_if_user_has_manage_server_permission(interaction):
-        return
-    server_class = server_classes[interaction.guild_id]
-    if not server_class.custom_emoji_check_logic:
-        # noinspection PyUnresolvedReferences
-        await interaction.response.send_message(messages.CUSTOM_EMOJI_CHECK_DISABLED)
+    if not server_class.whitelisted_emojis:
+        await send_error(interaction, messages.WHITELIST_ALREADY_EMPTY)
         return
 
     async with get_db_connection(connection_pool) as connection:
         server_config_repo.update_server_config_param(interaction.guild_id, "whitelisted_emojis", [], connection)
     server_class.whitelisted_emojis = []
     # noinspection PyUnresolvedReferences
-    await interaction.response.send_message(messages.WHITELIST_CLEARED)
+    await interaction.response.send_message(messages.WHITELIST_CLEARED.format(command=command_refs.WHITELIST_EMOJI))
     await utils.logging(bot, f"Clear whitelist command used by {interaction.user.name} in {interaction.guild.name}",
                         interaction.guild.id, log_level=log_type.COMMAND)
 
@@ -511,8 +626,7 @@ async def get_server_config(interaction: discord.Interaction):
         return
 
     if interaction.guild_id not in server_classes:
-        # noinspection PyUnresolvedReferences
-        await interaction.response.send_message(messages.ERROR_SERVER_NOT_SETUP)
+        await send_error(interaction, messages.ERROR_SERVER_NOT_SETUP)
         return
 
     embed = commands.build_server_config_embed(interaction.guild, server_classes[interaction.guild_id])
@@ -524,18 +638,26 @@ async def get_server_config(interaction: discord.Interaction):
 @tree.command(
     name="set_post_due_date",
     description="How many days ago should the post be to be considered old and not valid?")
-async def set_post_due_date(interaction: discord.Interaction, post_due_date: int):
+@app_commands.describe(post_due_date=f"How many days old a message can be and still reach the Hall of Fame "
+                                     f"({validation.POST_DUE_DATE_MIN}-{validation.POST_DUE_DATE_MAX})")
+async def set_post_due_date(interaction: discord.Interaction,
+                            post_due_date: app_commands.Range[int, validation.POST_DUE_DATE_MIN,
+                                                              validation.POST_DUE_DATE_MAX]):
     if not await ensure_bot_is_loaded(interaction):
         return
 
     if not await check_if_user_has_manage_server_permission(interaction):
         return
 
-    async with get_db_connection(connection_pool) as connection:
-        server_config_repo.update_server_config_param(interaction.guild_id, "post_due_date", post_due_date, connection)
-    server_classes[interaction.guild_id].post_due_date = post_due_date
-    # noinspection PyUnresolvedReferences
-    await interaction.response.send_message(messages.POST_DUE_DATE_SET.format(post_due_date=post_due_date))
+    error = validation.out_of_range_message("The post due date", post_due_date,
+                                            validation.POST_DUE_DATE_MIN, validation.POST_DUE_DATE_MAX)
+    if error is not None:
+        await send_error(interaction, error)
+        return
+
+    await update_setting(interaction, "post_due_date", post_due_date, "Post due date",
+                         shown_value=f"{post_due_date} day{plural(post_due_date)}",
+                         note=messages.POST_DUE_DATE_NOTE.format(days=post_due_date, plural=plural(post_due_date)))
     await utils.logging(bot, f"Set post due date command used by {interaction.user.name} in {interaction.guild.name}",
                         interaction.guild.id, post_due_date, log_level=log_type.COMMAND)
 
@@ -554,11 +676,8 @@ async def ignore_bot_messages(interaction: discord.Interaction, should_ignore_bo
     if not await check_if_user_has_manage_server_permission(interaction):
         return
 
-    async with get_db_connection(connection_pool) as connection:
-        server_config_repo.update_server_config_param(interaction.guild_id, "ignore_bot_messages", should_ignore_bot_messages, connection)
-    server_classes[interaction.guild_id].ignore_bot_messages = should_ignore_bot_messages
-    # noinspection PyUnresolvedReferences
-    await interaction.response.send_message(messages.IGNORE_BOT_MESSAGES.format(should_ignore_bot_messages=should_ignore_bot_messages))
+    await update_setting(interaction, "ignore_bot_messages", should_ignore_bot_messages,
+                         "Ignore messages from bots")
     await utils.logging(bot, f"Ignore bot messages command used by {interaction.user.name} in {interaction.guild.name}",
                         interaction.guild.id, should_ignore_bot_messages, log_level=log_type.COMMAND)
 
@@ -577,11 +696,9 @@ async def calculation_method(interaction: discord.Interaction, method: app_comma
     if not await check_if_user_has_manage_server_permission(interaction):
         return
 
-    async with get_db_connection(connection_pool) as connection:
-        server_config_repo.update_server_config_param(interaction.guild_id, "reaction_count_calculation_method", method.value, connection)
-    server_classes[interaction.guild_id].reaction_count_calculation_method = method.value
-    # noinspection PyUnresolvedReferences
-    await interaction.response.send_message(f"Reaction count calculation method set to {method.name}")
+    label = commands.calculation_method_labels.get(method.value, method.name)
+    await update_setting(interaction, "reaction_count_calculation_method", method.value,
+                         "Reactions are counted as", shown_value=label)
     await utils.logging(bot, f"Calculation method command used by {interaction.user.name} in {interaction.guild.name}",
                         interaction.guild.id, method.value, log_level=log_type.COMMAND)
 
@@ -599,15 +716,14 @@ async def hide_hall_of_fame_posts_when_they_are_below_threshold(interaction: dis
     if not await check_if_user_has_manage_server_permission(interaction):
         return
 
-    async with get_db_connection(connection_pool) as connection:
-        server_config_repo.update_server_config_param(interaction.guild_id, "hide_hof_post_below_threshold", hide, connection)
-    server_classes[interaction.guild_id].hide_hof_post_below_threshold = hide
-    # noinspection PyUnresolvedReferences
-    await interaction.response.send_message(f"Hide hall of fame posts when they are below the threshold set to {hide}")
+    note = "They show again once they are back above it." if hide else ""
+    await update_setting(interaction, "hide_hof_post_below_threshold", hide,
+                         "Hide Hall of Fame posts that drop below the threshold", note=note)
     await utils.logging(bot, f"Hide hall of fame posts command used by {interaction.user.name} in {interaction.guild.name}",
                         interaction.guild.id, str(hide), log_level=log_type.COMMAND)
 
 @tree.command(name="user_profile", description="Get the server profile of a user")
+@app_commands.describe(specific_user="The member to look up, yourself when left out")
 async def user_server_profile(interaction: discord.Interaction, specific_user: discord.User = None):
     """
     Get the server profile of a user
@@ -619,6 +735,10 @@ async def user_server_profile(interaction: discord.Interaction, specific_user: d
         return
 
     user = specific_user or interaction.user
+    if getattr(user, "bot", False):
+        await send_error(interaction, messages.PROFILE_BOT_USER)
+        return
+
     async with get_db_connection(connection_pool) as connection:
         user_stats = server_user_repo.get_server_user(connection, user.id, interaction.guild_id)
 
@@ -645,13 +765,11 @@ async def leaderboard(interaction: discord.Interaction):
         return
 
     if interaction.guild_id not in server_classes:
-        # noinspection PyUnresolvedReferences
-        await interaction.response.send_message(messages.ERROR_SERVER_NOT_SETUP)
+        await send_error(interaction, messages.ERROR_SERVER_NOT_SETUP)
         return
 
     if "leaderboard" in daily_command_cooldowns.get(interaction.user.id, []):
-        # noinspection PyUnresolvedReferences
-        await interaction.response.send_message(messages.COMMAND_ON_COOLDOWN)
+        await send_error(interaction, messages.COMMAND_ON_COOLDOWN)
         await utils.logging(bot, f"Leaderboard command on cooldown for {interaction.user.name} in {interaction.guild.name}",
                             interaction.guild.id, log_level=log_type.COMMAND)
         return
@@ -661,6 +779,8 @@ async def leaderboard(interaction: discord.Interaction):
             await commands.server_leaderboard(interaction, connection, month_emoji, all_time_emoji)
         except Exception as e:
             await utils.logging(bot, f"Error in leaderboard command: {e}", interaction.guild_id)
+            # The command was deferred, so without this the member is left watching it think forever
+            await send_error(interaction, messages.COMMAND_FAILED)
             return
 
     # Only put the command on cooldown once it actually produced a leaderboard
@@ -670,6 +790,7 @@ async def leaderboard(interaction: discord.Interaction):
                         interaction.guild.id, log_level=log_type.COMMAND)
 
 @tree.command(name="set_hall_of_fame_channel", description="Manually set the Hall of Fame channel for the server")
+@app_commands.describe(channel="The text channel Hall of Fame posts go to")
 async def set_hall_of_fame_channel(interaction: discord.Interaction, channel: discord.TextChannel):
     """
     Set the Hall of Fame channel for the server
@@ -682,35 +803,46 @@ async def set_hall_of_fame_channel(interaction: discord.Interaction, channel: di
     if not await check_if_user_has_manage_server_permission(interaction, False):
         return
 
-    missing_permissions = []
-    if not channel.permissions_for(interaction.guild.me).send_messages:
-        missing_permissions.append("Send Messages")
-    if not channel.permissions_for(interaction.guild.me).view_channel:
-        missing_permissions.append("View Channel")
-    if not channel.permissions_for(interaction.guild.me).read_message_history:
-        missing_permissions.append("Read Message History")
+    permissions = channel.permissions_for(interaction.guild.me)
+    required_permissions = [
+        ("View Channel", permissions.view_channel),
+        ("Send Messages", permissions.send_messages),
+        ("Read Message History", permissions.read_message_history),
+        # Every Hall of Fame post is an embed, and without this Discord drops it without an error
+        ("Embed Links", permissions.embed_links),
+    ]
+    missing_permissions = [name for name, granted in required_permissions if not granted]
     if missing_permissions:
-        # noinspection PyUnresolvedReferences
-        await interaction.response.send_message(f"Failed to set Hall of Fame channel. In {channel.mention}, the bot is missing the following permissions for the channel: {', '.join(missing_permissions)}")
+        await send_error(interaction, messages.HOF_CHANNEL_MISSING_PERMISSIONS.format(
+            channel=channel.mention, missing_permissions=", ".join(missing_permissions)))
         await utils.logging(bot, f"Failed to set Hall of Fame channel due to missing permissions by {interaction.user.name} in "
                                  f"{interaction.guild.name} with missing permissions: {', '.join(missing_permissions)}",
                                  interaction.guild.id, str(channel.id), log_level=log_type.COMMAND)
         return
 
+    server_class = server_classes.get(interaction.guild_id)
+    if server_class is not None and server_class.hall_of_fame_channel_id == channel.id:
+        await send_error(interaction, messages.HOF_CHANNEL_UNCHANGED.format(channel=channel.mention))
+        return
+
+    # Setting a server up for the first time posts in the channel, which can outlast the three
+    # seconds Discord waits for an answer
+    # noinspection PyUnresolvedReferences
+    await interaction.response.defer()
+
     async with get_db_connection(connection_pool) as connection:
-        if interaction.guild_id not in server_classes or server_classes[interaction.guild_id] is None or server_config_repo.check_if_guild_exists(connection, interaction.guild_id) is False:
+        if server_class is None or server_config_repo.check_if_guild_exists(connection, interaction.guild_id) is False:
             new_server_class = await events.guild_join(interaction.guild, connection, bot, channel)
             if new_server_class is None:
+                await send_error(interaction, messages.HOF_CHANNEL_SETUP_FAILED.format(channel=channel.mention))
                 return
             server_classes[interaction.guild_id] = new_server_class
         else:
-            server_class = server_classes[interaction.guild_id]
             server_class.hall_of_fame_channel_id = channel.id
 
         server_config_repo.update_server_config_param(interaction.guild_id, "hall_of_fame_channel_id", channel.id, connection)
 
-    # noinspection PyUnresolvedReferences
-    await interaction.response.send_message(f"Hall of Fame channel set to {channel.mention}")
+    await interaction.followup.send(messages.HOF_CHANNEL_SET.format(channel=channel.mention))
     await utils.logging(bot, f"Set Hall of Fame channel command used by {interaction.user.name} in {interaction.guild.name}",
                         interaction.guild.id, str(channel.id), log_level=log_type.COMMAND)
 
@@ -720,8 +852,7 @@ async def hof_wrapped_command(interaction: discord.Interaction):
         return
 
     if not (interaction.guild_id in server_classes and server_classes[interaction.guild_id] is not None):
-        # noinspection PyUnresolvedReferences
-        await interaction.response.send_message("Server is not set up for Hall of Fame yet.")
+        await send_error(interaction, messages.ERROR_SERVER_NOT_SETUP)
         return
 
     async with get_db_connection(connection_pool) as connection:
@@ -740,14 +871,13 @@ async def hof_wrapped_command(interaction: discord.Interaction):
     await utils.logging(bot, f"HOF Wrapped command used by {interaction.user.name} in {interaction.guild.name}",
                         interaction.guild.id, str(interaction.user.id), log_level=log_type.COMMAND)
 
-@tree.command(name="server_hof_wrapped", description="Get your Hall of Fame Wrapped for the year")
+@tree.command(name="server_hof_wrapped", description="Get the server's Hall of Fame Wrapped for the year")
 async def server_hof_wrapped_command(interaction: discord.Interaction):
     if not await ensure_bot_is_loaded(interaction):
         return
 
     if not (interaction.guild_id in server_classes and server_classes[interaction.guild_id] is not None):
-        # noinspection PyUnresolvedReferences
-        await interaction.response.send_message("Server is not set up for Hall of Fame yet.")
+        await send_error(interaction, messages.ERROR_SERVER_NOT_SETUP)
         return
 
     async with get_db_connection(connection_pool) as connection:
@@ -769,14 +899,12 @@ async def check_if_user_has_manage_server_permission(interaction: discord.Intera
     :return: True if the user has manage server permission
     """
     if not interaction.user.guild_permissions.manage_guild:
-        # noinspection PyUnresolvedReferences
-        await interaction.response.send_message(messages.NOT_AUTHORIZED)
+        await send_error(interaction, messages.NOT_AUTHORIZED)
         await utils.logging(bot, f"User {interaction.user.name} does not have manage server permission",
                             interaction.guild_id, log_level=log_type.COMMAND)
         return False
     if check_server_set_up and len(server_classes) > 1 and (interaction.guild_id not in server_classes or server_classes[interaction.guild_id] is None):
-        # noinspection PyUnresolvedReferences
-        await interaction.response.send_message(messages.ERROR_SERVER_NOT_SETUP)
+        await send_error(interaction, messages.ERROR_SERVER_NOT_SETUP)
         return False
     return True
 

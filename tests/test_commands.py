@@ -179,16 +179,31 @@ class SetReactionThresholdTests(unittest.IsolatedAsyncioTestCase):
     async def test_writes_the_threshold_for_the_server_it_was_used_in(self):
         interaction = FakeInteraction()
         with mock.patch.object(server_config_repo, "update_server_config_param") as update:
-            await commands.set_reaction_threshold(interaction, 7, connection=object())
+            await commands.set_reaction_threshold(interaction, 7, object(), "total reactions")
 
         self.assertEqual((200, "reaction_threshold", 7), update.call_args.args[:3])
 
     async def test_confirms_the_new_threshold(self):
         interaction = FakeInteraction()
         with mock.patch.object(server_config_repo, "update_server_config_param"):
-            await commands.set_reaction_threshold(interaction, 7, connection=object())
+            await commands.set_reaction_threshold(interaction, 7, object(), "total reactions")
 
-        self.assertIn("set to 7", interaction.response.messages[0])
+        self.assertIn("**7**", interaction.response.messages[0])
+
+    async def test_says_how_the_threshold_is_counted(self):
+        """The same number means different things under each calculation method."""
+        interaction = FakeInteraction()
+        with mock.patch.object(server_config_repo, "update_server_config_param"):
+            await commands.set_reaction_threshold(interaction, 7, object(), "total reactions")
+
+        self.assertIn("7 reactions, counted as: total reactions", interaction.response.messages[0])
+
+    async def test_does_not_pluralise_a_single_reaction(self):
+        interaction = FakeInteraction()
+        with mock.patch.object(server_config_repo, "update_server_config_param"):
+            await commands.set_reaction_threshold(interaction, 1, object(), "total reactions")
+
+        self.assertIn("1 reaction,", interaction.response.messages[0])
 
 
 class UserServerProfileTests(unittest.IsolatedAsyncioTestCase):

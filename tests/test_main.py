@@ -21,6 +21,7 @@ from translations import messages
 
 from tests.fakes import FakeConnection, FakePermissions
 from tests.test_server_class import build_server
+from tests.test_validation import FakeGuildEmoji
 
 GUILD_ID = 200
 
@@ -28,9 +29,28 @@ GUILD_ID = 200
 class FakeResponse:
     def __init__(self):
         self.messages = []
+        self.ephemeral = []
+        self.deferred = False
 
     async def send_message(self, content=None, embed=None, ephemeral=False):
         self.messages.append(embed if embed is not None else content)
+        self.ephemeral.append(ephemeral)
+
+    async def defer(self):
+        self.deferred = True
+
+    def is_done(self):
+        return self.deferred or bool(self.messages)
+
+
+class FakeFollowup:
+    def __init__(self):
+        self.messages = []
+        self.ephemeral = []
+
+    async def send(self, content=None, embed=None, ephemeral=False):
+        self.messages.append(embed if embed is not None else content)
+        self.ephemeral.append(ephemeral)
 
 
 class FakeUser:
@@ -43,9 +63,11 @@ class FakeUser:
 
 
 class FakeGuild:
-    def __init__(self, guild_id=GUILD_ID, name="Test Server"):
+    def __init__(self, guild_id=GUILD_ID, name="Test Server", emojis=()):
         self.id = guild_id
         self.name = name
+        self.emojis = list(emojis)
+        self.me = FakeUser(user_id=1, bot=True)
 
 
 class FakeInteraction:
@@ -54,6 +76,13 @@ class FakeInteraction:
         self.guild_id = guild_id
         self.user = FakeUser(manage_guild=manage_guild)
         self.response = FakeResponse()
+        self.followup = FakeFollowup()
+        self.command = types.SimpleNamespace(name="test_command")
+
+    @property
+    def replies(self):
+        """Everything sent back, whether as the response or as a followup"""
+        return self.response.messages + self.followup.messages
 
 
 class FakePool:
@@ -226,7 +255,7 @@ class SetReactionThresholdCommandTests(MainTestCase):
         self.patch(main, "bot_loaded", True)
         self.recorded = []
 
-        async def record(_interaction, threshold, _connection):
+        async def record(_interaction, threshold, _connection, _method_label):
             self.recorded.append(threshold)
 
         self.patch(main.commands, "set_reaction_threshold", record)
@@ -238,18 +267,45 @@ class SetReactionThresholdCommandTests(MainTestCase):
         self.assertEqual([7], self.recorded)
         self.assertEqual(7, main.server_classes[GUILD_ID].reaction_threshold)
 
-    async def test_raises_a_threshold_of_zero_to_one(self):
-        """A threshold of zero would send every message ever posted to the board."""
+    async def test_refuses_a_threshold_of_zero(self):
+        """
+        A threshold of zero would send every message ever posted to the board. It is refused rather
+        than quietly raised to one, so the member is not left believing zero was stored.
+        """
         interaction = FakeInteraction()
         await main.configure_bot.callback(interaction, 0)
 
-        self.assertEqual([1], self.recorded)
+        self.assertEqual([], self.recorded)
+        self.assertIn("between 1 and", interaction.response.messages[0])
+        self.assertEqual([True], interaction.response.ephemeral)
 
-    async def test_raises_a_negative_threshold_to_one(self):
+    async def test_refuses_a_negative_threshold(self):
         interaction = FakeInteraction()
         await main.configure_bot.callback(interaction, -5)
 
-        self.assertEqual([1], self.recorded)
+        self.assertEqual([], self.recorded)
+
+    async def test_refuses_a_threshold_above_the_maximum(self):
+        interaction = FakeInteraction()
+        await main.configure_bot.callback(interaction, main.validation.REACTION_THRESHOLD_MAX + 1)
+
+        self.assertEqual([], self.recorded)
+
+    async def test_says_so_when_the_threshold_is_already_set(self):
+        main.server_classes[GUILD_ID].reaction_threshold = 7
+        interaction = FakeInteraction()
+        await main.configure_bot.callback(interaction, 7)
+
+        self.assertEqual([], self.recorded)
+        self.assertIn("already", interaction.response.messages[0])
+        self.assertEqual(0, self.pool.handed_out)
+
+    async def test_the_command_picker_enforces_the_bounds(self):
+        """Discord refuses an out of range number before it ever reaches the bot."""
+        option = main.configure_bot.get_parameter("reaction_threshold")
+
+        self.assertEqual(main.validation.REACTION_THRESHOLD_MIN, option.min_value)
+        self.assertEqual(main.validation.REACTION_THRESHOLD_MAX, option.max_value)
 
     async def test_changes_nothing_for_a_member_without_manage_server(self):
         interaction = FakeInteraction(manage_guild=False)
@@ -546,3 +602,340 @@ class ConnectionSlotTests(MainTestCase):
                 main.connection_slots.release()
 
         self.assertEqual(main.database_pool_size, acquired)
+
+
+class CommandTestCase(MainTestCase):
+    """A loaded bot with this server set up and a pool whose writes are recorded rather than run."""
+
+    def setUp(self):
+        super().setUp()
+        self.set_server_classes([GUILD_ID, 201])
+        self.pool = FakePool()
+        self.patch(main, "connection_pool", self.pool)
+        self.patch(main, "bot_loaded", True)
+        self.writes = []
+
+        def record_write(guild_id, parameter, value, _connection):
+            self.writes.append((guild_id, parameter, value))
+
+        self.patch(main.server_config_repo, "update_server_config_param", record_write)
+
+    @property
+    def server(self):
+        return main.server_classes[GUILD_ID]
+
+
+class UpdateSettingTests(CommandTestCase):
+    async def test_stores_and_confirms_a_change(self):
+        self.server.ignore_bot_messages = False
+        interaction = FakeInteraction()
+        changed = await main.update_setting(interaction, "ignore_bot_messages", True, "Ignore messages from bots")
+
+        self.assertTrue(changed)
+        self.assertEqual([(GUILD_ID, "ignore_bot_messages", True)], self.writes)
+        self.assertTrue(self.server.ignore_bot_messages)
+        self.assertEqual(["✅ Ignore messages from bots: **On**"], interaction.response.messages)
+
+    async def test_confirms_a_change_where_the_channel_can_see_it(self):
+        """A settings change affects everybody, so it is announced rather than whispered."""
+        self.server.ignore_bot_messages = False
+        interaction = FakeInteraction()
+        await main.update_setting(interaction, "ignore_bot_messages", True, "Ignore messages from bots")
+
+        self.assertEqual([False], interaction.response.ephemeral)
+
+    async def test_says_so_rather_than_writing_a_value_that_is_already_set(self):
+        self.server.ignore_bot_messages = True
+        interaction = FakeInteraction()
+        changed = await main.update_setting(interaction, "ignore_bot_messages", True, "Ignore messages from bots")
+
+        self.assertFalse(changed)
+        self.assertEqual([], self.writes)
+        self.assertIn("already **On**", interaction.response.messages[0])
+        self.assertEqual([True], interaction.response.ephemeral)
+
+    async def test_adds_the_note_to_the_confirmation(self):
+        self.server.hide_hof_post_below_threshold = False
+        interaction = FakeInteraction()
+        await main.hide_hall_of_fame_posts_when_they_are_below_threshold.callback(interaction, True)
+
+        self.assertIn("back above it", interaction.response.messages[0])
+
+    async def test_answers_a_server_that_is_not_set_up(self):
+        self.patch(main, "server_classes", {})
+        interaction = FakeInteraction()
+        changed = await main.update_setting(interaction, "ignore_bot_messages", True, "Ignore messages from bots")
+
+        self.assertFalse(changed)
+        self.assertEqual([messages.ERROR_SERVER_NOT_SETUP], interaction.response.messages)
+
+
+class RefusalsAreEphemeralTests(CommandTestCase):
+    async def test_a_member_without_manage_server_is_told_privately(self):
+        interaction = FakeInteraction(manage_guild=False)
+        await main.include_author_own_reaction_in_threshold.callback(interaction, True)
+
+        self.assertEqual([messages.NOT_AUTHORIZED], interaction.response.messages)
+        self.assertEqual([True], interaction.response.ephemeral)
+        self.assertEqual([], self.writes)
+
+    async def test_the_leaderboard_cooldown_is_told_privately(self):
+        self.patch(main, "daily_command_cooldowns", {77: ["leaderboard"]})
+        interaction = FakeInteraction()
+        await main.leaderboard.callback(interaction)
+
+        self.assertEqual([messages.COMMAND_ON_COOLDOWN], interaction.response.messages)
+        self.assertEqual([True], interaction.response.ephemeral)
+
+
+class PostDueDateCommandTests(CommandTestCase):
+    async def test_stores_a_due_date_within_the_bounds(self):
+        interaction = FakeInteraction()
+        await main.set_post_due_date.callback(interaction, 14)
+
+        self.assertEqual([(GUILD_ID, "post_due_date", 14)], self.writes)
+        self.assertIn("14 days", interaction.response.messages[0])
+
+    async def test_refuses_a_due_date_of_zero(self):
+        """Zero days would stop every message from ever reaching the board."""
+        interaction = FakeInteraction()
+        await main.set_post_due_date.callback(interaction, 0)
+
+        self.assertEqual([], self.writes)
+        self.assertIn("between", interaction.response.messages[0])
+
+    async def test_refuses_a_negative_due_date(self):
+        interaction = FakeInteraction()
+        await main.set_post_due_date.callback(interaction, -3)
+
+        self.assertEqual([], self.writes)
+
+    async def test_the_command_picker_enforces_the_bounds(self):
+        option = main.set_post_due_date.get_parameter("post_due_date")
+
+        self.assertEqual(main.validation.POST_DUE_DATE_MIN, option.min_value)
+        self.assertEqual(main.validation.POST_DUE_DATE_MAX, option.max_value)
+
+
+class WhitelistCommandTests(CommandTestCase):
+    def setUp(self):
+        super().setUp()
+        self.server.custom_emoji_check_logic = True
+        self.stored_whitelist = []
+        self.patch(main.server_config_repo, "get_parameter_value",
+                   lambda _connection, _guild_id, _parameter: list(self.stored_whitelist))
+
+    async def test_adds_a_valid_emoji(self):
+        interaction = FakeInteraction()
+        await main.whitelist_emoji.callback(interaction, "❤️")
+
+        self.assertEqual([(GUILD_ID, "whitelisted_emojis", ["❤️"])], self.writes)
+        self.assertEqual(["❤️"], self.server.whitelisted_emojis)
+        self.assertIn("1 in total", interaction.response.messages[0])
+
+    async def test_refuses_text_that_is_not_an_emoji(self):
+        interaction = FakeInteraction()
+        await main.whitelist_emoji.callback(interaction, "fire")
+
+        self.assertEqual([], self.writes)
+        self.assertIn("not an emoji", interaction.response.messages[0])
+        self.assertEqual([True], interaction.response.ephemeral)
+
+    async def test_refuses_several_emojis_at_once(self):
+        interaction = FakeInteraction()
+        await main.whitelist_emoji.callback(interaction, "🔥😂")
+
+        self.assertEqual([], self.writes)
+
+    async def test_stores_a_custom_emoji_typed_by_name_in_the_form_reactions_use(self):
+        interaction = FakeInteraction()
+        interaction.guild.emojis = [FakeGuildEmoji("pepe", 123456789012345678)]
+        await main.whitelist_emoji.callback(interaction, ":pepe:")
+
+        self.assertEqual([(GUILD_ID, "whitelisted_emojis", ["<:pepe:123456789012345678>"])], self.writes)
+
+    async def test_says_so_when_the_emoji_is_already_listed(self):
+        self.stored_whitelist = ["🔥"]
+        interaction = FakeInteraction()
+        await main.whitelist_emoji.callback(interaction, "🔥")
+
+        self.assertEqual([], self.writes)
+        self.assertIn("already", interaction.response.messages[0])
+
+    async def test_refuses_to_grow_past_the_limit(self):
+        self.patch(main.validation, "WHITELIST_MAX_SIZE", 2)
+        self.stored_whitelist = ["🔥", "😂"]
+        interaction = FakeInteraction()
+        await main.whitelist_emoji.callback(interaction, "👍")
+
+        self.assertEqual([], self.writes)
+        self.assertIn("full", interaction.response.messages[0])
+
+    async def test_points_to_the_setting_when_the_whitelist_is_off(self):
+        self.server.custom_emoji_check_logic = False
+        interaction = FakeInteraction()
+        await main.whitelist_emoji.callback(interaction, "🔥")
+
+        self.assertEqual([messages.CUSTOM_EMOJI_CHECK_DISABLED], interaction.response.messages)
+        self.assertEqual([True], interaction.response.ephemeral)
+
+    async def test_removes_a_renamed_custom_emoji(self):
+        self.stored_whitelist = ["<:old:123456789012345678>", "🔥"]
+        interaction = FakeInteraction()
+        await main.unwhitelist_emoji.callback(interaction, "<:new:123456789012345678>")
+
+        self.assertEqual([(GUILD_ID, "whitelisted_emojis", ["🔥"])], self.writes)
+        self.assertIn("1 left", interaction.response.messages[0])
+
+    async def test_says_every_emoji_counts_once_the_last_one_is_removed(self):
+        """An empty whitelist filters nothing out, which is easy to not expect."""
+        self.stored_whitelist = ["🔥"]
+        interaction = FakeInteraction()
+        await main.unwhitelist_emoji.callback(interaction, "🔥")
+
+        self.assertIn("every emoji counts", interaction.response.messages[0])
+
+    async def test_says_so_when_removing_an_emoji_that_is_not_listed(self):
+        self.stored_whitelist = ["🔥"]
+        interaction = FakeInteraction()
+        await main.unwhitelist_emoji.callback(interaction, "😂")
+
+        self.assertEqual([], self.writes)
+        self.assertIn("not in the whitelist", interaction.response.messages[0])
+        self.assertEqual([True], interaction.response.ephemeral)
+
+    async def test_clearing_an_empty_whitelist_writes_nothing(self):
+        self.server.whitelisted_emojis = []
+        interaction = FakeInteraction()
+        await main.clear_whitelist.callback(interaction)
+
+        self.assertEqual([], self.writes)
+        self.assertEqual([messages.WHITELIST_ALREADY_EMPTY], interaction.response.messages)
+
+    async def test_turning_the_whitelist_on_warns_when_it_is_empty(self):
+        self.server.custom_emoji_check_logic = False
+        self.server.whitelisted_emojis = []
+        interaction = FakeInteraction()
+        option = types.SimpleNamespace(name="Only whitelisted emojis", value="whitelisted_emojis")
+        await main.custom_emoji_check_logic.callback(interaction, option)
+
+        self.assertEqual([(GUILD_ID, "custom_emoji_check_logic", True)], self.writes)
+        self.assertIn("every emoji counts", interaction.response.messages[0])
+
+
+class SetHallOfFameChannelCommandTests(CommandTestCase):
+    def channel(self, channel_id=300, **permissions):
+        granted = FakePermissions(**permissions)
+        return types.SimpleNamespace(id=channel_id, mention=f"<#{channel_id}>",
+                                     permissions_for=lambda _member: granted)
+
+    async def test_names_every_permission_the_bot_is_missing(self):
+        interaction = FakeInteraction()
+        await main.set_hall_of_fame_channel.callback(
+            interaction, self.channel(send_messages=False, embed_links=False))
+
+        self.assertIn("Send Messages, Embed Links", interaction.response.messages[0])
+        self.assertEqual([True], interaction.response.ephemeral)
+        self.assertEqual([], self.writes)
+
+    async def test_requires_embed_links(self):
+        """Posts are embeds, and Discord drops an embed without it rather than failing."""
+        interaction = FakeInteraction()
+        await main.set_hall_of_fame_channel.callback(interaction, self.channel(embed_links=False))
+
+        self.assertIn("Embed Links", interaction.response.messages[0])
+
+    async def test_says_so_when_the_channel_is_already_the_board(self):
+        self.server.hall_of_fame_channel_id = 300
+        interaction = FakeInteraction()
+        await main.set_hall_of_fame_channel.callback(interaction, self.channel(300))
+
+        self.assertEqual([], self.writes)
+        self.assertIn("already", interaction.response.messages[0])
+
+    async def test_moves_the_board_and_confirms(self):
+        self.patch(main.server_config_repo, "check_if_guild_exists", lambda _connection, _guild_id: True)
+        interaction = FakeInteraction()
+        await main.set_hall_of_fame_channel.callback(interaction, self.channel(300))
+
+        self.assertTrue(interaction.response.deferred)
+        self.assertEqual([(GUILD_ID, "hall_of_fame_channel_id", 300)], self.writes)
+        self.assertEqual([messages.HOF_CHANNEL_SET.format(channel="<#300>")], interaction.followup.messages)
+
+    async def test_answers_when_setting_the_server_up_fails(self):
+        """This used to return without a word, leaving the command to time out."""
+        self.patch(main, "server_classes", {201: build_server(guild_id=201)})
+
+        async def fail_to_join(*_args, **_kwargs):
+            return None
+
+        self.patch(main.events, "guild_join", fail_to_join)
+        interaction = FakeInteraction()
+        await main.set_hall_of_fame_channel.callback(interaction, self.channel(300))
+
+        self.assertIn("Could not set up", interaction.followup.messages[0])
+        self.assertEqual([], self.writes)
+
+
+class LeaderboardFailureTests(CommandTestCase):
+    async def test_tells_the_member_when_the_leaderboard_fails(self):
+        async def fail(interaction, *_args):
+            await interaction.response.defer()
+            raise RuntimeError("database went away")
+
+        self.patch(main.commands, "server_leaderboard", fail)
+        interaction = FakeInteraction()
+        await main.leaderboard.callback(interaction)
+
+        self.assertEqual([messages.COMMAND_FAILED], interaction.followup.messages)
+
+
+class UserProfileCommandTests(CommandTestCase):
+    async def test_a_bot_has_no_profile_to_look_up(self):
+        interaction = FakeInteraction()
+        await main.user_server_profile.callback(interaction, FakeUser(user_id=9, bot=True))
+
+        self.assertEqual([messages.PROFILE_BOT_USER], interaction.response.messages)
+        self.assertEqual(0, self.pool.handed_out)
+
+
+class CommandErrorHandlerTests(MainTestCase):
+    def invoke_error(self, message="boom"):
+        command = types.SimpleNamespace(name="leaderboard", qualified_name="leaderboard")
+        return discord.app_commands.CommandInvokeError(command, RuntimeError(message))
+
+    async def test_answers_a_command_that_raised(self):
+        interaction = FakeInteraction()
+        await main.on_app_command_error(interaction, self.invoke_error())
+
+        self.assertEqual([messages.COMMAND_FAILED], interaction.response.messages)
+        self.assertEqual([True], interaction.response.ephemeral)
+
+    async def test_records_what_went_wrong(self):
+        interaction = FakeInteraction()
+        await main.on_app_command_error(interaction, self.invoke_error("the query failed"))
+
+        self.assertTrue(any("the query failed" in entry for entry in self.logged))
+
+    async def test_answers_with_a_followup_once_the_command_was_deferred(self):
+        interaction = FakeInteraction()
+        await interaction.response.defer()
+        await main.on_app_command_error(interaction, self.invoke_error())
+
+        self.assertEqual([messages.COMMAND_FAILED], interaction.followup.messages)
+
+    async def test_explains_a_command_used_outside_a_server(self):
+        interaction = FakeInteraction()
+        await main.on_app_command_error(interaction, discord.app_commands.NoPrivateMessage())
+
+        self.assertEqual([messages.GUILD_ONLY], interaction.response.messages)
+
+
+class CommandContextTests(unittest.TestCase):
+    def test_commands_are_only_offered_in_servers(self):
+        """Every command reads the server it was used in, so in a DM it could only fail."""
+        contexts = main.tree.allowed_contexts
+
+        self.assertTrue(contexts.guild)
+        self.assertFalse(contexts.dm_channel)
+        self.assertFalse(contexts.private_channel)

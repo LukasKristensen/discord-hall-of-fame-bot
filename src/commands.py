@@ -4,6 +4,7 @@ from constants import version
 from enums import command_refs, calculation_method_type
 from repositories import server_config_repo, server_user_repo
 from caches import ExpiringSet
+from translations import messages
 
 async def get_help(interaction: discord.Interaction):
     """
@@ -66,19 +67,24 @@ async def manual_sweep(interaction: discord.Interaction, guild_id: int, sweep_li
     await utils.check_all_server_messages(int(guild_id), sweep_limit, sweep_limited, bot, collection, reaction_threshold, post_due_date, target_channel_id, allow_messages_in_hof_channel, interaction)
 
 
-async def set_reaction_threshold(interaction: discord.Interaction, reaction_threshold: int, connection):
+async def set_reaction_threshold(interaction: discord.Interaction, reaction_threshold: int, connection,
+                                 method_label: str):
     """
     Command to set the reaction threshold for posting a message in the Hall of Fame
     :param interaction:
     :param reaction_threshold:
     :param connection:
+    :param method_label: How the server counts reactions, so the reply says what the number means
     :return:
     """
     server_config_repo.update_server_config_param(interaction.guild.id, 'reaction_threshold', reaction_threshold, connection)
     # noinspection PyUnresolvedReferences
-    await interaction.response.send_message(f"Reaction threshold set to {reaction_threshold}.\n"
-                                            f"Note: The reaction threshold is based on the highest reaction count"
-                                            f" of a single emoji per message.")
+    await interaction.response.send_message(
+        messages.SETTING_CHANGED.format(label="Reaction threshold", value=reaction_threshold) + "\n"
+        + messages.REACTION_THRESHOLD_NOTE.format(threshold=reaction_threshold,
+                                                  plural="" if reaction_threshold == 1 else "s",
+                                                  method=method_label)
+        + f" Change how reactions are counted with {command_refs.CALCULATION_METHOD}.")
 
 
 async def user_server_profile(interaction, user, user_stats, connection, month_emoji: str, all_time_emoji: str):
@@ -302,7 +308,8 @@ def _toggle(enabled: bool, label: str) -> str:
 
 def _whitelist_value(emojis) -> str:
     if not emojis:
-        return f"Empty, so nothing counts yet. Add one with {command_refs.WHITELIST_EMOJI}"
+        # An empty whitelist filters nothing out, see message_reactions.filter_whitelisted_reactions
+        return f"Empty, so every emoji still counts. Add one with {command_refs.WHITELIST_EMOJI}"
 
     shown = []
     for index, emoji in enumerate(emojis):
