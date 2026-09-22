@@ -548,11 +548,11 @@ async def whitelist_emoji(interaction: discord.Interaction, emoji: str):
     if server_class is None:
         return
 
-    parsed, error = validation.parse_emoji(emoji, interaction.guild.emojis)
-    if error is not None:
-        await send_error(interaction, error)
+    parsed = validation.normalize_emoji(emoji)
+    if parsed is None:
+        await send_error(interaction, "No emoji was given.")
         await utils.logging(bot, f"Whitelist emoji command used by {interaction.user.name} in {interaction.guild.name} "
-                                 f"with an invalid emoji", interaction.guild.id, emoji, log_level=log_type.COMMAND)
+                                 f"with no emoji", interaction.guild.id, emoji, log_level=log_type.COMMAND)
         return
 
     async with get_db_connection(connection_pool) as connection:
@@ -584,7 +584,7 @@ async def unwhitelist_emoji(interaction: discord.Interaction, emoji: str):
 
     async with get_db_connection(connection_pool) as connection:
         whitelist = server_config_repo.get_parameter_value(connection, interaction.guild_id, "whitelisted_emojis") or []
-        entry = validation.find_in_whitelist(whitelist, emoji, interaction.guild.emojis)
+        entry = validation.find_in_whitelist(whitelist, emoji)
 
         if entry is not None:
             whitelist.remove(entry)

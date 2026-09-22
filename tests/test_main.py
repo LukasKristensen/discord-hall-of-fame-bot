@@ -21,7 +21,6 @@ from translations import messages
 
 from tests.fakes import FakeConnection, FakePermissions
 from tests.test_server_class import build_server
-from tests.test_validation import FakeGuildEmoji
 
 GUILD_ID = 200
 
@@ -733,26 +732,26 @@ class WhitelistCommandTests(CommandTestCase):
         self.assertEqual(["❤️"], self.server.whitelisted_emojis)
         self.assertIn("1 in total", interaction.response.messages[0])
 
-    async def test_refuses_text_that_is_not_an_emoji(self):
+    async def test_stores_text_that_is_not_an_emoji_as_is(self):
+        """Nothing catches this up front; it simply never matches a real reaction later."""
         interaction = FakeInteraction()
         await main.whitelist_emoji.callback(interaction, "fire")
 
-        self.assertEqual([], self.writes)
-        self.assertIn("not an emoji", interaction.response.messages[0])
-        self.assertEqual([True], interaction.response.ephemeral)
+        self.assertEqual([(GUILD_ID, "whitelisted_emojis", ["fire"])], self.writes)
 
-    async def test_refuses_several_emojis_at_once(self):
+    async def test_stores_several_emojis_typed_together_as_one_entry(self):
         interaction = FakeInteraction()
         await main.whitelist_emoji.callback(interaction, "🔥😂")
 
-        self.assertEqual([], self.writes)
+        self.assertEqual([(GUILD_ID, "whitelisted_emojis", ["🔥😂"])], self.writes)
 
-    async def test_stores_a_custom_emoji_typed_by_name_in_the_form_reactions_use(self):
+    async def test_refuses_empty_input(self):
         interaction = FakeInteraction()
-        interaction.guild.emojis = [FakeGuildEmoji("pepe", 123456789012345678)]
-        await main.whitelist_emoji.callback(interaction, ":pepe:")
+        await main.whitelist_emoji.callback(interaction, "   ")
 
-        self.assertEqual([(GUILD_ID, "whitelisted_emojis", ["<:pepe:123456789012345678>"])], self.writes)
+        self.assertEqual([], self.writes)
+        self.assertIn("No emoji was given", interaction.response.messages[0])
+        self.assertEqual([True], interaction.response.ephemeral)
 
     async def test_says_so_when_the_emoji_is_already_listed(self):
         self.stored_whitelist = ["🔥"]
