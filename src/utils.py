@@ -864,6 +864,9 @@ async def update_user_database(bot: discord.Client, connection):
             rebuilt += 1
         except Exception as e:
             failed += 1
+            # A failed statement aborts the transaction, and every guild after it shares this
+            # connection, so it is reset here rather than failing the rest of the sweep
+            connection.rollback()
             await logging(bot, f"Failed to update user stats for guild {guild.id}: {e}", guild.id)
         if position % user_stats_guilds_per_yield == 0:
             await asyncio.sleep(0)

@@ -118,6 +118,8 @@ class UpdateUserDatabaseTests(unittest.IsolatedAsyncioTestCase):
         await utils.update_user_database(self.bot, self.connection)
 
         self.assertEqual([200, 201, 202], self.rebuilt)
+        self.assertEqual(1, self.connection.rollbacks,
+                         "the aborted transaction should be reset before the next guild runs on it")
 
     async def test_reports_a_failing_guild(self):
         def fail_on_the_second(guild_id):

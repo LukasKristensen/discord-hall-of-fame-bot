@@ -71,6 +71,7 @@ class FakeConnection:
         self.description = description
         self.cursors = []
         self.commits = 0
+        self.rollbacks = 0
 
     def cursor(self):
         cursor = FakeCursor(self.row, self.rows, self.description)
@@ -79,6 +80,9 @@ class FakeConnection:
 
     def commit(self):
         self.commits += 1
+
+    def rollback(self):
+        self.rollbacks += 1
 
     @property
     def queries(self):
