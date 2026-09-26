@@ -93,9 +93,10 @@ messages being reacted to.
 
 ## Commands
 
-All commands are slash commands. The configuration ones need the **Manage Server** permission, and
-say so on each group; everything under [Recognition](#recognition-commands) and
-[Bot and help](#bot-and-help) is open to every member.
+All commands are slash commands and only work inside a server. The configuration ones need the
+**Manage Server** permission, and say so on each group; everything under
+[Recognition](#recognition-commands) and [Bot and help](#bot-and-help) is open to every member. If a
+command is refused, for example because a value is out of range, only you see the reply.
 
 ### Setting up the board
 
@@ -103,9 +104,9 @@ Requires **Manage Server**.
 
 | Command | Parameters | What it does |
 |:---|:---|:---|
-| `/set_hall_of_fame_channel` | `channel` | Point the bot at the channel it should post to. Checks its own permissions first and tells you what is missing. |
-| `/set_reaction_threshold` | `reaction_threshold` (number) | How many reactions a message needs. Seeded once on join from your member count, and fixed at that value until you change it here. |
-| `/allow_messages_in_hof_channel` | `allow` (true/false) | Let members chat in the hall of fame channel. Off by default, so the board stays clean. |
+| `/set_hall_of_fame_channel` | `channel` | Point the bot at the channel it should post to. Checks its own permissions first (View Channel, Send Messages, Read Message History and Embed Links) and tells you what is missing. |
+| `/set_reaction_threshold` | `reaction_threshold` (1 to 1000) | How many reactions a message needs. Seeded once on join from your member count, and fixed at that value until you change it here. |
+| `/allow_messages_in_hof_channel` | `allow` (true/false) | Let members chat in the hall of fame channel. Off by default, so the board stays clean. Removing chat needs the bot to have **Manage Messages** in that channel. |
 
 ### Choosing what qualifies
 
@@ -115,7 +116,7 @@ Requires **Manage Server**.
 |:---|:---|:---|
 | `/calculation_method` | `most_reactions_on_emoji`, `total_reactions` or `unique_users` | How reactions are counted. See [How reactions are counted](#how-reactions-are-counted). |
 | `/include_authors_reaction` | `include` (true/false) | Whether reacting to your own message counts toward the threshold. |
-| `/set_post_due_date` | `post_due_date` (days) | How old a message can be and still qualify. |
+| `/set_post_due_date` | `post_due_date` (1 to 3650 days) | How old a message can be and still qualify. |
 | `/require_image_or_video` | `require` (true/false) | Only feature messages that contain an image or a video. |
 | `/hide_hof_post_below_threshold` | `hide` (true/false) | Hide a post again if it drops back under the threshold, and restore it if it climbs back. |
 | `/ignore_bot_messages` | `should_ignore_bot_messages` (true/false) | Whether messages from other bots can be featured. |
@@ -128,7 +129,7 @@ Requires **Manage Server**. Every emoji counts until you turn this on, see
 | Command | Parameters | What it does |
 |:---|:---|:---|
 | `/custom_emoji_check_logic` | `All emojis` or `Only whitelisted emojis` | Switch whitelist mode on or off. |
-| `/whitelist_emoji` | `emoji` | Add one emoji to the whitelist. |
+| `/whitelist_emoji` | `emoji` | Add one emoji to the whitelist, up to 100. |
 | `/unwhitelist_emoji` | `emoji` | Remove one emoji from the whitelist. |
 | `/clear_whitelist` | | Empty the whitelist. |
 
@@ -149,8 +150,8 @@ Open to everyone.
 
 | Command | Parameters | What it does |
 |:---|:---|:---|
-| `/help` | | List every command. |
-| `/get_server_config` | | Show the current configuration for this server. |
+| `/help` | | List every command, grouped by what it changes. Mentioning the bot on its own shows the same overview. |
+| `/get_server_config` | | Show every setting for this server, with the command that changes it. |
 | `/invite` | | Invite link for adding the bot elsewhere. |
 | `/vote` | | Vote for the bot on top.gg. |
 | `/feedback` | | Send a feature request or bug report to the developer. |
@@ -166,6 +167,9 @@ reaction, a small set of in-joke emojis, or a classic star only board.
 
 Enable it with `/custom_emoji_check_logic`, then manage the list with `/whitelist_emoji`,
 `/unwhitelist_emoji` and `/clear_whitelist`. `/get_server_config` shows the current whitelist.
+
+The whitelist holds up to 100 emojis. While it is empty every emoji still counts. Custom emojis are
+matched by ID, so renaming one does not stop it counting.
 
 <br>
 
@@ -211,7 +215,7 @@ them with `/whitelist_emoji`.
 
 ### How many reactions does a message need?
 
-Whatever you set with `/set_reaction_threshold`. So that the board works before anyone configures it,
+Whatever you set with `/set_reaction_threshold`, from 1 to 1000. So that the board works before anyone configures it,
 the bot picks a starting value from your member count when it joins, between 1 for a tiny server and 7
 for a large one. That happens once, on join. It is not recalculated as the server grows, so revisit it
 yourself if your membership changes a lot.
@@ -266,6 +270,9 @@ python -m unittest discover -s tests -t .
 
 The same command runs on every pull request through the ``Tests`` workflow.
 
+For behaviour under load, `tests/stress/reaction_storm.py` drives the real reaction handler with
+hundreds of concurrent reactions. It is run by hand, see [tests/stress/README.md](tests/stress/README.md).
+
 <br>
 
 
@@ -295,23 +302,44 @@ one](https://discord.com/oauth2/authorize?client_id=1177041673352663070) to your
 ## Development Log
 
 ### 2.1
+- [x] Mentioning the bot on its own now answers with a help card listing the commands, with a per-channel cooldown so it cannot be spammed.
+- [x] /get_server_config shows every setting in one card, grouped by what it affects, with the command that changes each setting next to it.
+- [x] /help groups the commands by who uses them and what they change, and links the support server, voting and the source code.
+- [x] Settings commands check their input: the reaction threshold is 1 to 1000, the post due date 1 to 3650 days and the emoji whitelist holds up to 100 emojis. Discord shows the allowed range in the command picker.
+- [x] Settings commands confirm the new value in plain words, and say so when a setting already had that value instead of saving it again.
+- [x] Error replies, such as an invalid value or a missing permission, are only shown to the member who ran the command instead of the whole channel.
+- [x] A command that fails now answers with an error message instead of Discord's "The application did not respond", and commands are only offered inside servers.
+- [x] Commands now answer with a loading notice while the bot is still starting up, instead of timing out silently.
+- [x] /set_hall_of_fame_channel also checks for the Embed Links permission, without which Discord drops every Hall of Fame post silently.
+- [x] The Hall of Fame channel is only kept clear of chat when the bot has Manage Messages there, and the bot explains which permission to grant otherwise.
+- [x] /user_profile shows the monthly rank as N/A for members with nothing featured this month, instead of ranking them.
+- [x] The daily post limit resets at the start of each day instead of covering a rolling 24 hours, and its notice says clearly when posting resumes.
+- [x] The setup message explains that the bot cannot see channels hidden behind a role unless it is given that role.
 - [x] Fixed the emoji whitelist matching on partial emojis, so a reaction only counts when it is whitelisted exactly.
+- [x] Fixed whitelisted custom emojis no longer counting after being renamed; they are now matched by ID, and /unwhitelist_emoji accepts the renamed emoji.
 - [x] Fixed the total reactions calculation method discarding a whole reaction instead of a single vote when the author is excluded.
-- [x] Fixed developer ping notifications for critical runtime errors, which never triggered.
 - [x] Fixed Hall of Fame posts failing when the message that was replied to had been deleted, or when a reply had no text of its own.
 - [x] Fixed reactions being dropped when several arrived on the same message at once; they now queue so the newest count wins.
 - [x] Fixed the daily post limit allowing one more post than the limit it announced.
 - [x] Fixed /get_server_config failing in servers that are not set up yet.
-- [x] Commands now answer with a loading notice while the bot is still starting up, instead of timing out silently.
+- [x] Fixed the clickable /require_image_or_video link in /help and /get_server_config, which pointed at a command ID that does not exist.
+- [x] Fixed the daily leaderboard update failing when a featured message's channel was no longer accessible.
+- [x] Fixed an error in one server's leaderboard update aborting the updates of other servers running at the same time.
+- [x] Fixed developer ping notifications for critical runtime errors, which never triggered.
+- [x] Reactions wait for a free database connection during busy moments instead of being dropped, and the connection pool grew from 10 to 20.
 - [x] Reaction events serve the server configuration from memory, removing the database lookups from the path that runs most often.
 - [x] The daily member statistics are aggregated and ranked by the database in one statement per server, instead of reading every Hall of Fame message into the bot.
+- [x] The daily task updates servers in parallel batches, each under a time limit and a database statement timeout, so one stalled server cannot hold up the rest.
 - [x] The leaderboard updates each post in a single edit instead of three, cutting its daily rate limit cost.
+- [x] Errors while handling a reaction are logged instead of being discarded, with repeats collapsed per server, and the database state is reset cleanly after a restart.
 - [x] Duplicate log messages are filtered in memory instead of re-reading the log channel on every single log line.
 - [x] Switched to a thread safe database connection pool, since the daily snapshot runs on a worker thread.
 - [x] Hall of Fame posts no longer break the Discord message cache when truncating long messages.
-- [x] Added a unit test suite and a Tests workflow that runs on every pull request.
+- [x] Rebuilt the internal server statistics report as a modular package with a synthetic data mode, and fixed several of its metrics.
+- [x] Added a unit test suite and a Tests workflow that runs on every pull request, a reaction stress-test harness, and Dependabot.
 - [x] Added psycopg2-binary to requirements.txt, which the bot has always needed in order to start, and pinned Python 3.13.
 - [x] Rewrote the README and the Top.gg description around recognition rather than archiving, and documented /hof_wrapped, /server_hof_wrapped, /require_image_or_video and /set_post_due_date, which were missing.
+- [x] Published the code under a source-available license, and added CONTRIBUTING.md and the Contributing and License sections of the README.
 
 ### 2.0
 - [x] Added require_image_or_video server option to enforce media presence in embeds.
