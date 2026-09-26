@@ -32,7 +32,15 @@ REACTION_THRESHOLD_NOTE = ("A message reaches the Hall of Fame once it has {thre
                            "counted as: {method}.")
 POST_DUE_DATE_NOTE = "Messages older than {days} day{plural} can no longer reach the Hall of Fame."
 HOF_CHANNEL_SET = "✅ Hall of Fame channel set to {channel}."
-HOF_CHANNEL_UNCHANGED = "ℹ️ {channel} is already the Hall of Fame channel."
+HOF_CHANNEL_SET_ANNOUNCEMENT_FAILED = ("✅ Hall of Fame channel set to {channel}, but the bot could not post its "
+                                       "announcement there. Check that it can send messages in the channel.")
+# Posted in the channel the board moved to. A brand-new setup posts its own welcome instead
+HOF_CHANNEL_MOVED_ANNOUNCEMENT = ("🏆 **This is now the Hall of Fame channel!** 🏆\n"
+                                  "{user} moved the Hall of Fame here. Messages that reach **{threshold}** reactions "
+                                  "will be reposted in this channel from now on.\n"
+                                  "Change the threshold with {threshold_command} or see every setting with "
+                                  "{config_command}.")
+HOF_CHANNEL_UNCHANGED ="ℹ️ {channel} is already the Hall of Fame channel."
 HOF_CHANNEL_MISSING_PERMISSIONS = ("Could not use {channel} as the Hall of Fame channel. The bot is missing these "
                                    "permissions there: ``{missing_permissions}``\n"
                                    "Grant them in the channel settings and run the command again.")

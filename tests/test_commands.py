@@ -95,10 +95,30 @@ class GetHelpTests(unittest.IsolatedAsyncioTestCase):
         interaction = FakeInteraction()
         await commands.get_help(interaction)
 
-        listed = " ".join(field.name or "" for field in interaction.response.messages[0].fields)
+        listed = field_named(interaction.response.messages[0], "For everyone").value
         for command in ("leaderboard", "user_profile", "hof_wrapped", "server_hof_wrapped"):
             with self.subTest(command=command):
                 self.assertIn(command, listed)
+
+    async def test_lists_every_setting_command(self):
+        embed = commands.build_help_embed()
+
+        listed = embed.description + " ".join(field.value for field in embed.fields)
+        for command in ("set_hall_of_fame_channel", "set_reaction_threshold", "calculation_method",
+                        "get_server_config", "set_post_due_date", "include_authors_reaction",
+                        "ignore_bot_messages", "require_image_or_video", "allow_messages_in_hof_channel",
+                        "hide_hof_post_below_threshold", "custom_emoji_check_logic", "whitelist_emoji",
+                        "unwhitelist_emoji", "clear_whitelist", "feedback"):
+            with self.subTest(command=command):
+                self.assertIn(f"</{command}:", listed)
+
+    async def test_fits_within_discords_embed_limits(self):
+        embed = commands.build_help_embed()
+
+        self.assertLessEqual(len(embed), 6000)
+        for field in embed.fields:
+            with self.subTest(field=field.name):
+                self.assertLessEqual(len(field.value), 1024)
 
     async def test_points_at_the_support_server(self):
         interaction = FakeInteraction()
@@ -271,6 +291,15 @@ class UserServerProfileTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertIn("4", field_named(embed, "This Month's Hall of Fame Messages").value)
         self.assertIn("Rank: 2", field_named(embed, "This Month's Hall of Fame Messages").value)
+
+    async def test_shows_no_monthly_rank_for_a_member_with_nothing_this_month(self):
+        self.patch_top_of_stat()
+        stats = dict(self.stats, this_month_hall_of_fame_messages=0, monthly_message_rank=None,
+                     this_month_hall_of_fame_message_reactions=0, monthly_reaction_rank=None)
+        embed = await self.run_command(stats)
+
+        self.assertIn("Rank: N/A", field_named(embed, "This Month's Hall of Fame Messages").value)
+        self.assertIn("Rank: N/A", field_named(embed, "Reactions Received This Month").value)
 
     async def test_shows_the_reactions_earned(self):
         self.patch_top_of_stat()

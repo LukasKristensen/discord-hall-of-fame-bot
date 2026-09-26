@@ -831,16 +831,37 @@ async def set_hall_of_fame_channel(interaction: discord.Interaction, channel: di
     await interaction.response.defer()
 
     async with get_db_connection(connection_pool) as connection:
-        if server_class is None or server_config_repo.check_if_guild_exists(connection, interaction.guild_id) is False:
+        needs_setup = (server_class is None
+                       or server_config_repo.check_if_guild_exists(connection, interaction.guild_id) is False)
+        if needs_setup:
             new_server_class = await events.guild_join(interaction.guild, connection, bot, channel)
             if new_server_class is None:
                 await send_error(interaction, messages.HOF_CHANNEL_SETUP_FAILED.format(channel=channel.mention))
                 return
             server_classes[interaction.guild_id] = new_server_class
-        else:
-            server_class.hall_of_fame_channel_id = channel.id
 
         server_config_repo.update_server_config_param(interaction.guild_id, "hall_of_fame_channel_id", channel.id, connection)
+        if not needs_setup:
+            # Only once it is stored, so a failed write does not leave reactions posting to a channel
+            # the saved configuration does not know about
+            server_class.hall_of_fame_channel_id = channel.id
+
+    if needs_setup:
+        # Setting the server up already posted its welcome message in the channel
+        await interaction.followup.send(messages.HOF_CHANNEL_SET.format(channel=channel.mention))
+        return
+
+    try:
+        await channel.send(messages.HOF_CHANNEL_MOVED_ANNOUNCEMENT.format(
+            user=interaction.user.mention, threshold=server_class.reaction_threshold,
+            threshold_command=command_refs.SET_REACTION_THRESHOLD, config_command=command_refs.GET_SERVER_CONFIG),
+            allowed_mentions=discord.AllowedMentions.none())
+    except discord.HTTPException as e:
+        # The board has moved either way, so the member still hears that it worked
+        await utils.logging(bot, f"Could not post the Hall of Fame channel announcement in {interaction.guild.name}: {e}",
+                            interaction.guild.id, str(channel.id), log_level=log_type.COMMAND)
+        await interaction.followup.send(messages.HOF_CHANNEL_SET_ANNOUNCEMENT_FAILED.format(channel=channel.mention))
+        return
 
     await interaction.followup.send(messages.HOF_CHANNEL_SET.format(channel=channel.mention))
     await utils.logging(bot, f"Set Hall of Fame channel command used by {interaction.user.name} in {interaction.guild.name}",

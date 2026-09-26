@@ -52,6 +52,14 @@ class RebuildUserStatsForGuildTests(unittest.TestCase):
         self.assertIn("SUM(reaction_count)", query)
         self.assertEqual(4, query.count("ROW_NUMBER() OVER"))
 
+    def test_leaves_members_with_nothing_this_month_without_a_monthly_rank(self):
+        """Otherwise every inactive member is ranked this month, ordered by nothing but their user id."""
+        server_user_repo.rebuild_user_stats_for_guild(self.connection, 200, self.window)
+        query, _ = self.execute_call()
+
+        self.assertIn("CASE WHEN monthly_messages > 0", query)
+        self.assertIn("CASE WHEN monthly_reactions > 0", query)
+
     def test_writes_all_eight_stat_columns(self):
         server_user_repo.rebuild_user_stats_for_guild(self.connection, 200, self.window)
         query, _ = self.execute_call()

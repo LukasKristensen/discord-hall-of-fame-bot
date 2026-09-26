@@ -133,9 +133,13 @@ def rebuild_user_stats_for_guild(connection, guild_id, monthly_window_start) -> 
             total_reactions,
             monthly_reactions,
             ROW_NUMBER() OVER (ORDER BY total_messages DESC, author_id),
-            ROW_NUMBER() OVER (ORDER BY monthly_messages DESC, author_id),
+            -- Nobody is ranked for a month they had nothing featured in. Zero counts sort last, so
+            -- leaving them unranked does not move anyone who was active
+            CASE WHEN monthly_messages > 0
+                 THEN ROW_NUMBER() OVER (ORDER BY monthly_messages DESC, author_id) END,
             ROW_NUMBER() OVER (ORDER BY total_reactions DESC, author_id),
-            ROW_NUMBER() OVER (ORDER BY monthly_reactions DESC, author_id)
+            CASE WHEN monthly_reactions > 0
+                 THEN ROW_NUMBER() OVER (ORDER BY monthly_reactions DESC, author_id) END
         FROM (
             SELECT
                 author_id,

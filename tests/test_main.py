@@ -383,10 +383,6 @@ class PostApiBotStatsTests(MainTestCase):
         dbl.assert_called_once()
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class OnMessageMentionTests(MainTestCase):
     """Where a ping is answered relative to the checks that were already in on_message."""
 
@@ -827,10 +823,18 @@ class WhitelistCommandTests(CommandTestCase):
 
 
 class SetHallOfFameChannelCommandTests(CommandTestCase):
-    def channel(self, channel_id=300, **permissions):
+    def channel(self, channel_id=300, send_fails=False, **permissions):
         granted = FakePermissions(**permissions)
-        return types.SimpleNamespace(id=channel_id, mention=f"<#{channel_id}>",
-                                     permissions_for=lambda _member: granted)
+        channel = types.SimpleNamespace(id=channel_id, mention=f"<#{channel_id}>",
+                                        permissions_for=lambda _member: granted, sent=[])
+
+        async def send(content=None, **_kwargs):
+            if send_fails:
+                raise discord.HTTPException(types.SimpleNamespace(status=403, reason="Forbidden"), "Missing Access")
+            channel.sent.append(content)
+
+        channel.send = send
+        return channel
 
     async def test_names_every_permission_the_bot_is_missing(self):
         interaction = FakeInteraction()
@@ -864,6 +868,57 @@ class SetHallOfFameChannelCommandTests(CommandTestCase):
         self.assertTrue(interaction.response.deferred)
         self.assertEqual([(GUILD_ID, "hall_of_fame_channel_id", 300)], self.writes)
         self.assertEqual([messages.HOF_CHANNEL_SET.format(channel="<#300>")], interaction.followup.messages)
+        self.assertEqual(300, self.server.hall_of_fame_channel_id)
+
+    async def test_announces_the_move_in_the_new_channel(self):
+        self.patch(main.server_config_repo, "check_if_guild_exists", lambda _connection, _guild_id: True)
+        self.server.reaction_threshold = 5
+        interaction = FakeInteraction()
+        channel = self.channel(300)
+        await main.set_hall_of_fame_channel.callback(interaction, channel)
+
+        self.assertEqual(1, len(channel.sent))
+        self.assertIn(interaction.user.mention, channel.sent[0])
+        self.assertIn("**5**", channel.sent[0])
+
+    async def test_still_confirms_the_move_when_the_announcement_cannot_be_posted(self):
+        """The board has moved by then, so failing the command would tell the member the opposite."""
+        self.patch(main.server_config_repo, "check_if_guild_exists", lambda _connection, _guild_id: True)
+        interaction = FakeInteraction()
+        await main.set_hall_of_fame_channel.callback(interaction, self.channel(300, send_fails=True))
+
+        self.assertEqual(300, self.server.hall_of_fame_channel_id)
+        self.assertEqual([messages.HOF_CHANNEL_SET_ANNOUNCEMENT_FAILED.format(channel="<#300>")],
+                         interaction.followup.messages)
+
+    async def test_first_setup_does_not_announce_twice(self):
+        """Setting a server up posts its own welcome message in the channel."""
+        self.patch(main, "server_classes", {201: build_server(guild_id=201)})
+
+        async def join(*_args, **_kwargs):
+            return build_server(guild_id=GUILD_ID)
+
+        self.patch(main.events, "guild_join", join)
+        interaction = FakeInteraction()
+        channel = self.channel(300)
+        await main.set_hall_of_fame_channel.callback(interaction, channel)
+
+        self.assertEqual([], channel.sent)
+        self.assertEqual([messages.HOF_CHANNEL_SET.format(channel="<#300>")], interaction.followup.messages)
+
+    async def test_keeps_the_old_channel_cached_when_the_new_one_could_not_be_stored(self):
+        """Otherwise reactions post to a channel the saved configuration does not know about."""
+        self.patch(main.server_config_repo, "check_if_guild_exists", lambda _connection, _guild_id: True)
+        self.server.hall_of_fame_channel_id = 100
+
+        def fail_to_write(*_args):
+            raise RuntimeError("database went away")
+
+        self.patch(main.server_config_repo, "update_server_config_param", fail_to_write)
+        with self.assertRaises(RuntimeError):
+            await main.set_hall_of_fame_channel.callback(FakeInteraction(), self.channel(300))
+
+        self.assertEqual(100, self.server.hall_of_fame_channel_id)
 
     async def test_answers_when_setting_the_server_up_fails(self):
         """This used to return without a word, leaving the command to time out."""
@@ -942,3 +997,7 @@ class CommandContextTests(unittest.TestCase):
         self.assertTrue(contexts.guild)
         self.assertFalse(contexts.dm_channel)
         self.assertFalse(contexts.private_channel)
+
+
+if __name__ == "__main__":
+    unittest.main()

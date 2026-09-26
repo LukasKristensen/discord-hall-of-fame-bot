@@ -840,9 +840,12 @@ def median_reaction_multiple(buckets) -> float:
     if not total:
         return 0.0
     seen = 0
-    for ratio, posts in weighted:
+    for index, (ratio, posts) in enumerate(weighted):
         seen += posts
-        if seen >= total / 2:
+        if seen * 2 == total and index + 1 < len(weighted):
+            # An even number of posts split exactly here, so the median sits between this ratio and the next
+            return (ratio + weighted[index + 1][0]) / 2
+        if seen * 2 >= total:
             return ratio
     return weighted[-1][0]
 

@@ -497,6 +497,21 @@ class ReactionHeadroomTests(unittest.TestCase):
         ]
         self.assertAlmostEqual(metrics.median_reaction_multiple(buckets), 1.0)
 
+    def test_median_multiple_of_an_even_number_of_posts_is_between_the_middle_two(self):
+        buckets = [
+            metrics.ReactionBucket(reaction_count=5, reaction_threshold=5, posts=1),    # 1x
+            metrics.ReactionBucket(reaction_count=15, reaction_threshold=5, posts=1),   # 3x
+        ]
+        self.assertAlmostEqual(metrics.median_reaction_multiple(buckets), 2.0)
+
+    def test_median_multiple_of_an_odd_number_of_posts_is_the_middle_one(self):
+        buckets = [
+            metrics.ReactionBucket(reaction_count=5, reaction_threshold=5, posts=1),    # 1x
+            metrics.ReactionBucket(reaction_count=10, reaction_threshold=5, posts=1),   # 2x
+            metrics.ReactionBucket(reaction_count=40, reaction_threshold=5, posts=1),   # 8x
+        ]
+        self.assertAlmostEqual(metrics.median_reaction_multiple(buckets), 2.0)
+
     def test_median_multiple_of_nothing_is_zero(self):
         self.assertEqual(metrics.median_reaction_multiple([]), 0.0)
 

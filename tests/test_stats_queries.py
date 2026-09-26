@@ -71,6 +71,13 @@ class OptionalFetchTests(unittest.TestCase):
             queries._fetch(connection, "SELECT 1")
 
 
+class ServersQueryTests(unittest.TestCase):
+    def test_prefers_the_latest_snapshot_member_count_over_the_one_from_setup(self):
+        """The config only holds the member count from when the guild was set up."""
+        self.assertIn("COALESCE(latest_snapshot.member_count, sc.server_member_count, 0)", queries.SERVERS_SQL)
+        self.assertIn("ORDER BY guild_id, month_start DESC", queries.SERVERS_SQL)
+
+
 class SyntheticTrailingWindowTests(unittest.TestCase):
     now = datetime(2026, 9, 8, tzinfo=timezone.utc)
 

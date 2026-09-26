@@ -33,7 +33,9 @@ MISSING_SCHEMA_PGCODES = {"42P01", "42703"}
 SERVERS_SQL = f"""
     SELECT
         sc.guild_id,
-        COALESCE(sc.server_member_count, 0),
+        -- server_configs only records the member count from when the guild was set up, so the
+        -- latest monthly snapshot is preferred and the config value is the fallback
+        COALESCE(latest_snapshot.member_count, sc.server_member_count, 0),
         COALESCE(sc.reaction_threshold, 0),
         sc.joined_date,
         sc.hall_of_fame_channel_id IS NOT NULL,
@@ -63,6 +65,11 @@ SERVERS_SQL = f"""
         WHERE created_at >= {REAL_TIMESTAMP}
         GROUP BY guild_id
     ) activity ON activity.guild_id = sc.guild_id
+    LEFT JOIN (
+        SELECT DISTINCT ON (guild_id) guild_id, member_count
+        FROM guild_monthly_snapshot
+        ORDER BY guild_id, month_start DESC, captured_at DESC
+    ) latest_snapshot ON latest_snapshot.guild_id = sc.guild_id
 """
 
 LIFECYCLE_EVENTS_SQL = """

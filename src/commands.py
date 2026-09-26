@@ -6,45 +6,83 @@ from repositories import server_config_repo, server_user_repo
 from caches import ExpiringSet
 from translations import messages
 
+def build_help_embed() -> discord.Embed:
+    """
+    The card /help answers with: every command, grouped by who uses it and what it changes.
+
+    One field per group rather than one per command, so the whole list fits on a screen and a member
+    looking for the leaderboard does not have to scroll past a dozen settings to find it. The groups
+    follow the ones /get_server_config shows, so a setting is found under the same heading in both.
+    :return: The embed to send
+    """
+    embed = discord.Embed(
+        title="📖 Hall of Fame Commands",
+        description=f"React to a message, and once it passes the threshold it is reposted to the hall "
+                    f"of fame channel. To get started, pick a channel with "
+                    f"{command_refs.SET_HALL_OF_FAME_CHANNEL} and a threshold with "
+                    f"{command_refs.SET_REACTION_THRESHOLD}.",
+        color=discord.Color.gold()
+    )
+
+    embed.add_field(
+        name="🏆 For everyone",
+        value=f"{command_refs.LEADERBOARD} the server's top members\n"
+              f"{command_refs.USER_PROFILE} a member's standing\n"
+              f"{command_refs.HOF_WRAPPED} your year in review\n"
+              f"{command_refs.SERVER_HOF_WRAPPED} the server's year in review",
+        inline=False)
+
+    embed.add_field(
+        name="⚙️ Board · Manage Server",
+        value=f"{command_refs.SET_HALL_OF_FAME_CHANNEL} the channel posts go to\n"
+              f"{command_refs.SET_REACTION_THRESHOLD} reactions needed\n"
+              f"{command_refs.CALCULATION_METHOD} how reactions are counted\n"
+              f"{command_refs.GET_SERVER_CONFIG} every current setting",
+        inline=False)
+
+    embed.add_field(
+        name="🎯 What qualifies · Manage Server",
+        value=f"{command_refs.SET_POST_DUE_DATE} how old a post can be\n"
+              f"{command_refs.INCLUDE_AUTHORS_REACTION} count the author's own reaction\n"
+              f"{command_refs.IGNORE_BOT_MESSAGES} skip messages from bots\n"
+              f"{command_refs.REQUIRE_IMAGE_OR_VIDEO} only posts with an image or video",
+        inline=False)
+
+    embed.add_field(
+        name="📋 Board behaviour · Manage Server",
+        value=f"{command_refs.ALLOW_MESSAGES_IN_HOF_CHANNEL} let members chat in the board channel\n"
+              f"{command_refs.HIDE_HOF_POST_BELOW_THRESHOLD} hide posts that drop below the threshold",
+        inline=False)
+
+    embed.add_field(
+        name="😀 Emoji whitelist · Manage Server",
+        value=f"{command_refs.CUSTOM_EMOJI_CHECK_LOGIC} count every emoji or only whitelisted ones\n"
+              f"{command_refs.WHITELIST_EMOJI} · {command_refs.UNWHITELIST_EMOJI} · "
+              f"{command_refs.CLEAR_WHITELIST}",
+        inline=False)
+
+    embed.add_field(
+        name="🔗 Links",
+        value=f"[Support server](https://discord.gg/r98WC5GHcn) · "
+              f"[Add to a server](https://discord.com/oauth2/authorize?client_id=1177041673352663070) · "
+              f"[Vote](https://top.gg/bot/1177041673352663070/vote) · "
+              f"[Source](https://github.com/LukasKristensen/discord-hall-of-fame-bot)\n"
+              f"Found a bug or have an idea? {command_refs.FEEDBACK}\n"
+              f"Not working? Check the bot's permissions in the channel, or re-invite it.",
+        inline=False)
+
+    embed.set_footer(text=f"Hall of Fame {version.VERSION} · {version.DATE}")
+    return embed
+
+
 async def get_help(interaction: discord.Interaction):
     """
     Command to get a list of commands
     :param interaction:
     :return:
     """
-    embed = discord.Embed(
-        title="Commands",
-        color=0x00ff00
-    )
-    embed.add_field(name=command_refs.HELP, value="List of commands", inline=False)
-    embed.add_field(name=command_refs.SET_REACTION_THRESHOLD, value="Set the amount of reactions needed for a post to reach hall of fame", inline=False)
-    embed.add_field(name=command_refs.INCLUDE_AUTHORS_REACTION, value="Should the author of a message be included in the reaction count?", inline=False)
-    embed.add_field(name=command_refs.ALLOW_MESSAGES_IN_HOF_CHANNEL, value="Allow anyone to type in the Hall of Fame channel", inline=False)
-    embed.add_field(name=command_refs.CUSTOM_EMOJI_CHECK_LOGIC, value="Use only whitelisted emojis for the reaction count", inline=False)
-    embed.add_field(name=command_refs.WHITELIST_EMOJI, value="Add a whitelisted emoji to the list [custom_emoji_check_logic]", inline=False)
-    embed.add_field(name=command_refs.UNWHITELIST_EMOJI, value="Remove a whitelisted emoji from the list [custom_emoji_check_logic]", inline=False)
-    embed.add_field(name=command_refs.CLEAR_WHITELIST, value="Clear the whitelist of emojis [custom_emoji_check_logic]", inline=False)
-    embed.add_field(name=command_refs.GET_SERVER_CONFIG, value="Get the current bot configuration for the server", inline=False)
-    embed.add_field(name=command_refs.IGNORE_BOT_MESSAGES, value="Should the bot ignore messages from other bots?", inline=False)
-    embed.add_field(name=command_refs.HIDE_HOF_POST_BELOW_THRESHOLD, value="Should hall of fame posts be hidden when they go below the reaction threshold? (Will be visible again when they reach the threshold again)", inline=False)
-    embed.add_field(name=command_refs.CALCULATION_METHOD, value="Change the calculation method for reactions", inline=False)
-    embed.add_field(name=command_refs.SET_POST_DUE_DATE, value="Set how many days back a post is considered valid for reaching the Hall of Fame", inline=False)
-    embed.add_field(name=command_refs.USER_PROFILE, value="Get the Hall of Fame profile for a user", inline=False)
-    embed.add_field(name=command_refs.LEADERBOARD, value="Get the Hall of Fame leaderboard for the server", inline=False)
-    embed.add_field(name=command_refs.SET_HALL_OF_FAME_CHANNEL, value="Manually set the Hall of Fame channel for the server", inline=False)
-    embed.add_field(name=command_refs.FEEDBACK, value="Got a feature request or bug report? Let us know!", inline=False)
-    embed.add_field(name=command_refs.VOTE_BOT, value="Support the bot by voting for it on top.gg: https://top.gg/bot/1177041673352663070/vote", inline=False)
-    embed.add_field(name=command_refs.HOF_WRAPPED, value="Get your personal Hall of Fame wrap-up for the year", inline=False)
-    embed.add_field(name=command_refs.SERVER_HOF_WRAPPED, value="Get the server's Hall of Fame wrap-up for the year", inline=False)
-    embed.add_field(name="", value="", inline=True)
-    embed.add_field(name="Having trouble setting up the bot?", value="Make sure the bot has the correct permissions in the server or try to re-invite it", inline=False)
-    embed.add_field(name="Need help?", value="Join the community server: https://discord.gg/r98WC5GHcn", inline=False)
-    embed.add_field(name="Contribute on Github", value="https://github.com/LukasKristensen/discord-hall-of-fame-bot", inline=False)
-    embed.add_field(name="Invite the bot", value="https://discord.com/oauth2/authorize?client_id=1177041673352663070", inline=False)
-    embed.set_footer(text=f"Bot Version: {version.VERSION} - {version.DATE}")
-    embed.set_image(url="https://raw.githubusercontent.com/LukasKristensen/discord-hall-of-fame-bot/refs/heads/main/Assets/reaction_calculation_methods_wide.jpg")
     # noinspection PyUnresolvedReferences
-    await interaction.response.send_message(embed=embed)
+    await interaction.response.send_message(embed=build_help_embed())
 
 
 async def manual_sweep(interaction: discord.Interaction, guild_id: int, sweep_limit, sweep_limited: bool, bot: discord.Client,
@@ -124,13 +162,14 @@ async def user_server_profile(interaction, user, user_stats, connection, month_e
     if user_stats:
         embed.add_field(name="🏆 **This Month's Hall of Fame Messages**",
                         value=f"**{user_stats.get('this_month_hall_of_fame_messages', 0)}** "
-                              f"(Rank: {user_stats.get('monthly_message_rank', 'N/A')})", inline=False)
+                              # A member with nothing featured this month is stored without a rank
+                              f"(Rank: {user_stats.get('monthly_message_rank') or 'N/A'})", inline=False)
         embed.add_field(name="🌟 **Total Hall of Fame Messages**",
                         value=f"**{user_stats.get('total_hall_of_fame_messages', 0)}** "
                               f"(Rank: {user_stats.get('total_message_rank', 'N/A')})", inline=False)
         embed.add_field(name="💬 **Reactions Received This Month on Hall of Fame Messages**",
                         value=f"**{user_stats.get('this_month_hall_of_fame_message_reactions', 0)}** "
-                              f"(Rank: {user_stats.get('monthly_reaction_rank', 'N/A')})", inline=False)
+                              f"(Rank: {user_stats.get('monthly_reaction_rank') or 'N/A'})", inline=False)
         embed.add_field(name="💬 **Total Reactions Received on Hall of Fame Messages**",
                         value=f"**{user_stats.get('total_hall_of_fame_message_reactions', 0)}** "
                               f"(Rank: {user_stats.get('total_reaction_rank', 'N/A')})", inline=False)
