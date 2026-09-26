@@ -12,6 +12,7 @@ different windows.
 
 import asyncio
 import unittest
+from contextlib import asynccontextmanager
 from unittest import mock
 
 import concurrency
@@ -175,6 +176,8 @@ class DailyTaskLeaderboardTests(unittest.IsolatedAsyncioTestCase):
         self.updated = []
         self.in_flight = 0
         self.peak_in_flight = 0
+        self.borrowed = []
+        self.returned = []
 
         self.original_cache = utils.recently_logged_messages
         utils.recently_logged_messages = ExpiringSet(ttl_seconds=600)
@@ -211,8 +214,19 @@ class DailyTaskLeaderboardTests(unittest.IsolatedAsyncioTestCase):
         finally:
             self.in_flight -= 1
 
+    @asynccontextmanager
+    async def borrow_connection(self):
+        """Stands in for the pool, handing out a fresh connection and noting when it comes back."""
+        connection = FakeConnection()
+        self.borrowed.append(connection)
+        try:
+            yield connection
+        finally:
+            self.returned.append(connection)
+
     async def run_daily_task(self):
-        await events.daily_task(self.bot, self.connection, self.server_classes, dev_testing=True)
+        await events.daily_task(self.bot, self.connection, self.server_classes, dev_testing=True,
+                                borrow_connection=self.borrow_connection)
 
     async def test_updates_every_server_exactly_once(self):
         await self.run_daily_task()
@@ -293,6 +307,31 @@ class DailyTaskLeaderboardTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertIn(("stats", None), order)
         self.assertEqual(("stats", None), order[-1])
+
+    async def test_gives_every_server_a_connection_of_its_own(self):
+        """On a shared connection one server's database error aborts the transaction of the rest."""
+        used = {}
+
+        async def record_connection(connection, _bot, server_class):
+            used[server_class.guild_id] = connection
+
+        self.patch(utils, "update_leaderboard", record_connection)
+        await self.run_daily_task()
+
+        self.assertEqual(self.guild_ids, sorted(used))
+        self.assertEqual(len(self.guild_ids), len({id(connection) for connection in used.values()}))
+        self.assertNotIn(self.connection, used.values())
+
+    async def test_gives_back_every_connection_even_when_a_server_fails(self):
+        async def fail_on_one(_connection, _bot, server_class):
+            if server_class.guild_id == 202:
+                raise RuntimeError("database went away")
+
+        self.patch(utils, "update_leaderboard", fail_on_one)
+        await self.run_daily_task()
+
+        self.assertEqual(len(self.guild_ids), len(self.borrowed))
+        self.assertEqual(sorted(map(id, self.borrowed)), sorted(map(id, self.returned)))
 
 
 class DailyTaskPermissionSweepTests(unittest.IsolatedAsyncioTestCase):

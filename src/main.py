@@ -234,7 +234,8 @@ async def daily_task():
     await utils.logging(bot, "Running daily task")
     try:
         async with get_db_connection(connection_pool) as connection:
-            await events.daily_task(bot, connection, server_classes, dev_test)
+            await events.daily_task(bot, connection, server_classes, dev_test,
+                                    borrow_connection=lambda: get_db_connection(connection_pool))
 
             # Run snapshot work in thread executor to avoid blocking the event loop
             await asyncio.to_thread(monthly_guild_snapshot.run_monthly_snapshot, connection, bot.guilds)

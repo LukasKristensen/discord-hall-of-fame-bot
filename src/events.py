@@ -137,13 +137,16 @@ async def guild_remove(server, connection):
     utils.delete_database_context(server.id, connection)
 
 
-async def daily_task(bot, connection, server_classes, dev_testing):
+async def daily_task(bot, connection, server_classes, dev_testing, borrow_connection):
     """
     Daily task to check for updating the leaderboard
     :param bot:
     :param connection:
     :param server_classes:
     :param dev_testing:
+    :param borrow_connection: Returns an async context manager lending a connection of its own to one
+        leaderboard update. Guilds are updated concurrently, and on one shared connection a database
+        error in one guild aborts the transaction every other in-flight guild is writing to
     :return:
     """
     await utils.logging(bot, f"Starting daily task for {len(server_classes)} servers")
@@ -156,7 +159,8 @@ async def daily_task(bot, connection, server_classes, dev_testing):
     ]
 
     async def update_one_leaderboard(server_class):
-        await utils.update_leaderboard(connection, bot, server_class)
+        async with borrow_connection() as guild_connection:
+            await utils.update_leaderboard(guild_connection, bot, server_class)
 
     async def report_leaderboard_failure(server_class, error):
         if isinstance(error, asyncio.TimeoutError):

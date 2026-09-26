@@ -383,8 +383,9 @@ def build_server_config_embed(guild, server_config) -> discord.Embed:
             value=f"Every emoji counts. Restrict it with {command_refs.CUSTOM_EMOJI_CHECK_LOGIC}",
             inline=False)
 
+    # Discord rejects an empty field name, so a zero-width space keeps the spacer without a heading
     embed.add_field(
-        name="",
+        name="​",
         value=f"Change any setting with its own command · {command_refs.HELP}",
         inline=False)
     embed.set_footer(text=f"Hall of Fame {version.VERSION}")

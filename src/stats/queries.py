@@ -26,6 +26,10 @@ from stats.metrics import (
 # stretch every time axis back fifty years.
 REAL_TIMESTAMP = "TIMESTAMP '2000-01-01'"
 
+# SQLSTATE codes for undefined_table and undefined_column, the only failures an
+# optional query is allowed to swallow.
+MISSING_SCHEMA_PGCODES = {"42P01", "42703"}
+
 SERVERS_SQL = f"""
     SELECT
         sc.guild_id,
@@ -109,14 +113,17 @@ def _fetch(connection, sql, params=None, optional=False):
 
     ``optional`` covers tables a given deployment may not have yet, such as the
     lifecycle log on an installation that predates it: those come back empty
-    rather than taking down the whole report.
+    rather than taking down the whole report. Only a missing table or column is
+    forgiven. Anything else, such as a permission error or a dropped connection,
+    still raises, since an empty section would read as zero churn rather than as
+    a report that failed.
     """
     cursor = connection.cursor()
     try:
         cursor.execute(sql, params or ())
         return cursor.fetchall()
-    except Exception:
-        if not optional:
+    except Exception as error:
+        if not optional or getattr(error, "pgcode", None) not in MISSING_SCHEMA_PGCODES:
             raise
         connection.rollback()
         return []

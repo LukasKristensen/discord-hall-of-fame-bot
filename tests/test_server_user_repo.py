@@ -98,6 +98,18 @@ class TopUsersByStatTests(unittest.TestCase):
 
         self.assertEqual([(200, 5)], connection.parameters)
 
+    def test_leaves_members_with_nothing_this_month_out_of_the_monthly_ranking(self):
+        connection = FakeConnection(rows=[], description=["user_id", "guild_id", "this_month_hall_of_fame_messages"])
+        server_user_repo.get_top_users_by_stat(connection, 200, "this_month_hall_of_fame_messages")
+
+        self.assertIn("AND this_month_hall_of_fame_messages > 0", connection.queries[0])
+
+    def test_does_not_filter_a_rank_column(self):
+        connection = FakeConnection(rows=[], description=["user_id", "guild_id", "monthly_message_rank"])
+        server_user_repo.get_top_users_by_stat(connection, 200, "monthly_message_rank")
+
+        self.assertNotIn("> 0", connection.queries[0])
+
 
 class CheckIfUserIsTopOfStatTests(unittest.TestCase):
     def test_rejects_a_statistic_it_does_not_know(self):
@@ -108,6 +120,12 @@ class CheckIfUserIsTopOfStatTests(unittest.TestCase):
         connection = FakeConnection(row=(77,))
         self.assertTrue(server_user_repo.check_if_user_is_top_of_stat(
             connection, 77, 200, "total_hall_of_fame_messages"))
+
+    def test_crowns_nobody_for_a_month_without_activity(self):
+        connection = FakeConnection(row=None)
+        self.assertFalse(server_user_repo.check_if_user_is_top_of_stat(
+            connection, 77, 200, "this_month_hall_of_fame_messages"))
+        self.assertIn("AND this_month_hall_of_fame_messages > 0", connection.queries[0])
 
     def test_denies_a_member_who_is_not_first(self):
         connection = FakeConnection(row=(88,))

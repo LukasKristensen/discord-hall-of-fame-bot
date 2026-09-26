@@ -179,6 +179,20 @@ ALLOWED_STAT_FIELDS = {
 }
 
 
+def _ranking_filter(stat_field) -> str:
+    """
+    Keep members with nothing to show out of a ranking by count.
+
+    Every member who has ever been featured keeps a server_user row, so once a guild has been quiet
+    for a month every monthly count is zero. Ordering those would still produce a top five of zeroes
+    and crown whoever sorts first as champion. Rank columns are positions rather than amounts, so
+    they are left as they are.
+    """
+    if stat_field.endswith("_rank"):
+        return ""
+    return f"AND {stat_field} > 0"
+
+
 def get_top_users_by_stat(connection, guild_id, stat_field, limit=10):
     if stat_field not in ALLOWED_STAT_FIELDS:
         raise ValueError(f"Invalid stat_field: {stat_field}")
@@ -187,6 +201,7 @@ def get_top_users_by_stat(connection, guild_id, stat_field, limit=10):
         SELECT user_id, guild_id, {stat_field}
         FROM server_user
         WHERE guild_id = %s
+          {_ranking_filter(stat_field)}
         ORDER BY {stat_field} DESC
         LIMIT %s
     """
@@ -208,6 +223,7 @@ def check_if_user_is_top_of_stat(connection, user_id, guild_id, stat_field):
         SELECT user_id
         FROM server_user
         WHERE guild_id = %s
+          {_ranking_filter(stat_field)}
         ORDER BY {stat_field} DESC
         LIMIT 1
     """
