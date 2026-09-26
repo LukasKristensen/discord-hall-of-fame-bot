@@ -16,31 +16,21 @@ Turn feedback, bugs, or feature ideas into GitHub issues on `LukasKristensen/dis
   the issue can read it. Editing a leaked quote out afterwards does not remove it. Draft carefully first.
 - **One issue per distinct request.** If several pieces of feedback arrive together, create separate
   issues unless they are clearly the same request.
-- **Never delete issues.** If an issue has to go, give the user the command to run themselves:
-  `gh issue delete <n> -R LukasKristensen/discord-hall-of-fame-bot --yes`.
+- **Never delete issues.** If an issue has to go, give the user the command to run themselves.
 - Do not use em dashes in titles or bodies. Use a plain hyphen.
 
 ## Steps
 
-1. **Check for duplicates.** Run `gh issue list -R LukasKristensen/discord-hall-of-fame-bot --state all --limit 50`
-   and search for related open or closed issues. If one already covers the request, tell the user instead
-   of creating another.
+1. **Check for duplicates** among open and closed issues. If one already covers the request, tell the
+   user instead of creating another (or update it, if they ask).
 2. **Check the code.** Grep the repo to see whether the feature already exists or partly exists (for
    example, the emoji whitelist commands). If it exists but is undocumented, say so in the issue and
    suggest documenting it. For bugs, find the relevant file and function and cite it.
 3. **Pick a label.** `enhancement` for feature requests, `bug` for defects, `documentation` for docs-only
-   gaps. Use `gh label list` if unsure. Every issue gets at least one label.
+   gaps. Every issue gets at least one label.
 4. **Write the issue** using the matching template below. Keep the title short and descriptive (sentence
    case, no "Feature request -" prefix).
-5. **Create it** with a heredoc body:
-
-   ```bash
-   gh issue create -R LukasKristensen/discord-hall-of-fame-bot --label enhancement --title "..." --body "$(cat <<'EOF'
-   ...
-   EOF
-   )"
-   ```
-
+5. **Create it**, passing the body through a quoted heredoc so backticks and `$` survive.
 6. **Report back** with a markdown link per issue, written as
    `[Title (LukasKristensen/discord-hall-of-fame-bot#N)](https://github.com/LukasKristensen/discord-hall-of-fame-bot/issues/N)`.
 

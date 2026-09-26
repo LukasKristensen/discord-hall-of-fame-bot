@@ -41,12 +41,10 @@ Every release request produces two things from the same list of changes:
    release, meaning the last time the major or minor number changed (2.0.0, 2.1.0, ...). Patch
    releases in between (2.1.1, 2.1.2, ...) are never announced on their own, so their changes all
    belong in the next announcement.
-   - The version lives in `VERSION` in `src/constants/version.py`. There are no git tags, so list its
-     history:
-     ```bash
-     git log --format="%h %ad %s" --date=short -G 'VERSION =' -- src/constants/version.py
-     git show <hash>:src/constants/version.py
-     ```
+   - The version lives in `VERSION` in `src/constants/version.py`. There are no git tags, so find the
+     bumps by searching that file's history for changes to the `VERSION =` line.
+   - A version counts as released only once its bump is on `main`. A bump that exists only on the
+     branch being released is the release being prepared, not the previous one.
    - The **target** is the version being announced. If the user did not name it, it is the next minor
      version after the last feature release (2.1.0 -> 2.2.0).
    - The **base** is the most recent commit that set `VERSION` to a feature release *lower* than the
@@ -59,13 +57,9 @@ Every release request produces two things from the same list of changes:
      instead of adding a second one.
    - Tell the user the base commit, its version and date, and the number of commits in the range
      before writing the draft.
-2. **Collect the changes.** Read every commit in the range, not just the most recent ones.
-   ```bash
-   git log --no-merges --format="%h %ad %s%n%b" --date=short <base>..HEAD
-   gh pr list -R LukasKristensen/discord-hall-of-fame-bot --state merged --search "merged:>=<base date>" --limit 100
-   gh issue list -R LukasKristensen/discord-hall-of-fame-bot --state closed --search "closed:>=<base date>" --limit 100
-   ```
-   Merged PR descriptions and closed issues often explain the "why" better than commit messages.
+2. **Collect the changes.** Read every commit in the range (with bodies, not just subjects), plus the
+   PRs merged and issues closed since the base date. PR descriptions and issues often explain the "why"
+   better than commit messages.
    Several commits often make up one change (a feature plus its review fixes); merge them into one
    bullet.
    Also read [upcoming.md](upcoming.md): the user's own notes for the next release (announcements,
