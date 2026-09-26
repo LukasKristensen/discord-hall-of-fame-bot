@@ -83,8 +83,9 @@ class ServersQueryTests(unittest.TestCase):
         self.assertIn("COUNT(*) AS total_posts", activity)
         self.assertIn(f"MIN(created_at) FILTER (WHERE created_at >= {queries.REAL_TIMESTAMP})", activity)
         self.assertIn(f"MAX(created_at) FILTER (WHERE created_at >= {queries.REAL_TIMESTAMP})", activity)
-        grouped = queries.SERVERS_SQL.split("FROM hall_of_fame_message")[1].split("GROUP BY")[0]
-        self.assertNotIn("created_at", grouped)
+        # Nothing may sit between the table and GROUP BY guild_id: a WHERE on created_at there would
+        # drop the migrated posts from every total again
+        self.assertIn("FROM hall_of_fame_message\n        GROUP BY guild_id", queries.SERVERS_SQL)
 
 
 class SyntheticTrailingWindowTests(unittest.TestCase):

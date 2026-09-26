@@ -111,6 +111,39 @@ class RunInBatchesTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual([0, 2, 3], sorted(outcome.completed))
 
+    async def test_a_stalled_report_does_not_hold_a_slot(self):
+        """With one slot, a report that hangs while holding it would keep every other item waiting."""
+        started = []
+
+        async def worker(item):
+            started.append(item)
+            if item == 0:
+                raise RuntimeError("broken")
+
+        report_may_finish = asyncio.Event()
+
+        async def on_error(_item, _error):
+            await report_may_finish.wait()
+
+        batch = asyncio.create_task(concurrency.run_in_batches(range(3), worker, limit=1, on_error=on_error))
+        await asyncio.sleep(0.01)
+
+        self.assertEqual([0, 1, 2], started)
+        report_may_finish.set()
+        await batch
+
+    async def test_a_report_that_hangs_is_abandoned_like_the_work(self):
+        async def worker(_item):
+            raise RuntimeError("broken")
+
+        async def on_error(_item, _error):
+            await asyncio.sleep(30)
+
+        outcome = await asyncio.wait_for(
+            concurrency.run_in_batches([1], worker, limit=1, timeout=0.02, on_error=on_error), 1)
+
+        self.assertEqual(1, len(outcome.failed))
+
     async def test_abandons_an_item_that_hangs(self):
         async def worker(item):
             if item == 1:

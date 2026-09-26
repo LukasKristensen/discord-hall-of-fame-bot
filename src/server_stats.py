@@ -26,8 +26,6 @@ import sys
 
 from dotenv import load_dotenv
 
-from stats import report
-
 # Make the export location independent of the current working directory.
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.abspath(os.path.join(SCRIPT_DIR, os.pardir))
@@ -101,6 +99,10 @@ def load_dataset(args):
 
 
 def main(argv=None):
+    # Imported here rather than at the top, as it needs matplotlib: this keeps the rest of the
+    # module, the database settings included, importable and testable without the plotting stack
+    from stats import report
+
     args = parse_args(argv)
     dataset = load_dataset(args)
 

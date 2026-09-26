@@ -92,6 +92,7 @@ async def run_in_batches(items, worker, limit: int, timeout: float = None, on_er
     semaphore = asyncio.Semaphore(max(1, limit))
 
     async def run_one(item):
+        failure = None
         async with semaphore:
             try:
                 if timeout is None:
@@ -100,16 +101,23 @@ async def run_in_batches(items, worker, limit: int, timeout: float = None, on_er
                     await asyncio.wait_for(worker(item), timeout)
             except Exception as error:
                 outcome.failed.append((item, error))
-                if on_error is None:
-                    return
-                try:
-                    await on_error(item, error)
-                except Exception:
-                    # Reporting a failure must not become a second failure that stops the batch,
-                    # as the reporting itself goes over the same connection that just broke
-                    pass
+                failure = error
             else:
                 outcome.completed.append(item)
+
+        # Reported after the slot is given back, so a report that stalls cannot keep the next item
+        # from starting, and under the same timeout as the work, so it cannot hold up the batch either
+        if failure is None or on_error is None:
+            return
+        try:
+            if timeout is None:
+                await on_error(item, failure)
+            else:
+                await asyncio.wait_for(on_error(item, failure), timeout)
+        except Exception:
+            # Reporting a failure must not become a second failure that stops the batch, as the
+            # reporting itself goes over the same connection that just broke
+            pass
 
     await asyncio.gather(*(run_one(item) for item in items))
     return outcome
