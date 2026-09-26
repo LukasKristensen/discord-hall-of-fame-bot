@@ -6,3 +6,5 @@ notes; the release-notes skill rewrites them. Clear this list after the announce
 - I have become more active on GitHub Issues
   (https://github.com/LukasKristensen/discord-hall-of-fame-bot/issues). Anyone can report bugs or
   suggest features there and follow the progress on them.
+- This is a large release, so it might be a bit unstable at first. If anything seems off, please
+  report it on GitHub Issues or here in the Discord support server.
