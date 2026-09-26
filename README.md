@@ -32,6 +32,8 @@ profiles and Hall of Fame Wrapped are what make landing on it worth something.
 - [Recognition: leaderboards, profiles and Wrapped](#recognition-leaderboards-profiles-and-wrapped)
 - [Frequently asked questions](#frequently-asked-questions)
 - [Tests](#tests)
+- [Contributing](#contributing)
+- [License](#license)
 - [Development Log](#development-log)
 
 <br>
@@ -242,7 +244,8 @@ than a quote wall.
 
 ### Is the bot free?
 
-Yes, free and open source. There is no paid tier and no feature held back behind voting.
+Yes. There is no paid tier and no feature held back behind voting. The source code is public for
+anyone to read and contribute to, see [License](#license).
 
 ### Which channels does it watch?
 
@@ -262,6 +265,29 @@ python -m unittest discover -s tests -t .
 ```
 
 The same command runs on every pull request through the ``Tests`` workflow.
+
+<br>
+
+
+## Contributing
+
+Bug fixes, features, tests and documentation are all welcome. [CONTRIBUTING.md](CONTRIBUTING.md) covers
+setting up a development bot, running the tests and opening a pull request.
+
+<br>
+
+
+## License
+
+Hall of Fame is **source-available, not open source**. The code is public so that anyone can see exactly
+what the bot does with their server's messages, and so that anyone can contribute.
+
+- You may read the code, and fork and run it on a private test server to develop contributions.
+- You may not host or operate your own copy of the bot, or reuse the code elsewhere, without written
+  permission.
+
+See [LICENSE](LICENSE) for the full terms. To use the bot, [add the official
+one](https://discord.com/oauth2/authorize?client_id=1177041673352663070) to your server.
 
 <br>
 
