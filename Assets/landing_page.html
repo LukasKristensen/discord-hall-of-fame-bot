@@ -137,32 +137,32 @@
   </p>
   <table class="comparison">
     <tr>
-      <th></th>
-      <th>Hall of Fame</th>
-      <th>A starboard</th>
+      <td></td>
+      <th scope="col">Hall of Fame</th>
+      <th scope="col">A starboard</th>
     </tr>
     <tr>
-      <td><strong>The point</strong></td>
+      <th scope="row">The point</th>
       <td>Recognising your members and their best moments</td>
       <td>Archiving messages that passed a threshold</td>
     </tr>
     <tr>
-      <td><strong>Which emoji counts</strong></td>
+      <th scope="row">Which emoji counts</th>
       <td>Every emoji, or a whitelist you pick</td>
       <td>The one star emoji it was configured with</td>
     </tr>
     <tr>
-      <td><strong>Credit for members</strong></td>
+      <th scope="row">Credit for members</th>
       <td>Leaderboards, profiles, monthly and all time ranks</td>
       <td>None</td>
     </tr>
     <tr>
-      <td><strong>Year in review</strong></td>
+      <th scope="row">Year in review</th>
       <td>Hall of Fame Wrapped, per member and per server</td>
       <td>None</td>
     </tr>
     <tr>
-      <td><strong>Price</strong></td>
+      <th scope="row">Price</th>
       <td>Free, with public source code</td>
       <td>Best features often paywalled</td>
     </tr>
@@ -205,7 +205,7 @@
     <p>Yes. Images, videos and stickers travel with the post, and videos stay playable instead of becoming a bare link.</p>
 
     <h3>What happens when someone removes a reaction?</h3>
-    <p>The count updates live, and a post that falls back under the threshold is hidden until it climbs over again.</p>
+    <p>The count updates live. By default a post that falls back under the threshold is hidden until it climbs over again, and <code>/hide_hof_post_below_threshold</code> turns that off so featured posts stay up.</p>
 
     <h3>Can I see who gets featured most?</h3>
     <p>Yes, that is the point of it. <code>/leaderboard</code> ranks the server and <code>/user_profile</code> shows a member's standing.</p>

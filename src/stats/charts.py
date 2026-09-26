@@ -218,7 +218,8 @@ def render_cohort_retention(out_dir, dataset, cohort_limit=18):
 
     fig, ax = theme.new_figure(
         "Do servers that install stay installed?",
-        "Share of each month's new servers still installed N months later. Blank cells have not happened yet.",
+        "Share of each month's new servers still installed at the end of month N. Blank cells have not "
+        "finished yet.",
         figsize=(11.5, 0.9 + 0.38 * len(cohorts) + 1.6),
     )
     ax.grid(False)
@@ -248,7 +249,8 @@ def render_cohort_retention(out_dir, dataset, cohort_limit=18):
     bar.ax.tick_params(labelsize=8, color=theme.AXIS, labelcolor=theme.INK_MUTED, length=0)
 
     theme.finish(fig, out_dir, "13_cohort_retention.png",
-                 note="M0 is the install month itself, so it is 100% by construction.")
+                 note="M0 is measured at the end of the install month, so it counts servers that removed the bot "
+                      "within weeks of adding it.")
     theme.write_csv(
         out_dir, "13_cohort_retention.csv",
         ["cohort", "cohort_size"] + [f"m{index}" for index in range(grid.shape[1])],
@@ -534,8 +536,8 @@ def render_reaction_headroom(out_dir, dataset):
     median_multiple = metrics.median_reaction_multiple(dataset.reaction_headroom)
 
     fig, ax = theme.new_figure(
-        "How far above the threshold does a post land?",
-        f"{total:,} posts. The median post reaches {median_multiple:.2f}x its server's reaction "
+        "How far above today's threshold does a post land?",
+        f"{total:,} posts. The median post reaches {median_multiple:.2f}x its server's current reaction "
         "threshold.",
         figsize=(9.5, 5.4),
     )
@@ -544,7 +546,7 @@ def render_reaction_headroom(out_dir, dataset):
     bars = ax.bar(x, shares, width=0.62, color=theme.SERIES_BLUE)
     ax.set_xticks(x)
     ax.set_xticklabels(labels)
-    ax.set_xlabel("Reactions as a multiple of the server's threshold")
+    ax.set_xlabel("Reactions as a multiple of the server's current threshold")
     ax.set_ylabel("% of posts")
     ax.grid(axis="x", visible=False)
     # A bucket holding a fraction of a percent should not be labelled "0%".
@@ -552,14 +554,16 @@ def render_reaction_headroom(out_dir, dataset):
                      formatter=lambda v: f"{v:.0f}%" if v >= 1 else f"{v:.1f}%")
 
     theme.finish(fig, out_dir, "19_reaction_headroom.png",
-                 note="A mass piled in the first bucket means the threshold is what decides; a long tail means it is a formality.")
+                 note="Measured against each server's threshold today, as the threshold a post cleared when it was "
+                      "featured is not recorded. Posts below 1x are from servers that raised it since. A mass just "
+                      "above 1x means the threshold is what decides; a long tail means it is a formality.")
     theme.write_csv(
         out_dir, "19_reaction_headroom.csv",
-        ["multiple_of_threshold", "posts", "share_of_posts_pct"],
+        ["multiple_of_current_threshold", "posts", "share_of_posts_pct"],
         [[label, count, f"{share:.2f}"] for label, count, share in zip(labels, counts, shares)],
     )
     return Output("19_reaction_headroom.png", "Reaction headroom",
-                  "Do posts scrape past the threshold or blow through it?", "19_reaction_headroom.csv")
+                  "Do posts scrape past today's threshold or blow through it?", "19_reaction_headroom.csv")
 
 
 def render_survival(out_dir, dataset):

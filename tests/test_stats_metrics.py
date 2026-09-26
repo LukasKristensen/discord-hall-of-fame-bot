@@ -154,15 +154,91 @@ class LifespanTests(unittest.TestCase):
         server = make_server(guild_id=7, joined_at=datetime(1970, 1, 1, tzinfo=timezone.utc))
         self.assertEqual(metrics.build_lifespans([], [server]), [])
 
-    def test_a_reinvite_restarts_the_clock(self):
+    def test_a_reinvite_starts_a_new_stay_and_keeps_the_earlier_one(self):
+        """Keeping only the latest stay would lose the first install and its churn."""
         events = [
             (1, "JOIN", datetime(2024, 1, 1, tzinfo=timezone.utc)),
             (1, "LEAVE", datetime(2024, 6, 1, tzinfo=timezone.utc)),
             (1, "JOIN", datetime(2025, 1, 1, tzinfo=timezone.utc)),
         ]
         lifespans = metrics.build_lifespans(events, [make_server(guild_id=1)])
-        self.assertEqual(lifespans[0].joined_at, datetime(2025, 1, 1, tzinfo=timezone.utc))
-        self.assertTrue(lifespans[0].is_alive)
+        self.assertEqual([
+            metrics.GuildLifespan(1, datetime(2024, 1, 1, tzinfo=timezone.utc), datetime(2024, 6, 1, tzinfo=timezone.utc)),
+            metrics.GuildLifespan(1, datetime(2025, 1, 1, tzinfo=timezone.utc), None),
+        ], lifespans)
+
+    def test_a_guild_that_left_twice_has_two_departures(self):
+        events = [
+            (1, "JOIN", datetime(2024, 1, 1, tzinfo=timezone.utc)),
+            (1, "LEAVE", datetime(2024, 2, 1, tzinfo=timezone.utc)),
+            (1, "JOIN", datetime(2024, 5, 1, tzinfo=timezone.utc)),
+            (1, "LEAVE", datetime(2024, 8, 1, tzinfo=timezone.utc)),
+        ]
+        lifespans = metrics.build_lifespans(events, [])
+        self.assertEqual([datetime(2024, 2, 1, tzinfo=timezone.utc), datetime(2024, 8, 1, tzinfo=timezone.utc)],
+                         [lifespan.left_at for lifespan in lifespans])
+
+    def test_a_guild_installed_before_the_log_still_counts_its_departure(self):
+        """Its config row is gone, so its join date is unknown, but it did leave."""
+        events = [(1, "LEAVE", datetime(2025, 2, 1, tzinfo=timezone.utc))]
+        lifespans = metrics.build_lifespans(events, [])
+        self.assertEqual([metrics.GuildLifespan(1, None, datetime(2025, 2, 1, tzinfo=timezone.utc))], lifespans)
+
+    def test_a_legacy_guild_that_left_and_came_back_has_both_stays(self):
+        events = [
+            (1, "LEAVE", datetime(2025, 2, 1, tzinfo=timezone.utc)),
+            (1, "JOIN", datetime(2025, 3, 1, tzinfo=timezone.utc)),
+        ]
+        lifespans = metrics.build_lifespans(events, [make_server(guild_id=1)])
+        self.assertEqual([
+            metrics.GuildLifespan(1, None, datetime(2025, 2, 1, tzinfo=timezone.utc)),
+            metrics.GuildLifespan(1, datetime(2025, 3, 1, tzinfo=timezone.utc), None),
+        ], lifespans)
+
+    def test_a_missed_leave_does_not_invent_a_departure(self):
+        events = [
+            (1, "JOIN", datetime(2024, 1, 1, tzinfo=timezone.utc)),
+            (1, "JOIN", datetime(2024, 9, 1, tzinfo=timezone.utc)),
+        ]
+        lifespans = metrics.build_lifespans(events, [make_server(guild_id=1)])
+        self.assertEqual([metrics.GuildLifespan(1, datetime(2024, 1, 1, tzinfo=timezone.utc), None)], lifespans)
+
+    def test_a_guild_back_after_its_last_leave_without_a_join_uses_its_config(self):
+        events = [
+            (1, "JOIN", datetime(2024, 1, 1, tzinfo=timezone.utc)),
+            (1, "LEAVE", datetime(2024, 6, 1, tzinfo=timezone.utc)),
+        ]
+        server = make_server(guild_id=1, joined_at=datetime(2025, 1, 1, tzinfo=timezone.utc))
+        lifespans = metrics.build_lifespans(events, [server])
+        self.assertEqual(2, len(lifespans))
+        self.assertEqual(metrics.GuildLifespan(1, datetime(2025, 1, 1, tzinfo=timezone.utc), None), lifespans[-1])
+
+
+class UnknownJoinDateTests(unittest.TestCase):
+    """Stays that began before the lifecycle log, whose join date was lost with their config row."""
+
+    def setUp(self):
+        self.now = datetime(2025, 4, 15, tzinfo=timezone.utc)
+        self.lifespans = [
+            metrics.GuildLifespan(1, None, datetime(2025, 2, 10, tzinfo=timezone.utc)),
+            metrics.GuildLifespan(2, datetime(2025, 1, 5, tzinfo=timezone.utc)),
+        ]
+
+    def test_count_as_installed_and_as_churn_but_never_as_a_join(self):
+        rows = metrics.lifecycle_by_month(self.lifespans, self.now)
+        self.assertEqual(1, sum(row["joined"] for row in rows))
+        self.assertEqual(1, sum(row["left"] for row in rows))
+        february = next(row for row in rows if row["month"] == date(2025, 2, 1))
+        self.assertEqual(50.0, february["churn_rate"])
+        self.assertEqual(1, rows[-1]["installed"])
+
+    def test_belong_to_no_cohort(self):
+        retention = metrics.cohort_retention(self.lifespans, self.now)
+        self.assertEqual([date(2025, 1, 1)], retention["cohorts"])
+
+    def test_have_no_age_on_the_survival_curve(self):
+        points = metrics.survival_curve(self.lifespans, self.now, max_months=0)
+        self.assertEqual(1, points[0]["eligible"])
 
 
 class LifecycleByMonthTests(unittest.TestCase):
@@ -235,8 +311,19 @@ class CohortRetentionTests(unittest.TestCase):
         result = metrics.cohort_retention(lifespans, datetime(2025, 3, 15, tzinfo=timezone.utc),
                                           max_months=6)
         row = result["matrix"][0]
-        self.assertEqual(row[:3], [100.0, 100.0, 100.0])
-        self.assertTrue(all(value is None for value in row[3:]))
+        # January and February have ended; March is still running.
+        self.assertEqual(row[:2], [100.0, 100.0])
+        self.assertTrue(all(value is None for value in row[2:]))
+
+    def test_an_uninstall_in_the_install_month_shows_in_m0(self):
+        lifespans = [
+            metrics.GuildLifespan(1, datetime(2025, 1, 10, tzinfo=timezone.utc)),
+            metrics.GuildLifespan(2, datetime(2025, 1, 12, tzinfo=timezone.utc),
+                                  datetime(2025, 1, 14, tzinfo=timezone.utc)),
+        ]
+        result = metrics.cohort_retention(lifespans, datetime(2025, 3, 15, tzinfo=timezone.utc),
+                                          max_months=2)
+        self.assertEqual(result["matrix"][0][0], 50.0)
 
     def test_a_departure_shows_up_from_the_month_it_happened(self):
         lifespans = [
@@ -247,8 +334,8 @@ class CohortRetentionTests(unittest.TestCase):
         result = metrics.cohort_retention(lifespans, datetime(2025, 4, 15, tzinfo=timezone.utc),
                                           max_months=3)
         self.assertEqual(result["sizes"], [2])
-        # Both alive at M0 and M1; the second is gone by the start of M2.
-        self.assertEqual(result["matrix"][0][:3], [100.0, 100.0, 50.0])
+        # Both alive at the end of M0; the second is gone by the end of M1.
+        self.assertEqual(result["matrix"][0], [100.0, 50.0, 50.0, None])
 
     def test_no_lifespans_gives_an_empty_grid(self):
         result = metrics.cohort_retention([], datetime(2025, 4, 15, tzinfo=timezone.utc))
@@ -383,9 +470,20 @@ class ReactionHeadroomTests(unittest.TestCase):
             metrics.ReactionBucket(reaction_count=30, reaction_threshold=5, posts=1),   # 6.0x
         ]
         labels, counts = metrics.reaction_headroom_histogram(buckets)
-        self.assertEqual(counts[0], 10)
+        self.assertEqual(counts[labels.index("1 - 1.25x")], 10)
         self.assertEqual(counts[labels.index("2 - 3x")], 4)
         self.assertEqual(counts[-1], 1)
+
+    def test_posts_below_the_current_threshold_are_counted_rather_than_dropped(self):
+        """A server that raised its threshold later has older posts that no longer clear it."""
+        buckets = [
+            metrics.ReactionBucket(reaction_count=3, reaction_threshold=5, posts=7),    # 0.6x
+            metrics.ReactionBucket(reaction_count=5, reaction_threshold=5, posts=2),    # 1.0x
+        ]
+        labels, counts = metrics.reaction_headroom_histogram(buckets)
+        self.assertEqual("below 1x", labels[0])
+        self.assertEqual(7, counts[0])
+        self.assertEqual(9, sum(counts))
 
     def test_a_zero_threshold_is_skipped_rather_than_crashing(self):
         buckets = [metrics.ReactionBucket(reaction_count=5, reaction_threshold=0, posts=3)]

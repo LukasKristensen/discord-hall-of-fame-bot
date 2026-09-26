@@ -40,9 +40,10 @@ HOF_CHANNEL_SETUP_FAILED = ("Could not set up the Hall of Fame in {channel}. Che
                             "in it, then try again. If it keeps failing, ask in the support server: "
                             "<https://discord.gg/r98WC5GHcn>")
 PROFILE_BOT_USER = "Bots do not have a Hall of Fame profile."
-COMMAND_FAILED = ("Something went wrong while running this command. Check the result with "
-                  "</get_server_config:1358208382473076852> and try again in a moment. If it keeps happening, let us know in the support server: "
-                  "<https://discord.gg/r98WC5GHcn>")
+# Sent for any command that fails in a way nothing more specific covers, so it must not assume the
+# command was changing a setting
+COMMAND_FAILED = ("Something went wrong while running this command. Please try again in a moment. If it keeps "
+                  "happening, let us know in the support server: <https://discord.gg/r98WC5GHcn>")
 GUILD_ONLY = "This command only works inside a server."
 LEADERBOARD_NO_DATA = "The leaderboard is currently empty. Data updates every 24 hours, so please check back later."
 PROFILE_NO_DATA = "No profile data is available for this user yet. Data is refreshed every 24 hours."

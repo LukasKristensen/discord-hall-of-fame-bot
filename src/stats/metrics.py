@@ -168,10 +168,14 @@ class ServerRow:
 
 @dataclass(frozen=True)
 class GuildLifespan:
-    """When a guild installed the bot and, if it has gone, when it left."""
+    """When a guild installed the bot and, if it has gone, when it left.
+
+    One guild can have several, one per stay. ``joined_at`` is None for a stay
+    that began before the lifecycle log did and whose join date was lost.
+    """
 
     guild_id: int
-    joined_at: datetime
+    joined_at: datetime | None
     left_at: datetime | None = None
 
     @property
@@ -347,12 +351,27 @@ def bin_by_edges(pairs, edges):
 
 
 def build_lifespans(events, servers=None) -> list:
-    """Fold raw JOIN/LEAVE events into one lifespan per guild.
+    """Fold raw JOIN/LEAVE events into one lifespan per install.
 
-    ``guild_lifecycle_event`` was added long after the bot shipped, so guilds
-    that are installed but have no JOIN event fall back to
-    ``server_configs.joined_date``. A guild with events that is no longer in
-    ``server_configs`` counts as churned even if its LEAVE was never recorded.
+    A guild that leaves and is invited back has one lifespan for each stay, so
+    its earlier install and departure still count towards joins, churn, cohorts
+    and survival rather than being overwritten by the latest one.
+
+    ``guild_lifecycle_event`` was added long after the bot shipped, which leaves
+    three gaps in the log that are filled here:
+
+    - A guild that is installed but has no JOIN event falls back to
+      ``server_configs.joined_date``.
+    - A guild whose first recorded event is a LEAVE was installed before the log
+      began. Leaving deletes its config row, so its join date is gone; the stay
+      is kept with ``joined_at`` of None, which counts its departure without
+      inventing when it arrived.
+    - A guild whose last event is a JOIN but that is no longer in
+      ``server_configs`` counts as churned even though its LEAVE was never
+      recorded.
+
+    Two JOINs in a row mean a LEAVE was missed, but not when, so the stay is
+    kept open from the first JOIN rather than inventing a departure.
     """
     installed = {server.guild_id: server for server in servers} if servers else {}
 
@@ -365,65 +384,84 @@ def build_lifespans(events, servers=None) -> list:
         key=lambda item: (item[1], item[0]),
     )
 
-    first_join = {}
-    last_event = {}
-    for occurred_at, guild_id, event_type in ordered_events:
-        if event_type == "JOIN":
-            # A re-invite restarts the clock, so keep the most recent join.
-            first_join[guild_id] = occurred_at
-            last_event[guild_id] = (occurred_at, "JOIN")
-        elif event_type == "LEAVE":
-            last_event[guild_id] = (occurred_at, "LEAVE")
+    def config_joined_at(guild_id):
+        server = installed.get(guild_id)
+        if server is None or not is_real_timestamp(server.joined_at):
+            return None
+        return as_utc(server.joined_at)
 
     lifespans = []
-    for guild_id, (occurred_at, event_type) in last_event.items():
-        joined_at = first_join.get(guild_id)
-        if joined_at is None:
-            server = installed.get(guild_id)
-            if server is not None and is_real_timestamp(server.joined_at):
-                joined_at = as_utc(server.joined_at)
-        if joined_at is None:
+    open_since = {}
+    last_heard = {}
+    seen = set()
+    for occurred_at, guild_id, event_type in ordered_events:
+        if event_type not in ("JOIN", "LEAVE"):
             continue
-        if event_type == "LEAVE":
-            left_at = occurred_at
-        elif guild_id in installed:
-            left_at = None
+        first_event = guild_id not in seen
+        seen.add(guild_id)
+        last_heard[guild_id] = occurred_at
+        if event_type == "JOIN":
+            open_since.setdefault(guild_id, occurred_at)
+        elif guild_id in open_since:
+            lifespans.append(GuildLifespan(guild_id, open_since.pop(guild_id), occurred_at))
+        elif first_event:
+            # The config row, if there is one, was created by a later stay, so it cannot date this one
+            lifespans.append(GuildLifespan(guild_id, None, occurred_at))
+        # A second LEAVE with no JOIN between them adds nothing the first did not
+
+    for guild_id, joined_at in open_since.items():
+        if guild_id in installed:
+            lifespans.append(GuildLifespan(guild_id, joined_at, None))
         else:
             # No LEAVE row, but the config is gone: treat the last thing we heard
             # from the guild as its departure rather than counting it as alive.
-            left_at = occurred_at
-        lifespans.append(GuildLifespan(guild_id, joined_at, left_at))
+            lifespans.append(GuildLifespan(guild_id, joined_at, last_heard[guild_id]))
 
-    covered = {lifespan.guild_id for lifespan in lifespans}
-    for guild_id, server in installed.items():
-        if guild_id in covered or not is_real_timestamp(server.joined_at):
+    for guild_id in installed:
+        if guild_id in open_since:
             continue
-        lifespans.append(GuildLifespan(guild_id, as_utc(server.joined_at), None))
+        if guild_id in seen:
+            # Back since its last recorded LEAVE, with the JOIN missing from the log
+            joined_at = config_joined_at(guild_id)
+            if joined_at is None or joined_at < last_heard[guild_id]:
+                continue
+        else:
+            joined_at = config_joined_at(guild_id)
+        if joined_at is not None:
+            lifespans.append(GuildLifespan(guild_id, joined_at, None))
 
-    lifespans.sort(key=lambda lifespan: (lifespan.joined_at, lifespan.guild_id))
+    lifespans.sort(key=lambda lifespan: (lifespan.joined_at or EPOCH_CUTOFF, lifespan.guild_id))
     return lifespans
 
 
 def lifecycle_by_month(lifespans, now: datetime) -> list:
-    """Joins, leaves, net change and end-of-month installed count per month."""
-    if not lifespans:
+    """Joins, leaves, net change and end-of-month installed count per month.
+
+    A stay with no known join date was installed before the timeline starts, so
+    it counts towards the opening installed base and its departure towards
+    churn, but never as a join.
+    """
+    known_joins = [month_floor(lifespan.joined_at) for lifespan in lifespans if lifespan.joined_at is not None]
+    departures = [month_floor(lifespan.left_at) for lifespan in lifespans if lifespan.left_at is not None]
+    if not known_joins and not departures:
         return []
-    first = min(month_floor(lifespan.joined_at) for lifespan in lifespans)
+    first = min(known_joins + departures)
     months = month_range(first, month_floor(now))
 
     joined_counts = {month: 0 for month in months}
     left_counts = {month: 0 for month in months}
     for lifespan in lifespans:
-        joined_month = month_floor(lifespan.joined_at)
-        if joined_month in joined_counts:
-            joined_counts[joined_month] += 1
+        if lifespan.joined_at is not None:
+            joined_month = month_floor(lifespan.joined_at)
+            if joined_month in joined_counts:
+                joined_counts[joined_month] += 1
         if lifespan.left_at is not None:
             left_month = month_floor(lifespan.left_at)
             if left_month in left_counts:
                 left_counts[left_month] += 1
 
     rows = []
-    installed = 0
+    installed = sum(1 for lifespan in lifespans if lifespan.joined_at is None)
     for month in months:
         joined = joined_counts[month]
         left = left_counts[month]
@@ -669,11 +707,17 @@ def top_servers(servers, now: datetime, limit: int = 25) -> list:
 
 
 def cohort_retention(lifespans, now: datetime, max_months: int = 12) -> dict:
-    """Share of each join cohort still installed N months later.
+    """Share of each join cohort still installed at the end of its Nth month.
 
-    Only elapsed cells are filled; a cohort three months old has no twelve month
-    number, and inventing one as 100% would flatter every recent cohort.
+    Cells are measured at the end of the month rather than the start, so M0 is
+    the share that survived the install month itself; measured at the start it
+    would be 100% by construction and hide every same-month uninstall.
+
+    Only completed months are filled; a cohort three months old has no twelve
+    month number, and inventing one as 100% would flatter every recent cohort.
+    Stays with no known join date belong to no cohort and are left out.
     """
+    lifespans = [lifespan for lifespan in lifespans if lifespan.joined_at is not None]
     if not lifespans:
         return {"cohorts": [], "sizes": [], "matrix": [], "max_months": max_months}
 
@@ -692,10 +736,10 @@ def cohort_retention(lifespans, now: datetime, max_months: int = 12) -> dict:
         elapsed = months_between(cohort, current_month)
         row = []
         for offset in range(max_months + 1):
-            if offset > elapsed:
+            if offset >= elapsed:
                 row.append(None)
                 continue
-            checkpoint = add_months(cohort, offset)
+            checkpoint = add_months(cohort, offset + 1)
             moment = datetime(checkpoint.year, checkpoint.month, 1, tzinfo=timezone.utc)
             retained = sum(1 for ls in members if ls.left_at is None or as_utc(ls.left_at) > moment)
             row.append(share(retained, len(members)))
@@ -708,9 +752,11 @@ def survival_curve(lifespans, now: datetime, max_months: int = 24) -> list:
     """Share of servers still installed N months after joining.
 
     Each point only counts servers old enough to have reached that age, so the
-    tail is not dragged down by servers that joined last week.
+    tail is not dragged down by servers that joined last week. Stays with no
+    known join date have no age to measure and are left out.
     """
     now = as_utc(now)
+    lifespans = [lifespan for lifespan in lifespans if lifespan.joined_at is not None]
     points = []
     for offset in range(max_months + 1):
         eligible = 0
@@ -750,13 +796,18 @@ def survival_half_life(points):
 
 
 def reaction_headroom_histogram(buckets, edges=None):
-    """How far past its threshold a typical post lands.
+    """How far past its server's current threshold a typical post lands.
 
     A fleet where everything sits at exactly 1.0x is one whose thresholds are
     doing all the selecting; a long right tail means the threshold is a formality.
+
+    The threshold a post had to clear when it was featured is not recorded, so
+    every post is measured against the threshold its server has today. A server
+    that has since raised its threshold has posts below 1x; they get a bucket of
+    their own rather than being dropped, so the total still counts every post.
     """
     edges = list(edges or [1.0, 1.25, 1.5, 2.0, 3.0, 5.0])
-    labels = []
+    labels = [f"below {edges[0]:g}x"]
     for index, edge in enumerate(edges):
         if index == len(edges) - 1:
             labels.append(f"{edge:g}x+")
@@ -769,10 +820,11 @@ def reaction_headroom_histogram(buckets, edges=None):
             continue
         ratio = bucket.reaction_count / bucket.reaction_threshold
         if ratio < edges[0]:
+            counts[0] += bucket.posts
             continue
         for index in range(len(edges) - 1, -1, -1):
             if ratio >= edges[index]:
-                counts[index] += bucket.posts
+                counts[index + 1] += bucket.posts
                 break
     return labels, counts
 

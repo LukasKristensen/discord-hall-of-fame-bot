@@ -97,6 +97,9 @@ POSTING_RHYTHM_SQL = f"""
     GROUP BY 1, 2
 """
 
+# Joined to each server's threshold as it is now: the threshold a post cleared
+# when it was featured is not stored, so the report presents this as headroom
+# over today's threshold rather than over the one that applied at the time.
 REACTION_HEADROOM_SQL = f"""
     SELECT h.reaction_count, sc.reaction_threshold, COUNT(*)
     FROM hall_of_fame_message h
