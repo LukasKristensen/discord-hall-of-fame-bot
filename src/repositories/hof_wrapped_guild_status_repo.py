@@ -37,6 +37,14 @@ def mark_hof_wrapped_as_processed(connection, guild_id, year, duration_seconds):
     connection.commit()
     cursor.close()
 
+def delete_progress_for_guild(connection, guild_id):
+    cursor = connection.cursor()
+    cursor.execute("""
+        DELETE FROM hof_wrapped_progress WHERE guild_id = %s
+    """, (guild_id,))
+    connection.commit()
+    cursor.close()
+
 def is_hof_wrapped_processed(connection, guild_id, year):
     cursor = connection.cursor()
     cursor.execute("""

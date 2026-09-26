@@ -100,6 +100,77 @@ def update_user_stats(connection, stats, user_id, guild_id):
     cursor.close()
 
 
+def rebuild_user_stats_for_guild(connection, guild_id, monthly_window_start) -> int:
+    """
+    Recompute every member's hall of fame totals and ranks for one guild in a single statement.
+
+    Counting and ranking happen in Postgres so that the guild's whole hall of fame history stays in
+    the database. Reading it into the bot cost time proportional to all history ever recorded, every
+    day, rather than to what actually changed.
+
+    Ranks are assigned with ROW_NUMBER, so every member gets a distinct position and members on equal
+    counts are ordered by user id. Swap it for RANK if tied members should share a position instead.
+
+    :param connection: The database connection
+    :param guild_id: The guild to recompute
+    :param monthly_window_start: Naive UTC timestamp the monthly counters reach back to
+    :return: The number of members whose stats were written
+    """
+    cursor = connection.cursor()
+    cursor.execute("""
+        INSERT INTO server_user (
+            user_id, guild_id,
+            total_hall_of_fame_messages, this_month_hall_of_fame_messages,
+            total_hall_of_fame_message_reactions, this_month_hall_of_fame_message_reactions,
+            total_message_rank, monthly_message_rank,
+            total_reaction_rank, monthly_reaction_rank
+        )
+        SELECT
+            author_id,
+            %(guild_id)s,
+            total_messages,
+            monthly_messages,
+            total_reactions,
+            monthly_reactions,
+            ROW_NUMBER() OVER (ORDER BY total_messages DESC, author_id),
+            -- Nobody is ranked for a month they had nothing featured in. Zero counts sort last, so
+            -- leaving them unranked does not move anyone who was active
+            CASE WHEN monthly_messages > 0
+                 THEN ROW_NUMBER() OVER (ORDER BY monthly_messages DESC, author_id) END,
+            ROW_NUMBER() OVER (ORDER BY total_reactions DESC, author_id),
+            CASE WHEN monthly_reactions > 0
+                 THEN ROW_NUMBER() OVER (ORDER BY monthly_reactions DESC, author_id) END
+        FROM (
+            SELECT
+                author_id,
+                COUNT(*) AS total_messages,
+                COALESCE(SUM(reaction_count), 0) AS total_reactions,
+                COUNT(*) FILTER (WHERE created_at >= %(monthly_window_start)s) AS monthly_messages,
+                COALESCE(SUM(reaction_count) FILTER (WHERE created_at >= %(monthly_window_start)s), 0)
+                    AS monthly_reactions
+            FROM hall_of_fame_message
+            WHERE guild_id = %(guild_id)s
+              AND author_id IS NOT NULL
+              AND created_at IS NOT NULL
+              AND EXISTS (SELECT 1 FROM server_configs WHERE server_configs.guild_id = %(guild_id)s)
+            GROUP BY author_id
+        ) AS totals
+        ON CONFLICT (user_id, guild_id) DO UPDATE SET
+            total_hall_of_fame_messages = EXCLUDED.total_hall_of_fame_messages,
+            this_month_hall_of_fame_messages = EXCLUDED.this_month_hall_of_fame_messages,
+            total_hall_of_fame_message_reactions = EXCLUDED.total_hall_of_fame_message_reactions,
+            this_month_hall_of_fame_message_reactions = EXCLUDED.this_month_hall_of_fame_message_reactions,
+            total_message_rank = EXCLUDED.total_message_rank,
+            monthly_message_rank = EXCLUDED.monthly_message_rank,
+            total_reaction_rank = EXCLUDED.total_reaction_rank,
+            monthly_reaction_rank = EXCLUDED.monthly_reaction_rank
+    """, {"guild_id": guild_id, "monthly_window_start": monthly_window_start})
+    written = cursor.rowcount
+    connection.commit()
+    cursor.close()
+    return written
+
+
 ALLOWED_STAT_FIELDS = {
     "monthly_reaction_rank",
     "total_message_rank",
@@ -112,6 +183,20 @@ ALLOWED_STAT_FIELDS = {
 }
 
 
+def _ranking_filter(stat_field) -> str:
+    """
+    Keep members with nothing to show out of a ranking by count.
+
+    Every member who has ever been featured keeps a server_user row, so once a guild has been quiet
+    for a month every monthly count is zero. Ordering those would still produce a top five of zeroes
+    and crown whoever sorts first as champion. Rank columns are positions rather than amounts, so
+    they are left as they are.
+    """
+    if stat_field.endswith("_rank"):
+        return ""
+    return f"AND {stat_field} > 0"
+
+
 def get_top_users_by_stat(connection, guild_id, stat_field, limit=10):
     if stat_field not in ALLOWED_STAT_FIELDS:
         raise ValueError(f"Invalid stat_field: {stat_field}")
@@ -120,6 +205,7 @@ def get_top_users_by_stat(connection, guild_id, stat_field, limit=10):
         SELECT user_id, guild_id, {stat_field}
         FROM server_user
         WHERE guild_id = %s
+          {_ranking_filter(stat_field)}
         ORDER BY {stat_field} DESC
         LIMIT %s
     """
@@ -141,6 +227,7 @@ def check_if_user_is_top_of_stat(connection, user_id, guild_id, stat_field):
         SELECT user_id
         FROM server_user
         WHERE guild_id = %s
+          {_ranking_filter(stat_field)}
         ORDER BY {stat_field} DESC
         LIMIT 1
     """
