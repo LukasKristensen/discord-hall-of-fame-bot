@@ -333,6 +333,32 @@ class DailyTaskLeaderboardTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(self.guild_ids), len(self.borrowed))
         self.assertEqual(sorted(map(id, self.borrowed)), sorted(map(id, self.returned)))
 
+    async def test_limits_how_long_each_statement_may_run_and_resets_it_afterwards(self):
+        """A blocking query stalls the event loop, so only the database can stop one that hangs."""
+        seen = []
+
+        async def record_queries_so_far(connection, _bot, _server_class):
+            seen.append(list(connection.queries))
+
+        self.patch(utils, "update_leaderboard", record_queries_so_far)
+        await self.run_daily_task()
+
+        for queries_during_update, connection in zip(seen, self.borrowed):
+            self.assertEqual(["SET statement_timeout = %s"], queries_during_update)
+            self.assertEqual("RESET statement_timeout", connection.queries[-1])
+        self.assertEqual([(events.daily_task_statement_timeout_ms,)], self.borrowed[0].parameters[:1])
+
+    async def test_rolls_back_a_failed_server_before_resetting_its_timeout(self):
+        async def fail(_connection, _bot, _server_class):
+            raise RuntimeError("canceling statement due to statement timeout")
+
+        self.patch(utils, "update_leaderboard", fail)
+        await self.run_daily_task()
+
+        for connection in self.borrowed:
+            self.assertEqual(1, connection.rollbacks)
+            self.assertEqual("RESET statement_timeout", connection.queries[-1])
+
 
 class DailyTaskPermissionSweepTests(unittest.IsolatedAsyncioTestCase):
     """The permission sweep runs per server too, so it is paced the same way."""

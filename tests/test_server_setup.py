@@ -12,8 +12,8 @@ from unittest import mock
 import utils
 from caches import ExpiringSet
 from enums import calculation_method_type
-from repositories import (hall_of_fame_message_repo, hof_wrapped_repo, server_config_repo,
-                          server_user_repo)
+from repositories import (hall_of_fame_message_repo, hof_wrapped_guild_status_repo, hof_wrapped_repo,
+                          server_config_repo, server_user_repo)
 
 from tests.fakes import FakeConnection, FakePermissions
 
@@ -204,11 +204,13 @@ class DeleteDatabaseContextTests(unittest.TestCase):
              mock.patch.object(server_config_repo, "delete_server_config",
                                lambda _c, guild_id: calls.append(("config", guild_id))), \
              mock.patch.object(hof_wrapped_repo, "delete_hof_wrapped_for_guild",
-                               lambda _c, guild_id: calls.append(("wrapped", guild_id))):
+                               lambda _c, guild_id: calls.append(("wrapped", guild_id))), \
+             mock.patch.object(hof_wrapped_guild_status_repo, "delete_progress_for_guild",
+                               lambda _c, guild_id: calls.append(("wrapped progress", guild_id))):
             utils.delete_database_context(GUILD_ID, connection)
 
-        self.assertEqual([("messages", GUILD_ID), ("users", GUILD_ID),
-                          ("config", GUILD_ID), ("wrapped", GUILD_ID)], calls)
+        self.assertEqual([("messages", GUILD_ID), ("users", GUILD_ID), ("config", GUILD_ID),
+                          ("wrapped", GUILD_ID), ("wrapped progress", GUILD_ID)], calls)
 
 
 class FakeHistoryMessage:

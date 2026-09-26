@@ -435,8 +435,7 @@ async def configure_bot(interaction: discord.Interaction,
     method = commands.calculation_method_labels.get(server_class.reaction_count_calculation_method,
                                                     str(server_class.reaction_count_calculation_method))
     async with get_db_connection(connection_pool) as connection:
-        await commands.set_reaction_threshold(interaction, reaction_threshold, connection, method.lower())
-    server_class.reaction_threshold = reaction_threshold
+        await commands.set_reaction_threshold(interaction, reaction_threshold, connection, method.lower(), server_class)
     await utils.logging(bot, f"Reaction threshold configure command used by {interaction.user.name} in {interaction.guild.name}",
                         interaction.guild.id, reaction_threshold, log_level=log_type.COMMAND)
 

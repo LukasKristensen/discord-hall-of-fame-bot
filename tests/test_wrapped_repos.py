@@ -180,6 +180,14 @@ class WrappedProgressTests(unittest.TestCase):
 
         self.assertTrue(all(cursor.closed for cursor in connection.cursors))
 
+    def test_forgets_every_year_of_one_guild(self):
+        connection = FakeConnection()
+        hof_wrapped_guild_status_repo.delete_progress_for_guild(connection, 200)
+
+        self.assertIn("DELETE FROM hof_wrapped_progress WHERE guild_id = %s", connection.queries[0])
+        self.assertEqual([(200,)], connection.parameters)
+        self.assertEqual(1, connection.commits)
+
 
 if __name__ == "__main__":
     unittest.main()

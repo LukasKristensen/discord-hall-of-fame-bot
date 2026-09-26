@@ -68,16 +68,20 @@ async def manual_sweep(interaction: discord.Interaction, guild_id: int, sweep_li
 
 
 async def set_reaction_threshold(interaction: discord.Interaction, reaction_threshold: int, connection,
-                                 method_label: str):
+                                 method_label: str, server_config):
     """
     Command to set the reaction threshold for posting a message in the Hall of Fame
     :param interaction:
     :param reaction_threshold:
     :param connection:
     :param method_label: How the server counts reactions, so the reply says what the number means
+    :param server_config: The server's cached configuration, updated along with the database
     :return:
     """
     server_config_repo.update_server_config_param(interaction.guild.id, 'reaction_threshold', reaction_threshold, connection)
+    # Updated before the reply is awaited, so a reaction handled meanwhile, or a reply that fails, does
+    # not leave the cache on the old threshold while the database already holds the new one
+    server_config.reaction_threshold = reaction_threshold
     # noinspection PyUnresolvedReferences
     await interaction.response.send_message(
         messages.SETTING_CHANGED.format(label="Reaction threshold", value=reaction_threshold) + "\n"

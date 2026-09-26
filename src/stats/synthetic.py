@@ -149,9 +149,26 @@ def _monthly_posts_for(rng, server, joined_at, now, member_count, threshold):
         posts = int(max(0, round(expected)))
         if index == 0:
             posts = int(posts * rng.uniform(0.0, 0.6))  # Partial first month.
+        if index == len(months) - 1:
+            # The month in progress has only had the days up to now, as in production
+            posts = int(round(posts * _elapsed_share(month, now)))
         if posts:
             series.append((month, posts))
     return series
+
+
+def _month_bounds(month):
+    """The start of a month and the start of the one after it, in UTC."""
+    next_month = add_months(month, 1)
+    return (datetime(month.year, month.month, 1, tzinfo=timezone.utc),
+            datetime(next_month.year, next_month.month, 1, tzinfo=timezone.utc))
+
+
+def _elapsed_share(month, now) -> float:
+    """How much of a month has passed by ``now``, from 0 to 1."""
+    month_start, month_end = _month_bounds(month)
+    elapsed = min(max(now, month_start), month_end) - month_start
+    return elapsed / (month_end - month_start)
 
 
 def _posts_in_trailing_window(series, now) -> int:
@@ -159,19 +176,30 @@ def _posts_in_trailing_window(series, now) -> int:
 
     ``SERVERS_SQL`` counts the trailing ``LIVE_WINDOW_DAYS`` days, which usually
     spans the end of last month and the start of this one. Posts are only
-    generated per month, so each month contributes in proportion to how many of
-    its days fall inside the window.
+    generated per month, spread evenly over the part of the month that has
+    passed, so each month contributes in proportion to how much of that part
+    falls inside the window.
     """
     window_start = now - timedelta(days=LIVE_WINDOW_DAYS)
     total = 0.0
     for month, posts in series:
-        month_start = datetime(month.year, month.month, 1, tzinfo=timezone.utc)
-        next_month = add_months(month, 1)
-        month_end = datetime(next_month.year, next_month.month, 1, tzinfo=timezone.utc)
-        overlap = min(month_end, now) - max(month_start, window_start)
+        month_start, month_end = _month_bounds(month)
+        covered_until = min(month_end, now)
+        if covered_until <= month_start:
+            continue
+        overlap = covered_until - max(month_start, window_start)
         if overlap.total_seconds() > 0:
-            total += posts * overlap / (month_end - month_start)
+            total += posts * overlap / (covered_until - month_start)
     return int(round(total))
+
+
+def _sample_within(rng, month, now, not_before=None) -> datetime:
+    """A moment in a month that has already happened, and is no earlier than ``not_before``."""
+    month_start, month_end = _month_bounds(month)
+    earliest = max(month_start, not_before) if not_before else month_start
+    earliest = min(earliest, now)
+    latest = max(earliest, min(month_end, now))
+    return earliest + (latest - earliest) * rng.random()
 
 
 def build_dataset(seed: int = 20260908, servers_alive: int = 520, history_months: int = 34) -> StatsDataset:
@@ -204,13 +232,10 @@ def build_dataset(seed: int = 20260908, servers_alive: int = 520, history_months
         if series:
             first_month, _ = series[0]
             last_month, _ = series[-1]
-            first_post_at = datetime(first_month.year, first_month.month, 1, tzinfo=timezone.utc) + timedelta(
-                days=rng.uniform(0, 27)
-            )
-            first_post_at = max(first_post_at, lifespan.joined_at + timedelta(days=rng.uniform(0.1, 21)))
-            last_post_at = datetime(last_month.year, last_month.month, 1, tzinfo=timezone.utc) + timedelta(
-                days=rng.uniform(0, 27)
-            )
+            # Posts cannot come before the bot joined or after the report was generated
+            first_post_at = _sample_within(rng, first_month, now,
+                                           not_before=lifespan.joined_at + timedelta(days=rng.uniform(0.1, 21)))
+            last_post_at = _sample_within(rng, last_month, now, not_before=first_post_at)
 
         servers.append(
             ServerRow(

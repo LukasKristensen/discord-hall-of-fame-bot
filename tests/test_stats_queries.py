@@ -75,8 +75,8 @@ class SyntheticTrailingWindowTests(unittest.TestCase):
     now = datetime(2026, 9, 8, tzinfo=timezone.utc)
 
     def test_counts_the_end_of_last_month_as_well_as_this_one(self):
-        # The window runs from 9 August, so 23 of August's 31 days and 7 of September's 30 fall in it
-        series = [(date(2026, 8, 1), 310), (date(2026, 9, 1), 300)]
+        # The window runs from 9 August, so 23 of August's 31 days fall in it, and all of September so far
+        series = [(date(2026, 8, 1), 310), (date(2026, 9, 1), 70)]
 
         self.assertEqual(230 + 70, synthetic._posts_in_trailing_window(series, self.now))
 
@@ -84,6 +84,21 @@ class SyntheticTrailingWindowTests(unittest.TestCase):
         series = [(date(2026, 6, 1), 500), (date(2026, 7, 1), 500)]
 
         self.assertEqual(0, synthetic._posts_in_trailing_window(series, self.now))
+
+    def test_the_month_in_progress_only_counts_the_days_so_far(self):
+        # 8 September at midnight is 7 of September's 30 days
+        self.assertAlmostEqual(7 / 30, synthetic._elapsed_share(date(2026, 9, 1), self.now))
+        self.assertEqual(1.0, synthetic._elapsed_share(date(2026, 8, 1), self.now))
+
+    def test_no_post_is_dated_after_the_report(self):
+        dataset = synthetic.build_dataset()
+
+        for server in dataset.servers:
+            for moment in (server.first_post_at, server.last_post_at):
+                if moment is not None:
+                    self.assertLessEqual(moment, dataset.generated_at)
+            if server.first_post_at is not None:
+                self.assertLessEqual(server.first_post_at, server.last_post_at)
 
     def test_only_uses_calculation_methods_the_bot_stores(self):
         from enums import calculation_method_type

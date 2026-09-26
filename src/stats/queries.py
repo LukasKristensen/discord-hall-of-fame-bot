@@ -159,7 +159,9 @@ def _server_row(row) -> ServerRow:
 def load_dataset(connection, reference_dt=None) -> StatsDataset:
     """Pull the whole report dataset in six aggregate queries."""
     now = as_utc(reference_dt or datetime.now(timezone.utc))
-    live_window_start = now - timedelta(days=LIVE_WINDOW_DAYS)
+    # Naive UTC, as created_at is a TIMESTAMP without a time zone. An aware cutoff would be compared in
+    # the session's time zone and shift the window on a database that is not set to UTC
+    live_window_start = (now - timedelta(days=LIVE_WINDOW_DAYS)).replace(tzinfo=None)
 
     servers = [_server_row(row) for row in _fetch(connection, SERVERS_SQL, (live_window_start,))]
     events = _fetch(connection, LIFECYCLE_EVENTS_SQL, optional=True)

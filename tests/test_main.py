@@ -254,8 +254,11 @@ class SetReactionThresholdCommandTests(MainTestCase):
         self.patch(main, "bot_loaded", True)
         self.recorded = []
 
-        async def record(_interaction, threshold, _connection, _method_label):
+        self.given_server_configs = []
+
+        async def record(_interaction, threshold, _connection, _method_label, server_config):
             self.recorded.append(threshold)
+            self.given_server_configs.append(server_config)
 
         self.patch(main.commands, "set_reaction_threshold", record)
 
@@ -264,7 +267,8 @@ class SetReactionThresholdCommandTests(MainTestCase):
         await main.configure_bot.callback(interaction, 7)
 
         self.assertEqual([7], self.recorded)
-        self.assertEqual(7, main.server_classes[GUILD_ID].reaction_threshold)
+        # The command updates the cache itself, before it replies, so it must be given the cached config
+        self.assertEqual([main.server_classes[GUILD_ID]], self.given_server_configs)
 
     async def test_refuses_a_threshold_of_zero(self):
         """

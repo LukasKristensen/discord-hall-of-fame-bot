@@ -6,7 +6,8 @@ import asyncio
 from message_reactions import most_reacted_emoji, reaction_count
 from classes import server_class
 from enums import command_refs, log_type, calculation_method_type
-from repositories import server_config_repo, hall_of_fame_message_repo, server_user_repo, hof_wrapped_repo
+from repositories import (server_config_repo, hall_of_fame_message_repo, server_user_repo, hof_wrapped_repo,
+                          hof_wrapped_guild_status_repo)
 from caches import ExpiringSet
 
 daily_post_limit = 100
@@ -664,6 +665,8 @@ def delete_database_context(server_id: int, connection):
     server_user_repo.delete_server_users(connection, server_id)
     server_config_repo.delete_server_config(connection, server_id)
     hof_wrapped_repo.delete_hof_wrapped_for_guild(connection, server_id)
+    # Left behind, a guild that rejoins stays marked as done for the year and never gets its wrapped again
+    hof_wrapped_guild_status_repo.delete_progress_for_guild(connection, server_id)
 
 
 async def send_server_owner_error_message(owner, e, bot):

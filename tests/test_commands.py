@@ -179,14 +179,16 @@ class SetReactionThresholdTests(unittest.IsolatedAsyncioTestCase):
     async def test_writes_the_threshold_for_the_server_it_was_used_in(self):
         interaction = FakeInteraction()
         with mock.patch.object(server_config_repo, "update_server_config_param") as update:
-            await commands.set_reaction_threshold(interaction, 7, object(), "total reactions")
+            await commands.set_reaction_threshold(interaction, 7, object(), "total reactions",
+                                                  types.SimpleNamespace(reaction_threshold=5))
 
         self.assertEqual((200, "reaction_threshold", 7), update.call_args.args[:3])
 
     async def test_confirms_the_new_threshold(self):
         interaction = FakeInteraction()
         with mock.patch.object(server_config_repo, "update_server_config_param"):
-            await commands.set_reaction_threshold(interaction, 7, object(), "total reactions")
+            await commands.set_reaction_threshold(interaction, 7, object(), "total reactions",
+                                                  types.SimpleNamespace(reaction_threshold=5))
 
         self.assertIn("**7**", interaction.response.messages[0])
 
@@ -194,16 +196,36 @@ class SetReactionThresholdTests(unittest.IsolatedAsyncioTestCase):
         """The same number means different things under each calculation method."""
         interaction = FakeInteraction()
         with mock.patch.object(server_config_repo, "update_server_config_param"):
-            await commands.set_reaction_threshold(interaction, 7, object(), "total reactions")
+            await commands.set_reaction_threshold(interaction, 7, object(), "total reactions",
+                                                  types.SimpleNamespace(reaction_threshold=5))
 
         self.assertIn("7 reactions, counted as: total reactions", interaction.response.messages[0])
 
     async def test_does_not_pluralise_a_single_reaction(self):
         interaction = FakeInteraction()
         with mock.patch.object(server_config_repo, "update_server_config_param"):
-            await commands.set_reaction_threshold(interaction, 1, object(), "total reactions")
+            await commands.set_reaction_threshold(interaction, 1, object(), "total reactions",
+                                                  types.SimpleNamespace(reaction_threshold=5))
 
         self.assertIn("1 reaction,", interaction.response.messages[0])
+
+    async def test_updates_the_cached_threshold_before_replying(self):
+        """Reactions handled while the reply is sent, or after it fails, must use the new threshold."""
+        server_config = types.SimpleNamespace(reaction_threshold=5)
+        interaction = FakeInteraction()
+        seen_when_replying = []
+
+        async def reply(*_args, **_kwargs):
+            seen_when_replying.append(server_config.reaction_threshold)
+            raise RuntimeError("interaction expired")
+
+        interaction.response.send_message = reply
+        with mock.patch.object(server_config_repo, "update_server_config_param"):
+            with self.assertRaises(RuntimeError):
+                await commands.set_reaction_threshold(interaction, 7, object(), "total reactions", server_config)
+
+        self.assertEqual([7], seen_when_replying)
+        self.assertEqual(7, server_config.reaction_threshold)
 
 
 class UserServerProfileTests(unittest.IsolatedAsyncioTestCase):
