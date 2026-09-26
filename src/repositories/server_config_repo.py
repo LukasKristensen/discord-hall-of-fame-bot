@@ -100,6 +100,19 @@ def get_parameter_value(connection, guild_id, param_name):
     cursor.close()
     return result[0] if result else None
 
+def get_guild_ids_with_leaderboard(connection) -> set:
+    """
+    Every guild with a leaderboard set up, in one query rather than one per guild.
+
+    Read from the database rather than the cached configuration because the flag is only ever changed
+    in the database directly, so the cache would not see it until the bot restarts.
+    """
+    cursor = connection.cursor()
+    cursor.execute("SELECT guild_id FROM server_configs WHERE leaderboard_setup")
+    guild_ids = {row[0] for row in cursor.fetchall()}
+    cursor.close()
+    return guild_ids
+
 def insert_server_config(connection, guild_id):
     cursor = connection.cursor()
     cursor.execute("""

@@ -190,10 +190,12 @@ async def daily_task(bot, connection, server_classes, dev_testing, borrow_connec
     await utils.logging(bot, f"Starting daily task for {len(server_classes)} servers")
 
     bot_guild_ids = {guild.id for guild in bot.guilds}
+    # One query for the whole fleet, as a blocking lookup per guild stalls the event loop for longer
+    # the more servers the bot is in
+    leaderboard_guild_ids = server_config_repo.get_guild_ids_with_leaderboard(connection)
     due_for_leaderboard = [
         server_class for server_class in list(server_classes.values())
-        if server_class.guild_id in bot_guild_ids
-        and server_config_repo.get_parameter_value(connection, server_class.guild_id, "leaderboard_setup")
+        if server_class.guild_id in bot_guild_ids and server_class.guild_id in leaderboard_guild_ids
     ]
 
     async def update_one_leaderboard(server_class):

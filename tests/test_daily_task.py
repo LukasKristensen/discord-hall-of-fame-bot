@@ -183,7 +183,7 @@ class DailyTaskLeaderboardTests(unittest.IsolatedAsyncioTestCase):
         utils.recently_logged_messages = ExpiringSet(ttl_seconds=600)
         self.addCleanup(self.restore_cache)
 
-        self.patch(server_config_repo, "get_parameter_value", self.leaderboard_is_set_up)
+        self.patch(server_config_repo, "get_guild_ids_with_leaderboard", self.guilds_with_leaderboards)
         self.patch(utils, "update_leaderboard", self.record_update)
         self.patch(utils, "update_user_database", self.noop_async)
         self.patch(events, "check_write_permissions_to_hall_of_fame_channel", self.noop_async)
@@ -196,9 +196,11 @@ class DailyTaskLeaderboardTests(unittest.IsolatedAsyncioTestCase):
         patcher.start()
         self.addCleanup(patcher.stop)
 
-    def leaderboard_is_set_up(self, _connection, guild_id, parameter):
-        self.assertEqual("leaderboard_setup", parameter)
-        return guild_id not in self.without_leaderboards
+    def guilds_with_leaderboards(self, _connection):
+        self.leaderboard_lookups += 1
+        return {guild_id for guild_id in self.guild_ids if guild_id not in self.without_leaderboards}
+
+    leaderboard_lookups = 0
 
     without_leaderboards = ()
 
@@ -307,6 +309,11 @@ class DailyTaskLeaderboardTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertIn(("stats", None), order)
         self.assertEqual(("stats", None), order[-1])
+
+    async def test_looks_up_which_servers_have_a_leaderboard_once_rather_than_per_server(self):
+        await self.run_daily_task()
+
+        self.assertEqual(1, self.leaderboard_lookups)
 
     async def test_gives_every_server_a_connection_of_its_own(self):
         """On a shared connection one server's database error aborts the transaction of the rest."""

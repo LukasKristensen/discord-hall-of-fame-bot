@@ -246,7 +246,8 @@ def month_ticks(ax, months, max_labels=18):
     """Thin month labels so a three year x-axis stays readable."""
     if not months:
         return
-    step = max(1, len(months) // max_labels)
+    # Ceiling division, so 35 months with a limit of 18 steps by 2 rather than labelling all 35
+    step = max(1, -(-len(months) // max_labels))
     positions = list(range(0, len(months), step))
     ax.set_xticks(positions)
     ax.set_xticklabels([months[i].strftime("%Y-%m") for i in positions], rotation=45, ha="right")
