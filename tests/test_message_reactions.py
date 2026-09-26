@@ -40,6 +40,19 @@ class FilterWhitelistedReactionsTests(unittest.TestCase):
             [variant], config(custom_emoji_check=True, whitelist=["👍"]))
         self.assertEqual([], filtered)
 
+    def test_still_counts_a_whitelisted_custom_emoji_after_it_is_renamed(self):
+        """A rename changes the tag but keeps the ID, and the server never asked to stop counting it."""
+        renamed = FakeReaction("<:poggers:123456789012345678>", [1])
+        filtered = message_reactions.filter_whitelisted_reactions(
+            [renamed], config(custom_emoji_check=True, whitelist=["<:pog:123456789012345678>"]))
+        self.assertEqual([renamed], filtered)
+
+    def test_does_not_match_a_different_custom_emoji_with_the_same_name(self):
+        other = FakeReaction("<:pog:999999999999999999>", [1])
+        filtered = message_reactions.filter_whitelisted_reactions(
+            [other], config(custom_emoji_check=True, whitelist=["<:pog:123456789012345678>"]))
+        self.assertEqual([], filtered)
+
 
 class MostReactedEmojiTests(unittest.TestCase):
     def test_returns_an_empty_string_without_reactions(self):

@@ -188,7 +188,11 @@ async def get_db_connection(connection_pool):
             yield conn
             conn.commit()
         except Exception as e:
-            await utils.logging(bot, f"Database error: {e}", log_level=log_type.CRITICAL)
+            # Anything raised while the connection is held lands here, most of it Discord errors
+            # rather than database ones, so it is an ordinary error and not a page. Only failing to
+            # get a connection at all, above, is critical
+            await utils.logging(bot, f"Error while holding a database connection: {e}",
+                                validate_for_duplicates=True)
             raise
     finally:
         connection_pool.putconn(conn)

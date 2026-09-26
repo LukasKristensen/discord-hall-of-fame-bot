@@ -39,8 +39,11 @@ def render_size_distribution(out_dir, dataset):
     total_members = sum(member_counts) or 1
     member_share = [value / total_members * 100 for value in member_mass]
 
-    median = metrics.percentile(member_counts, 50)
-    p90 = metrics.percentile(member_counts, 90)
+    # Taken over the servers whose size is known, the same ones the histogram bins. A count of 0 means
+    # the size was never recorded, and including it drags the median to 0, which has no log position
+    known_sizes = [count for count in member_counts if count > 0]
+    median = metrics.percentile(known_sizes, 50)
+    p90 = metrics.percentile(known_sizes, 90)
 
     fig, (ax_top, ax_bottom) = theme.new_figure(
         "How big are the servers, and where do the members sit?",
@@ -60,7 +63,7 @@ def render_size_distribution(out_dir, dataset):
     ax_top.set_ylabel("Servers")
     ax_top.set_title("Servers per size band", loc="left", fontsize=10.5, color=theme.INK_SECONDARY, pad=8)
     # Headroom so the median marker's label does not sit on top of a bar.
-    ax_top.set_ylim(top=max(counts) * 1.16)
+    ax_top.set_ylim(top=max(max(counts), 1) * 1.16)
 
     ax_bottom.bar(lefts, member_share, width=widths, align="edge", color=theme.SERIES_ORANGE)
     ax_bottom.set_ylabel("% of all members")
@@ -73,10 +76,12 @@ def render_size_distribution(out_dir, dataset):
         ax.grid(axis="x", visible=False)
         ax.set_xticks(list(decades))
         ax.set_xticklabels([theme.compact(10 ** decade) for decade in decades])
-        ax.axvline(np.log10(median), color=theme.INK_MUTED, linewidth=1.0)
-    ax_top.annotate("median server", xy=(np.log10(median), 1), xycoords=("data", "axes fraction"),
-                    xytext=(5, -4), textcoords="offset points", fontsize=8.5,
-                    color=theme.INK_MUTED, va="top")
+        if median > 0:
+            ax.axvline(np.log10(median), color=theme.INK_MUTED, linewidth=1.0)
+    if median > 0:
+        ax_top.annotate("median server", xy=(np.log10(median), 1), xycoords=("data", "axes fraction"),
+                        xytext=(5, -4), textcoords="offset points", fontsize=8.5,
+                        color=theme.INK_MUTED, va="top")
 
     theme.finish(fig, out_dir, "10_server_size_distribution.png",
                  note="Log-spaced bins; three bins per decade. Bars are counts, not densities.")

@@ -77,6 +77,15 @@ class ServersQueryTests(unittest.TestCase):
         self.assertIn("COALESCE(latest_snapshot.member_count, sc.server_member_count, 0)", queries.SERVERS_SQL)
         self.assertIn("ORDER BY guild_id, month_start DESC", queries.SERVERS_SQL)
 
+    def test_counts_migrated_posts_but_keeps_their_placeholder_date_off_the_timeline(self):
+        """Posts migrated from MongoDB carry a 1970 date, but they are still posts the server made."""
+        activity = queries.SERVERS_SQL.split("FROM hall_of_fame_message")[0].split("LEFT JOIN (")[1]
+        self.assertIn("COUNT(*) AS total_posts", activity)
+        self.assertIn(f"MIN(created_at) FILTER (WHERE created_at >= {queries.REAL_TIMESTAMP})", activity)
+        self.assertIn(f"MAX(created_at) FILTER (WHERE created_at >= {queries.REAL_TIMESTAMP})", activity)
+        grouped = queries.SERVERS_SQL.split("FROM hall_of_fame_message")[1].split("GROUP BY")[0]
+        self.assertNotIn("created_at", grouped)
+
 
 class SyntheticTrailingWindowTests(unittest.TestCase):
     now = datetime(2026, 9, 8, tzinfo=timezone.utc)

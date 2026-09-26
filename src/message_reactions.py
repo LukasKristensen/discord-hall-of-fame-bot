@@ -1,4 +1,5 @@
 import discord as discord
+import validation
 from enums import calculation_method_type
 from repositories import server_config_repo
 
@@ -18,7 +19,18 @@ def filter_whitelisted_reactions(reactions: list[discord.Reaction], config: dict
         return reactions
 
     whitelist = {str(emoji) for emoji in whitelisted_emojis}
-    return [reaction for reaction in reactions if str(reaction.emoji) in whitelist]
+    # A custom emoji keeps its ID when it is renamed but its tag changes, so it is matched by ID as well.
+    # Matching the tag alone would silently stop counting a whitelisted emoji the moment it is renamed
+    whitelisted_ids = {emoji_id for emoji_id in map(validation.custom_emoji_id, whitelist) if emoji_id}
+
+    def is_whitelisted(reaction) -> bool:
+        tag = str(reaction.emoji)
+        if tag in whitelist:
+            return True
+        emoji_id = validation.custom_emoji_id(tag)
+        return emoji_id is not None and emoji_id in whitelisted_ids
+
+    return [reaction for reaction in reactions if is_whitelisted(reaction)]
 
 
 async def author_has_reacted(reaction: discord.Reaction, author_id: int) -> bool:

@@ -8,7 +8,7 @@ timestamped folder are a puzzle rather than a report.
 from __future__ import annotations
 
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 
 from stats import charts, metrics, tables, theme
 
@@ -16,11 +16,23 @@ INDEX_FILENAME = "README.md"
 
 
 def create_output_dir(root, reference_dt=None):
-    """A timestamped folder under ``root``, created if missing."""
-    stamp = (reference_dt or datetime.now()).strftime("%Y%m%d_%H%M%S")
+    """A new timestamped folder under ``root``, never one an earlier export wrote to.
+
+    Stamped in UTC to match the time the README says the report was generated. Two
+    exports started in the same second would otherwise share a folder and overwrite
+    each other's files, so a taken name gets a numbered suffix instead.
+    """
+    stamp = (reference_dt or datetime.now(timezone.utc)).strftime("%Y%m%d_%H%M%S")
+    os.makedirs(root, exist_ok=True)
     path = os.path.join(root, stamp)
-    os.makedirs(path, exist_ok=True)
-    return path
+    suffix = 1
+    while True:
+        try:
+            os.mkdir(path)
+            return path
+        except FileExistsError:
+            suffix += 1
+            path = os.path.join(root, f"{stamp}_{suffix}")
 
 
 def render(dataset, out_dir):

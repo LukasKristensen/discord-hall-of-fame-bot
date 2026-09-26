@@ -54,15 +54,16 @@ SERVERS_SQL = f"""
         COALESCE(sc.hide_hof_post_below_threshold, FALSE)
     FROM server_configs sc
     LEFT JOIN (
+        -- Every post counts towards the totals, migrated ones included. Only the date-based values
+        -- skip the 1970 placeholder, which would otherwise pass for a very old first post
         SELECT
             guild_id,
             COUNT(*) AS total_posts,
             COUNT(*) FILTER (WHERE created_at >= %s) AS posts_last_30d,
-            MIN(created_at) AS first_post_at,
-            MAX(created_at) AS last_post_at,
+            MIN(created_at) FILTER (WHERE created_at >= {REAL_TIMESTAMP}) AS first_post_at,
+            MAX(created_at) FILTER (WHERE created_at >= {REAL_TIMESTAMP}) AS last_post_at,
             COUNT(DISTINCT author_id) AS distinct_authors
         FROM hall_of_fame_message
-        WHERE created_at >= {REAL_TIMESTAMP}
         GROUP BY guild_id
     ) activity ON activity.guild_id = sc.guild_id
     LEFT JOIN (

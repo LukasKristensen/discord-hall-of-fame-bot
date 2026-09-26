@@ -55,17 +55,31 @@ def parse_args(argv=None):
     return parser.parse_args(argv)
 
 
+def database_settings():
+    """The connection settings for the environment the report runs in.
+
+    Chosen the same way the bot chooses them: a development run (``DEV_TEST=True``)
+    reads the local database through the ``*_LOCAL`` variables and never loads the
+    production credentials. Reporting on the live fleet means running it with the
+    production environment.
+    """
+    load_dotenv(os.path.join(PROJECT_ROOT, ".env"))
+    import environment
+
+    prefix = "_LOCAL" if environment.is_development() else ""
+    return {
+        "host": os.getenv(f"POSTGRES_HOST{prefix}"),
+        "database": os.getenv(f"POSTGRES_DB{prefix}"),
+        "user": os.getenv(f"POSTGRES_USER{prefix}"),
+        "password": os.getenv(f"POSTGRES_PASSWORD{prefix}"),
+    }
+
+
 def connect():
     """Open the Postgres connection the report reads from."""
     import psycopg2
 
-    load_dotenv(os.path.join(PROJECT_ROOT, ".env"))
-    return psycopg2.connect(
-        host=os.getenv("POSTGRES_HOST"),
-        database=os.getenv("POSTGRES_DB"),
-        user=os.getenv("POSTGRES_USER"),
-        password=os.getenv("POSTGRES_PASSWORD"),
-    )
+    return psycopg2.connect(**database_settings())
 
 
 def load_dataset(args):

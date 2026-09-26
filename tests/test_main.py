@@ -16,6 +16,7 @@ import discord
 
 import main
 import utils
+from enums import log_type
 from caches import ExpiringSet
 from translations import messages
 
@@ -506,6 +507,25 @@ class ConnectionSlotTests(MainTestCase):
             if in_flight is not None:
                 in_flight.append(self.pool.handed_out - self.pool.returned)
             await asyncio.sleep(hold)
+
+    async def test_an_error_while_holding_a_connection_is_logged_as_an_ordinary_error(self):
+        """Most of what is raised here comes from Discord, so it must not page anyone as a database failure."""
+        self.size_the_pool(2)
+        calls = []
+
+        async def record_log(_bot, message, *args, **kwargs):
+            calls.append((str(message), kwargs))
+
+        self.patch(utils, "logging", record_log)
+        with self.assertRaises(RuntimeError):
+            async with main.get_db_connection(self.pool):
+                raise RuntimeError("404 Not Found (error code: 10008): Unknown Message")
+
+        message, kwargs = calls[0]
+        self.assertNotIn("Database error", message)
+        self.assertNotEqual(log_type.CRITICAL, kwargs.get("log_level"))
+        self.assertTrue(kwargs.get("validate_for_duplicates"))
+        self.assertEqual(1, self.pool.returned)
 
     async def test_hands_out_a_connection(self):
         self.size_the_pool(2)
