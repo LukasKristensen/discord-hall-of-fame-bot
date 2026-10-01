@@ -3,10 +3,11 @@ import discord
 from discord import app_commands
 from discord.ext import commands as discord_commands
 from discord.ext import tasks
-from dotenv import load_dotenv
+# First of the bot's own modules, as importing it loads .env, leaving out the production-only values
+# in development
+import environment
 import commands
 import concurrency
-import environment
 import events
 import utils
 import validation
@@ -32,7 +33,6 @@ from contextlib import asynccontextmanager
 from scripts import monthly_guild_snapshot
 import asyncio
 
-load_dotenv()
 dev_test = environment.is_development()
 TOKEN = os.getenv('DEV_KEY') if dev_test else os.getenv('KEY')
 # Only the live bot reports to the listing sites, so the development bot never reads their keys
@@ -62,14 +62,10 @@ def create_connection_pool():
     Open the pool the bot serves every command and reaction from
     :return: A thread safe connection pool for the configured database
     """
-    prefix = "_LOCAL" if dev_test else ""
     return psycopg2.pool.ThreadedConnectionPool(
         minconn=1,
         maxconn=database_pool_size,
-        host=os.getenv(f'POSTGRES_HOST{prefix}'),
-        database=os.getenv(f'POSTGRES_DB{prefix}'),
-        user=os.getenv(f'POSTGRES_USER{prefix}'),
-        password=os.getenv(f'POSTGRES_PASSWORD{prefix}'))
+        **environment.database_settings())
 
 message_locks = concurrency.KeyedLocks()
 daily_command_cooldowns = {}

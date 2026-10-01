@@ -22,8 +22,7 @@ class DatabaseSettingsTests(unittest.TestCase):
     }
 
     def settings(self, dev_test):
-        with mock.patch.dict(os.environ, dict(self.variables, DEV_TEST=dev_test), clear=True), \
-                mock.patch.object(server_stats, "load_dotenv"):
+        with mock.patch.dict(os.environ, dict(self.variables, DEV_TEST=dev_test), clear=True):
             return server_stats.database_settings()
 
     def test_a_development_run_reads_the_local_database(self):

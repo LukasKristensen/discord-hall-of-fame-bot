@@ -90,6 +90,74 @@ class ListingSiteKeyTests(unittest.TestCase):
             self.assertEqual("live-topgg-key", topgg_api.auth_key())
 
 
+ENV_FILE = {
+    "DEV_KEY": "development-token",
+    "KEY": "live-token",
+    "TOPGG_API_KEY": "live-topgg-key",
+    "DISCORD_BOT_LIST_API_KEY": "live-dbl-key",
+    "MONGODB_URI": "live-mongo",
+    "POSTGRES_HOST": "production-host", "POSTGRES_DB": "production-db",
+    "POSTGRES_USER": "production-user", "POSTGRES_PASSWORD": "production-password",
+    "POSTGRES_HOST_LOCAL": "local-host", "POSTGRES_DB_LOCAL": "local-db",
+    "POSTGRES_USER_LOCAL": "local-user", "POSTGRES_PASSWORD_LOCAL": "local-password",
+}
+
+
+class LoadEnvironmentTests(unittest.TestCase):
+    """Gating the readers is not enough if loading .env puts every live credential in the environment."""
+
+    def load(self, env_file, already_set=None):
+        import os
+        with mock.patch.dict("os.environ", already_set or {}, clear=True):
+            environment.load_environment(env_file)
+            return dict(os.environ)
+
+    def test_a_development_run_loads_no_production_only_value(self):
+        loaded = self.load(dict(ENV_FILE, DEV_TEST="True"))
+
+        for name in environment.PRODUCTION_ONLY_VARIABLES:
+            self.assertNotIn(name, loaded)
+        self.assertEqual("development-token", loaded["DEV_KEY"])
+        self.assertEqual("local-host", loaded["POSTGRES_HOST_LOCAL"])
+
+    def test_the_flag_can_come_from_the_shell_rather_than_the_file(self):
+        loaded = self.load(dict(ENV_FILE, DEV_TEST="False"), already_set={"DEV_TEST": "True"})
+
+        self.assertNotIn("KEY", loaded)
+        self.assertEqual("True", loaded["DEV_TEST"])
+
+    def test_the_live_bot_loads_everything(self):
+        loaded = self.load(dict(ENV_FILE, DEV_TEST="False"))
+
+        self.assertEqual("live-token", loaded["KEY"])
+        self.assertEqual("production-password", loaded["POSTGRES_PASSWORD"])
+
+    def test_the_live_bot_loads_everything_when_the_flag_is_unset(self):
+        """The deployed bot does not set it, so an unset flag has to keep loading the live values."""
+        loaded = self.load(dict(ENV_FILE))
+
+        self.assertEqual("live-token", loaded["KEY"])
+
+    def test_a_value_already_in_the_environment_is_left_alone(self):
+        loaded = self.load(dict(ENV_FILE, DEV_TEST="False"), already_set={"KEY": "from-the-shell"})
+
+        self.assertEqual("from-the-shell", loaded["KEY"])
+
+
+class DatabaseSettingsTests(unittest.TestCase):
+    def settings(self, development):
+        with mock.patch.dict("os.environ", dict(ENV_FILE, DEV_TEST="True" if development else "False"),
+                             clear=True):
+            return environment.database_settings()
+
+    def test_development_connects_to_the_local_database(self):
+        self.assertEqual({"host": "local-host", "database": "local-db", "user": "local-user",
+                          "password": "local-password"}, self.settings(development=True))
+
+    def test_production_connects_to_the_production_database(self):
+        self.assertEqual("production-host", self.settings(development=False)["host"])
+
+
 class DevelopmentRequestTests(unittest.TestCase):
     def test_a_development_stats_post_carries_no_credential(self):
         """The bot skips this call in development, and it would be unauthenticated even if not."""

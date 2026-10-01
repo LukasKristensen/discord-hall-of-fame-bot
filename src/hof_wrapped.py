@@ -5,16 +5,10 @@ import datetime
 from repositories import hof_wrapped_repo, hall_of_fame_message_repo, server_config_repo, hof_wrapped_guild_status_repo
 import psycopg2
 import os
-from dotenv import load_dotenv
 import json
+import environment
 from constants import version
 from enums import command_refs
-
-load_dotenv()
-POSTGRES_HOST = os.getenv('POSTGRES_HOST')
-POSTGRES_DB = os.getenv('POSTGRES_DB')
-POSTGRES_USER = os.getenv('POSTGRES_USER')
-POSTGRES_PASSWORD = os.getenv('POSTGRES_PASSWORD')
 
 users = {}
 total_hall_of_fame_posts = 0
@@ -285,7 +279,7 @@ def get_user_rank(rankings: dict, user: User):
 
 
 def save_user_wrapped_to_db(guild_id, user, year):
-    connection = psycopg2.connect(host=POSTGRES_HOST, database=POSTGRES_DB, user=POSTGRES_USER, password=POSTGRES_PASSWORD)
+    connection = psycopg2.connect(**environment.database_settings())
     cursor = connection.cursor()
     # Ensure rankings is not None
     user_ranks = get_user_rank(rankings, user) if rankings is not None else {}
@@ -472,7 +466,7 @@ if __name__ == "__main__":
         print(f'Logged in as {bot.user} (ID: {bot.user.id})')
         print('------')
 
-        connection = psycopg2.connect(host=POSTGRES_HOST, database=POSTGRES_DB, user=POSTGRES_USER, password=POSTGRES_PASSWORD)
+        connection = psycopg2.connect(**environment.database_settings())
         hof_wrapped_repo.create_hof_wrapped_table(connection)
         hof_wrapped_guild_status_repo.create_hof_wrapped_progress_table(connection)
 
@@ -506,9 +500,7 @@ if __name__ == "__main__":
         await bot.close()
 
     print("Logging in the bot...")
-    if os.getenv('DEV_TEST') == 'False':
-        bot.token = os.getenv('KEY')
-    else:
-        bot.token = os.getenv('DEV_KEY')
+    # Decided the same way as for the bot, where an unset flag means production
+    bot.token = os.getenv('DEV_KEY') if environment.is_development() else os.getenv('KEY')
 
     bot.run(bot.token)

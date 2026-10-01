@@ -24,7 +24,7 @@ import argparse
 import os
 import sys
 
-from dotenv import load_dotenv
+import environment
 
 # Make the export location independent of the current working directory.
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -56,21 +56,12 @@ def parse_args(argv=None):
 def database_settings():
     """The connection settings for the environment the report runs in.
 
-    Chosen the same way the bot chooses them: a development run (``DEV_TEST=True``)
-    reads the local database through the ``*_LOCAL`` variables and never loads the
-    production credentials. Reporting on the live fleet means running it with the
-    production environment.
+    Chosen exactly as the bot chooses them, through ``environment``, which also
+    loads .env: a development run (``DEV_TEST=True``) reads the local database
+    and never loads the production credentials. Reporting on the live fleet means
+    running it with the production environment.
     """
-    load_dotenv(os.path.join(PROJECT_ROOT, ".env"))
-    import environment
-
-    prefix = "_LOCAL" if environment.is_development() else ""
-    return {
-        "host": os.getenv(f"POSTGRES_HOST{prefix}"),
-        "database": os.getenv(f"POSTGRES_DB{prefix}"),
-        "user": os.getenv(f"POSTGRES_USER{prefix}"),
-        "password": os.getenv(f"POSTGRES_PASSWORD{prefix}"),
-    }
+    return environment.database_settings()
 
 
 def connect():
