@@ -954,9 +954,11 @@ if __name__ == "__main__":
         raise ValueError("TOKEN environment variable is not set in the .env file")
     connection_pool = create_connection_pool()
     while True:
-        # Every run gets a new event loop, and a semaphore that has ever had to make a caller wait
-        # stays bound to the loop it waited on. Reusing it after a restart would raise instead of wait
+        # Every run gets a new event loop, and a semaphore or lock that has ever had to make a caller
+        # wait stays bound to the loop it waited on. Reusing one after a restart would raise instead
+        # of wait, so both are made fresh for each run
         connection_slots = asyncio.Semaphore(database_pool_size)
+        message_locks = concurrency.KeyedLocks()
         try:
             bot.run(TOKEN)
         except Exception as e:
