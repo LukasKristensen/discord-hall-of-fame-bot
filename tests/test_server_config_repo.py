@@ -19,6 +19,31 @@ class ParameterValidationTests(unittest.TestCase):
         self.assertEqual(7, server_config_repo.get_parameter_value(connection, 1, "reaction_threshold"))
 
 
+class GuildIdsWithLeaderboardTests(unittest.TestCase):
+    """The daily task updates exactly these guilds, so a wrong filter silently drops every leaderboard."""
+
+    def test_returns_the_guild_of_every_row(self):
+        connection = FakeConnection(rows=[(200,), (201,), (205,)])
+        self.assertEqual({200, 201, 205}, server_config_repo.get_guild_ids_with_leaderboard(connection))
+
+    def test_returns_nothing_when_no_guild_has_one(self):
+        self.assertEqual(set(), server_config_repo.get_guild_ids_with_leaderboard(FakeConnection(rows=[])))
+
+    def test_selects_only_guilds_with_a_leaderboard_set_up(self):
+        connection = FakeConnection(rows=[])
+        server_config_repo.get_guild_ids_with_leaderboard(connection)
+
+        query = " ".join(connection.queries[0].split())
+        self.assertEqual("SELECT guild_id FROM server_configs WHERE leaderboard_setup", query)
+
+    def test_is_one_query_for_the_whole_fleet(self):
+        connection = FakeConnection(rows=[(200,), (201,)])
+        server_config_repo.get_guild_ids_with_leaderboard(connection)
+
+        self.assertEqual(1, len(connection.queries))
+        self.assertTrue(all(cursor.closed for cursor in connection.cursors))
+
+
 class ReactionConfigTests(unittest.TestCase):
     def test_maps_the_row_to_the_configuration(self):
         connection = FakeConnection(row=("total_reactions", False, True, ["👍"]))

@@ -2,10 +2,10 @@ import os
 import importlib
 import discord
 from pymongo.mongo_client import MongoClient
-from dotenv import load_dotenv
+import environment
 from datetime import datetime, UTC
 
-load_dotenv('../.env')
+# environment has loaded .env, leaving MONGO_URI out of a development run
 mongo_uri = os.getenv('MONGO_URI')
 db_client = MongoClient(mongo_uri)
 migration_collection = db_client["migrations"]["migration_status"]

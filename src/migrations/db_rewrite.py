@@ -1,8 +1,12 @@
 import os
+import sys
 from pymongo.mongo_client import MongoClient
-from dotenv import load_dotenv
 
-load_dotenv('../../.env')
+# Run directly from this folder, so src is put on the path for the environment loader
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import environment
+
+# environment has loaded .env, leaving MONGO_URI out of a development run
 mongo_uri = os.getenv('MONGO_URI')
 db_client = MongoClient(mongo_uri)
 
