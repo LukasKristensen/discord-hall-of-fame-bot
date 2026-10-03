@@ -95,8 +95,6 @@ ENV_FILE = {
     "KEY": "live-token",
     "TOPGG_API_KEY": "live-topgg-key",
     "DISCORD_BOT_LIST_API_KEY": "live-dbl-key",
-    "MONGODB_URI": "live-mongo",
-    "MONGO_URI": "live-mongo-for-migrations",
     "POSTGRES_HOST": "production-host", "POSTGRES_DB": "production-db",
     "POSTGRES_USER": "production-user", "POSTGRES_PASSWORD": "production-password",
     "POSTGRES_HOST_LOCAL": "local-host", "POSTGRES_DB_LOCAL": "local-db",

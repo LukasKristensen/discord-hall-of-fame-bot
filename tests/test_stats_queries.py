@@ -77,6 +77,14 @@ class ServersQueryTests(unittest.TestCase):
         self.assertIn("COALESCE(latest_snapshot.member_count, sc.server_member_count, 0)", queries.SERVERS_SQL)
         self.assertIn("ORDER BY guild_id, month_start DESC", queries.SERVERS_SQL)
 
+    def test_author_counts_leave_out_the_migration_sentinel(self):
+        """Migrated posts without an author were stored as author 0, which is nobody."""
+        for name in ("SERVERS_SQL", "MONTHLY_AUTHORS_SQL"):
+            with self.subTest(query=name):
+                sql = getattr(queries, name)
+                self.assertIn("COUNT(DISTINCT NULLIF(author_id, 0))", sql)
+                self.assertNotIn("COUNT(DISTINCT author_id)", sql)
+
     def test_a_snapshot_without_a_member_count_does_not_override_a_known_one(self):
         """The snapshot stores 0 when Discord reported no count, and that 0 must not win the COALESCE."""
         snapshot = queries.SERVERS_SQL.split("FROM guild_monthly_snapshot")[1].split("ORDER BY")[0]

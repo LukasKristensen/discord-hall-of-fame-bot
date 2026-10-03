@@ -44,9 +44,8 @@ change and say in the report which items did not apply.
    it, add it to `reaction_config()`; that object is served from memory, so the command must update it
    (`update_setting` does this through `setattr`).
 3. **Defaults for new servers** in `utils.create_database_context` (the `ServerClass(...)` it builds).
-4. **`src/db_backup.py`** - the column lists it copies.
-5. **Where the setting takes effect** - usually `utils.validate_message` or `message_reactions.py`.
-6. **`/get_server_config`** - add a line in `commands.build_server_config_embed`, in the same group as
+4. **Where the setting takes effect** - usually `utils.validate_message` or `message_reactions.py`.
+5. **`/get_server_config`** - add a line in `commands.build_server_config_embed`, in the same group as
    `/help`, with the command that changes it.
 
 ## Tests

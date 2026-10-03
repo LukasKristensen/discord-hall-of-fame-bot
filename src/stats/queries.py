@@ -55,14 +55,15 @@ SERVERS_SQL = f"""
     FROM server_configs sc
     LEFT JOIN (
         -- Every post counts towards the totals, migrated ones included. Only the date-based values
-        -- skip the 1970 placeholder, which would otherwise pass for a very old first post
+        -- skip the 1970 placeholder, which would otherwise pass for a very old first post, and the
+        -- author count skips author 0, which migrated posts without an author were stored under
         SELECT
             guild_id,
             COUNT(*) AS total_posts,
             COUNT(*) FILTER (WHERE created_at >= %s) AS posts_last_30d,
             MIN(created_at) FILTER (WHERE created_at >= {REAL_TIMESTAMP}) AS first_post_at,
             MAX(created_at) FILTER (WHERE created_at >= {REAL_TIMESTAMP}) AS last_post_at,
-            COUNT(DISTINCT author_id) AS distinct_authors
+            COUNT(DISTINCT NULLIF(author_id, 0)) AS distinct_authors
         FROM hall_of_fame_message
         GROUP BY guild_id
     ) activity ON activity.guild_id = sc.guild_id
@@ -91,7 +92,7 @@ MONTHLY_GUILD_POSTS_SQL = f"""
 """
 
 MONTHLY_AUTHORS_SQL = f"""
-    SELECT DATE_TRUNC('month', created_at)::date, COUNT(DISTINCT author_id)
+    SELECT DATE_TRUNC('month', created_at)::date, COUNT(DISTINCT NULLIF(author_id, 0))
     FROM hall_of_fame_message
     WHERE created_at >= {REAL_TIMESTAMP}
     GROUP BY 1

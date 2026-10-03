@@ -30,9 +30,9 @@ This is a review. Report findings first and fix only what the user agrees to, as
 - New columns need `ALTER TABLE ... ADD COLUMN IF NOT EXISTS ... DEFAULT ...` next to the
   `CREATE TABLE IF NOT EXISTS` in the repository, because production tables already exist.
 - New columns must also be in `ALLOWED_COLUMNS` in `server_config_repo.py`, in every SELECT that
-  builds a `ServerClass` (row indexes shift), and in `db_backup.py`.
-- One-off data changes go in `src/migrations/`. Check that they are idempotent and say whether the user
-  has to run one by hand before or after deploy.
+  builds a `ServerClass` (row indexes shift).
+- One-off data changes go in `src/migrations/` as a `.sql` file the user runs by hand against
+  PostgreSQL. Check that they are idempotent and say whether to run one before or after deploy.
 - Upserts need the matching primary key or unique constraint to exist in production, not only in the
   test fakes.
 
@@ -55,7 +55,7 @@ This is a review. Report findings first and fix only what the user agrees to, as
 - Anything created at import time and bound to an event loop (semaphores, locks) must be recreated when
   the crash-restart loop starts a new loop.
 - If the pool size changed, check that Postgres `max_connections` still covers the bot plus the other
-  scripts that connect (`hof_wrapped`, `db_backup`, the monthly snapshot).
+  scripts that connect (`hof_wrapped`, `pg_backup.sh`, the stats report).
 
 **Discord behaviour**
 - Required permissions: a new API call may need a permission servers never granted. Commands should say

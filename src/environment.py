@@ -27,9 +27,6 @@ PRODUCTION_ONLY_VARIABLES = frozenset({
     "KEY",
     "TOPGG_API_KEY",
     "DISCORD_BOT_LIST_API_KEY",
-    "MONGODB_URI",
-    # The name the migrations read the same production Mongo database under
-    "MONGO_URI",
     "POSTGRES_HOST",
     "POSTGRES_DB",
     "POSTGRES_USER",
