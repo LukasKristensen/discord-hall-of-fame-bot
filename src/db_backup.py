@@ -2,7 +2,7 @@ import os
 from datetime import datetime
 import json
 from pymongo.mongo_client import MongoClient
-from dotenv import load_dotenv
+import environment
 import psycopg2
 from repositories import hall_of_fame_message_repo, server_config_repo, server_user_repo, hof_wrapped_repo, hof_wrapped_guild_status_repo
 
@@ -143,7 +143,12 @@ def convert_mongodb_to_postgresql(db_client, connection):
 # Todo: Implement a recurring job to back up data every 15 min, then every hour, then every day, etc.
 
 if __name__ == "__main__":
-    load_dotenv()
+    # This copies the production databases, so it only runs where the production credentials are
+    # loaded. In development environment leaves them out, and running on without them would quietly
+    # connect to whatever the defaults point at
+    if environment.is_development():
+        raise SystemExit("db_backup copies the production databases. Run it with the production "
+                         "environment (DEV_TEST not set to True).")
     mongo_uri = os.getenv('MONGODB_URI')
     client = MongoClient(mongo_uri)
     backup_database(client)

@@ -1,0 +1,33 @@
+Hall of Fame - Source-Available License
+
+Copyright (c) 2026 Lukas Kristensen. All rights reserved.
+
+1. Viewing
+   You may view and read this source code for reference.
+
+2. Contributing
+   You may fork, clone, and modify this repository, and run a local
+   instance of the software on a private test server, solely for the
+   purpose of developing, testing, and submitting contributions (such as
+   pull requests) to the official repository at
+   https://github.com/LukasKristensen/discord-hall-of-fame-bot.
+
+3. Restrictions
+   Except as permitted in section 2, you may not copy, modify, distribute,
+   sublicense, host, deploy, or operate this software or any derivative
+   of it, in whole or in part, including as a public or private Discord
+   bot, without prior written permission from the copyright holder.
+
+4. Contributions
+   By submitting a contribution to this repository, you grant the
+   copyright holder a perpetual, worldwide, irrevocable, royalty-free,
+   non-exclusive license to use, modify, distribute, sublicense, and
+   relicense your contribution under any terms. You confirm that you have
+   the right to grant this license and that your contribution is your
+   own original work.
+
+5. No Warranty
+   This software is provided "as is", without warranty of any kind,
+   express or implied. In no event shall the copyright holder be liable
+   for any claim, damages, or other liability arising from the use of
+   this software.

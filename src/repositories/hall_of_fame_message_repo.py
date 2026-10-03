@@ -12,6 +12,14 @@ def create_hall_of_fame_message_table(connection):
             video_link_message_id BIGINT
         )
     """)
+    # The table is keyed by message, but nearly every read is by guild: the daily stats rebuild, the
+    # leaderboard and the daily post limit checked on every reaction. Without this each of them scans
+    # every guild's history. created_at comes second so the "posted today" and monthly windows are
+    # served from the index too. IF NOT EXISTS makes it a one-off build on the existing table
+    cursor.execute("""
+        CREATE INDEX IF NOT EXISTS hall_of_fame_message_guild_created_idx
+        ON hall_of_fame_message (guild_id, created_at)
+    """)
     connection.commit()
     cursor.close()
 

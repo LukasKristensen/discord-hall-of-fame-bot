@@ -53,6 +53,7 @@ def get_hof_wrapped(connection, guild_id, user_id, year):
     """, (guild_id, user_id, year))
     row = cursor.fetchone()
     if row is None:
+        cursor.close()
         return None
     columns = [desc[0] for desc in cursor.description]
     result = dict(zip(columns, row))
