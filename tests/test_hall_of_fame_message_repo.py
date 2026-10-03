@@ -19,6 +19,18 @@ MESSAGE_COLUMNS = ["message_id", "channel_id", "guild_id", "hall_of_fame_message
 MESSAGE_ROW = (4242, 100, 200, 5555, 12, 77, datetime.datetime(2026, 3, 1, 12, 0), None)
 
 
+class CreateTableTests(unittest.TestCase):
+    def test_indexes_the_table_by_guild_and_date(self):
+        """Nearly every read is by guild, and without this each one scans every guild's history."""
+        connection = FakeConnection()
+        hall_of_fame_message_repo.create_hall_of_fame_message_table(connection)
+
+        index = " ".join(connection.queries[-1].split())
+        self.assertIn("CREATE INDEX IF NOT EXISTS", index)
+        self.assertIn("ON hall_of_fame_message (guild_id, created_at)", index)
+        self.assertEqual(1, connection.commits)
+
+
 class FindHallOfFameMessageTests(unittest.TestCase):
     def test_maps_the_row_to_its_column_names(self):
         connection = FakeConnection(row=MESSAGE_ROW, description=MESSAGE_COLUMNS)
