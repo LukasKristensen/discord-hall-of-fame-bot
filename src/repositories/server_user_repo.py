@@ -187,18 +187,22 @@ ALLOWED_STAT_FIELDS = {
 }
 
 
-def _ranking_filter(stat_field) -> str:
+def _ranking_clause(stat_field) -> str:
     """
-    Keep members with nothing to show out of a ranking by count.
+    The filter and order that put the best member first for a statistic.
 
-    Every member who has ever been featured keeps a server_user row, so once a guild has been quiet
-    for a month every monthly count is zero. Ordering those would still produce a top five of zeroes
-    and crown whoever sorts first as champion. Rank columns are positions rather than amounts, so
-    they are left as they are.
+    For counts that is the highest, and members with nothing to show are left out: every member who
+    has ever been featured keeps a server_user row, so once a guild has been quiet for a month every
+    monthly count is zero, and ordering those would still produce a top five of zeroes and crown
+    whoever sorts first as champion.
+
+    For rank columns the best is position 1, so they order ascending. A member with nothing featured
+    this month has no monthly rank (NULL), and is left out rather than sorted to the top, which is
+    where PostgreSQL puts NULLs in a descending order.
     """
     if stat_field.endswith("_rank"):
-        return ""
-    return f"AND {stat_field} > 0"
+        return f"AND {stat_field} IS NOT NULL ORDER BY {stat_field} ASC"
+    return f"AND {stat_field} > 0 ORDER BY {stat_field} DESC"
 
 
 def get_top_users_by_stat(connection, guild_id, stat_field, limit=10):
@@ -209,8 +213,7 @@ def get_top_users_by_stat(connection, guild_id, stat_field, limit=10):
         SELECT user_id, guild_id, {stat_field}
         FROM server_user
         WHERE guild_id = %s
-          {_ranking_filter(stat_field)}
-        ORDER BY {stat_field} DESC
+          {_ranking_clause(stat_field)}
         LIMIT %s
     """
     cursor.execute(query, (guild_id, limit))
@@ -231,8 +234,7 @@ def check_if_user_is_top_of_stat(connection, user_id, guild_id, stat_field):
         SELECT user_id
         FROM server_user
         WHERE guild_id = %s
-          {_ranking_filter(stat_field)}
-        ORDER BY {stat_field} DESC
+          {_ranking_clause(stat_field)}
         LIMIT 1
     """
     cursor.execute(query, (guild_id,))

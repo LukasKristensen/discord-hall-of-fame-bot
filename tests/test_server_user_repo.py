@@ -104,11 +104,15 @@ class TopUsersByStatTests(unittest.TestCase):
 
         self.assertIn("AND this_month_hall_of_fame_messages > 0", connection.queries[0])
 
-    def test_does_not_filter_a_rank_column(self):
+    def test_a_rank_column_puts_position_one_first_and_skips_the_unranked(self):
+        """Rank 1 is the best, and a member with no monthly rank is NULL, which DESC would sort first."""
         connection = FakeConnection(rows=[], description=["user_id", "guild_id", "monthly_message_rank"])
         server_user_repo.get_top_users_by_stat(connection, 200, "monthly_message_rank")
 
-        self.assertNotIn("> 0", connection.queries[0])
+        query = " ".join(connection.queries[0].split())
+        self.assertIn("AND monthly_message_rank IS NOT NULL ORDER BY monthly_message_rank ASC", query)
+        self.assertNotIn("> 0", query)
+        self.assertNotIn("DESC", query)
 
 
 class CheckIfUserIsTopOfStatTests(unittest.TestCase):
@@ -126,6 +130,13 @@ class CheckIfUserIsTopOfStatTests(unittest.TestCase):
         self.assertFalse(server_user_repo.check_if_user_is_top_of_stat(
             connection, 77, 200, "this_month_hall_of_fame_messages"))
         self.assertIn("AND this_month_hall_of_fame_messages > 0", connection.queries[0])
+
+    def test_the_top_of_a_rank_column_is_position_one(self):
+        connection = FakeConnection(row=(77,))
+        self.assertTrue(server_user_repo.check_if_user_is_top_of_stat(connection, 77, 200, "monthly_reaction_rank"))
+
+        query = " ".join(connection.queries[0].split())
+        self.assertIn("AND monthly_reaction_rank IS NOT NULL ORDER BY monthly_reaction_rank ASC", query)
 
     def test_denies_a_member_who_is_not_first(self):
         connection = FakeConnection(row=(88,))
