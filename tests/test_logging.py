@@ -37,6 +37,15 @@ class LoggingTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertTrue(self.sent_to(CRITICAL_CHANNEL_ID)[0].startswith(DEVELOPER_MENTION))
 
+    async def test_a_critical_message_can_be_logged_without_a_ping(self):
+        """Recurring critical events, such as a server at its daily limit, still go to the critical channel."""
+        await utils.logging(self.bot, "a server hit its daily limit", log_level=log_type.CRITICAL,
+                            ping_developer=False)
+
+        sent = self.sent_to(CRITICAL_CHANNEL_ID)
+        self.assertIn("a server hit its daily limit", sent[0])
+        self.assertNotIn(DEVELOPER_MENTION, sent[0])
+
     async def test_does_not_ping_the_developer_on_a_regular_error(self):
         await utils.logging(self.bot, "a smaller problem", log_level=log_type.ERROR)
 

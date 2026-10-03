@@ -16,7 +16,7 @@ from datetime import timezone
 from unittest import mock
 
 import utils
-from enums import calculation_method_type
+from enums import calculation_method_type, log_type
 
 from tests.fakes import FakePermissions
 from tests.test_server_class import build_server
@@ -223,9 +223,11 @@ class GateTestCase(unittest.IsolatedAsyncioTestCase):
         self.embed = object()
         self.create_embed = Recorder(result=self.embed)
         self.logged = []
+        self.log_options = []
 
         async def record_log(_bot, message, *args, **kwargs):
             self.logged.append(str(message))
+            self.log_options.append(kwargs)
 
         self.reaction_total = 5
 
@@ -447,6 +449,16 @@ class DailyPostLimitTests(GateTestCase):
         self.build(messages_today=100)
         await self.run_gate()
         self.assertTrue(any("exceeded the daily limit" in entry for entry in self.logged))
+
+    async def test_reports_the_limit_as_critical_without_a_ping(self):
+        """It recurs for every reaction while the server is at its limit, so it must not ping each time."""
+        self.build(messages_today=100)
+        await self.run_gate()
+
+        options = next(kwargs for entry, kwargs in zip(self.logged, self.log_options)
+                       if "exceeded the daily limit" in entry)
+        self.assertEqual(log_type.CRITICAL, options["log_level"])
+        self.assertFalse(options["ping_developer"])
 
 
 class BelowThresholdTests(GateTestCase):

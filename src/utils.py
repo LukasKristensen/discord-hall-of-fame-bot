@@ -83,7 +83,9 @@ async def validate_message(reaction_event: discord.RawReactionActionEvent, bot: 
         return
 
     if hall_of_fame_message_repo.guild_message_count_today(connection, guild_id) >= daily_post_limit:
-        await logging(bot, f"Guild {guild_id} has exceeded the daily limit for hall of fame posts.", source_message.guild.id, log_level=log_type.CRITICAL, validate_for_duplicates=True)
+        # Recurs for every reaction while the server is at its limit, so it is kept out of the pings
+        await logging(bot, f"Guild {guild_id} has exceeded the daily limit for hall of fame posts.", source_message.guild.id,
+                      log_level=log_type.CRITICAL, validate_for_duplicates=True, ping_developer=False)
         existing_messages = [message async for message in target_channel.history(limit=30)]
         for existing_message in existing_messages:
             if existing_message.author.id == bot.user.id and "has hit the daily limit of" in existing_message.content:
@@ -625,7 +627,8 @@ async def send_server_owner_error_message(owner, e, bot):
             await logging(bot, f"Failed to send error message to server owner {owner.name}: {history_error}")
 
 
-async def logging(bot: discord.Client, message, server_id=None, new_value=None, log_level=log_type.ERROR, validate_for_duplicates=False):
+async def logging(bot: discord.Client, message, server_id=None, new_value=None, log_level=log_type.ERROR,
+                  validate_for_duplicates=False, ping_developer=True):
     """
     Log an error message to the error channel
     :param bot:
@@ -634,6 +637,9 @@ async def logging(bot: discord.Client, message, server_id=None, new_value=None, 
     :param new_value: The new value of the server configuration
     :param log_level: The type of log message
     :param validate_for_duplicates: Whether to check for duplicate logging messages
+    :param ping_developer: Whether a critical message mentions the developer. Turned off for critical
+        events that recur on their own, such as a server reaching its daily post limit, which belong
+        in the critical channel but would otherwise ping on every repeat
     :return:
     """
     log_channels = {
@@ -660,7 +666,7 @@ async def logging(bot: discord.Client, message, server_id=None, new_value=None, 
         if validate_for_duplicates and not recently_logged_messages.add_if_absent(f"{log_level}:{server_id}:{message}"):
             return  # Do not send duplicate error message
 
-        message_prefix = "<@230698327589650432> " if log_level == log_type.CRITICAL else ""
+        message_prefix = "<@230698327589650432> " if log_level == log_type.CRITICAL and ping_developer else ""
         await channel.send(f"{message_prefix}```diff\n{date_formatted_message}\n```")
 
 
