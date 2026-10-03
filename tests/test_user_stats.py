@@ -52,6 +52,13 @@ class RebuildUserStatsForGuildTests(unittest.TestCase):
         self.assertIn("SUM(reaction_count)", query)
         self.assertEqual(4, query.count("ROW_NUMBER() OVER"))
 
+    def test_leaves_out_posts_migrated_without_an_author(self):
+        """Those were stored with author 0, and ranking them puts a member who does not exist on the board."""
+        server_user_repo.rebuild_user_stats_for_guild(self.connection, 200, self.window)
+        query, _ = self.execute_call()
+
+        self.assertIn("author_id <> 0", query)
+
     def test_leaves_members_with_nothing_this_month_without_a_monthly_rank(self):
         """Otherwise every inactive member is ranked this month, ordered by nothing but their user id."""
         server_user_repo.rebuild_user_stats_for_guild(self.connection, 200, self.window)

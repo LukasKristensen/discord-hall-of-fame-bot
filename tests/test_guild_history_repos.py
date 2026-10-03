@@ -114,6 +114,24 @@ class ActiveServersTests(unittest.TestCase):
         self.assertEqual([], guild_lifecycle_event_repo.get_active_servers_timeseries(connection, MARCH, APRIL))
 
 
+class CreateGuildMonthlySnapshotTableTests(unittest.TestCase):
+    """The captured_at conversion shifts every row on a non-UTC server if it runs on a converted column."""
+
+    def altered(self, current_type):
+        connection = FakeConnection(row=(current_type,) if current_type else None)
+        guild_monthly_snapshot_repo.create_guild_monthly_snapshot_table(connection)
+        return [query for query in connection.queries if "ALTER COLUMN captured_at" in query]
+
+    def test_does_not_convert_a_column_that_is_already_timezone_aware(self):
+        self.assertEqual([], self.altered("timestamp with time zone"))
+
+    def test_converts_a_naive_column_once(self):
+        self.assertEqual(1, len(self.altered("timestamp without time zone")))
+
+    def test_does_nothing_when_the_column_cannot_be_found(self):
+        self.assertEqual([], self.altered(None))
+
+
 class UpsertGuildMonthlySnapshotTests(unittest.TestCase):
     def test_writes_the_size_and_activity_of_one_server_for_one_month(self):
         connection = FakeConnection()

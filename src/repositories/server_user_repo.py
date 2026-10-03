@@ -151,6 +151,10 @@ def rebuild_user_stats_for_guild(connection, guild_id, monthly_window_start) -> 
             FROM hall_of_fame_message
             WHERE guild_id = %(guild_id)s
               AND author_id IS NOT NULL
+              -- Posts migrated from MongoDB without an author were stored with author 0, which is
+              -- nobody. The rebuild this replaced skipped them, and ranking them puts a member who
+              -- does not exist on every leaderboard
+              AND author_id <> 0
               AND created_at IS NOT NULL
               AND EXISTS (SELECT 1 FROM server_configs WHERE server_configs.guild_id = %(guild_id)s)
             GROUP BY author_id

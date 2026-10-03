@@ -587,6 +587,32 @@ class UserStatisticsSweepTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("230", logged)
         self.assertIn("deadlock detected", logged)
 
+    async def test_every_rebuild_runs_under_a_statement_timeout(self):
+        """A rebuild blocks the event loop, so only the database can stop one that stalls."""
+        queries_at_first_rebuild = []
+
+        def note_queries(_guild_id):
+            if not queries_at_first_rebuild:
+                queries_at_first_rebuild.extend(self.connection.queries)
+
+        self.patch_rebuild(side_effect=note_queries)
+        await utils.update_user_database(self.bot, self.connection)
+
+        self.assertEqual(["SET statement_timeout = %s"], queries_at_first_rebuild)
+        self.assertEqual([(utils.user_stats_statement_timeout_ms,)], self.connection.parameters[:1])
+        self.assertEqual("RESET statement_timeout", self.connection.queries[-1])
+
+    async def test_a_cancelled_rebuild_does_not_stop_the_sweep(self):
+        def time_out_on_one(guild_id):
+            if guild_id == 230:
+                raise RuntimeError("canceling statement due to statement timeout")
+
+        self.patch_rebuild(side_effect=time_out_on_one)
+        await utils.update_user_database(self.bot, self.connection)
+
+        self.assertEqual(self.guild_ids, self.rebuilt)
+        self.assertEqual("RESET statement_timeout", self.connection.queries[-1])
+
 
 if __name__ == "__main__":
     unittest.main()

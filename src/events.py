@@ -1,7 +1,6 @@
 import discord
 import asyncio
 import datetime
-from contextlib import contextmanager
 import concurrency
 import utils
 from translations import messages
@@ -143,38 +142,6 @@ async def guild_remove(server, connection):
     utils.delete_database_context(server.id, connection)
 
 
-@contextmanager
-def statement_timeout(connection, milliseconds: int):
-    """
-    Have the database cancel any statement on this connection that runs longer than the limit.
-
-    The limit is set for the session rather than with SET LOCAL, because the repositories commit as
-    they go and SET LOCAL would be dropped at the first commit. Pooled connections are reused, so it
-    is always reset afterwards, after rolling back a transaction the failure may have left aborted.
-    :param connection: A connection borrowed for this block alone
-    :param milliseconds: The longest a single statement may run
-    """
-    _execute_and_commit(connection, "SET statement_timeout = %s", (milliseconds,))
-    try:
-        yield
-    except BaseException:
-        connection.rollback()
-        raise
-    else:
-        connection.commit()
-    finally:
-        _execute_and_commit(connection, "RESET statement_timeout")
-
-
-def _execute_and_commit(connection, sql, params=None):
-    cursor = connection.cursor()
-    try:
-        cursor.execute(sql, params)
-    finally:
-        cursor.close()
-    connection.commit()
-
-
 async def daily_task(bot, connection, server_classes, dev_testing, borrow_connection):
     """
     Daily task to check for updating the leaderboard
@@ -200,7 +167,7 @@ async def daily_task(bot, connection, server_classes, dev_testing, borrow_connec
 
     async def update_one_leaderboard(server_class):
         async with borrow_connection() as guild_connection:
-            with statement_timeout(guild_connection, daily_task_statement_timeout_ms):
+            with utils.statement_timeout(guild_connection, daily_task_statement_timeout_ms):
                 await utils.update_leaderboard(guild_connection, bot, server_class)
 
     async def report_leaderboard_failure(server_class, error):

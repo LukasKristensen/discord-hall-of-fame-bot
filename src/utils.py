@@ -3,6 +3,7 @@ import discord
 import datetime
 from datetime import timezone
 import asyncio
+from contextlib import contextmanager
 from message_reactions import most_reacted_emoji, reaction_count
 from classes import server_class
 from enums import command_refs, log_type, calculation_method_type
@@ -757,6 +758,43 @@ monthly_stats_window_days = 30
 # How many guilds are rebuilt before the sweep hands control back to the event loop
 user_stats_guilds_per_yield = 25
 
+# The longest one guild's stats rebuild may run before the database cancels it
+user_stats_statement_timeout_ms = 20_000
+
+
+@contextmanager
+def statement_timeout(connection, milliseconds: int):
+    """
+    Have the database cancel any statement on this connection that runs longer than the limit.
+
+    psycopg2 blocks the event loop while a query runs, so an asyncio timeout cannot fire during a
+    stalled one; only the database can stop it. The limit is set for the session rather than with
+    SET LOCAL, because the repositories commit as they go and SET LOCAL would be dropped at the first
+    commit. Connections are reused, so it is always reset afterwards, after rolling back a
+    transaction the failure may have left aborted.
+    :param connection: A connection that runs nothing else while the block is open
+    :param milliseconds: The longest a single statement may run
+    """
+    _execute_and_commit(connection, "SET statement_timeout = %s", (milliseconds,))
+    try:
+        yield
+    except BaseException:
+        connection.rollback()
+        raise
+    else:
+        connection.commit()
+    finally:
+        _execute_and_commit(connection, "RESET statement_timeout")
+
+
+def _execute_and_commit(connection, sql, params=None):
+    cursor = connection.cursor()
+    try:
+        cursor.execute(sql, params)
+    finally:
+        cursor.close()
+    connection.commit()
+
 
 def monthly_window_start(now=None):
     """
@@ -791,18 +829,22 @@ async def update_user_database(bot: discord.Client, connection):
 
     rebuilt = 0
     failed = 0
-    for position, guild in enumerate(bot.guilds, start=1):
-        try:
-            server_user_repo.rebuild_user_stats_for_guild(connection, guild.id, window_start)
-            rebuilt += 1
-        except Exception as e:
-            failed += 1
-            # A failed statement aborts the transaction, and every guild after it shares this
-            # connection, so it is reset here rather than failing the rest of the sweep
-            connection.rollback()
-            await logging(bot, f"Failed to update user stats for guild {guild.id}: {e}", guild.id)
-        if position % user_stats_guilds_per_yield == 0:
-            await asyncio.sleep(0)
+    # Each rebuild blocks the event loop while it runs, so the database cancels any one that stalls
+    # rather than letting it freeze reactions and commands. A cancelled rebuild fails like any other
+    # and the sweep carries on with the next guild
+    with statement_timeout(connection, user_stats_statement_timeout_ms):
+        for position, guild in enumerate(bot.guilds, start=1):
+            try:
+                server_user_repo.rebuild_user_stats_for_guild(connection, guild.id, window_start)
+                rebuilt += 1
+            except Exception as e:
+                failed += 1
+                # A failed statement aborts the transaction, and every guild after it shares this
+                # connection, so it is reset here rather than failing the rest of the sweep
+                connection.rollback()
+                await logging(bot, f"Failed to update user stats for guild {guild.id}: {e}", guild.id)
+            if position % user_stats_guilds_per_yield == 0:
+                await asyncio.sleep(0)
     await logging(bot, f"Finished updating user database: {rebuilt} rebuilt, {failed} failed")
 
 
