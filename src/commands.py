@@ -85,26 +85,6 @@ async def get_help(interaction: discord.Interaction):
     await interaction.response.send_message(embed=build_help_embed())
 
 
-async def manual_sweep(interaction: discord.Interaction, guild_id: int, sweep_limit, sweep_limited: bool, bot: discord.Client,
-                       collection, reaction_threshold: int, post_due_date: int, target_channel_id: int,
-                       allow_messages_in_hof_channel: bool):
-    """
-    Command to manually sweep all messages in a server [DEV]
-    :param interaction:
-    :param guild_id:
-    :param sweep_limit:
-    :param sweep_limited:
-    :param bot:
-    :param collection:
-    :param reaction_threshold:
-    :param post_due_date:
-    :param target_channel_id:
-    :param allow_messages_in_hof_channel:
-    :return:
-    """
-    await utils.check_all_server_messages(int(guild_id), sweep_limit, sweep_limited, bot, collection, reaction_threshold, post_due_date, target_channel_id, allow_messages_in_hof_channel, interaction)
-
-
 async def set_reaction_threshold(interaction: discord.Interaction, reaction_threshold: int, connection,
                                  method_label: str, server_config):
     """
