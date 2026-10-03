@@ -67,8 +67,11 @@ SERVERS_SQL = f"""
         GROUP BY guild_id
     ) activity ON activity.guild_id = sc.guild_id
     LEFT JOIN (
+        -- The snapshot stores 0 when Discord did not report a member count, which is unknown
+        -- rather than empty, so the latest snapshot that has a count is used instead
         SELECT DISTINCT ON (guild_id) guild_id, member_count
         FROM guild_monthly_snapshot
+        WHERE member_count > 0
         ORDER BY guild_id, month_start DESC, captured_at DESC
     ) latest_snapshot ON latest_snapshot.guild_id = sc.guild_id
 """

@@ -7,9 +7,13 @@ environment. Nothing outside production has any use for them, and a process that
 credential should not be holding one.
 
 This module is the single place that decides what counts as production, so that the answer cannot
-drift between the bot and the services it reports to. It is also the only place that reads the .env
-file, because gating the readers is not enough: loading the whole file would still put every live
-credential into the process environment of a development run.
+drift between the bot and the services it reports to. It is also the only Python code that reads the
+.env file, because gating the readers is not enough: loading the whole file would still put every
+live credential into the process environment of a development run.
+
+The Pi's deployment scripts, src/run.sh and src/pg_backup.sh, export the whole .env themselves before
+starting the bot or a backup. That is intended: they only ever run in production, where every value
+is needed. A development run goes through this module and never through them.
 """
 
 import os

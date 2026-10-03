@@ -77,6 +77,11 @@ class ServersQueryTests(unittest.TestCase):
         self.assertIn("COALESCE(latest_snapshot.member_count, sc.server_member_count, 0)", queries.SERVERS_SQL)
         self.assertIn("ORDER BY guild_id, month_start DESC", queries.SERVERS_SQL)
 
+    def test_a_snapshot_without_a_member_count_does_not_override_a_known_one(self):
+        """The snapshot stores 0 when Discord reported no count, and that 0 must not win the COALESCE."""
+        snapshot = queries.SERVERS_SQL.split("FROM guild_monthly_snapshot")[1].split("ORDER BY")[0]
+        self.assertIn("WHERE member_count > 0", snapshot)
+
     def test_counts_migrated_posts_but_keeps_their_placeholder_date_off_the_timeline(self):
         """Posts migrated from MongoDB carry a 1970 date, but they are still posts the server made."""
         activity = queries.SERVERS_SQL.split("FROM hall_of_fame_message")[0].split("LEFT JOIN (")[1]
