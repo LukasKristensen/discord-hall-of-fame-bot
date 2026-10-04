@@ -234,6 +234,7 @@ class GateTestCase(unittest.IsolatedAsyncioTestCase):
             ("logging", record_log),
             ("reaction_count", count_reactions),
             ("daily_limit_handled_on", {}),
+            ("missing_channels_logged", set()),
         ):
             patcher = mock.patch.object(utils, name, replacement)
             patcher.start()
@@ -297,6 +298,21 @@ class ChannelVisibilityTests(GateTestCase):
         self.build(target_channel_missing=True)
         await self.run_gate()
         self.assertTrue(any("Could not find the Hall of Fame channel" in entry for entry in self.logged))
+
+    async def test_reports_the_missing_hall_of_fame_channel_once(self):
+        """Reactions keep arriving in a server whose board was deleted, which must not repeat the log."""
+        self.build(target_channel_missing=True)
+        await self.run_gate()
+        await self.run_gate()
+
+        self.assertEqual(1, sum("Could not find the Hall of Fame channel" in entry for entry in self.logged))
+
+    async def test_stays_quiet_on_later_days_of_the_same_boot(self):
+        self.build(target_channel_missing=True)
+        utils.missing_channels_logged.add(GUILD_ID)
+        await self.run_gate()
+
+        self.assertFalse(any("Could not find the Hall of Fame channel" in entry for entry in self.logged))
 
 
 class PostDueDateTests(GateTestCase):

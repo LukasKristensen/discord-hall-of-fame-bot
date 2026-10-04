@@ -15,6 +15,8 @@ duplicate_log_window_seconds = 600
 recently_logged_messages = ExpiringSet(ttl_seconds=duplicate_log_window_seconds)
 # Guild ID to the day its reaching the daily post limit was last handled, so it is logged and announced once a day
 daily_limit_handled_on = {}
+# Guild IDs whose missing Hall of Fame channel has been logged, so each server is reported once per boot
+missing_channels_logged = set()
 
 
 async def validate_message(reaction_event: discord.RawReactionActionEvent, bot: discord.Client, connection,
@@ -79,8 +81,7 @@ async def validate_message(reaction_event: discord.RawReactionActionEvent, bot: 
 
     target_channel = bot.get_channel(target_channel_id)
     if target_channel is None:
-        await logging(bot, f"Could not find the Hall of Fame channel {target_channel_id} of guild {guild_id}",
-                      guild_id, validate_for_duplicates=True)
+        await report_missing_hall_of_fame_channel(bot, guild_id, target_channel_id)
         return
 
     if hall_of_fame_message_repo.guild_message_count_today(connection, guild_id) >= daily_post_limit:
@@ -251,6 +252,26 @@ async def update_leaderboard(connection, bot: discord.Client, server_config: ser
             embed=await create_embed(original_message, server_config.reaction_threshold, connection, reaction_config))
 
 
+async def report_missing_hall_of_fame_channel(bot: discord.Client, guild_id: int, channel_id: int,
+                                             guild_name: str = None):
+    """
+    Log that a server's Hall of Fame channel cannot be found, once per boot for each server
+    Every reaction in such a server and the daily task all end up here, and the duplicate guard only
+    lasts ten minutes, so without this the same servers fill the error channel all day
+    :param bot: The Discord bot
+    :param guild_id: The ID of the server
+    :param channel_id: The ID of the Hall of Fame channel that could not be found
+    :param guild_name: The name of the server, when known
+    :return: None
+    """
+    if guild_id in missing_channels_logged:
+        return
+    missing_channels_logged.add(guild_id)
+
+    server = f"guild {guild_id}" if guild_name is None else f"server {guild_name}"
+    await logging(bot, f"Could not find the Hall of Fame channel {channel_id} of {server}", guild_id)
+
+
 async def post_hall_of_fame_message(message: discord.Message, bot: discord.Client, connection, target_channel_id: int,
                                     reaction_threshold: int, config: dict = None):
     """
@@ -265,8 +286,7 @@ async def post_hall_of_fame_message(message: discord.Message, bot: discord.Clien
     """
     target_channel = bot.get_channel(target_channel_id)
     if target_channel is None:
-        await logging(bot, f"Could not find the Hall of Fame channel {target_channel_id} of guild {message.guild.id}",
-                      message.guild.id, validate_for_duplicates=True)
+        await report_missing_hall_of_fame_channel(bot, message.guild.id, target_channel_id)
         return
     video_link = check_video_extension(message)
     video_message = None

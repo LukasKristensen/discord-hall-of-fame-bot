@@ -58,6 +58,12 @@ class TopGgPostBotStatsTests(unittest.TestCase):
         self.assertEqual(502, result[0])
         self.assertIn("error", result[1])
 
+    def test_an_accepted_count_without_a_json_body_is_not_an_error(self):
+        """top.gg answers 200 with no JSON body, which used to be logged as an error."""
+        result, _ = self.post(FakeResponse(status_code=200, json_fails=True))
+
+        self.assertEqual((200, {}), result)
+
     def test_leaves_out_the_shard_fields_until_the_bot_is_sharded(self):
         _, call = self.post(FakeResponse())
 
@@ -97,6 +103,11 @@ class DiscordBotListPostBotStatsTests(unittest.TestCase):
 
         self.assertEqual(500, result[0])
         self.assertIn("error", result[1])
+
+    def test_an_accepted_count_without_a_json_body_is_not_an_error(self):
+        result, _ = self.post(FakeResponse(status_code=200, json_fails=True))
+
+        self.assertEqual((200, {}), result)
 
 
 class DiscordBotListCommandListTests(unittest.TestCase):

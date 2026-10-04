@@ -103,7 +103,11 @@ async def on_message(message: discord.Message, bot: discord.Client, server_confi
         # once per message posted, which is exactly the situation the permission is missing in
         return
 
-    await message.delete()
+    try:
+        await message.delete()
+    except discord.NotFound:
+        # Removed by someone else first, often another moderation bot, so there is nothing to explain
+        return
 
     # Without this the reminder itself fails, and the member is left with a deletion and no reason
     if not permissions.send_messages:
@@ -112,7 +116,11 @@ async def on_message(message: discord.Message, bot: discord.Client, server_confi
     msg = await message.channel.send(f"Only Hall of Fame messages are allowed in this channel, {message.author.mention}. "
                                      f"Can be disabled by {command_refs.ALLOW_MESSAGES_IN_HOF_CHANNEL}")
     await asyncio.sleep(5)
-    await msg.delete()
+    try:
+        await msg.delete()
+    except discord.NotFound:
+        # A moderator or another bot already cleared the reminder
+        pass
 
 
 async def guild_join(server, connection, bot, custom_channel: discord.TextChannel = None):
@@ -210,7 +218,8 @@ async def check_write_permissions_to_hall_of_fame_channel(bot: discord.Client, s
             return
         channel = guild.get_channel(server_class.hall_of_fame_channel_id)
         if not channel:
-            await utils.logging(bot, f"Could not find Hall of Fame channel for server {guild.name}", guild.id)
+            await utils.report_missing_hall_of_fame_channel(bot, guild.id, server_class.hall_of_fame_channel_id,
+                                                            guild.name)
             # await utils.send_message_to_highest_prio_channel(bot, guild, messages.FAILED_TO_FIND_HOF_CHANNEL)
             return
         permissions = channel.permissions_for(guild.me)

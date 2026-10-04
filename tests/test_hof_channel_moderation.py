@@ -1,11 +1,15 @@
+import types
 import unittest
 from unittest import mock
+
+import discord
 
 from tests.fakes import (FakeBotWithGuildLookup, FakeChannelMessage, FakeGuildWithChannels, FakeMemberGuild,
                          FakePermissions, FakeTextChannel)
 from tests.test_server_class import build_server
 
 import events
+import utils
 
 
 class OnMessageTests(unittest.IsolatedAsyncioTestCase):
@@ -82,6 +86,33 @@ class OnMessageTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertFalse(message.deleted)
 
+    async def test_does_nothing_more_when_the_message_was_already_removed(self):
+        """Another moderation bot often deletes the message first, which is not an error."""
+        message, channel, server = self.build()
+        message.delete = self.raise_not_found
+        await events.on_message(message, None, server)
+
+        self.assertEqual([], channel.sent)
+
+    async def test_survives_its_reminder_being_removed_by_someone_else(self):
+        message, channel, server = self.build()
+        send = channel.send
+
+        async def send_reminder(content):
+            reminder = await send(content)
+            reminder.delete = self.raise_not_found
+            return reminder
+
+        channel.send = send_reminder
+        await events.on_message(message, None, server)
+
+        self.assertTrue(message.deleted)
+        self.assertEqual(1, len(channel.sent))
+
+    @staticmethod
+    async def raise_not_found():
+        raise discord.NotFound(types.SimpleNamespace(status=404, reason="Not Found"), "Unknown Message")
+
     async def test_leaves_the_channel_alone_when_chatting_is_allowed(self):
         message, channel, server = self.build(allow_messages=True)
         await events.on_message(message, None, server)
@@ -97,10 +128,15 @@ class DailyPermissionCheckTests(unittest.IsolatedAsyncioTestCase):
 
     def setUp(self):
         self.warnings = []
+        self.logged = []
 
-        logging = mock.patch("events.utils.logging", new=self.record_nothing)
+        logging = mock.patch("events.utils.logging", new=self.record_log)
         logging.start()
         self.addCleanup(logging.stop)
+
+        logged_on = mock.patch.object(utils, "missing_channels_logged", set())
+        logged_on.start()
+        self.addCleanup(logged_on.stop)
 
         notify = mock.patch("events.utils.send_message_to_highest_prio_channel", new=self.record_warning)
         notify.start()
@@ -110,12 +146,16 @@ class DailyPermissionCheckTests(unittest.IsolatedAsyncioTestCase):
     async def record_nothing(*_args, **_kwargs):
         return None
 
+    async def record_log(self, _bot, message, *_args, **_kwargs):
+        self.logged.append(str(message))
+
     async def record_warning(self, _bot, guild, content):
         self.warnings.append((guild.id, content))
 
-    async def sweep(self, permissions, allow_messages=False):
+    async def sweep(self, permissions, allow_messages=False, channel_missing=False):
         channel = FakeTextChannel(channel_id=self.HOF_CHANNEL_ID, permissions=permissions)
-        guild = FakeGuildWithChannels(guild_id=200, channels={self.HOF_CHANNEL_ID: channel})
+        channels = {} if channel_missing else {self.HOF_CHANNEL_ID: channel}
+        guild = FakeGuildWithChannels(guild_id=200, channels=channels)
         bot = FakeBotWithGuildLookup({200: guild})
         server = build_server(guild_id=200, hall_of_fame_channel_id=self.HOF_CHANNEL_ID,
                               allow_messages_in_hof_channel=allow_messages)
@@ -143,6 +183,20 @@ class DailyPermissionCheckTests(unittest.IsolatedAsyncioTestCase):
         content = warnings[0][1]
         self.assertIn("Send Messages", content)
         self.assertIn("View Channel", content)
+
+    async def test_reports_a_missing_hall_of_fame_channel_with_the_server_name(self):
+        await self.sweep(FakePermissions(), channel_missing=True)
+
+        self.assertEqual(1, len(self.logged))
+        self.assertIn("Could not find the Hall of Fame channel", self.logged[0])
+        self.assertIn("Test Server", self.logged[0])
+
+    async def test_skips_a_missing_channel_the_reactions_already_reported(self):
+        """One line per server for the whole boot, whichever of the two noticed it first."""
+        utils.missing_channels_logged.add(200)
+        await self.sweep(FakePermissions(), channel_missing=True)
+
+        self.assertEqual([], self.logged)
 
 
 if __name__ == "__main__":

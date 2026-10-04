@@ -53,6 +53,9 @@ def post_bot_stats(server_count: int, api_key: str, shards=None, shard_id=None, 
     try:
         return response.status_code, response.json()
     except requests.exceptions.JSONDecodeError:
+        if response.status_code == 200:
+            # The count was accepted, the site just answered without a JSON body
+            return response.status_code, {}
         return response.status_code, {"error": "Invalid JSON response from server"}
 
 

@@ -122,6 +122,7 @@ class PostingTestCase(unittest.IsolatedAsyncioTestCase):
         self.patch(utils, "logging", record_log)
         self.patch(utils, "reaction_count", count_reactions)
         self.patch(utils, "create_embed", build_embed)
+        self.patch(utils, "missing_channels_logged", set())
 
         self.original_cache = utils.recently_logged_messages
         utils.recently_logged_messages = ExpiringSet(ttl_seconds=600)
