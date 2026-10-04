@@ -1,9 +1,13 @@
 import requests
-import os
-from dotenv import load_dotenv
+import environment
 
-load_dotenv()
-auth_key = os.getenv('DISCORD_BOT_LIST_API_KEY')
+
+def auth_key():
+    """
+    :return: The discordbotlist.com key in production, and None elsewhere, as only the live bot
+             reports to discordbotlist.com
+    """
+    return environment.production_secret('DISCORD_BOT_LIST_API_KEY')
 
 
 def post_command_list():
@@ -14,7 +18,7 @@ def post_command_list():
     url = "https://discordbotlist.com/api/v1/bots/1177041673352663070/commands"
     headers = {
         "Content-Type": "application/json",
-        "Authorization": auth_key
+        "Authorization": auth_key()
     }
     payload = [
         {
@@ -111,7 +115,7 @@ def post_bot_stats(server_count: int):
     url = "https://discordbotlist.com/api/v1/bots/1177041673352663070/stats"
     headers = {
         "Content-Type": "application/json",
-        "Authorization": auth_key
+        "Authorization": auth_key()
     }
     payload = {
         "guilds": server_count

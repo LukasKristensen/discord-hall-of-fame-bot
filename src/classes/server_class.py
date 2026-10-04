@@ -23,6 +23,21 @@ class Server:
         self.server_member_count = server_member_count
         self.require_image_or_video = require_image_or_video
 
+    def reaction_config(self) -> dict:
+        """
+        The configuration needed to count reactions, in the shape the reaction helpers expect.
+        Served from memory so that the reaction event path does not query the database, and kept
+        correct because every command that changes one of these values also updates this object.
+        :return: The reaction related server configuration
+        """
+        return {
+            "reaction_count_calculation_method": self.reaction_count_calculation_method,
+            "include_author_in_reaction_calculation": self.include_author_in_reaction_calculation,
+            "custom_emoji_check_logic": self.custom_emoji_check_logic,
+            "whitelisted_emojis": self.whitelisted_emojis
+        }
+
+
 class ServerClass(Server):
     @staticmethod
     def from_row(row):

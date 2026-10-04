@@ -2,14 +2,11 @@ import base64
 import requests
 from urllib.parse import urlparse
 import os
-from dotenv import load_dotenv
+import environment
 
-dev_test = os.getenv('DEV_TEST') == "True"
-load_dotenv()
-if dev_test:
-    TOKEN = os.getenv('DEV_KEY')
-else:
-    TOKEN = os.getenv('KEY')
+# Decided after environment has loaded .env, so DEV_TEST from the file counts, and a development run
+# never has the live token to pick
+TOKEN = os.getenv('DEV_KEY') if environment.is_development() else os.getenv('KEY')
 
 
 def custom_bot_profile_for_guild(guild_id: int, image_url: str = None, cover_url: str = None):

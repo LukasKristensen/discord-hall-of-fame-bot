@@ -12,13 +12,28 @@ def create_guild_monthly_snapshot_table(connection):
         )
         """
     )
+    # Tables created before captured_at was timezone aware hold it as a naive UTC timestamp, so those
+    # are converted once. The conversion must not run on a column that is already TIMESTAMPTZ: there
+    # AT TIME ZONE 'UTC' yields a naive value that is cast back using the session's time zone, which
+    # shifts every row by that offset on every startup of a server not set to UTC
     cursor.execute(
         """
-        ALTER TABLE guild_monthly_snapshot
-        ALTER COLUMN captured_at TYPE TIMESTAMPTZ
-        USING captured_at AT TIME ZONE 'UTC'
+        SELECT data_type
+        FROM information_schema.columns
+        WHERE table_schema = current_schema()
+          AND table_name = 'guild_monthly_snapshot'
+          AND column_name = 'captured_at'
         """
     )
+    column = cursor.fetchone()
+    if column is not None and column[0] == "timestamp without time zone":
+        cursor.execute(
+            """
+            ALTER TABLE guild_monthly_snapshot
+            ALTER COLUMN captured_at TYPE TIMESTAMPTZ
+            USING captured_at AT TIME ZONE 'UTC'
+            """
+        )
     cursor.execute(
         """
         CREATE INDEX IF NOT EXISTS idx_guild_monthly_snapshot_month_start
