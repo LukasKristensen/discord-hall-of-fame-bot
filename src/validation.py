@@ -8,7 +8,7 @@ POST_DUE_DATE_MIN = 1
 POST_DUE_DATE_MAX = 3650
 
 # A whitelist is read on every reaction, and past this it has stopped being a whitelist
-WHITELIST_MAX_SIZE = 100
+WHITELIST_MAX_SIZE = 1000
 
 custom_emoji_pattern = re.compile(r"^<(a?):([A-Za-z0-9_]{2,32}):([0-9]{15,21})>$")
 
