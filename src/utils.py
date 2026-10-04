@@ -1,4 +1,3 @@
-import random
 import discord
 import datetime
 from datetime import timezone
@@ -292,18 +291,6 @@ async def post_hall_of_fame_message(message: discord.Message, bot: discord.Clien
         await logging(bot, e, message.guild.id, log_level=log_type.CRITICAL)
 
 
-async def set_footer(embed: discord.Embed):
-    """
-    Set the footer of an embed
-    :param embed: The embed to set the footer for
-    :return: None
-    """
-    if random.random() > 0.05 or embed.image:
-        return embed
-
-    embed.add_field(name="Enjoying the bot? Vote for it on top.gg", value="https://top.gg/bot/1177041673352663070/vote", inline=True)
-    return embed
-
 def format_reactions_field_value(count: int, top_reaction) -> str:
     """
     User-facing reactions label.
@@ -372,8 +359,6 @@ async def create_embed(message: discord.Message, reaction_threshold: int, connec
 
         embed.add_field(name="Reactions", value=reactions_field_value, inline=True)
         embed.add_field(name="Jump to Message", value=message.jump_url, inline=False)
-
-        embed = await set_footer(embed)
         return embed
 
     # Check if the message is a sticker
@@ -387,7 +372,6 @@ async def create_embed(message: discord.Message, reaction_threshold: int, connec
         embed.set_author(name=message.author.name, icon_url=message.author.avatar.url if message.author.avatar else None)
         embed.add_field(name="Reactions", value=reactions_field_value, inline=True)
         embed.add_field(name="Jump to Message", value=message.jump_url, inline=False)
-        embed = await set_footer(embed)
         return embed
 
     # Check if the message is a reply to another message
@@ -416,7 +400,6 @@ async def create_embed(message: discord.Message, reaction_threshold: int, connec
 
             embed.add_field(name="Reactions", value=reactions_field_value, inline=True)
             embed.add_field(name="Jump to Message", value=message.jump_url, inline=False)
-        embed = await set_footer(embed)
         return embed
 
     # Include the reference message in the embed if the message has both a reference and attachment with an image content type
@@ -437,8 +420,6 @@ async def create_embed(message: discord.Message, reaction_threshold: int, connec
         
         attachment = message.attachments[0]
         embed.set_image(url=attachment.url)
-
-        embed = await set_footer(embed)
         return embed
 
     # Include the reference message in the embed if the message has both a reference and attachment but the attachment is not an image (e.g. video, file, etc.)
@@ -458,7 +439,6 @@ async def create_embed(message: discord.Message, reaction_threshold: int, connec
         embed.set_author(name=message.author.name, icon_url=message.author.avatar.url if message.author.avatar else None)
         embed.add_field(name="Reactions", value=reactions_field_value, inline=True)
         embed.add_field(name="Jump to Message", value=message.jump_url, inline=False)
-        embed = await set_footer(embed)
         return embed
     else:
         embed = discord.Embed(
@@ -485,8 +465,6 @@ async def create_embed(message: discord.Message, reaction_threshold: int, connec
 
         embed.add_field(name="Reactions", value=reactions_field_value, inline=True)
         embed.add_field(name="Jump to Message", value=message.jump_url, inline=False)
-
-        embed = await set_footer(embed)
         return embed
 
 

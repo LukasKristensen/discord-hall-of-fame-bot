@@ -97,12 +97,6 @@ class CheckVideoExtensionTests(unittest.TestCase):
 
 
 class CreateEmbedTests(unittest.IsolatedAsyncioTestCase):
-    def setUp(self):
-        # The footer is added at random, so it is disabled to keep the assertions stable
-        patcher = mock.patch("utils.random.random", return_value=1.0)
-        patcher.start()
-        self.addCleanup(patcher.stop)
-
     @staticmethod
     def field_names(embed):
         return [field.name for field in embed.fields]
@@ -149,11 +143,6 @@ def embed_with(type_name=None, url=None, image_url=None, thumbnail_url=None):
 
 
 class CreateEmbedContentTests(unittest.IsolatedAsyncioTestCase):
-    def setUp(self):
-        patcher = mock.patch("utils.random.random", return_value=1.0)
-        patcher.start()
-        self.addCleanup(patcher.stop)
-
     @staticmethod
     def field_named(embed, name):
         return next((field for field in embed.fields if field.name == name), None)
@@ -242,30 +231,6 @@ class CreateEmbedContentTests(unittest.IsolatedAsyncioTestCase):
         embed = await utils.create_embed(message, 5, None, REACTION_CONFIG)
 
         self.assertEqual("https://cdn/original.png", embed.image.url)
-
-
-class SetFooterTests(unittest.IsolatedAsyncioTestCase):
-    async def test_usually_leaves_the_embed_alone(self):
-        with mock.patch("utils.random.random", return_value=1.0):
-            embed = await utils.set_footer(discord.Embed())
-
-        self.assertEqual([], embed.fields)
-
-    async def test_occasionally_asks_for_a_vote(self):
-        with mock.patch("utils.random.random", return_value=0.0):
-            embed = await utils.set_footer(discord.Embed())
-
-        self.assertEqual(1, len(embed.fields))
-        self.assertIn("top.gg", embed.fields[0].value)
-
-    async def test_never_asks_for_a_vote_on_an_embed_with_an_image(self):
-        embed_with_image = discord.Embed()
-        embed_with_image.set_image(url="https://cdn/x.png")
-
-        with mock.patch("utils.random.random", return_value=0.0):
-            embed = await utils.set_footer(embed_with_image)
-
-        self.assertEqual([], embed.fields)
 
 
 if __name__ == "__main__":
