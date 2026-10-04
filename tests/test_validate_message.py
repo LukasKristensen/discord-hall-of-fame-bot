@@ -10,6 +10,7 @@ Reaction counting itself is stubbed for the same reason: what is being tested is
 the counting is already covered by ``test_message_reactions``.
 """
 
+import asyncio
 import datetime
 import unittest
 from datetime import timezone
@@ -151,10 +152,9 @@ class FakePostedMessage:
 
 
 class FakeTargetChannel:
-    def __init__(self, messages=None, history=()):
+    def __init__(self, messages=None):
         self.id = TARGET_CHANNEL_ID
         self.messages = messages if messages is not None else {}
-        self.history_messages = list(history)
         self.sent = []
         self.fetched = []
 
@@ -164,16 +164,8 @@ class FakeTargetChannel:
             raise AssertionError(f"The gate fetched an unexpected message id: {message_id!r}")
         return self.messages[message_id]
 
-    def history(self, limit=None):
-        messages = self.history_messages[:limit]
-
-        async def iterator():
-            for message in messages:
-                yield message
-
-        return iterator()
-
     async def send(self, content=None, embed=None):
+        await asyncio.sleep(0)  # Yields like the API call it stands in for, so concurrent reactions interleave
         message = FakePostedMessage(len(self.sent) + 1, content=content or "")
         self.sent.append(message)
         return message
@@ -241,6 +233,7 @@ class GateTestCase(unittest.IsolatedAsyncioTestCase):
             ("create_embed", self.create_embed),
             ("logging", record_log),
             ("reaction_count", count_reactions),
+            ("daily_limit_handled_on", {}),
         ):
             patcher = mock.patch.object(utils, name, replacement)
             patcher.start()
@@ -248,13 +241,13 @@ class GateTestCase(unittest.IsolatedAsyncioTestCase):
 
     def build(self, *, age_days=0, author_bot=False, attachments=(), embeds=(),
               read_messages=True, source_channel_missing=False, target_channel_missing=False,
-              db_message=None, messages_today=0, posted_messages=None, history=()):
+              db_message=None, messages_today=0, posted_messages=None):
         """Assemble the bot, channels and repository the gate will see."""
         guild = FakeGuild()
         self.source_message = FakeSourceMessage(
             guild, age_days=age_days, author_bot=author_bot, attachments=attachments, embeds=embeds)
         self.source_channel = FakeSourceChannel(guild, self.source_message, read_messages=read_messages)
-        self.target_channel = FakeTargetChannel(messages=posted_messages, history=history)
+        self.target_channel = FakeTargetChannel(messages=posted_messages)
 
         channels = {}
         if not source_channel_missing:
@@ -431,20 +424,6 @@ class DailyPostLimitTests(GateTestCase):
         self.assertEqual(1, len(self.target_channel.sent))
         self.assertIn("has hit the daily limit of", self.target_channel.sent[0].content)
 
-    async def test_does_not_repeat_an_announcement_it_already_made(self):
-        already_announced = FakePostedMessage(
-            1, author_id=BOT_USER_ID, content="Server **Test Server** has hit the daily limit of **100 posts**.")
-        self.build(messages_today=100, history=[already_announced])
-        await self.run_gate()
-        self.assertEqual([], self.target_channel.sent)
-
-    async def test_a_similar_message_from_a_member_does_not_count_as_the_announcement(self):
-        member_message = FakePostedMessage(
-            1, author_id=AUTHOR_ID, content="the server has hit the daily limit of posts, apparently")
-        self.build(messages_today=100, history=[member_message])
-        await self.run_gate()
-        self.assertEqual(1, len(self.target_channel.sent))
-
     async def test_reports_reaching_the_limit(self):
         self.build(messages_today=100)
         await self.run_gate()
@@ -459,6 +438,27 @@ class DailyPostLimitTests(GateTestCase):
                        if "exceeded the daily limit" in entry)
         self.assertEqual(log_type.CRITICAL, options["log_level"])
         self.assertFalse(options["ping_developer"])
+
+    async def test_reports_the_limit_once_a_day(self):
+        """Reactions keep arriving all day while the server is at its limit, which must not repeat the log."""
+        self.build(messages_today=100)
+        await self.run_gate()
+        await self.run_gate()
+
+        self.assertEqual(1, sum("exceeded the daily limit" in entry for entry in self.logged))
+        self.assertEqual(1, len(self.target_channel.sent))
+
+    async def test_reactions_arriving_together_announce_the_limit_once(self):
+        """Reactions are handled concurrently, so they must not all pass the check before the notice is sent."""
+        self.build(messages_today=100)
+        await asyncio.gather(*(self.run_gate() for _ in range(5)))
+        self.assertEqual(1, len(self.target_channel.sent))
+
+    async def test_reports_the_limit_again_the_next_day(self):
+        self.build(messages_today=100)
+        utils.daily_limit_handled_on[GUILD_ID] = datetime.date.today() - datetime.timedelta(days=1)
+        await self.run_gate()
+        self.assertTrue(any("exceeded the daily limit" in entry for entry in self.logged))
 
 
 class BelowThresholdTests(GateTestCase):

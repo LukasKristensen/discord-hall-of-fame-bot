@@ -13,6 +13,8 @@ from caches import ExpiringSet
 daily_post_limit = 100
 duplicate_log_window_seconds = 600
 recently_logged_messages = ExpiringSet(ttl_seconds=duplicate_log_window_seconds)
+# Guild ID to the day its reaching the daily post limit was last handled, so it is logged and announced once a day
+daily_limit_handled_on = {}
 
 
 async def validate_message(reaction_event: discord.RawReactionActionEvent, bot: discord.Client, connection,
@@ -82,13 +84,14 @@ async def validate_message(reaction_event: discord.RawReactionActionEvent, bot: 
         return
 
     if hall_of_fame_message_repo.guild_message_count_today(connection, guild_id) >= daily_post_limit:
-        # Recurs for every reaction while the server is at its limit, so it is kept out of the pings
+        # Every reaction lands here while the server is at its limit, so it is handled once a day
+        today = datetime.date.today()
+        if daily_limit_handled_on.get(guild_id) == today:
+            return
+        daily_limit_handled_on[guild_id] = today
+
         await logging(bot, f"Guild {guild_id} has exceeded the daily limit for hall of fame posts.", source_message.guild.id,
                       log_level=log_type.CRITICAL, validate_for_duplicates=True, ping_developer=False)
-        existing_messages = [message async for message in target_channel.history(limit=30)]
-        for existing_message in existing_messages:
-            if existing_message.author.id == bot.user.id and "has hit the daily limit of" in existing_message.content:
-                return
         await target_channel.send(
             f"⚠️ **Hall of Fame limit reached**\n"
             f"Server **{source_message.guild.name}** has hit the daily limit of **{daily_post_limit} posts**.\n"
