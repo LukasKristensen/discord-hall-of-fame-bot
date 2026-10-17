@@ -6,6 +6,38 @@ from repositories import server_config_repo, server_user_repo
 from caches import ExpiringSet
 from translations import messages
 
+INVITE_LINK = (messages.INVITE_BUTTON, messages.INVITE_URL)
+VOTE_LINK = (messages.VOTE_BUTTON, messages.VOTE_URL)
+SUPPORT_SERVER_LINK = (messages.SUPPORT_SERVER_BUTTON, messages.SUPPORT_SERVER_URL)
+
+
+def build_link_buttons(*links: tuple[str, str]) -> discord.ui.View:
+    """
+    A row of link buttons, one per (label, url) pair, in the order given.
+
+    Link buttons open the URL in Discord itself and never call back to the bot, so the view has no
+    timeout and the buttons keep working after a restart. Must be built inside a running event loop.
+    :param links: (label, url) pairs
+    :return: The view to send with the reply
+    """
+    view = discord.ui.View(timeout=None)
+    for label, url in links:
+        view.add_item(discord.ui.Button(style=discord.ButtonStyle.link, label=label, url=url))
+    return view
+
+
+def build_invite_view() -> discord.ui.View:
+    return build_link_buttons(INVITE_LINK, SUPPORT_SERVER_LINK)
+
+
+def build_vote_view() -> discord.ui.View:
+    return build_link_buttons(VOTE_LINK)
+
+
+def build_help_view() -> discord.ui.View:
+    return build_link_buttons(INVITE_LINK, VOTE_LINK, SUPPORT_SERVER_LINK)
+
+
 def build_help_embed() -> discord.Embed:
     """
     The card /help answers with: every command, grouped by who uses it and what it changes.
@@ -63,9 +95,9 @@ def build_help_embed() -> discord.Embed:
 
     embed.add_field(
         name="🔗 Links",
-        value=f"[Support server](https://discord.gg/r98WC5GHcn) · "
-              f"[Add to a server](https://discord.com/oauth2/authorize?client_id=1177041673352663070) · "
-              f"[Vote](https://top.gg/bot/1177041673352663070/vote) · "
+        value=f"[Support server]({messages.SUPPORT_SERVER_URL}) · "
+              f"[Add to a server]({messages.INVITE_URL}) · "
+              f"[Vote]({messages.VOTE_URL}) · "
               f"[Source](https://github.com/LukasKristensen/discord-hall-of-fame-bot)\n"
               f"Found a bug or have an idea? {command_refs.FEEDBACK}\n"
               f"Not working? Check the bot's permissions in the channel, or re-invite it.",
@@ -82,7 +114,7 @@ async def get_help(interaction: discord.Interaction):
     :return:
     """
     # noinspection PyUnresolvedReferences
-    await interaction.response.send_message(embed=build_help_embed())
+    await interaction.response.send_message(embed=build_help_embed(), view=build_help_view())
 
 
 async def set_reaction_threshold(interaction: discord.Interaction, reaction_threshold: int, connection,
@@ -158,7 +190,7 @@ async def user_server_profile(interaction, user, user_stats, connection, month_e
         embed.add_field(name="", value="", inline=False)
         embed.add_field(name="🌟 **Total Hall of Fame Messages**", value="**0**", inline=False)
     embed.set_thumbnail(url=user.display_avatar.url)
-    embed.set_footer(text="Note that this is calculated every 24 hours, so it may not be up to date.")
+    embed.set_footer(text=messages.STATS_FOOTER)
     await interaction.response.send_message(embed=embed)
 
 
@@ -224,7 +256,7 @@ async def server_leaderboard(interaction, connection, month_emoji: str, all_time
             leaderboard += f"{rank}. Unknown Member: {user.get('total_hall_of_fame_message_reactions', 0)} reactions\n"
 
     embed.add_field(name="Leaderboard", value=leaderboard, inline=False)
-    embed.set_footer(text="Note that this is calculated every 24 hours, so it may not be up to date.")
+    embed.set_footer(text=messages.STATS_FOOTER)
     await interaction.followup.send(embed=embed)
 
 
@@ -302,9 +334,9 @@ def build_bot_info_embed(guild, bot_user, server_config) -> discord.Embed:
         inline=True)
     embed.add_field(
         name="Links",
-        value="[Add to a server](https://discord.com/oauth2/authorize?client_id=1177041673352663070)\n"
-              "[Support server](https://discord.gg/r98WC5GHcn)\n"
-              "[Vote](https://top.gg/bot/1177041673352663070/vote)\n"
+        value=f"[Add to a server]({messages.INVITE_URL})\n"
+              f"[Support server]({messages.SUPPORT_SERVER_URL})\n"
+              f"[Vote]({messages.VOTE_URL})\n"
               "[Source](https://github.com/LukasKristensen/discord-hall-of-fame-bot)",
         inline=True)
 

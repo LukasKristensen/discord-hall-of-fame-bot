@@ -13,8 +13,10 @@ from unittest import mock
 import discord
 
 import commands
+import hof_wrapped
 from constants import version
 from repositories import server_config_repo, server_user_repo
+from translations import messages
 
 MONTH_EMOJI = "<:month:1>"
 ALL_TIME_EMOJI = "<:all_time:2>"
@@ -23,10 +25,12 @@ ALL_TIME_EMOJI = "<:all_time:2>"
 class FakeResponse:
     def __init__(self):
         self.messages = []
+        self.views = []
         self.deferred = False
 
-    async def send_message(self, content=None, embed=None, ephemeral=False):
+    async def send_message(self, content=None, embed=None, ephemeral=False, view=None):
         self.messages.append(embed if embed is not None else content)
+        self.views.append(view)
 
     async def defer(self):
         self.deferred = True
@@ -126,6 +130,43 @@ class GetHelpTests(unittest.IsolatedAsyncioTestCase):
 
         values = " ".join(field.value or "" for field in interaction.response.messages[0].fields)
         self.assertIn("discord.gg", values)
+
+    async def test_offers_invite_vote_and_support_buttons(self):
+        interaction = FakeInteraction()
+        await commands.get_help(interaction)
+
+        self.assertEqual([messages.INVITE_URL, messages.VOTE_URL, messages.SUPPORT_SERVER_URL],
+                         [button.url for button in interaction.response.views[0].children])
+
+
+def link_buttons(view):
+    return [(button.label, button.url) for button in view.children]
+
+
+class LinkButtonTests(unittest.IsolatedAsyncioTestCase):
+    """The buttons under /invite, /vote and /help. Views need a running event loop, hence async tests."""
+
+    async def test_invite_offers_the_install_link_first_then_support(self):
+        self.assertEqual([(messages.INVITE_BUTTON, messages.INVITE_URL),
+                          (messages.SUPPORT_SERVER_BUTTON, messages.SUPPORT_SERVER_URL)],
+                         link_buttons(commands.build_invite_view()))
+
+    async def test_vote_offers_only_the_vote_link(self):
+        self.assertEqual([(messages.VOTE_BUTTON, messages.VOTE_URL)], link_buttons(commands.build_vote_view()))
+
+    async def test_buttons_are_links_that_never_expire(self):
+        """A non-link button would need a callback, and a timeout would grey the buttons out."""
+        for view in (commands.build_invite_view(), commands.build_vote_view(), commands.build_help_view()):
+            with self.subTest(view=link_buttons(view)):
+                self.assertIsNone(view.timeout)
+                for button in view.children:
+                    self.assertEqual(discord.ButtonStyle.link, button.style)
+                    self.assertTrue(button.url.startswith("https://"))
+
+    async def test_labels_fit_discords_button_limit(self):
+        for label in (messages.INVITE_BUTTON, messages.VOTE_BUTTON, messages.SUPPORT_SERVER_BUTTON):
+            with self.subTest(label=label):
+                self.assertLessEqual(len(label), 80)
 
 
 def server_config(**overrides):
@@ -351,6 +392,12 @@ class UserServerProfileTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertIn("24 hours", embed.footer.text)
 
+    async def test_points_at_the_invite_command(self):
+        self.patch_top_of_stat()
+        embed = await self.run_command(self.stats)
+
+        self.assertIn("/invite", embed.footer.text)
+
 
 class ServerLeaderboardTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
@@ -398,6 +445,13 @@ class ServerLeaderboardTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("1. Champion: 4 messages", board)
         self.assertIn("2. Runner Up: 2 messages", board)
 
+    async def test_footer_says_when_it_updates_and_points_at_the_invite_command(self):
+        self.patch_top_users()
+        footer = (await self.run_command()).footer.text
+
+        self.assertIn("24 hours", footer)
+        self.assertIn("/invite", footer)
+
     async def test_shows_all_four_boards(self):
         self.patch_top_users()
         board = field_named(await self.run_command(), "Leaderboard").value
@@ -437,3 +491,22 @@ class ServerLeaderboardTests(unittest.IsolatedAsyncioTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class HofWrappedEmbedTests(unittest.IsolatedAsyncioTestCase):
+    """The card /hof_wrapped answers with, built from a member's precomputed Wrapped row."""
+
+    def wrapped_row(self):
+        return {"reaction_count": 12, "hof_message_posts": 3, "fan_of_users": "{}", "users_fans": "{}",
+                "most_used_channels": "{}", "most_used_emojis": "{}",
+                "user_ranks": '{"hallOfFameMessagePosts": 1, "mostUsedChannels": 2, "mostUsedEmojis": 3, '
+                              '"usersFans": 4, "fanOfUsers": 5}',
+                "most_reacted_post_message_id": None, "most_reacted_post_channel_id": None,
+                "most_reacted_post_reaction_count": 0}
+
+    async def test_footer_points_at_the_invite_command(self):
+        member = types.SimpleNamespace(id=77, mention="<@77>", avatar=None,
+                                       default_avatar=types.SimpleNamespace(url="https://cdn.example/0.png"))
+        embed = await hof_wrapped.create_embed(member, self.wrapped_row(), bot=None)
+
+        self.assertEqual(messages.INVITE_FOOTER, embed.footer.text)

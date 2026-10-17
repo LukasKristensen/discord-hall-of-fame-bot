@@ -30,11 +30,13 @@ class FakeResponse:
     def __init__(self):
         self.messages = []
         self.ephemeral = []
+        self.views = []
         self.deferred = False
 
-    async def send_message(self, content=None, embed=None, ephemeral=False):
+    async def send_message(self, content=None, embed=None, ephemeral=False, view=None):
         self.messages.append(embed if embed is not None else content)
         self.ephemeral.append(ephemeral)
+        self.views.append(view)
 
     async def defer(self):
         self.deferred = True
@@ -222,6 +224,24 @@ class SetupDatabasesTests(unittest.TestCase):
         for query in connection.queries:
             with self.subTest(query=query.strip()[:40]):
                 self.assertNotIn("DROP TABLE", query)
+
+
+class LinkCommandTests(MainTestCase):
+    """/invite and /vote answer with buttons rather than a bare URL."""
+
+    async def test_invite_replies_with_the_install_button(self):
+        interaction = FakeInteraction(manage_guild=False)
+        await main.invite.callback(interaction)
+
+        self.assertEqual([messages.INVITE_MESSAGE], interaction.response.messages)
+        self.assertIn(messages.INVITE_URL, [button.url for button in interaction.response.views[0].children])
+
+    async def test_vote_replies_with_the_vote_button(self):
+        interaction = FakeInteraction(manage_guild=False)
+        await main.vote.callback(interaction)
+
+        self.assertEqual([messages.VOTE_MESSAGE], interaction.response.messages)
+        self.assertEqual([messages.VOTE_URL], [button.url for button in interaction.response.views[0].children])
 
 
 class CommandTreeTests(unittest.TestCase):

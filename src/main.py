@@ -515,7 +515,7 @@ async def require_image_or_video(interaction: discord.Interaction, require: bool
 @tree.command(name="vote", description="Vote for the bot on top.gg")
 async def vote(interaction: discord.Interaction):
     # noinspection PyUnresolvedReferences
-    await interaction.response.send_message(messages.VOTE_MESSAGE)
+    await interaction.response.send_message(messages.VOTE_MESSAGE, view=commands.build_vote_view())
     await utils.logging(bot, f"Vote command used by {interaction.user.name} in {interaction.guild.name}",
                         interaction.guild.id, log_level=log_type.COMMAND)
 
@@ -694,7 +694,7 @@ async def set_post_due_date(interaction: discord.Interaction,
 @tree.command(name="invite", description="Invite the bot to your server")
 async def invite(interaction: discord.Interaction):
     # noinspection PyUnresolvedReferences
-    await interaction.response.send_message(messages.INVITE_MESSAGE)
+    await interaction.response.send_message(messages.INVITE_MESSAGE, view=commands.build_invite_view())
     await utils.logging(bot, f"Invite command used by {interaction.user.name} in {interaction.guild.name}",
                         interaction.guild.id, log_level=log_type.COMMAND)
 

@@ -5,8 +5,22 @@ CUSTOM_EMOJI_CHECK_DISABLED = (
     "Custom emoji check logic is not enabled for this server. "
     "Use </custom_emoji_check_logic:1358208382473076848> to enable it."
 )
-VOTE_MESSAGE = "Vote for the bot on top.gg: https://top.gg/bot/1177041673352663070/vote"
-INVITE_MESSAGE = "Invite the bot to your server: <https://discord.com/oauth2/authorize?client_id=1177041673352663070>"
+# /invite and /vote answer with link buttons, so the text says why to click and leaves the URL to the button
+VOTE_MESSAGE = "Votes on top.gg help more servers find Hall of Fame. You can vote every 12 hours."
+INVITE_URL = "https://discord.com/oauth2/authorize?client_id=1177041673352663070"
+VOTE_URL = "https://top.gg/bot/1177041673352663070/vote"
+SUPPORT_SERVER_URL = "https://discord.gg/r98WC5GHcn"
+INVITE_BUTTON = "Add to a server"
+VOTE_BUTTON = "Vote on top.gg"
+SUPPORT_SERVER_BUTTON = "Support server"
+# Footer on every Hall of Fame post: the brand only, since the board is the server's showcase and an ask on
+# every post would read as an ad. The ask goes on replies a member asked for instead
+POST_FOOTER = "Hall of Fame"
+# Footers render plain text only, so the command is named rather than a clickable command_refs mention
+INVITE_FOOTER = "Run a server? Add Hall of Fame with /invite"
+# /user_profile and /leaderboard, whose figures come from the daily task
+STATS_FOOTER = f"Updated every 24 hours · {INVITE_FOOTER}"
+INVITE_MESSAGE = "Add Hall of Fame to another server you run. Need a hand setting it up? Ask in the support server."
 NOT_AUTHORIZED = "You are not authorized to use this command, only for members with manage server permission"
 DEV_NOT_AUTHORIZED = "You are not authorized to use this command, only for developers"
 WHITELIST_CLEARED = "✅ Whitelist cleared. Every emoji counts toward the threshold again until one is added with {command}."

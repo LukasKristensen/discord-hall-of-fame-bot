@@ -9,6 +9,7 @@ from enums import command_refs, log_type, calculation_method_type
 from repositories import (server_config_repo, hall_of_fame_message_repo, server_user_repo, hof_wrapped_repo,
                           hof_wrapped_guild_status_repo)
 from caches import ExpiringSet
+from translations import messages
 
 daily_post_limit = 100
 duplicate_log_window_seconds = 600
@@ -345,6 +346,20 @@ def embed_field_value(content: str) -> str:
     return content if content else "​"
 
 
+def add_post_footer(embed: discord.Embed, guild) -> discord.Embed:
+    """
+    Brand a Hall of Fame post, so members who see the board know which bot made it and how to get it
+    :param embed: The post embed
+    :param guild: The server the post is made in, whose bot member supplies the logo
+    :return: The same embed, with the footer set
+    """
+    bot_member = getattr(guild, "me", None)
+    # The global avatar rather than a server's custom bot profile, so the brand looks the same everywhere
+    avatar = getattr(bot_member, "avatar", None)
+    embed.set_footer(text=messages.POST_FOOTER, icon_url=avatar.url if avatar else None)
+    return embed
+
+
 async def create_embed(message: discord.Message, reaction_threshold: int, connection, config: dict = None) -> discord.Embed:
     """
     Create an embed for a message in the Hall of Fame channel
@@ -353,6 +368,18 @@ async def create_embed(message: discord.Message, reaction_threshold: int, connec
     :param connection: MySQL connection
     :param config: The reaction related server configuration, fetched when not supplied
     :return: The embed for the message
+    """
+    embed = await build_post_embed(message, connection, config)
+    return add_post_footer(embed, message.guild)
+
+
+async def build_post_embed(message: discord.Message, connection, config: dict = None) -> discord.Embed:
+    """
+    The content of a Hall of Fame post, laid out for the kind of message it is
+    :param message: The message to create an embed for
+    :param connection: MySQL connection
+    :param config: The reaction related server configuration, fetched when not supplied
+    :return: The embed for the message, without the footer
     """
     # handle 1024 character limit on embed description
     content = truncate_content(message.content)

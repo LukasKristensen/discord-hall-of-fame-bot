@@ -9,6 +9,7 @@ import json
 import environment
 from constants import version
 from enums import command_refs
+from translations import messages
 
 users = {}
 total_hall_of_fame_posts = 0
@@ -233,6 +234,7 @@ async def create_embed(discord_user, data_for_user_wrapped, bot):
                     inline=False
                 )
 
+    embed.set_footer(text=messages.INVITE_FOOTER)
     return embed
 
 
