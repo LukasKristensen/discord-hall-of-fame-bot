@@ -63,6 +63,8 @@ Run the whole suite with the `hof313` interpreter (see `dev-environment`).
 ## Before finishing
 
 - Leave everything as uncommitted edits.
+- Run the `policy-check` skill and put its one-line outcome in the report. A new setting that stores or
+  shows data in a new way usually means a change to `PRIVACY.md`.
 - Tell the user the command needs its global sync (happens on bot start) before the ID exists, and ask
   for the ID if a mention is needed.
 - Add a line to the next release's Development Log only if the user asks; the `release-notes` skill

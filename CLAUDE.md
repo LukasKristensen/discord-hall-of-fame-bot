@@ -44,6 +44,8 @@ troubleshooting are in the `dev-environment` skill.
 - **CI must be green before a merge**, and only the user merges.
 - **Behaviour changes hit every server on deploy.** Changing counting, defaults or post layout needs a
   migration path for existing rows (`ADD COLUMN IF NOT EXISTS`) and a note on who is affected.
+- **Check the privacy policy and terms after every feature.** Before reporting a feature or behaviour
+  change as done, run `policy-check` and say whether `PRIVACY.md` or `TERMS.md` needed an update.
 
 ## Command mentions
 
@@ -64,6 +66,7 @@ Every slash command has a clickable mention in `src/enums/command_refs.py`, for 
 | Add or change a command or server setting | `add-command` |
 | Run tests, the stress harness or the stats report | `dev-environment` |
 | Check a branch or PR before it reaches production | `production-check` |
+| Check whether the privacy policy or terms need updating after a feature | `policy-check` |
 | Work through review comments on a PR | `address-pr-review` |
 | Turn feedback or bugs into GitHub issues | `report-issue` |
 | README changelog and Discord announcement for a release | `release-notes` |

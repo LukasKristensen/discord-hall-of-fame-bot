@@ -1,17 +1,34 @@
-TERMS OF SERVICE AGREEMENT
+# Terms of Service for Hall of Fame
 
-This Terms of Service Agreement (the "Agreement") is entered into between [Lukas Kristensen] ("Bot Owner") and the user ("User") of the [Hall Of Fame] Discord bot (the "Bot").
+Effective date: 18 October 2026
 
-By using the Bot, the User agrees to be bound by the terms of this Agreement. If the User does not agree to the terms of this Agreement, they should immediately discontinue use of the Bot.
+These terms apply between Lukas Kristensen ("the Owner") and anyone who adds Hall of Fame (the "Bot") to
+a server or uses it. By using the Bot you agree to them. If you do not agree, remove the Bot or stop
+using it.
 
-1. Use of the Bot: The Bot Owner grants the User a non-exclusive, non-transferable, limited license to use the Bot for personal or non-commercial purposes.
-2. Prohibited Use: The User may not use the Bot in any way that violates applicable laws, rules, or regulations or infringes upon the rights of any third party. The User may not use the Bot for any commercial purposes without the express written consent of the Bot Owner.
-3. Limitation of Liability: The Bot Owner shall not be liable for any damages arising out of the use or inability to use the Bot, including but not limited to, damages for loss of profits, loss of data, or other intangible losses.
-4. Modifications to the Bot: The Bot Owner may modify or discontinue the Bot at any time without notice. The User agrees that the Bot Owner shall not be liable to the User or any third party for any modification, suspension, or discontinuance of the Bot.
-5. Intellectual Property: The Bot and all intellectual property rights therein are and shall remain the property of the Bot Owner. The User agrees not to copy, modify, or distribute the Bot or any portion thereof without the express written consent of the Bot Owner.
-6. Indemnification: The User agrees to indemnify and hold harmless the Bot Owner, its affiliates, and their respective directors, officers, employees, and agents from any and all claims, damages, liabilities, costs, and expenses, including reasonable attorneys' fees, arising out of the User's use of the Bot.
-7. Termination: This Agreement may be terminated by either party at any time for any reason. Upon termination, the User must immediately cease all use of the Bot.
-8. Governing Law: This Agreement shall be governed by and construed in accordance with the laws of [Your country/state/province]. Any dispute arising under or in connection with this Agreement shall be resolved by arbitration in accordance with the rules of [Your arbitration provider].
-9. Entire Agreement: This Agreement constitutes the entire agreement between the parties and supersedes all prior or contemporaneous agreements or representations, whether written or oral, relating to the Bot.
-
-By using the Bot, the User acknowledges that they have read this Agreement, understand it, and agree to be bound by its terms and conditions.
+1. **Use of the Bot.** You may use the Bot in any Discord server, including servers run by creators,
+   communities and businesses. You may not resell, rebrand or offer the Bot as part of a paid service
+   without the Owner's written consent.
+2. **Rules.** You must follow Discord's Terms of Service and Community Guidelines when using the Bot.
+   Do not use the Bot to break the law, harass people, or repost content you have no right to share.
+3. **Content.** Messages the Bot reposts remain the property of their authors. Each server's admins
+   decide what their Hall of Fame shows and can remove reposts at any time. The Owner does not review
+   reposted content.
+4. **Availability.** The Bot is free and provided "as is", without guarantees that it will be
+   available, error-free or suitable for a particular purpose. The Owner may change, pause or
+   discontinue the Bot at any time.
+5. **Liability.** To the extent permitted by law, the Owner is not liable for indirect damages or loss
+   of data, profits or content arising from the use of the Bot. Nothing in these terms limits liability
+   that cannot be limited by law, or your rights as a consumer.
+6. **Source code.** The Bot's source code is published under the Hall of Fame Source-Available License
+   in [LICENSE](LICENSE). That license governs any use of the code. These terms govern use of the
+   hosted Bot.
+7. **Ending use.** You can stop using the Bot at any time by removing it from your server. The Owner may
+   remove the Bot from, or block, servers or users that break these terms.
+8. **Privacy.** How the Bot handles data is described in the [Privacy Policy](PRIVACY.md).
+9. **Law.** These terms are governed by Danish law, without affecting any mandatory consumer rights you
+   have where you live.
+10. **Changes and contact.** Changes are made to this file in the
+    [GitHub repository](https://github.com/LukasKristensen/discord-hall-of-fame-bot), where its history
+    shows every earlier version, and significant changes are announced in the support server.
+    Questions: githublukas@gmail.com or the [support server](https://discord.gg/r98WC5GHcn).

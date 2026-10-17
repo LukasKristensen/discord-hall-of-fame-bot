@@ -11,9 +11,9 @@ drift between the bot and the services it reports to. It is also the only Python
 .env file, because gating the readers is not enough: loading the whole file would still put every
 live credential into the process environment of a development run.
 
-The Pi's deployment scripts, src/run.sh and src/pg_backup.sh, export the whole .env themselves before
-starting the bot or a backup. That is intended: they only ever run in production, where every value
-is needed. A development run goes through this module and never through them.
+The Pi's deployment script, src/run.sh, exports the whole .env itself before starting the bot. That is
+intended: it only ever runs in production, where every value is needed. A development run goes
+through this module and never through it.
 """
 
 import os

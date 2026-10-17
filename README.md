@@ -34,6 +34,7 @@ profiles and Hall of Fame Wrapped are what make landing on it worth something.
 - [Tests](#tests)
 - [Contributing](#contributing)
 - [License](#license)
+- [Privacy and terms](#privacy-and-terms)
 - [Development Log](#development-log)
 
 <br>
@@ -295,6 +296,15 @@ what the bot does with their server's messages, and so that anyone can contribut
 
 See [LICENSE](LICENSE) for the full terms. To use the bot, [add the official
 one](https://discord.com/oauth2/authorize?client_id=1177041673352663070&permissions=275146730576&integration_type=0&scope=bot+applications.commands) to your server.
+
+<br>
+
+
+## Privacy and terms
+
+The bot stores IDs, reaction counts and statistics, not the text or images of your messages. Removing it
+from a server deletes that server's data. The [Privacy Policy](PRIVACY.md) lists exactly what is kept
+and how to ask for deletion, and the [Terms of Service](TERMS.md) cover using the bot.
 
 <br>
 
