@@ -84,6 +84,9 @@ month_emoji = "<:month_most_hof_messages:1380272332609683517>" if not dev_test e
 all_time_emoji = "<:all_time_most_hof_messages:1380272422842007622>" if not dev_test else "<:all_time_most_hof_messages:1380272953098244166>"
 
 bot_loaded = False
+# Summed over every guild on startup and by the daily task, and adjusted as servers join and leave in
+# between, so the presence does not walk every guild on each join
+total_member_count = 0
 
 
 async def ensure_bot_is_loaded(interaction: discord.Interaction) -> bool:
@@ -218,7 +221,7 @@ async def on_ready():
         bot_loaded = True
 
         await utils.logging(bot, f"Loaded a total of {len(server_classes)} servers")
-        await bot.change_presence(activity=discord.CustomActivity(name=f'🏆 Hall of Fame - {sum(server.member_count for server in bot.guilds)} users', type=5))
+        await refresh_total_member_count()
 
         await events.post_wrapped()
         daily_task.start()
@@ -245,9 +248,34 @@ async def daily_task():
         await utils.logging(bot, f"Error in daily_task: {e}")
 
     daily_command_cooldowns.clear()
-    total_server_members = sum(server.member_count for server in bot.guilds)
-    await bot.change_presence(activity=discord.CustomActivity(name=f'🏆 Hall of Fame - {total_server_members} users', type=5))
+    # Recount once a day, since members joining and leaving servers are not tracked in between
+    await refresh_total_member_count()
     await post_api_bot_stats()
+
+async def refresh_total_member_count():
+    """
+    Count the members across every guild from scratch and show the total in the presence
+    """
+    global total_member_count
+    total_member_count = sum(server.member_count or 0 for server in bot.guilds)
+    await update_member_count_presence()
+
+async def adjust_total_member_count(change: int):
+    """
+    Add a joined server's members to the total, or subtract a removed one's, without recounting
+    :param change: The number of members to add, negative to subtract
+    """
+    global total_member_count
+    total_member_count = max(0, total_member_count + change)
+    if bot_loaded:
+        await update_member_count_presence()
+
+async def update_member_count_presence():
+    # A total of 0 only means Discord has not reported member counts yet, so keep the current
+    # presence rather than advertise 0 users
+    if total_member_count <= 0:
+        return
+    await bot.change_presence(activity=discord.CustomActivity(name=f'🏆 Hall of Fame - {total_member_count} users', type=5))
 
 def setup_databases(connection):
     print("Setting up databases...")
@@ -380,6 +408,7 @@ async def on_guild_join(server):
     if new_server_class is None:
         return
     server_classes[server.id] = new_server_class
+    await adjust_total_member_count(server.member_count or 0)
     await post_api_bot_stats()
 
 @bot.event
@@ -395,6 +424,7 @@ async def on_guild_remove(server):
         )
     if server.id in server_classes:
         del server_classes[server.id]
+    await adjust_total_member_count(-(server.member_count or 0))
     await post_api_bot_stats()
 
 @tree.command(name="help", description="List of commands")
