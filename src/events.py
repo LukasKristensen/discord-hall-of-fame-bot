@@ -223,6 +223,11 @@ async def check_write_permissions_to_hall_of_fame_channel(bot: discord.Client, s
             # await utils.send_message_to_highest_prio_channel(bot, guild, messages.FAILED_TO_FIND_HOF_CHANNEL)
             return
         permissions = channel.permissions_for(guild.me)
+        try:
+            await utils.refresh_board_topic(channel, permissions)
+        except discord.HTTPException:
+            # Tried again tomorrow, and must not cost the server its permission check today
+            pass
         missing_permissions = []
         if not permissions.view_channel:
             missing_permissions.append("View Channel")

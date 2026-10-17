@@ -88,6 +88,12 @@ bot_loaded = False
 # between, so the presence does not walk every guild on each join
 total_member_count = 0
 
+# How long each status stays up before the next one. Discord limits how often a bot may change its
+# presence, and ten minutes stays far inside that while still showing every status within the hour
+presence_rotation_minutes = 10
+# How many statuses the rotation has shown, which decides the next one (see presence_status)
+presence_index = 0
+
 
 async def ensure_bot_is_loaded(interaction: discord.Interaction) -> bool:
     """
@@ -222,6 +228,9 @@ async def on_ready():
 
         await utils.logging(bot, f"Loaded a total of {len(server_classes)} servers")
         await refresh_total_member_count()
+        # on_ready fires again after a reconnect, when the rotation is already running
+        if not rotate_presence.is_running():
+            rotate_presence.start()
 
         await events.post_wrapped()
         daily_task.start()
@@ -254,28 +263,51 @@ async def daily_task():
 
 async def refresh_total_member_count():
     """
-    Count the members across every guild from scratch and show the total in the presence
+    Count the members across every guild from scratch. The presence rotation shows the new total
+    the next time the member count comes round
     """
     global total_member_count
     total_member_count = sum(server.member_count or 0 for server in bot.guilds)
-    await update_member_count_presence()
 
 async def adjust_total_member_count(change: int):
     """
-    Add a joined server's members to the total, or subtract a removed one's, without recounting
+    Add a joined server's members to the total, or subtract a removed one's, without recounting.
+    The presence is left to the rotation, so a burst of joins does not change it on every one
     :param change: The number of members to add, negative to subtract
     """
     global total_member_count
     total_member_count = max(0, total_member_count + change)
-    if bot_loaded:
-        await update_member_count_presence()
 
-async def update_member_count_presence():
-    # A total of 0 only means Discord has not reported member counts yet, so keep the current
-    # presence rather than advertise 0 users
-    if total_member_count <= 0:
-        return
-    await bot.change_presence(activity=discord.CustomActivity(name=f'🏆 Hall of Fame - {total_member_count} users', type=5))
+def presence_status(turn: int, member_count: int) -> str:
+    """
+    The status for a turn of the rotation: the member count on every second turn, and the command
+    pointers in order on the turns between
+    :param turn: How many statuses have been shown before this one
+    :param member_count: The members across every server
+    """
+    pointers = messages.PRESENCE_STATUSES
+    # A total of 0 only means Discord has not reported member counts yet, so leave the count out
+    # rather than advertise 0 users
+    if member_count <= 0:
+        return pointers[turn % len(pointers)]
+    if turn % 2 == 0:
+        return messages.PRESENCE_MEMBER_COUNT.format(members=member_count)
+    return pointers[(turn // 2) % len(pointers)]
+
+@tasks.loop(minutes=presence_rotation_minutes)
+async def rotate_presence():
+    """
+    Show the next status, so the member count shares the presence with pointers to the commands
+    members can try, /invite among them
+    """
+    global presence_index
+    status = presence_status(presence_index, total_member_count)
+    presence_index += 1
+    try:
+        await bot.change_presence(activity=discord.CustomActivity(name=status))
+    except Exception as e:
+        # A loop stops for good on an error it does not handle, so a failed change only skips a turn
+        await utils.logging(bot, f"Error changing the presence: {e}", validate_for_duplicates=True)
 
 def setup_databases(connection):
     print("Setting up databases...")

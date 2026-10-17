@@ -12,6 +12,7 @@ from unittest import mock
 import utils
 from caches import ExpiringSet
 from enums import calculation_method_type
+from translations import messages
 from repositories import (hall_of_fame_message_repo, hof_wrapped_guild_status_repo, hof_wrapped_repo,
                           server_config_repo, server_user_repo)
 
@@ -22,12 +23,14 @@ CHANNEL_ID = 555
 
 
 class FakeCreatedChannel:
-    def __init__(self, channel_id=CHANNEL_ID, name="hall-of-fame"):
+    def __init__(self, channel_id=CHANNEL_ID, name="hall-of-fame", topic=None):
         self.id = channel_id
         self.name = name
+        self.topic = topic
         self.edits = []
         self.permissions = []
         self.sent = []
+        self.views = []
 
     async def edit(self, **kwargs):
         self.edits.append(kwargs)
@@ -35,8 +38,9 @@ class FakeCreatedChannel:
     async def set_permissions(self, target, **kwargs):
         self.permissions.append((target, kwargs))
 
-    async def send(self, content=None):
+    async def send(self, content=None, view=None):
         self.sent.append(content)
+        self.views.append(view)
 
 
 class FakeBotMember:
@@ -135,11 +139,41 @@ class CreateDatabaseContextTests(SetupTestCase):
         self.assertEqual([], channel.permissions)
         self.assertEqual([], channel.edits)
 
+    async def test_gives_a_new_board_the_topic_with_the_install_link(self):
+        guild, _ = await self.join()
+
+        self.assertEqual([messages.HOF_CHANNEL_TOPIC], [edit["topic"] for edit in guild.created_channels[0].edits])
+
+    async def test_keeps_the_topic_of_a_channel_it_was_pointed_at(self):
+        custom = FakeCreatedChannel(channel_id=777, topic="Our funniest moments, no spoilers")
+        await self.join(custom_channel=custom)
+
+        self.assertEqual([], custom.edits)
+
+    async def test_replaces_its_own_old_topic_on_a_channel_it_was_pointed_at(self):
+        custom = FakeCreatedChannel(channel_id=777, topic=messages.LEGACY_HOF_CHANNEL_TOPICS[0])
+        await self.join(custom_channel=custom)
+
+        self.assertEqual([messages.HOF_CHANNEL_TOPIC], [edit["topic"] for edit in custom.edits])
+
     async def test_introduces_itself_in_the_new_channel(self):
         guild, _ = await self.join()
 
         self.assertEqual(1, len(guild.created_channels[0].sent))
         self.assertIn("Welcome to the Hall of Fame", guild.created_channels[0].sent[0])
+
+    async def test_welcome_message_links_to_support_and_voting(self):
+        guild, _ = await self.join()
+
+        view = guild.created_channels[0].views[0]
+        self.assertEqual([(messages.SUPPORT_SERVER_BUTTON, messages.SUPPORT_SERVER_URL),
+                          (messages.VOTE_BUTTON, messages.VOTE_URL)],
+                         [(button.label, button.url) for button in view.children])
+
+    async def test_welcome_message_asks_to_be_pinned(self):
+        guild, _ = await self.join()
+
+        self.assertIn("Pin this message", guild.created_channels[0].sent[0])
 
     async def test_names_the_starting_threshold_in_the_welcome_message(self):
         guild, created = await self.join(FakeJoinedGuild(member_count=30))

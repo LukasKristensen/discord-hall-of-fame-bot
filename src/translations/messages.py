@@ -29,6 +29,23 @@ POST_FOOTER = "Hall of Fame"
 INVITE_FOOTER = "Run a server? Add Hall of Fame with /invite"
 # /user_profile and /leaderboard, whose figures come from the daily task
 STATS_FOOTER = f"Updated every 24 hours · {INVITE_FOOTER}"
+PATCH_NOTES_URL = "https://discord.gg/GmFtfySetp"
+# The bot's App Directory page. Opens its profile with an Add App button, and is a third the length of
+# INVITE_URL, which reads as noise wherever the raw link is shown
+APP_DIRECTORY_URL = "https://discord.com/discovery/applications/1177041673352663070"
+# Topic of the board channel, shown to everyone who opens it. The install link goes first, since the
+# channel header only shows the start of a long topic
+HOF_CHANNEL_TOPIC = (f"The best moments of this server, picked by your reactions. Add Hall of Fame to your own "
+                     f"server: {APP_DIRECTORY_URL} · Patch notes: {PATCH_NOTES_URL}")
+# Topics the bot set itself in earlier versions, written out in full rather than built from the
+# constants above, so a later change to those cannot hide an old topic. A board whose topic is still
+# one of these is moved to HOF_CHANNEL_TOPIC, while a topic an admin wrote is never touched
+LEGACY_HOF_CHANNEL_TOPICS = (
+    "Patch notes for Hall Of Fame: https://discord.gg/GmFtfySetp",
+    "The best moments of this server, picked by your reactions. Want one in your own server? Add Hall of Fame: "
+    "https://discord.com/oauth2/authorize?client_id=1177041673352663070&permissions=275146730576"
+    "&integration_type=0&scope=bot+applications.commands · Patch notes: https://discord.gg/GmFtfySetp",
+)
 INVITE_MESSAGE = "Add Hall of Fame to another server you run. Need a hand setting it up? Ask in the support server."
 NOT_AUTHORIZED = "You are not authorized to use this command, only for members with manage server permission"
 DEV_NOT_AUTHORIZED = "You are not authorized to use this command, only for developers"
@@ -88,3 +105,12 @@ FAILED_TO_FIND_HOF_CHANNEL = (
     f"Set it up using </set_hall_of_fame_channel:1393576242237804768> if it doesn't exist.\n"
     "For further assistance, contact support: <https://discord.gg/r98WC5GHcn>"
 )
+
+# The bot's status, shown in turn. Command mentions do not render in a status, so commands are plain
+# text, and each stays within the 128 characters Discord shows
+PRESENCE_MEMBER_COUNT = "🏆 Hall of Fame - {members:,} users"
+PRESENCE_STATUSES = [
+    "➕ /invite to add Hall of Fame to your server",
+    "📊 /leaderboard - who rules your server?",
+    "✨ /hof_wrapped - your year on the board",
+]

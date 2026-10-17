@@ -535,6 +535,35 @@ def check_video_extension(message):
     return None
 
 
+def board_topic_is_ours(topic) -> bool:
+    """
+    Whether the bot may set the topic of a board channel: it has none, or it is one the bot set itself
+    :param topic: The channel's current topic
+    :return: True when no admin has written the topic
+    """
+    return not topic or topic in messages.LEGACY_HOF_CHANNEL_TOPICS
+
+
+async def refresh_board_topic(channel, permissions) -> bool:
+    """
+    Move a board still showing a topic from an earlier version to the current one. A topic an admin
+    wrote, or removed, is left alone
+    :param channel: The Hall of Fame channel
+    :param permissions: The bot's permissions in that channel
+    :return: True when the topic was changed
+    """
+    if channel.topic not in messages.LEGACY_HOF_CHANNEL_TOPICS or not permissions.manage_channels:
+        return False
+    await channel.edit(topic=messages.HOF_CHANNEL_TOPIC, reason="Updating the Hall of Fame channel topic")
+    return True
+
+
+def welcome_view():
+    # Imported here, as commands imports this module
+    import commands
+    return commands.build_welcome_view()
+
+
 async def create_database_context(bot, server, connection, custom_channel=None) -> server_class.Server:
     """
     Create a database context for the server
@@ -564,10 +593,9 @@ async def create_database_context(bot, server, connection, custom_channel=None) 
     hall_of_fame_channel = custom_channel or await server.create_text_channel("hall-of-fame")
 
     if server.me.guild_permissions.manage_channels:
-        await hall_of_fame_channel.edit(
-            topic="Patch notes for Hall Of Fame: https://discord.gg/GmFtfySetp",
-            reason="Creating Hall of Fame channel"
-        )
+        # A channel picked with /set_hall_of_fame_channel keeps the topic its admins gave it
+        if board_topic_is_ours(hall_of_fame_channel.topic):
+            await hall_of_fame_channel.edit(topic=messages.HOF_CHANNEL_TOPIC, reason="Creating Hall of Fame channel")
         await hall_of_fame_channel.set_permissions(server.me, read_messages=True, send_messages=True)
         await hall_of_fame_channel.set_permissions(server.default_role, read_messages=True, send_messages=False)
 
@@ -591,6 +619,9 @@ async def create_database_context(bot, server, connection, custom_channel=None) 
         f"   Use {command_refs.CALCULATION_METHOD} to change the reaction count calculation method.\n\n"
         f"🛡️ **Note on channel permissions:**\n"
         f"   If most of your channels are view-blocked behind a certain role, the bot will not be able to see messages from these channels unless given that role.\n\n"
+        f"📌 **Pin this message** so your moderators can find these settings later.\n\n"
+        f"💛 **Questions or ideas?** Ask in the support server. A vote on top.gg helps other servers find Hall of Fame.\n",
+        view=welcome_view()
     )
 
     new_server_class = server_class.Server(

@@ -169,10 +169,15 @@ class FakeSentMessage:
 class FakeTextChannel:
     """A channel that reports a fixed permission set for the bot."""
 
-    def __init__(self, channel_id=100, permissions=None):
+    def __init__(self, channel_id=100, permissions=None, topic=None):
         self.id = channel_id
         self.permissions = permissions if permissions is not None else FakePermissions()
+        self.topic = topic
         self.sent = []
+        self.edits = []
+
+    async def edit(self, **kwargs):
+        self.edits.append(kwargs)
 
     def permissions_for(self, _member):
         return self.permissions

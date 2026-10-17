@@ -10,6 +10,7 @@ from tests.test_server_class import build_server
 
 import events
 import utils
+from translations import messages
 
 
 class OnMessageTests(unittest.IsolatedAsyncioTestCase):
@@ -152,8 +153,9 @@ class DailyPermissionCheckTests(unittest.IsolatedAsyncioTestCase):
     async def record_warning(self, _bot, guild, content):
         self.warnings.append((guild.id, content))
 
-    async def sweep(self, permissions, allow_messages=False, channel_missing=False):
-        channel = FakeTextChannel(channel_id=self.HOF_CHANNEL_ID, permissions=permissions)
+    async def sweep(self, permissions, allow_messages=False, channel_missing=False, topic=None):
+        channel = FakeTextChannel(channel_id=self.HOF_CHANNEL_ID, permissions=permissions, topic=topic)
+        self.channel = channel
         channels = {} if channel_missing else {self.HOF_CHANNEL_ID: channel}
         guild = FakeGuildWithChannels(guild_id=200, channels=channels)
         bot = FakeBotWithGuildLookup({200: guild})
@@ -197,6 +199,46 @@ class DailyPermissionCheckTests(unittest.IsolatedAsyncioTestCase):
         await self.sweep(FakePermissions(), channel_missing=True)
 
         self.assertEqual([], self.logged)
+
+    async def test_moves_a_board_off_the_old_default_topic(self):
+        await self.sweep(FakePermissions(), topic=messages.LEGACY_HOF_CHANNEL_TOPICS[0])
+
+        self.assertEqual([messages.HOF_CHANNEL_TOPIC], [edit["topic"] for edit in self.channel.edits])
+
+    async def test_shortens_the_topic_with_the_full_invite_link(self):
+        await self.sweep(FakePermissions(), topic=messages.LEGACY_HOF_CHANNEL_TOPICS[1])
+
+        self.assertEqual([messages.HOF_CHANNEL_TOPIC], [edit["topic"] for edit in self.channel.edits])
+
+    async def test_never_touches_a_topic_an_admin_wrote(self):
+        await self.sweep(FakePermissions(), topic="Our funniest moments, no spoilers")
+
+        self.assertEqual([], self.channel.edits)
+
+    async def test_does_not_add_a_topic_an_admin_removed(self):
+        await self.sweep(FakePermissions(), topic=None)
+
+        self.assertEqual([], self.channel.edits)
+
+    async def test_leaves_the_old_topic_without_manage_channels(self):
+        await self.sweep(FakePermissions(manage_channels=False), topic=messages.LEGACY_HOF_CHANNEL_TOPICS[0])
+
+        self.assertEqual([], self.channel.edits)
+
+    async def test_a_failed_topic_change_still_reports_missing_permissions(self):
+        async def refuse(**_kwargs):
+            raise discord.Forbidden(types.SimpleNamespace(status=403, reason="Forbidden"), "Missing Access")
+
+        channel = FakeTextChannel(channel_id=self.HOF_CHANNEL_ID, permissions=FakePermissions(send_messages=False),
+                                  topic=messages.LEGACY_HOF_CHANNEL_TOPICS[0])
+        channel.edit = refuse
+        guild = FakeGuildWithChannels(guild_id=200, channels={self.HOF_CHANNEL_ID: channel})
+        server = build_server(guild_id=200, hall_of_fame_channel_id=self.HOF_CHANNEL_ID)
+        await events.check_write_permissions_to_hall_of_fame_channel(FakeBotWithGuildLookup({200: guild}),
+                                                                     {200: server})
+
+        self.assertEqual(1, len(self.warnings))
+        self.assertIn("Send Messages", self.warnings[0][1])
 
 
 if __name__ == "__main__":

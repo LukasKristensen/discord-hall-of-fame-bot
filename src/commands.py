@@ -38,6 +38,11 @@ def build_help_view() -> discord.ui.View:
     return build_link_buttons(INVITE_LINK, VOTE_LINK, SUPPORT_SERVER_LINK)
 
 
+def build_welcome_view() -> discord.ui.View:
+    # The server has just installed the bot, so there is nothing to invite it to yet
+    return build_link_buttons(SUPPORT_SERVER_LINK, VOTE_LINK)
+
+
 def build_help_embed() -> discord.Embed:
     """
     The card /help answers with: every command, grouped by who uses it and what it changes.

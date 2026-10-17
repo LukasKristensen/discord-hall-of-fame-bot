@@ -156,6 +156,22 @@ class InviteUrlTests(unittest.TestCase):
         self.assertIn("client_id=1177041673352663070", messages.INVITE_URL)
 
 
+class BoardTopicTests(unittest.TestCase):
+    def test_carries_the_install_link(self):
+        self.assertIn(messages.APP_DIRECTORY_URL, messages.HOF_CHANNEL_TOPIC)
+
+    def test_keeps_the_link_short(self):
+        # The full OAuth link took up most of the channel header
+        self.assertNotIn("oauth2", messages.HOF_CHANNEL_TOPIC)
+
+    def test_fits_in_a_channel_topic(self):
+        self.assertLessEqual(len(messages.HOF_CHANNEL_TOPIC), 1024)
+
+    def test_is_not_mistaken_for_an_old_topic(self):
+        # Otherwise the daily sweep would rewrite the current topic every day
+        self.assertNotIn(messages.HOF_CHANNEL_TOPIC, messages.LEGACY_HOF_CHANNEL_TOPICS)
+
+
 def link_buttons(view):
     return [(button.label, button.url) for button in view.children]
 

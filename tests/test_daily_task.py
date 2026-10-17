@@ -425,6 +425,7 @@ class DailyTaskPermissionSweepTests(unittest.IsolatedAsyncioTestCase):
             def __init__(self, guild_id):
                 self.id = guild_id + 1000
                 self.guild_id = guild_id
+                self.topic = None
 
             def permissions_for(self, _member):
                 from tests.fakes import FakePermissions
