@@ -7,7 +7,16 @@ CUSTOM_EMOJI_CHECK_DISABLED = (
 )
 # /invite and /vote answer with link buttons, so the text says why to click and leaves the URL to the button
 VOTE_MESSAGE = "Votes on top.gg help more servers find Hall of Fame. You can vote every 12 hours."
-INVITE_URL = "https://discord.com/oauth2/authorize?client_id=1177041673352663070"
+# The permissions the bot uses, asked for up front since granting them after the install does not
+# work: View Channel, Send Messages, Read Message History, Embed Links, Use External Emojis (the
+# leaderboard emojis), Manage Messages (chat in the board channel), Manage Channels and Manage Roles
+# (creating the board channel and setting its overwrites), Send Messages in Threads (answering a ping
+# inside a thread). Attach Files and Add Reactions are not used yet, but are asked for now so later
+# features such as image cards work on servers that install today. tests/test_commands.py checks the value.
+INVITE_PERMISSIONS = 275146730576
+# integration_type=0 installs to a server, so the link keeps working if user installs are added
+INVITE_URL = ("https://discord.com/oauth2/authorize?client_id=1177041673352663070"
+              f"&permissions={INVITE_PERMISSIONS}&integration_type=0&scope=bot+applications.commands")
 VOTE_URL = "https://top.gg/bot/1177041673352663070/vote"
 SUPPORT_SERVER_URL = "https://discord.gg/r98WC5GHcn"
 INVITE_BUTTON = "Add to a server"

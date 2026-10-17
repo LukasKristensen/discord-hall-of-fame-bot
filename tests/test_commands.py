@@ -139,6 +139,23 @@ class GetHelpTests(unittest.IsolatedAsyncioTestCase):
                          [button.url for button in interaction.response.views[0].children])
 
 
+class InviteUrlTests(unittest.TestCase):
+    """The install link everything shares. Without scopes and permissions it relied on portal defaults."""
+
+    def test_asks_for_exactly_the_permissions_the_bot_uses(self):
+        expected = discord.Permissions(view_channel=True, send_messages=True, read_message_history=True,
+                                       embed_links=True, use_external_emojis=True, manage_messages=True,
+                                       manage_channels=True, manage_roles=True, attach_files=True,
+                                       add_reactions=True, send_messages_in_threads=True)
+        self.assertEqual(expected.value, messages.INVITE_PERMISSIONS)
+        self.assertIn(f"permissions={expected.value}", messages.INVITE_URL)
+
+    def test_installs_the_bot_and_its_commands_to_a_server(self):
+        self.assertIn("scope=bot+applications.commands", messages.INVITE_URL)
+        self.assertIn("integration_type=0", messages.INVITE_URL)
+        self.assertIn("client_id=1177041673352663070", messages.INVITE_URL)
+
+
 def link_buttons(view):
     return [(button.label, button.url) for button in view.children]
 

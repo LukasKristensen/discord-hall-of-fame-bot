@@ -129,23 +129,24 @@ Terms of Service and Privacy Policy are already set and stay as they are.
 Developer Portal > Installation > Default Install Settings, guild install, scopes `bot` and
 `applications.commands`.
 
-Keep:
+Match the invite link, `INVITE_PERMISSIONS` in `src/translations/messages.py` (`275146730576`):
 
 | Permission | Why the bot needs it |
 |:---|:---|
 | View Channels | See the messages being reacted to |
 | Read Message History | Fetch older messages when reactions arrive |
 | Send Messages | Post to the hall of fame channel |
+| Send Messages in Threads | Answer a ping inside a thread |
 | Embed Links | Hall of fame posts, leaderboards and profiles are embeds |
-| Attach Files | Image cards, if added later |
+| Use External Emojis | The leaderboard's month and all time emojis |
 | Manage Channels | Create the #hall-of-fame channel on join |
 | Manage Roles | Set the hall of fame channel's permission overwrites on join |
 | Manage Messages | Remove chat from the hall of fame channel when chat there is off |
+| Attach Files | Not used yet, asked for so image cards work on servers that install now |
+| Add Reactions | Not used yet, asked for ahead of later features |
 
-The current listing also asks for Manage Threads, Create Public Threads, Send Messages in Threads, Pin
-Messages, Use External Emojis and Add Reactions. A search of `src/` found nothing that uses them. Remove them after
-checking on a test server that setup, posting and the board still work. Servers that already have the
-bot keep the permissions they granted.
+The current listing also asks for Manage Threads, Create Public Threads and Pin Messages. Nothing in
+`src/` uses them, so untick them. Servers that already have the bot keep the permissions they granted.
 
 <br>
 

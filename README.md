@@ -14,7 +14,7 @@ the hall of fame, and the members who land there get leaderboards, profiles and 
 It is a recognition bot, not an archive. The board is where the moments live; the leaderboards, member
 profiles and Hall of Fame Wrapped are what make landing on it worth something.
 
-[Add the bot to your server](https://discord.com/oauth2/authorize?client_id=1177041673352663070) ·
+[Add the bot to your server](https://discord.com/oauth2/authorize?client_id=1177041673352663070&permissions=275146730576&integration_type=0&scope=bot+applications.commands) ·
 [Join the support server](https://discord.gg/r98WC5GHcn) ·
 [Vote on top.gg](https://top.gg/bot/1177041673352663070/vote)
 
@@ -78,7 +78,7 @@ gets immortalised, that is what this is for.
 
 ## Quick start
 
-1. [Invite the bot](https://discord.com/oauth2/authorize?client_id=1177041673352663070) and accept the
+1. [Invite the bot](https://discord.com/oauth2/authorize?client_id=1177041673352663070&permissions=275146730576&integration_type=0&scope=bot+applications.commands) and accept the
    permissions it asks for. Granting them afterwards does not work, so accept them up front.
 2. The bot creates a `#hall-of-fame` channel, and picks a starting reaction threshold once from your
    member count so the board works before you configure anything.
@@ -294,7 +294,7 @@ what the bot does with their server's messages, and so that anyone can contribut
   permission.
 
 See [LICENSE](LICENSE) for the full terms. To use the bot, [add the official
-one](https://discord.com/oauth2/authorize?client_id=1177041673352663070) to your server.
+one](https://discord.com/oauth2/authorize?client_id=1177041673352663070&permissions=275146730576&integration_type=0&scope=bot+applications.commands) to your server.
 
 <br>
 
