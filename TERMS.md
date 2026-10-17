@@ -7,8 +7,9 @@ a server or uses it. By using the Bot you agree to them. If you do not agree, re
 using it.
 
 1. **Use of the Bot.** You may use the Bot in any Discord server, including servers run by creators,
-   communities and businesses. You may not resell, rebrand or offer the Bot as part of a paid service
-   without the Owner's written consent.
+   communities and businesses, and add it to your own account to use its personal commands in DMs.
+   You may not resell, rebrand or offer the Bot as part of a paid service without the Owner's written
+   consent.
 2. **Rules.** You must follow Discord's Terms of Service and Community Guidelines when using the Bot.
    Do not use the Bot to break the law, harass people, or repost content you have no right to share.
 3. **Content.** Messages the Bot reposts remain the property of their authors. Each server's admins

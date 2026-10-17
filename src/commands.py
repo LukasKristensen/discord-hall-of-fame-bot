@@ -1,8 +1,10 @@
+import json
+from datetime import timezone
 import discord
 import utils
 from constants import version
 from enums import command_refs, calculation_method_type
-from repositories import server_config_repo, server_user_repo
+from repositories import server_config_repo, server_user_repo, hall_of_fame_message_repo
 from caches import ExpiringSet
 from translations import messages
 
@@ -64,9 +66,16 @@ def build_help_embed() -> discord.Embed:
     embed.add_field(
         name="🏆 For everyone",
         value=f"{command_refs.LEADERBOARD} the server's top members\n"
-              f"{command_refs.USER_PROFILE} a member's standing\n"
+              f"{command_refs.USER_PROFILE} a member's standing, with totals across every server\n"
               f"{command_refs.HOF_WRAPPED} your year in review\n"
               f"{command_refs.SERVER_HOF_WRAPPED} the server's year in review",
+        inline=False)
+
+    embed.add_field(
+        name="🔒 Your data",
+        value=f"{command_refs.MY_DATA} see everything stored about you\n"
+              f"{command_refs.DELETE_MY_DATA} delete it\n"
+              f"{command_refs.PROFILE_PRIVACY} hide or show your totals across servers",
         inline=False)
 
     embed.add_field(
@@ -88,7 +97,8 @@ def build_help_embed() -> discord.Embed:
     embed.add_field(
         name="📋 Board behaviour · Manage Server",
         value=f"{command_refs.ALLOW_MESSAGES_IN_HOF_CHANNEL} let members chat in the board channel\n"
-              f"{command_refs.HIDE_HOF_POST_BELOW_THRESHOLD} hide posts that drop below the threshold",
+              f"{command_refs.HIDE_HOF_POST_BELOW_THRESHOLD} hide posts that drop below the threshold\n"
+              f"{command_refs.COUNT_IN_GLOBAL_PROFILES} count posts here toward totals across servers",
         inline=False)
 
     embed.add_field(
@@ -146,7 +156,8 @@ async def set_reaction_threshold(interaction: discord.Interaction, reaction_thre
         + f" Change how reactions are counted with {command_refs.CALCULATION_METHOD}.")
 
 
-async def user_server_profile(interaction, user, user_stats, connection, month_emoji: str, all_time_emoji: str):
+async def user_server_profile(interaction, user, user_stats, connection, month_emoji: str, all_time_emoji: str,
+                              global_profile: dict = None):
     """
     Command to get the Hall of Fame profile for a user in a specific server
     :param interaction:
@@ -155,6 +166,7 @@ async def user_server_profile(interaction, user, user_stats, connection, month_e
     :param connection:
     :param month_emoji:
     :param all_time_emoji:
+    :param global_profile: The member's totals across every server, or None when hidden or not wanted
     :return:
     """
     user_has_most_this_month_hall_of_fame_messages = server_user_repo.check_if_user_is_top_of_stat(
@@ -162,9 +174,11 @@ async def user_server_profile(interaction, user, user_stats, connection, month_e
     user_with_most_all_time_hall_of_fame_messages = server_user_repo.check_if_user_is_top_of_stat(
         connection, user.id, interaction.guild.id, "total_hall_of_fame_messages")
 
+    show_global = global_profile_adds_something(global_profile, user_stats)
     embed = discord.Embed(
-        title=f"📊 {user.name}'s Server Profile",
-        description=f"Here are your stats for **{interaction.guild.name}**:",
+        title=f"📊 {user.name}'s Hall of Fame Profile",
+        description=f"Stats for **{interaction.guild.name}**"
+                    + (" and every server with Hall of Fame." if show_global else "."),
         color=discord.Color.gold()
     )
     if user_has_most_this_month_hall_of_fame_messages and user_stats:
@@ -175,28 +189,260 @@ async def user_server_profile(interaction, user, user_stats, connection, month_e
         embed.add_field(name=f"{all_time_emoji} **All-Time Hall of Fame Champion**",
                         value=f"**{user.name}** is the all-time champion with **{user_stats.get('total_hall_of_fame_messages', 0)}** messages!",
                         inline=False)
-    embed.add_field(name="", value="", inline=False)
+
+    # Side by side columns: this month and all time in this server, then every server. Inline fields
+    # sit next to each other on desktop and stack on a phone
+    stats = user_stats or {}
+    embed.add_field(name="🏆 This month", inline=True, value=_stat_column(
+        stats.get("this_month_hall_of_fame_messages", 0), stats.get("monthly_message_rank"),
+        stats.get("this_month_hall_of_fame_message_reactions", 0), stats.get("monthly_reaction_rank")))
+    embed.add_field(name="🌟 All time", inline=True, value=_stat_column(
+        stats.get("total_hall_of_fame_messages", 0), stats.get("total_message_rank"),
+        stats.get("total_hall_of_fame_message_reactions", 0), stats.get("total_reaction_rank")))
+    if show_global:
+        embed.add_field(name=messages.GLOBAL_PROFILE_HEADING, inline=True,
+                        value=global_profile_column_value(global_profile))
+
     if user_stats:
-        embed.add_field(name="🏆 **This Month's Hall of Fame Messages**",
-                        value=f"**{user_stats.get('this_month_hall_of_fame_messages', 0)}** "
-                              # A member with nothing featured this month is stored without a rank
-                              f"(Rank: {user_stats.get('monthly_message_rank') or 'N/A'})", inline=False)
-        embed.add_field(name="🌟 **Total Hall of Fame Messages**",
-                        value=f"**{user_stats.get('total_hall_of_fame_messages', 0)}** "
-                              f"(Rank: {user_stats.get('total_message_rank', 'N/A')})", inline=False)
-        embed.add_field(name="💬 **Reactions Received This Month on Hall of Fame Messages**",
-                        value=f"**{user_stats.get('this_month_hall_of_fame_message_reactions', 0)}** "
-                              f"(Rank: {user_stats.get('monthly_reaction_rank') or 'N/A'})", inline=False)
-        embed.add_field(name="💬 **Total Reactions Received on Hall of Fame Messages**",
-                        value=f"**{user_stats.get('total_hall_of_fame_message_reactions', 0)}** "
-                              f"(Rank: {user_stats.get('total_reaction_rank', 'N/A')})", inline=False)
-    else:
-        embed.add_field(name="🏆 **This Month's Hall of Fame Messages**", value="**0**", inline=False)
-        embed.add_field(name="", value="", inline=False)
-        embed.add_field(name="🌟 **Total Hall of Fame Messages**", value="**0**", inline=False)
+        highlights = hall_of_fame_message_repo.get_member_highlights(connection, interaction.guild.id, user.id)
+        gap = rank_gap_line(user_stats, lambda stat, rank_field, rank: server_user_repo.get_stat_at_rank(
+            connection, interaction.guild.id, stat, rank_field, rank))
+        value = highlights_value(interaction.guild.id, highlights, gap)
+        if value:
+            embed.add_field(name=messages.HIGHLIGHTS_HEADING, value=value, inline=False)
     embed.set_thumbnail(url=user.display_avatar.url)
-    embed.set_footer(text=messages.STATS_FOOTER)
+    embed.set_footer(text=messages.GLOBAL_STATS_FOOTER if show_global else messages.STATS_FOOTER)
     await interaction.response.send_message(embed=embed)
+
+
+def _posts(count: int) -> str:
+    return f"{count} post{'' if count == 1 else 's'}"
+
+
+# The periods the gap to the next place is worked out for, in order of preference: this month is the
+# race a member can still change, so it is used whenever they have a rank in it
+RANK_GAP_PERIODS = (
+    ("this month", "this_month_hall_of_fame_messages", "monthly_message_rank"),
+    ("all time", "total_hall_of_fame_messages", "total_message_rank"),
+)
+
+
+def rank_gap_line(user_stats: dict, stat_at_rank) -> str | None:
+    """
+    How far a member is from the next place up, or how far ahead they are when first
+    :param user_stats: The member's row in this server
+    :param stat_at_rank: Looks up the count held at a rank: (stat_field, rank_field, rank) -> count or None
+    :return: The line for the highlights, or None when there is nothing to compare with
+    """
+    for period, stat_field, rank_field in RANK_GAP_PERIODS:
+        rank = user_stats.get(rank_field)
+        if not rank:
+            continue
+        mine = user_stats.get(stat_field) or 0
+        if rank > 1:
+            ahead = stat_at_rank(stat_field, rank_field, rank - 1)
+            if ahead is None:
+                return None
+            gap = ahead - mine
+            if gap <= 0:
+                return messages.HIGHLIGHT_LEVEL_WITH.format(rank=rank - 1, period=period)
+            return messages.HIGHLIGHT_BEHIND.format(posts=_posts(gap), rank=rank - 1, period=period)
+        behind = stat_at_rank(stat_field, rank_field, 2)
+        if behind is None:
+            return None
+        lead = mine - behind
+        if lead <= 0:
+            return messages.HIGHLIGHT_SHARING_FIRST.format(period=period)
+        return messages.HIGHLIGHT_LEADING.format(posts=_posts(lead), period=period)
+    return None
+
+
+def highlights_value(guild_id: int, highlights: dict, gap_line: str | None) -> str:
+    """
+    The highlights under the profile columns: best post with a link to it, when the member was last
+    featured, and the gap to the next place. A line is left out when there is nothing for it
+    :param guild_id: The guild, for the jump link
+    :param highlights: From hall_of_fame_message_repo.get_member_highlights
+    :param gap_line: From rank_gap_line
+    :return: The field value, empty when every line was left out
+    """
+    lines = []
+    best = highlights.get("best_post")
+    if best:
+        reactions = best["reaction_count"]
+        url = f"https://discord.com/channels/{guild_id}/{best['channel_id']}/{best['message_id']}"
+        lines.append(messages.HIGHLIGHT_BEST_POST.format(
+            reactions=f"{reactions} reaction{'' if reactions == 1 else 's'}", url=url))
+    last = highlights.get("last_featured")
+    if last:
+        # Stored as naive UTC. A Discord timestamp shows it relative and in the reader's own time zone
+        if last.tzinfo is None:
+            last = last.replace(tzinfo=timezone.utc)
+        lines.append(messages.HIGHLIGHT_LAST_FEATURED.format(timestamp=f"<t:{int(last.timestamp())}:R>"))
+    if gap_line:
+        lines.append(gap_line)
+    return "\n".join(lines)
+
+
+def _stat_column(posts: int, posts_rank, reactions: int, reactions_rank) -> str:
+    """
+    One column of the profile card: posts and reactions, each with the member's rank in the server.
+    A member with nothing featured in the period is stored without a rank, shown as a dash
+    """
+    def ranked(count: int, label: str, rank) -> str:
+        return f"**{count or 0:,}** {label} · {f'#{rank}' if rank else '-'}"
+
+    return f"{ranked(posts, 'posts', posts_rank)}\n{ranked(reactions, 'reactions', reactions_rank)}"
+
+
+def global_profile_adds_something(global_profile: dict, user_stats: dict) -> bool:
+    """
+    Whether the totals across servers say more than the server profile above them. When every
+    counted post is from this server the two match, and the section would only repeat the card
+    :param global_profile: The totals from global_profile_repo.get_global_profile, or None
+    :param user_stats: The member's row in this server
+    """
+    if not global_profile or not global_profile["posts"]:
+        return False
+    return global_profile["posts"] != (user_stats or {}).get("total_hall_of_fame_messages", 0)
+
+
+def global_profile_column_value(profile: dict) -> str:
+    """
+    The every-server column of /user_profile: a member's totals across every server.
+
+    Built from totals alone, so nothing in it can name or point to another server. That is what
+    makes it safe to show in any server, and it must stay that way: no per-server rows, ranks or links.
+    :param profile: The totals from global_profile_repo.get_global_profile
+    :return: The field value
+    """
+    servers = profile["servers"]
+    top_of_board = profile["top_of_board"]
+    servers_line = f"**{servers}** server{'' if servers == 1 else 's'}"
+    if top_of_board:
+        servers_line += f" · #1 in {top_of_board}"
+    return f"**{profile['posts']:,}** posts\n**{profile['reactions']:,}** reactions\n{servers_line}"
+
+
+def build_my_data_export(user_id: int, posts: list, standings: list, wrapped: list, profile_hidden: bool,
+                         not_counted: bool = False) -> bytes:
+    """
+    The file /my_data attaches: every row stored about a member, as JSON.
+
+    Only ever sent privately to the member it describes, so unlike the totals on a profile it does include
+    the server and message IDs, which are the member's own data.
+    :param user_id: The member's user ID
+    :param posts: Their featured posts, from hall_of_fame_message
+    :param standings: Their per-server statistics, from server_user
+    :param wrapped: Their Wrapped rows, from hof_wrapped
+    :param profile_hidden: Whether they hid their totals across servers
+    :param not_counted: Whether they asked not to be counted from now on
+    :return: The file's contents
+    """
+    export = {
+        "user_id": str(user_id),
+        "about": "Everything Hall of Fame stores about you. IDs are strings so no digits are lost. "
+                 "Message text, images and usernames are not stored. Privacy policy: "
+                 + messages.PRIVACY_POLICY_URL,
+        "global_profile_hidden": profile_hidden,
+        "not_counted": not_counted,
+        "featured_posts": posts,
+        "server_statistics": standings,
+        "wrapped": wrapped,
+    }
+
+    def stringify_ids(rows):
+        return [{key: str(value) if key.endswith("_id") and value is not None else value
+                 for key, value in row.items()} for row in rows]
+
+    for key in ("featured_posts", "server_statistics", "wrapped"):
+        export[key] = stringify_ids(export[key])
+    # Datetimes, and anything else JSON has no type for, are written as text
+    return json.dumps(export, indent=2, default=str, ensure_ascii=False).encode("utf-8")
+
+
+class ConfirmDeleteView(discord.ui.View):
+    """
+    The confirm and cancel buttons under /delete_my_data. Deleting cannot be undone, so it only
+    happens on a deliberate second click, and only the member who asked can make it
+    """
+
+    def __init__(self, owner_id: int, on_confirm, timeout_seconds: float = 120):
+        """
+        :param owner_id: The member whose data would be deleted
+        :param on_confirm: Coroutine function taking the button's interaction and whether the member
+            also asked not to be counted from now on, which deletes and answers
+        :param timeout_seconds: How long the buttons stay usable
+        """
+        super().__init__(timeout=timeout_seconds)
+        self.owner_id = owner_id
+        self.on_confirm = on_confirm
+        self.original_interaction = None
+        self.finished = False
+
+        confirm = discord.ui.Button(style=discord.ButtonStyle.danger, label=messages.DELETE_MY_DATA_BUTTON)
+        stop_counting = discord.ui.Button(style=discord.ButtonStyle.danger, label=messages.DELETE_AND_STOP_BUTTON)
+        cancel = discord.ui.Button(style=discord.ButtonStyle.secondary, label=messages.CANCEL_BUTTON)
+        confirm.callback = self.confirm
+        stop_counting.callback = self.confirm_and_stop_counting
+        cancel.callback = self.cancel
+        self.add_item(confirm)
+        self.add_item(stop_counting)
+        self.add_item(cancel)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        # The prompt is ephemeral, so nobody else should see it, but a click is checked all the same
+        if interaction.user.id != self.owner_id:
+            await interaction.response.send_message(messages.DELETE_MY_DATA_NOT_YOURS, ephemeral=True)
+            return False
+        return True
+
+    async def confirm(self, interaction: discord.Interaction):
+        self.finished = True
+        self.stop()
+        await self.on_confirm(interaction, False)
+
+    async def confirm_and_stop_counting(self, interaction: discord.Interaction):
+        self.finished = True
+        self.stop()
+        await self.on_confirm(interaction, True)
+
+    async def cancel(self, interaction: discord.Interaction):
+        self.finished = True
+        self.stop()
+        await interaction.response.edit_message(content=messages.DELETE_MY_DATA_CANCELLED, view=None)
+
+    async def on_timeout(self):
+        if self.finished or self.original_interaction is None:
+            return
+        try:
+            await self.original_interaction.edit_original_response(
+                content=messages.DELETE_MY_DATA_EXPIRED.format(command=command_refs.DELETE_MY_DATA), view=None)
+        except discord.HTTPException:
+            # The member dismissed the prompt, so there is nothing left to update
+            pass
+
+
+class CountAgainView(discord.ui.View):
+    """The button /delete_my_data offers a member who asked not to be counted"""
+
+    def __init__(self, owner_id: int, on_count_again, timeout_seconds: float = 120):
+        super().__init__(timeout=timeout_seconds)
+        self.owner_id = owner_id
+        self.on_count_again = on_count_again
+        button = discord.ui.Button(style=discord.ButtonStyle.primary, label=messages.COUNT_ME_AGAIN_BUTTON)
+        button.callback = self.count_again
+        self.add_item(button)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.owner_id:
+            await interaction.response.send_message(messages.DELETE_MY_DATA_NOT_YOURS, ephemeral=True)
+            return False
+        return True
+
+    async def count_again(self, interaction: discord.Interaction):
+        self.stop()
+        await self.on_count_again(interaction)
 
 
 async def server_leaderboard(interaction, connection, month_emoji: str, all_time_emoji: str):
@@ -429,6 +675,8 @@ def build_server_config_embed(guild, server_config) -> discord.Embed:
                     "Members can chat in the board channel"),
             _toggle(server_config.hide_hof_post_below_threshold,
                     "Hide posts that drop below the threshold"),
+            _toggle(server_config.count_in_global_profiles,
+                    "Posts count toward members' totals across servers"),
         ]),
         inline=False)
 

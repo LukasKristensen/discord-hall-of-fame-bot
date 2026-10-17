@@ -7,7 +7,7 @@ from message_reactions import most_reacted_emoji, reaction_count
 from classes import server_class
 from enums import command_refs, log_type, calculation_method_type
 from repositories import (server_config_repo, hall_of_fame_message_repo, server_user_repo, hof_wrapped_repo,
-                          hof_wrapped_guild_status_repo)
+                          hof_wrapped_guild_status_repo, opt_out_repo)
 from caches import ExpiringSet
 from translations import messages
 
@@ -299,13 +299,17 @@ async def post_hall_of_fame_message(message: discord.Message, bot: discord.Clien
     hall_of_fame_message = await target_channel.send(embed=embed)
 
     try:
+        # A member who asked not to be counted still gets onto the server's board, but the post is
+        # stored without them, so it never reaches a leaderboard, profile or Wrapped
+        author_id = (hall_of_fame_message_repo.NO_AUTHOR_ID
+                     if opt_out_repo.is_opted_out(connection, message.author.id) else int(message.author.id))
         hall_of_fame_message_repo.insert_hall_of_fame_message(connection,
                                                               int(message.id),
                                                               int(message.channel.id),
                                                               int(message.guild.id),
                                                               int(hall_of_fame_message.id),
                                                               int(await reaction_count(message, connection, config)),
-                                                              int(message.author.id),
+                                                              author_id,
                                                               datetime.datetime.now(timezone.utc),
                                                               int(video_message.id) if video_link else None)
     except Exception as e:
@@ -605,7 +609,8 @@ async def create_database_context(bot, server, connection, custom_channel=None) 
                                                 reaction_threshold_default, 1000, leader_board_messages,
                                                 1000, False, True, False, False,
                                                 [], datetime.datetime.now(timezone.utc), False, False,
-                                                server_member_count, calculation_method_type.MOST_REACTIONS_ON_EMOJI, True, False)
+                                                server_member_count, calculation_method_type.MOST_REACTIONS_ON_EMOJI, True, False,
+                                                True)
 
     await hall_of_fame_channel.send(
         f"🎉 **Welcome to the Hall of Fame!** 🎉\n"
@@ -640,7 +645,8 @@ async def create_database_context(bot, server, connection, custom_channel=None) 
         reaction_count_calculation_method=calculation_method_type.MOST_REACTIONS_ON_EMOJI,
         hide_hof_post_below_threshold=True,
         server_member_count=server_member_count,
-        require_image_or_video=False
+        require_image_or_video=False,
+        count_in_global_profiles=True
     )
     return new_server_class
 

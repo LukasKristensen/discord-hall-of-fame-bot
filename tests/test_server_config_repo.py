@@ -1,3 +1,4 @@
+import datetime
 import unittest
 
 from tests.fakes import FakeConnection
@@ -41,6 +42,43 @@ class GuildIdsWithLeaderboardTests(unittest.TestCase):
         server_config_repo.get_guild_ids_with_leaderboard(connection)
 
         self.assertEqual(1, len(connection.queries))
+        self.assertTrue(all(cursor.closed for cursor in connection.cursors))
+
+
+class RecordMissingGuildsTests(unittest.TestCase):
+    """The grace period before a departed server is deleted is counted from this date."""
+
+    NOW = datetime.datetime(2026, 10, 18, tzinfo=datetime.timezone.utc)
+
+    def test_returns_when_each_server_was_first_found_missing(self):
+        earlier = self.NOW - datetime.timedelta(days=3)
+        connection = FakeConnection(rows=[(300, earlier), (301, self.NOW)])
+
+        missing_since = server_config_repo.record_missing_guilds(connection, [300, 301], self.NOW)
+
+        self.assertEqual({300: earlier, 301: self.NOW}, missing_since)
+
+    def test_clears_servers_that_are_back_before_marking_new_ones(self):
+        connection = FakeConnection(rows=[])
+        server_config_repo.record_missing_guilds(connection, [300], self.NOW)
+
+        clear, mark, _ = connection.queries
+        self.assertIn("SET missing_since = NULL", clear)
+        self.assertIn("NOT (guild_id = ANY", clear)
+        self.assertIn("WHERE missing_since IS NULL", mark)
+        self.assertEqual([([300],), (self.NOW, [300]), None], connection.parameters)
+
+    def test_never_moves_the_date_of_a_server_already_missing(self):
+        connection = FakeConnection(rows=[])
+        server_config_repo.record_missing_guilds(connection, [300], self.NOW)
+
+        self.assertIn("missing_since IS NULL", connection.queries[1])
+
+    def test_commits_and_closes(self):
+        connection = FakeConnection(rows=[])
+        server_config_repo.record_missing_guilds(connection, [], self.NOW)
+
+        self.assertEqual(1, connection.commits)
         self.assertTrue(all(cursor.closed for cursor in connection.cursors))
 
 

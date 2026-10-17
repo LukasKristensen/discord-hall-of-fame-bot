@@ -20,6 +20,9 @@ def create_hof_wrapped_table(connection):
             user_ranks TEXT
         )
     """)
+    # The unique key starts with the guild, so looking a member up across guilds (/my_data and
+    # /delete_my_data) would otherwise scan the whole table
+    cursor.execute("CREATE INDEX IF NOT EXISTS hof_wrapped_user_idx ON hof_wrapped (user_id)")
     connection.commit()
     cursor.close()
 
@@ -78,6 +81,45 @@ def delete_hof_wrapped_for_guild(connection, guild_id):
     """, (guild_id,))
     connection.commit()
     cursor.close()
+
+def get_hof_wrapped_for_user(connection, user_id) -> list[dict]:
+    """
+    Every Wrapped a member has, across guilds and years, for /my_data
+    :param connection: The database connection
+    :param user_id: The member's user ID
+    :return: One dict per row, without the row's own serial ID
+    """
+    cursor = connection.cursor()
+    cursor.execute("SELECT * FROM hof_wrapped WHERE user_id = %s ORDER BY year, guild_id", (user_id,))
+    columns = [desc[0] for desc in cursor.description]
+    results = [{key: value for key, value in zip(columns, row) if key != "id"} for row in cursor.fetchall()]
+    cursor.close()
+    return results
+
+def delete_hof_wrapped_for_user(connection, user_id) -> int:
+    """
+    Delete a member's own Wrapped rows, and take their ID out of everybody else's fan lists, where
+    it is stored as a key of the JSON objects fan_of_users and users_fans
+    :param connection: The database connection
+    :param user_id: The member's user ID
+    :return: The number of the member's own rows deleted
+    """
+    cursor = connection.cursor()
+    cursor.execute("DELETE FROM hof_wrapped WHERE user_id = %s", (user_id,))
+    deleted = cursor.rowcount
+    key = str(user_id)
+    # The LIKE narrows the update to rows that mention the member before any JSON is parsed. json.dumps
+    # writes the integer keys as quoted strings, which is the form matched here
+    pattern = f'%"{key}"%'
+    for column in ("fan_of_users", "users_fans"):
+        cursor.execute(f"""
+            UPDATE hof_wrapped
+            SET {column} = ({column}::jsonb - %s)::text
+            WHERE {column} LIKE %s
+        """, (key, pattern))
+    connection.commit()
+    cursor.close()
+    return deleted
 
 def check_if_guild_wrapped_data_exists(connection, guild_id, year):
     cursor = connection.cursor()

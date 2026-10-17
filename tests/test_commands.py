@@ -15,7 +15,7 @@ import discord
 import commands
 import hof_wrapped
 from constants import version
-from repositories import server_config_repo, server_user_repo
+from repositories import server_config_repo, server_user_repo, hall_of_fame_message_repo
 from translations import messages
 
 MONTH_EMOJI = "<:month:1>"
@@ -215,6 +215,7 @@ def server_config(**overrides):
         "reaction_count_calculation_method": "unique_users",
         "hide_hof_post_below_threshold": False,
         "require_image_or_video": False,
+        "count_in_global_profiles": True,
     }
     config.update(overrides)
     return types.SimpleNamespace(**config)
@@ -336,6 +337,14 @@ class UserServerProfileTests(unittest.IsolatedAsyncioTestCase):
             "monthly_reaction_rank": 3,
             "total_reaction_rank": 5,
         }
+        # The highlights read the database too; these tests are about the columns and the crowns
+        for target, name, replacement in (
+                (hall_of_fame_message_repo, "get_member_highlights",
+                 lambda *_args: {"best_post": None, "last_featured": None}),
+                (server_user_repo, "get_stat_at_rank", lambda *_args: None)):
+            patcher = mock.patch.object(target, name, replacement)
+            patcher.start()
+            self.addCleanup(patcher.stop)
 
     def patch_top_of_stat(self, monthly=False, all_time=False):
         def is_top(_connection, _user_id, _guild_id, stat):
@@ -356,15 +365,14 @@ class UserServerProfileTests(unittest.IsolatedAsyncioTestCase):
         self.patch_top_of_stat()
         embed = await self.run_command(self.stats)
 
-        self.assertIn("40", field_named(embed, "Total Hall of Fame Messages").value)
-        self.assertIn("Rank: 1", field_named(embed, "Total Hall of Fame Messages").value)
+        self.assertIn("**40** posts · #1", field_named(embed, "All time").value)
 
     async def test_shows_the_monthly_standing(self):
         self.patch_top_of_stat()
         embed = await self.run_command(self.stats)
 
-        self.assertIn("4", field_named(embed, "This Month's Hall of Fame Messages").value)
-        self.assertIn("Rank: 2", field_named(embed, "This Month's Hall of Fame Messages").value)
+        self.assertIn("**4** posts · #2", field_named(embed, "This month").value)
+        self.assertIn("**60** reactions · #3", field_named(embed, "This month").value)
 
     async def test_shows_no_monthly_rank_for_a_member_with_nothing_this_month(self):
         self.patch_top_of_stat()
@@ -372,14 +380,14 @@ class UserServerProfileTests(unittest.IsolatedAsyncioTestCase):
                      this_month_hall_of_fame_message_reactions=0, monthly_reaction_rank=None)
         embed = await self.run_command(stats)
 
-        self.assertIn("Rank: N/A", field_named(embed, "This Month's Hall of Fame Messages").value)
-        self.assertIn("Rank: N/A", field_named(embed, "Reactions Received This Month").value)
+        self.assertIn("**0** posts · -", field_named(embed, "This month").value)
+        self.assertIn("**0** reactions · -", field_named(embed, "This month").value)
 
     async def test_shows_the_reactions_earned(self):
         self.patch_top_of_stat()
         embed = await self.run_command(self.stats)
 
-        self.assertIn("600", field_named(embed, "Total Reactions Received").value)
+        self.assertIn("**600** reactions · #5", field_named(embed, "All time").value)
 
     async def test_crowns_the_monthly_champion(self):
         self.patch_top_of_stat(monthly=True)
@@ -404,7 +412,7 @@ class UserServerProfileTests(unittest.IsolatedAsyncioTestCase):
         self.patch_top_of_stat()
         embed = await self.run_command(None)
 
-        self.assertIn("0", field_named(embed, "Total Hall of Fame Messages").value)
+        self.assertIn("**0** posts", field_named(embed, "All time").value)
 
     async def test_does_not_crown_a_member_with_no_history(self):
         self.patch_top_of_stat(monthly=True, all_time=True)

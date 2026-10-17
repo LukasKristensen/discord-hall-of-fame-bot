@@ -14,6 +14,25 @@ jobs:
     name: Unit Tests
     runs-on: ubuntu-latest
 
+    # A throwaway database for tests/integration, which run the real SQL behind /delete_my_data and
+    # are skipped without it. Nothing else connects to it, and it is gone when the job ends
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: hoftest
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U hoftest"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      HOF_TEST_DATABASE_URL: "host=localhost port=5432 user=hoftest dbname=hoftest"
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4

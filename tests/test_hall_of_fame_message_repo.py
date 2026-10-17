@@ -25,10 +25,18 @@ class CreateTableTests(unittest.TestCase):
         connection = FakeConnection()
         hall_of_fame_message_repo.create_hall_of_fame_message_table(connection)
 
-        index = " ".join(connection.queries[-1].split())
-        self.assertIn("CREATE INDEX IF NOT EXISTS", index)
-        self.assertIn("ON hall_of_fame_message (guild_id, created_at)", index)
+        indexes = [" ".join(query.split()) for query in connection.queries if "CREATE INDEX" in query]
+        self.assertTrue(any("ON hall_of_fame_message (guild_id, created_at)" in index for index in indexes))
+        self.assertTrue(all("IF NOT EXISTS" in index for index in indexes))
         self.assertEqual(1, connection.commits)
+
+    def test_indexes_the_table_by_author(self):
+        """/my_data, /delete_my_data and the global profile read one member's posts across guilds."""
+        connection = FakeConnection()
+        hall_of_fame_message_repo.create_hall_of_fame_message_table(connection)
+
+        indexes = [" ".join(query.split()) for query in connection.queries if "CREATE INDEX" in query]
+        self.assertTrue(any("ON hall_of_fame_message (author_id)" in index for index in indexes))
 
 
 class FindHallOfFameMessageTests(unittest.TestCase):

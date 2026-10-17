@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+import io
 import discord
 from discord import app_commands
 from discord.ext import commands as discord_commands
@@ -27,6 +28,8 @@ from repositories import (
     hof_wrapped_guild_status_repo,
     guild_lifecycle_event_repo,
     guild_monthly_snapshot_repo,
+    global_profile_repo,
+    opt_out_repo,
 )
 import hof_wrapped
 from contextlib import asynccontextmanager
@@ -69,6 +72,10 @@ def create_connection_pool():
 
 message_locks = concurrency.KeyedLocks()
 daily_command_cooldowns = {}
+
+# The longest a single query behind /my_data or /delete_my_data may run. psycopg2 holds the event loop
+# while a query runs, so a slow one would stall the bot in every server; the database cancels it instead
+data_command_statement_timeout_ms = 10_000
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -124,6 +131,23 @@ async def send_error(interaction: discord.Interaction, content: str):
     else:
         # noinspection PyUnresolvedReferences
         await interaction.response.send_message(content, ephemeral=True)
+
+
+async def refuse_in_closed_board(interaction: discord.Interaction) -> bool:
+    """
+    Turn away a command that answers with a public card when it is used in a Hall of Fame channel
+    that is closed to chat. The bot deletes members' messages there, and a profile or leaderboard
+    card left in the middle of the board would be the same clutter
+    :param interaction: The command being answered
+    :return: True when the command was turned away
+    """
+    server_class = server_classes.get(interaction.guild_id)
+    if (server_class is None or server_class.allow_messages_in_hof_channel
+            or getattr(interaction, "channel_id", None) != server_class.hall_of_fame_channel_id):
+        return False
+    await send_error(interaction, messages.COMMAND_NOT_IN_CLOSED_BOARD.format(
+        channel=f"<#{server_class.hall_of_fame_channel_id}>"))
+    return True
 
 
 def on_off(value: bool) -> str:
@@ -331,6 +355,10 @@ def setup_databases(connection):
     guild_lifecycle_event_repo.create_guild_lifecycle_event_table(connection)
     print("Creating guild monthly snapshot table...")
     guild_monthly_snapshot_repo.create_guild_monthly_snapshot_table(connection)
+    print("Creating hidden global profile table...")
+    global_profile_repo.create_hidden_global_profile_table(connection)
+    print("Creating opted out member table...")
+    opt_out_repo.create_opted_out_member_table(connection)
 
 async def handle_raw_reaction(payload: discord.RawReactionActionEvent, event_name: str):
     """
@@ -794,12 +822,15 @@ async def hide_hall_of_fame_posts_when_they_are_below_threshold(interaction: dis
 @app_commands.describe(specific_user="The member to look up, yourself when left out")
 async def user_server_profile(interaction: discord.Interaction, specific_user: discord.User = None):
     """
-    Get the server profile of a user
+    Get the server profile of a user, with their totals across every server at the bottom unless
+    they hid them
     :param interaction: The interaction object
     :param specific_user: The user to get the profile of, defaults to the interaction user
     :return: The server profile of the user
     """
     if not await ensure_bot_is_loaded(interaction):
+        return
+    if await refuse_in_closed_board(interaction):
         return
 
     user = specific_user or interaction.user
@@ -809,8 +840,14 @@ async def user_server_profile(interaction: discord.Interaction, specific_user: d
 
     async with get_db_connection(connection_pool) as connection:
         user_stats = server_user_repo.get_server_user(connection, user.id, interaction.guild_id)
+        # The profile is posted in the channel, so a member who hid their totals has them left out
+        # even when they look themselves up
+        global_profile = (None if global_profile_repo.is_hidden(connection, user.id)
+                          else global_profile_repo.get_global_profile(connection, user.id))
 
-    if user_stats is None:
+    # A member featured only in other servers still has a card worth showing: zeros for this
+    # server, and their totals across servers below
+    if user_stats is None and not commands.global_profile_adds_something(global_profile, None):
         # noinspection PyUnresolvedReferences
         await interaction.response.send_message(messages.PROFILE_NO_DATA)
         await utils.logging(bot, f"User server profile command used by {interaction.user.name} in {interaction.guild.name} but no data available for user {user.name}",
@@ -818,9 +855,188 @@ async def user_server_profile(interaction: discord.Interaction, specific_user: d
         return
 
     async with get_db_connection(connection_pool) as connection:
-        await commands.user_server_profile(interaction, user, user_stats, connection, month_emoji, all_time_emoji)
+        await commands.user_server_profile(interaction, user, user_stats, connection, month_emoji, all_time_emoji,
+                                           global_profile)
     await utils.logging(bot, f"Get user server profile command used by {interaction.user.name} in {interaction.guild.name}",
                         interaction.guild.id, str(user.id), log_level=log_type.COMMAND)
+
+def where_used(interaction: discord.Interaction) -> str:
+    """Where a command was used, for the log. The data commands also run in DMs, where there is no server"""
+    guild = interaction.guild
+    return getattr(guild, "name", None) or "a DM or a server without the bot"
+
+
+@tree.command(name="profile_privacy", description="Hide or show your totals across servers on your profile")
+@app_commands.allowed_installs(guilds=True, users=True)
+@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+@app_commands.describe(visibility="Hide your totals across servers from your profile, or show them again")
+@app_commands.choices(visibility=[
+    app_commands.Choice(name="Hide", value="hide"),
+    app_commands.Choice(name="Show", value="show"),
+])
+async def profile_privacy(interaction: discord.Interaction, visibility: app_commands.Choice[str]):
+    if not await ensure_bot_is_loaded(interaction):
+        return
+
+    hide = visibility.value == "hide"
+    async with get_db_connection(connection_pool) as connection:
+        currently_hidden = global_profile_repo.is_hidden(connection, interaction.user.id)
+        if currently_hidden != hide:
+            global_profile_repo.set_hidden(connection, interaction.user.id, hide)
+
+    if currently_hidden == hide:
+        content = messages.PROFILE_PRIVACY_UNCHANGED.format(state="hidden" if hide else "visible")
+    else:
+        content = messages.PROFILE_PRIVACY_HIDDEN if hide else messages.PROFILE_PRIVACY_SHOWN
+    # noinspection PyUnresolvedReferences
+    await interaction.response.send_message(content, ephemeral=True)
+    await utils.logging(bot, f"Profile privacy command used in {where_used(interaction)}", interaction.guild_id,
+                        visibility.value, log_level=log_type.COMMAND)
+
+
+@tree.command(name="count_in_global_profiles", description="Should posts in this server count toward members' totals across servers?")
+@app_commands.describe(count="Whether members' totals across servers include their posts from this server")
+async def count_in_global_profiles(interaction: discord.Interaction, count: bool):
+    if not await ensure_bot_is_loaded(interaction):
+        return
+
+    if not await check_if_user_has_manage_server_permission(interaction):
+        return
+
+    note = messages.GLOBAL_PROFILE_COUNTING_ON_NOTE if count else messages.GLOBAL_PROFILE_COUNTING_OFF_NOTE
+    await update_setting(interaction, "count_in_global_profiles", count,
+                         "Posts here count toward members' totals across servers", note=note)
+    await utils.logging(bot, f"Count in global profiles command used by {interaction.user.name} in {interaction.guild.name}",
+                        interaction.guild.id, str(count), log_level=log_type.COMMAND)
+
+
+def on_daily_cooldown(user_id: int, command_name: str) -> bool:
+    return command_name in daily_command_cooldowns.get(user_id, [])
+
+
+def start_daily_cooldown(user_id: int, command_name: str):
+    daily_command_cooldowns.setdefault(user_id, []).append(command_name)
+
+
+def plural_suffix(count: int, singular: str, many: str) -> str:
+    return singular if count == 1 else many
+
+
+@tree.command(name="my_data", description="See everything Hall of Fame stores about you")
+@app_commands.allowed_installs(guilds=True, users=True)
+@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+async def my_data(interaction: discord.Interaction):
+    if not await ensure_bot_is_loaded(interaction):
+        return
+
+    user_id = interaction.user.id
+    if on_daily_cooldown(user_id, "my_data"):
+        await send_error(interaction, messages.COMMAND_ON_COOLDOWN)
+        return
+
+    # noinspection PyUnresolvedReferences
+    await interaction.response.defer(ephemeral=True)
+    async with get_db_connection(connection_pool) as connection:
+        with utils.statement_timeout(connection, data_command_statement_timeout_ms):
+            posts = hall_of_fame_message_repo.get_messages_by_author(connection, user_id)
+            standings = server_user_repo.get_server_users_for_user(connection, user_id)
+            wrapped = hof_wrapped_repo.get_hof_wrapped_for_user(connection, user_id)
+            hidden = global_profile_repo.is_hidden(connection, user_id)
+            not_counted = opt_out_repo.is_opted_out(connection, user_id)
+
+    if not posts and not standings and not wrapped and not hidden and not not_counted:
+        await interaction.followup.send(messages.MY_DATA_EMPTY, ephemeral=True)
+    else:
+        export = commands.build_my_data_export(user_id, posts, standings, wrapped, hidden, not_counted)
+        servers = len({row["guild_id"] for row in standings})
+        content = messages.MY_DATA_INTRO.format(
+            posts=len(posts), posts_plural=plural(len(posts)),
+            servers=servers, servers_plural=plural(servers),
+            wrapped=len(wrapped), wrapped_plural=plural_suffix(len(wrapped), "y", "ies"))
+        await interaction.followup.send(content, ephemeral=True,
+                                        file=discord.File(io.BytesIO(export), filename="hall-of-fame-my-data.json"))
+    # Only once it worked, so a failed attempt does not lock the member out for the day
+    start_daily_cooldown(user_id, "my_data")
+    await utils.logging(bot, f"My data command used in {where_used(interaction)}", interaction.guild_id,
+                        log_level=log_type.COMMAND)
+
+
+async def delete_member_data(user_id: int, stop_counting: bool = False) -> int:
+    """
+    Remove a member from everything the bot stores: their posts lose their author, and their
+    statistics, Wrapped rows, place in other members' Wrapped and privacy choice are deleted
+    :param user_id: The member's user ID
+    :param stop_counting: Also leave the member out of posts featured from now on
+    :return: How many posts were detached from them
+    """
+    async with get_db_connection(connection_pool) as connection:
+        with utils.statement_timeout(connection, data_command_statement_timeout_ms):
+            # Recorded first, so a post featured while the rest runs is already stored without them
+            if stop_counting:
+                opt_out_repo.set_opted_out(connection, user_id, True)
+            # The posts before the statistics: the daily rebuild recreates server_user from them, so
+            # deleting the statistics alone would undo itself overnight
+            detached = hall_of_fame_message_repo.remove_author(connection, user_id)
+            server_user_repo.delete_server_users_for_user(connection, user_id)
+            hof_wrapped_repo.delete_hof_wrapped_for_user(connection, user_id)
+            global_profile_repo.delete_for_user(connection, user_id)
+    return detached
+
+
+@tree.command(name="delete_my_data", description="Delete everything Hall of Fame stores about you")
+@app_commands.allowed_installs(guilds=True, users=True)
+@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+async def delete_my_data(interaction: discord.Interaction):
+    if not await ensure_bot_is_loaded(interaction):
+        return
+
+    user_id = interaction.user.id
+    async with get_db_connection(connection_pool) as connection:
+        opted_out = opt_out_repo.is_opted_out(connection, user_id)
+    if opted_out:
+        # Checked before the cooldown, so being counted again is never held back by it
+        await offer_to_count_again(interaction, user_id)
+        return
+
+    if on_daily_cooldown(user_id, "delete_my_data"):
+        await send_error(interaction, messages.COMMAND_ON_COOLDOWN)
+        return
+
+    async def confirmed(button_interaction: discord.Interaction, stop_counting: bool):
+        detached = await delete_member_data(user_id, stop_counting)
+        start_daily_cooldown(user_id, "delete_my_data")
+        content = (messages.DELETE_MY_DATA_DONE_STOPPED.format(command=command_refs.DELETE_MY_DATA)
+                   if stop_counting else messages.DELETE_MY_DATA_DONE)
+        # noinspection PyUnresolvedReferences
+        await button_interaction.response.edit_message(content=content, view=None)
+        # No name in the log: the member has just asked to be forgotten
+        await utils.logging(bot, f"A member deleted their data, detaching {detached} post{plural(detached)}"
+                                 + (", and asked not to be counted" if stop_counting else ""),
+                            interaction.guild_id, log_level=log_type.COMMAND)
+
+    view = commands.ConfirmDeleteView(user_id, confirmed)
+    view.original_interaction = interaction
+    # noinspection PyUnresolvedReferences
+    await interaction.response.send_message(messages.DELETE_MY_DATA_CONFIRM, view=view, ephemeral=True)
+
+
+async def offer_to_count_again(interaction: discord.Interaction, user_id: int):
+    """
+    /delete_my_data for a member who is not counted: there is nothing stored to delete, so the
+    command explains that and offers to count them again
+    """
+    async def count_again(button_interaction: discord.Interaction):
+        async with get_db_connection(connection_pool) as connection:
+            opt_out_repo.set_opted_out(connection, user_id, False)
+        # noinspection PyUnresolvedReferences
+        await button_interaction.response.edit_message(content=messages.COUNTED_AGAIN, view=None)
+        await utils.logging(bot, "A member asked to be counted again", interaction.guild_id,
+                            log_level=log_type.COMMAND)
+
+    view = commands.CountAgainView(user_id, count_again)
+    # noinspection PyUnresolvedReferences
+    await interaction.response.send_message(messages.NOT_COUNTED_STATUS, view=view, ephemeral=True)
+
 
 @tree.command(name="leaderboard", description="Get the server leaderboard")
 async def leaderboard(interaction: discord.Interaction):
@@ -830,6 +1046,8 @@ async def leaderboard(interaction: discord.Interaction):
     :return: The server stats
     """
     if not await ensure_bot_is_loaded(interaction):
+        return
+    if await refuse_in_closed_board(interaction):
         return
 
     if interaction.guild_id not in server_classes:
@@ -939,6 +1157,8 @@ async def set_hall_of_fame_channel(interaction: discord.Interaction, channel: di
 async def hof_wrapped_command(interaction: discord.Interaction):
     if not await ensure_bot_is_loaded(interaction):
         return
+    if await refuse_in_closed_board(interaction):
+        return
 
     if not (interaction.guild_id in server_classes and server_classes[interaction.guild_id] is not None):
         await send_error(interaction, messages.ERROR_SERVER_NOT_SETUP)
@@ -963,6 +1183,8 @@ async def hof_wrapped_command(interaction: discord.Interaction):
 @tree.command(name="server_hof_wrapped", description="Get the server's Hall of Fame Wrapped for the year")
 async def server_hof_wrapped_command(interaction: discord.Interaction):
     if not await ensure_bot_is_loaded(interaction):
+        return
+    if await refuse_in_closed_board(interaction):
         return
 
     if not (interaction.guild_id in server_classes and server_classes[interaction.guild_id] is not None):

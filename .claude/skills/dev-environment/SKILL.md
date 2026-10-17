@@ -35,6 +35,18 @@ From the repo root, exactly as CI runs them:
   the summary, not the exit status.
 - Tests use fakes (`tests/fakes.py`), so no bot token or Postgres is needed. Never point a test at the
   production database or read production secrets.
+- The exception is `tests/integration`, which runs the real SQL behind `/delete_my_data` and the
+  opt-out. It is skipped unless `HOF_TEST_DATABASE_URL` is set, and CI runs it against its own
+  PostgreSQL service. Locally, never use the development bot's database for it: start a throwaway
+  cluster from the installed PostgreSQL 18 binaries in a scratch folder instead, then stop it after.
+
+  ```bash
+  B="/c/Program Files/PostgreSQL/18/bin"; D="<scratch folder>/pgdata"
+  "$B/initdb" -D "$D" -U hoftest --auth=trust -E UTF8 --no-locale
+  "$B/pg_ctl" -D "$D" -o "-p 55432" -l "$D.log" -w start
+  HOF_TEST_DATABASE_URL="host=localhost port=55432 user=hoftest dbname=postgres" /c/Users/lukas/.conda/envs/hof313/python.exe -m unittest discover -s tests -t .
+  "$B/pg_ctl" -D "$D" -w stop
+  ```
 - The user often pastes output from PyCharm's test runner. It is the same suite, so find the cause in
   the traceback (a missing import in a test has happened before), fix it, and confirm with the command
   above.

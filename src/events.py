@@ -4,8 +4,8 @@ import datetime
 import concurrency
 import utils
 from translations import messages
-from enums import command_refs
-from repositories import server_config_repo, hall_of_fame_message_repo
+from enums import command_refs, log_type
+from repositories import server_config_repo, hall_of_fame_message_repo, guild_lifecycle_event_repo
 
 # The daily sweep runs once per server the bot is in, so it is paced rather than run all at once:
 # a bounded number of servers are handled together, and any single one that hangs is abandoned so
@@ -17,6 +17,14 @@ daily_task_guild_timeout_seconds = 120
 # a stalled query. The database is told to cancel any single statement that runs longer than this
 # instead, which bounds how long one server can hold up the loop
 daily_task_statement_timeout_ms = 20_000
+
+# Removing the bot while it is offline sends no remove event, which leaves the server's data behind.
+# The daily task deletes it, but only once the server has been missing for this many days in a row,
+# Discord confirms the bot has no access to it, and few enough servers are missing at once that it
+# cannot be Discord leaving servers out of the guild list
+departed_guild_grace_days = 7
+departed_guild_max_missing_share = 0.1
+departed_guild_fetch_timeout_seconds = 30
 
 
 async def post_wrapped():
@@ -194,15 +202,82 @@ async def daily_task(bot, connection, server_classes, dev_testing, borrow_connec
     await utils.logging(bot, f"Updated {len(leaderboards.completed)} leaderboards, "
                              f"{len(leaderboards.failed)} failed")
 
-    await utils.logging(bot, f"Checking for db entries that are not in the guilds")
-    for server in server_classes.values():
-        if dev_testing:
-            continue
-        if int(server.guild_id) not in [guild.id for guild in bot.guilds]:
-            await utils.logging(bot, f"Could not find server {server.guild_id} in bot guilds")
+    if not dev_testing:
+        # The development bot is in a handful of servers, so every other server would look departed
+        await clean_up_departed_guilds(bot, connection, server_classes)
     await utils.logging(bot, f"Checked {len(server_classes)} servers for daily task")
     await update_user_database(bot, connection)
     await check_write_permissions_to_hall_of_fame_channel(bot, server_classes)
+
+
+async def clean_up_departed_guilds(bot: discord.Client, connection, server_classes, now=None):
+    """
+    Delete the data of servers that removed the bot while it was offline, and so never sent a remove
+    event. Deleting cannot be undone, so a server is only deleted when all of these hold:
+    - few enough servers are missing at once that Discord is not just leaving servers out
+    - it has been missing from the bot's guilds for departed_guild_grace_days days in a row
+    - asking Discord for the server directly answers that the bot has no access to it
+    :param bot: The bot client
+    :param connection: The database connection
+    :param server_classes: The in memory server configurations, which deleted servers are removed from
+    :param now: The time of this check
+    :return: The IDs of the servers that were deleted
+    """
+    now = now or datetime.datetime.now(datetime.timezone.utc)
+    bot_guild_ids = {guild.id for guild in bot.guilds}
+    missing = [int(guild_id) for guild_id in server_classes if int(guild_id) not in bot_guild_ids]
+    if not missing:
+        # Still recorded, so a server that came back loses its missing date and starts the grace period over
+        server_config_repo.record_missing_guilds(connection, missing, now)
+        return []
+
+    if not bot_guild_ids or len(missing) > len(server_classes) * departed_guild_max_missing_share:
+        await utils.logging(bot, f"{len(missing)} of {len(server_classes)} servers are missing from the bot's "
+                                 f"guilds, which looks like Discord leaving them out rather than servers "
+                                 f"removing the bot. Not cleaning up any server today")
+        return []
+
+    missing_since = server_config_repo.record_missing_guilds(connection, missing, now)
+    grace = datetime.timedelta(days=departed_guild_grace_days)
+    deleted = []
+    for guild_id in missing:
+        since = missing_since.get(guild_id)
+        if since is None or now - since < grace:
+            first_seen = since.strftime("%Y-%m-%d") if since else "today"
+            await utils.logging(bot, f"Could not find server {guild_id} in bot guilds (missing since {first_seen})")
+            continue
+        try:
+            if not await bot_has_left_guild(bot, guild_id):
+                await utils.logging(bot, f"Server {guild_id} has been missing from the bot's guilds since "
+                                         f"{since:%Y-%m-%d}, but Discord still gives the bot access to it. "
+                                         f"Not deleting it")
+                continue
+            utils.delete_database_context(guild_id, connection)
+            # A leave without a matching join would leave the server below zero in the activity statistics
+            if guild_lifecycle_event_repo.get_latest_event_type(connection, guild_id) == "JOIN":
+                guild_lifecycle_event_repo.insert_guild_lifecycle_event(connection, guild_id, "LEAVE", now)
+        except Exception as e:
+            connection.rollback()
+            await utils.logging(bot, f"Could not clean up departed server {guild_id}: {e}", guild_id)
+            continue
+        server_classes.pop(guild_id, None)
+        deleted.append(guild_id)
+        await utils.logging(bot, f"Deleted the data of server {guild_id}, which removed the bot while it was "
+                                 f"offline (missing since {since:%Y-%m-%d})", guild_id, log_level=log_type.SYSTEM)
+    return deleted
+
+
+async def bot_has_left_guild(bot: discord.Client, guild_id: int) -> bool:
+    """
+    Ask Discord directly whether the bot is still in a server, rather than trusting the guild cache.
+    Only a clear "no access" or "unknown guild" counts as left. Any other failure, such as an outage or
+    a timeout, raises, so the server is checked again the next day instead of being deleted
+    """
+    try:
+        await asyncio.wait_for(bot.fetch_guild(guild_id), departed_guild_fetch_timeout_seconds)
+    except (discord.Forbidden, discord.NotFound):
+        return True
+    return False
 
 
 async def check_write_permissions_to_hall_of_fame_channel(bot: discord.Client, server_classes):

@@ -29,17 +29,25 @@ GUILD_ID = 200
 class FakeResponse:
     def __init__(self):
         self.messages = []
+        self.contents = []
         self.ephemeral = []
         self.views = []
+        self.edits = []
         self.deferred = False
+        self.deferred_ephemeral = False
 
     async def send_message(self, content=None, embed=None, ephemeral=False, view=None):
         self.messages.append(embed if embed is not None else content)
+        self.contents.append(content)
         self.ephemeral.append(ephemeral)
         self.views.append(view)
 
-    async def defer(self):
+    async def edit_message(self, content=None, view=None):
+        self.edits.append((content, view))
+
+    async def defer(self, ephemeral=False):
         self.deferred = True
+        self.deferred_ephemeral = ephemeral
 
     def is_done(self):
         return self.deferred or bool(self.messages)
@@ -49,10 +57,12 @@ class FakeFollowup:
     def __init__(self):
         self.messages = []
         self.ephemeral = []
+        self.files = []
 
-    async def send(self, content=None, embed=None, ephemeral=False):
+    async def send(self, content=None, embed=None, ephemeral=False, file=None):
         self.messages.append(embed if embed is not None else content)
         self.ephemeral.append(ephemeral)
+        self.files.append(file)
 
 
 class FakeUser:
@@ -214,7 +224,7 @@ class SetupDatabasesTests(unittest.TestCase):
         main.setup_databases(connection)
 
         created = [query for query in connection.queries if "CREATE TABLE IF NOT EXISTS" in query]
-        self.assertEqual(7, len(created))
+        self.assertEqual(9, len(created))
 
     def test_creates_each_table_only_if_it_is_missing(self):
         """This runs on every start, so it must never drop or recreate a table that holds data."""
@@ -973,6 +983,51 @@ class SetHallOfFameChannelCommandTests(CommandTestCase):
 
         self.assertIn("Could not set up", interaction.followup.messages[0])
         self.assertEqual([], self.writes)
+
+
+class ClosedBoardTests(CommandTestCase):
+    """The public cards stay out of a Hall of Fame channel that is closed to chat."""
+
+    def setUp(self):
+        super().setUp()
+        self.server.hall_of_fame_channel_id = 100
+        self.server.allow_messages_in_hof_channel = False
+        # The leaderboard goes on a daily cooldown once it is shown, which would leak into later tests
+        self.patch(main, "daily_command_cooldowns", {})
+        self.shown = []
+
+        async def record(*_args, **_kwargs):
+            self.shown.append(True)
+
+        self.patch(main.commands, "server_leaderboard", record)
+
+    def interaction(self, channel_id=100):
+        interaction = FakeInteraction()
+        interaction.channel_id = channel_id
+        return interaction
+
+    async def test_turns_the_public_commands_away_privately(self):
+        for command, args in ((main.user_server_profile, (None,)), (main.leaderboard, ()),
+                              (main.hof_wrapped_command, ()), (main.server_hof_wrapped_command, ())):
+            with self.subTest(command=command.name):
+                interaction = self.interaction()
+                await command.callback(interaction, *args)
+
+                self.assertEqual([messages.COMMAND_NOT_IN_CLOSED_BOARD.format(channel="<#100>")],
+                                 interaction.response.messages)
+                self.assertEqual([True], interaction.response.ephemeral)
+        self.assertEqual(0, self.pool.handed_out)
+
+    async def test_works_in_any_other_channel(self):
+        await main.leaderboard.callback(self.interaction(channel_id=555))
+
+        self.assertEqual([True], self.shown)
+
+    async def test_works_in_a_board_open_to_chat(self):
+        self.server.allow_messages_in_hof_channel = True
+        await main.leaderboard.callback(self.interaction())
+
+        self.assertEqual([True], self.shown)
 
 
 class LeaderboardFailureTests(CommandTestCase):

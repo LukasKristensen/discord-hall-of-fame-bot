@@ -94,10 +94,11 @@ messages being reacted to.
 
 ## Commands
 
-All commands are slash commands and only work inside a server. The configuration ones need the
-**Manage Server** permission, and say so on each group; everything under
-[Recognition](#recognition-commands) and [Bot and help](#bot-and-help) is open to every member. If a
-command is refused, for example because a value is out of range, only you see the reply.
+All commands are slash commands and work inside a server, except the three under
+[Your data](#your-data), which also work in DMs. The configuration ones need the **Manage Server**
+permission, and say so on each group; everything under [Recognition](#recognition-commands),
+[Your data](#your-data) and [Bot and help](#bot-and-help) is open to every member. If a command is
+refused, for example because a value is out of range, only you see the reply.
 
 ### Setting up the board
 
@@ -107,7 +108,8 @@ Requires **Manage Server**.
 |:---|:---|:---|
 | `/set_hall_of_fame_channel` | `channel` | Point the bot at the channel it should post to. Checks its own permissions first (View Channel, Send Messages, Read Message History and Embed Links) and tells you what is missing. |
 | `/set_reaction_threshold` | `reaction_threshold` (1 to 1000) | How many reactions a message needs. Seeded once on join from your member count, and fixed at that value until you change it here. |
-| `/allow_messages_in_hof_channel` | `allow` (true/false) | Let members chat in the hall of fame channel. Off by default, so the board stays clean. Removing chat needs the bot to have **Manage Messages** in that channel. |
+| `/allow_messages_in_hof_channel` | `allow` (true/false) | Let members chat in the hall of fame channel. Off by default, so the board stays clean: chat is removed, and `/user_profile`, `/leaderboard` and the Wrapped commands are turned away there with a private note to use another channel. Removing chat needs the bot to have **Manage Messages** in that channel. |
+| `/count_in_global_profiles` | `count` (true/false) | Whether members' totals across servers include their posts from this server. On by default. The server is never named either way. |
 
 ### Choosing what qualifies
 
@@ -141,9 +143,19 @@ Open to everyone.
 | Command | Parameters | What it does |
 |:---|:---|:---|
 | `/leaderboard` | | Rank the server by hall of fame posts and reactions earned. Refreshed daily. |
-| `/user_profile` | `specific_user` (optional) | All time and monthly totals and ranks for a member. Defaults to you. |
+| `/user_profile` | `specific_user` (optional) | All time and monthly totals and ranks for a member. Defaults to you. When the member has been featured in other servers too, the card ends with their posts, reactions and titles added up across every server with the bot, without naming any server. |
 | `/hof_wrapped` | | Your personal Hall of Fame Wrapped for the year. |
 | `/server_hof_wrapped` | | The Hall of Fame Wrapped for the whole server. |
+
+### Your data
+
+Open to everyone, answered only to you, and usable in DMs as well as servers.
+
+| Command | Parameters | What it does |
+|:---|:---|:---|
+| `/my_data` | | A file with everything the bot stores about you. Once a day. |
+| `/delete_my_data` | | Remove you from every leaderboard, profile and Wrapped, after you confirm. Your posts stay on the boards but are no longer credited to you. Choose **Delete and stop counting me** to also be left out of posts featured from then on; running the command again offers to count you again. Once a day. |
+| `/profile_privacy` | `visibility` (hide or show) | Hide your totals across servers from your profile, or show them again. Your profile then shows only the numbers from the server it is looked up in. |
 
 ### Bot and help
 
@@ -303,8 +315,9 @@ one](https://discord.com/oauth2/authorize?client_id=1177041673352663070&permissi
 ## Privacy and terms
 
 The bot stores IDs, reaction counts and statistics, not the text or images of your messages. Removing it
-from a server deletes that server's data. The [Privacy Policy](PRIVACY.md) lists exactly what is kept
-and how to ask for deletion, and the [Terms of Service](TERMS.md) cover using the bot.
+from a server deletes that server's data, and any member can see or delete their own with `/my_data`
+and `/delete_my_data`. The [Privacy Policy](PRIVACY.md) lists exactly what is kept, and the
+[Terms of Service](TERMS.md) cover using the bot.
 
 <br>
 

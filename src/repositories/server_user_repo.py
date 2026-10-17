@@ -48,6 +48,36 @@ def delete_server_users(connection, guild_id):
     connection.commit()
     cursor.close()
 
+def get_server_users_for_user(connection, user_id) -> list[dict]:
+    """
+    A member's standing in every guild, for /my_data. The primary key starts with user_id, so this
+    is an index lookup
+    :param connection: The database connection
+    :param user_id: The member's user ID
+    :return: One dict per guild
+    """
+    cursor = connection.cursor()
+    cursor.execute("SELECT * FROM server_user WHERE user_id = %s ORDER BY guild_id", (user_id,))
+    columns = [desc[0] for desc in cursor.description]
+    results = [dict(zip(columns, row)) for row in cursor.fetchall()]
+    cursor.close()
+    return results
+
+def delete_server_users_for_user(connection, user_id) -> int:
+    """
+    Delete a member's standing in every guild. The daily rebuild writes it again from
+    hall_of_fame_message, so this only sticks once the member's posts no longer carry their ID
+    :param connection: The database connection
+    :param user_id: The member's user ID
+    :return: The number of rows deleted
+    """
+    cursor = connection.cursor()
+    cursor.execute("DELETE FROM server_user WHERE user_id = %s", (user_id,))
+    deleted = cursor.rowcount
+    connection.commit()
+    cursor.close()
+    return deleted
+
 def get_server_user(connection, user_id, guild_id):
     cursor = connection.cursor()
     cursor.execute("""
@@ -203,6 +233,27 @@ def _ranking_clause(stat_field) -> str:
     if stat_field.endswith("_rank"):
         return f"AND {stat_field} IS NOT NULL ORDER BY {stat_field} ASC"
     return f"AND {stat_field} > 0 ORDER BY {stat_field} DESC"
+
+
+def get_stat_at_rank(connection, guild_id, stat_field, rank_field, rank):
+    """
+    The value of a statistic held by whoever is at a given rank in a guild, for the gap to the next
+    place on /user_profile
+    :param connection: The database connection
+    :param guild_id: The guild
+    :param stat_field: The count to read, such as this_month_hall_of_fame_messages
+    :param rank_field: The rank column that orders it, such as monthly_message_rank
+    :param rank: The position to read
+    :return: The count, or None when nobody holds that rank
+    """
+    if stat_field not in ALLOWED_STAT_FIELDS or rank_field not in ALLOWED_STAT_FIELDS:
+        raise ValueError(f"Invalid field: {stat_field}, {rank_field}")
+    cursor = connection.cursor()
+    cursor.execute(f"SELECT {stat_field} FROM server_user WHERE guild_id = %s AND {rank_field} = %s LIMIT 1",
+                   (guild_id, rank))
+    row = cursor.fetchone()
+    cursor.close()
+    return row[0] if row else None
 
 
 def get_top_users_by_stat(connection, guild_id, stat_field, limit=10):

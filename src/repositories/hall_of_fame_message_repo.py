@@ -20,6 +20,12 @@ def create_hall_of_fame_message_table(connection):
         CREATE INDEX IF NOT EXISTS hall_of_fame_message_guild_created_idx
         ON hall_of_fame_message (guild_id, created_at)
     """)
+    # /my_data, /delete_my_data and the global profile read one member's posts across every guild.
+    # Without this each of them scans the whole table, and psycopg2 holds the event loop while it does
+    cursor.execute("""
+        CREATE INDEX IF NOT EXISTS hall_of_fame_message_author_idx
+        ON hall_of_fame_message (author_id)
+    """)
     connection.commit()
     cursor.close()
 
@@ -160,3 +166,71 @@ def get_monthly_message_counts_by_guild(connection, month_start, month_end):
     rows = cursor.fetchall()
     cursor.close()
     return [{"guild_id": row[0], "message_count": row[1]} for row in rows]
+
+# Posts whose author is unknown or removed. The stats rebuild already skips it, which is what lets
+# /delete_my_data take a member off every leaderboard without deleting the server's posts
+NO_AUTHOR_ID = 0
+
+def get_messages_by_author(connection, author_id) -> list[dict]:
+    """
+    Every featured post by one member, across every guild, for /my_data
+    :param connection: The database connection
+    :param author_id: The member's user ID
+    :return: One dict per post, oldest first
+    """
+    cursor = connection.cursor()
+    cursor.execute("""
+        SELECT guild_id, channel_id, message_id, hall_of_fame_message_id, reaction_count, created_at
+        FROM hall_of_fame_message
+        WHERE author_id = %s
+        ORDER BY created_at
+    """, (author_id,))
+    columns = ["guild_id", "channel_id", "message_id", "hall_of_fame_message_id", "reaction_count", "created_at"]
+    results = [dict(zip(columns, row)) for row in cursor.fetchall()]
+    cursor.close()
+    return results
+
+def get_member_highlights(connection, guild_id, author_id) -> dict:
+    """
+    A member's best post and most recent feature in one guild, for the highlights on /user_profile
+    :param connection: The database connection
+    :param guild_id: The guild the profile is for
+    :param author_id: The member's user ID
+    :return: best_post as a dict with channel_id, message_id and reaction_count, and last_featured
+        as a datetime, either one None when the member has nothing featured here
+    """
+    cursor = connection.cursor()
+    cursor.execute("""
+        SELECT channel_id, message_id, reaction_count
+        FROM hall_of_fame_message
+        WHERE guild_id = %s AND author_id = %s
+        ORDER BY reaction_count DESC, created_at DESC
+        LIMIT 1
+    """, (guild_id, author_id))
+    best = cursor.fetchone()
+    cursor.execute("""
+        SELECT MAX(created_at) FROM hall_of_fame_message
+        WHERE guild_id = %s AND author_id = %s
+    """, (guild_id, author_id))
+    latest = cursor.fetchone()
+    cursor.close()
+    return {
+        "best_post": dict(zip(("channel_id", "message_id", "reaction_count"), best)) if best else None,
+        "last_featured": latest[0] if latest else None,
+    }
+
+def remove_author(connection, author_id) -> int:
+    """
+    Detach a member from every post they wrote. The posts stay on their servers' boards, since they
+    belong to those servers, but nothing links them to the member any more
+    :param connection: The database connection
+    :param author_id: The member's user ID
+    :return: The number of posts changed
+    """
+    cursor = connection.cursor()
+    cursor.execute("UPDATE hall_of_fame_message SET author_id = %s WHERE author_id = %s",
+                   (NO_AUTHOR_ID, author_id))
+    changed = cursor.rowcount
+    connection.commit()
+    cursor.close()
+    return changed

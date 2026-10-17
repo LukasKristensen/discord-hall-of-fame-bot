@@ -54,6 +54,21 @@ class InsertGuildLifecycleEventTests(unittest.TestCase):
         self.assertEqual(1, connection.commits)
 
 
+class LatestEventTypeTests(unittest.TestCase):
+    def test_returns_the_type_of_the_newest_event(self):
+        self.assertEqual("JOIN", guild_lifecycle_event_repo.get_latest_event_type(FakeConnection(row=("JOIN",)), 200))
+
+    def test_returns_none_for_a_server_without_history(self):
+        self.assertIsNone(guild_lifecycle_event_repo.get_latest_event_type(FakeConnection(row=None), 200))
+
+    def test_reads_only_that_server_newest_first(self):
+        connection = FakeConnection(row=("LEAVE",))
+        guild_lifecycle_event_repo.get_latest_event_type(connection, 200)
+
+        self.assertEqual([(200,)], connection.parameters)
+        self.assertIn("ORDER BY occurred_at DESC", connection.queries[0])
+
+
 class MonthlyJoinLeaveCountTests(unittest.TestCase):
     def test_maps_a_month_to_its_joins_and_leaves(self):
         connection = FakeConnection(rows=[(MARCH, 12, 3)])
