@@ -619,8 +619,7 @@ async def create_database_context(bot, server, connection, custom_channel=None) 
         f"   Use {command_refs.CALCULATION_METHOD} to change the reaction count calculation method.\n\n"
         f"🛡️ **Note on channel permissions:**\n"
         f"   If most of your channels are view-blocked behind a certain role, the bot will not be able to see messages from these channels unless given that role.\n\n"
-        f"📌 **Pin this message** so your moderators can find these settings later.\n\n"
-        f"💛 **Questions or ideas?** Ask in the support server. A vote on top.gg helps other servers find Hall of Fame.\n",
+        f"💬 **Questions or ideas?** Ask in the support server.\n",
         view=welcome_view()
     )
 

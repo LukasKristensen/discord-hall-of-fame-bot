@@ -170,11 +170,6 @@ class CreateDatabaseContextTests(SetupTestCase):
                           (messages.VOTE_BUTTON, messages.VOTE_URL)],
                          [(button.label, button.url) for button in view.children])
 
-    async def test_welcome_message_asks_to_be_pinned(self):
-        guild, _ = await self.join()
-
-        self.assertIn("Pin this message", guild.created_channels[0].sent[0])
-
     async def test_names_the_starting_threshold_in_the_welcome_message(self):
         guild, created = await self.join(FakeJoinedGuild(member_count=30))
 
