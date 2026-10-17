@@ -42,21 +42,25 @@ markdown.
 When a message gets enough reactions, Hall of Fame reposts it to your hall of fame channel. The members who land there get leaderboards, profiles and a yearly Wrapped, so your server has something to compete over.
 
 **The board**
+
 - Any emoji counts, custom server emojis included. Or choose a whitelist of up to 100.
 - Images, videos and stickers are carried over, and videos stay playable.
 - If the message was a reply, the message it replied to is shown with it, so the joke still makes sense.
 - Reaction counts update live. A post that drops below the threshold is hidden until it climbs back.
 
 **The recognition**
+
 - /leaderboard ranks the server by posts and reactions earned.
 - /user_profile shows a member's monthly and all time totals and rank.
 - /hof_wrapped and /server_hof_wrapped give each member, and the server, a year in review.
 
 **Count it your way**
+
 - Most reactions on one emoji, total reactions, or unique people who reacted.
 - Choose whether authors' own reactions count, how old a message can be, and whether only images and videos qualify.
 
 **Getting started**
+
 1. Add the app and accept the permissions it asks for.
 2. It creates a #hall-of-fame channel and picks a starting threshold from your member count.
 3. React as normal. Change the threshold with /set_reaction_threshold, or use an existing channel with /set_hall_of_fame_channel.
@@ -86,9 +90,10 @@ community
 
 ## Category
 
-Pick **Social** as the main category, and **Entertainment** as the second if the portal offers it.
-Moving away from Moderation and Tools puts the app beside community and fun apps rather than MEE6 and
-Dyno, which is where people browsing for this kind of bot look.
+Use as many categories as fit, since each one is another place the app can be browsed. Make **Social**
+the first, add **Entertainment** if the portal offers it, and keep **Moderation and Tools**. Social
+describes what the bot is for. In Moderation and Tools it is shown beside MEE6 and Dyno, which is a
+crowded place to be found but still costs nothing to keep.
 
 <br>
 
