@@ -112,5 +112,6 @@ PRESENCE_MEMBER_COUNT = "🏆 Hall of Fame - {members:,} users"
 PRESENCE_STATUSES = [
     "➕ /invite to add Hall of Fame to your server",
     "📊 /leaderboard - who rules your server?",
-    "✨ /hof_wrapped - your year on the board",
 ]
+# Joins the statuses only in Wrapped season, December and January
+PRESENCE_WRAPPED = "✨ /hof_wrapped - your year on the board"

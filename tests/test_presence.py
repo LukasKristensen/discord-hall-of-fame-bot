@@ -14,30 +14,49 @@ from tests.test_main import MainTestCase
 
 
 COUNT = "🏆 Hall of Fame - 260,000 users"
+NOVEMBER, DECEMBER, JANUARY, FEBRUARY = 11, 12, 1, 2
 
 
-def rotation(member_count, turns):
-    return [main.presence_status(turn, member_count) for turn in range(turns)]
+def rotation(member_count, turns, month=None):
+    return [main.presence_status(turn, member_count, month) for turn in range(turns)]
 
 
 class PresenceStatusTests(unittest.TestCase):
     def test_shows_the_member_count_every_second_turn(self):
-        first, second, third = messages.PRESENCE_STATUSES
+        invite, leaderboard = messages.PRESENCE_STATUSES
 
-        self.assertEqual(rotation(260_000, 7), [COUNT, first, COUNT, second, COUNT, third, COUNT])
+        self.assertEqual(rotation(260_000, 5, NOVEMBER), [COUNT, invite, COUNT, leaderboard, COUNT])
 
     def test_starts_the_pointers_over_after_the_last(self):
-        self.assertEqual(main.presence_status(7, 260_000), messages.PRESENCE_STATUSES[0])
+        self.assertEqual(main.presence_status(5, 260_000, NOVEMBER), messages.PRESENCE_STATUSES[0])
 
     def test_leaves_the_count_out_before_discord_reports_one(self):
-        self.assertEqual(rotation(0, 4), messages.PRESENCE_STATUSES + messages.PRESENCE_STATUSES[:1])
+        self.assertEqual(rotation(0, 3, NOVEMBER), messages.PRESENCE_STATUSES + messages.PRESENCE_STATUSES[:1])
 
     def test_points_members_to_the_invite_command(self):
-        self.assertTrue(any("/invite" in status for status in rotation(10, 6)))
+        self.assertTrue(any("/invite" in status for status in rotation(10, 4, NOVEMBER)))
 
     def test_every_status_fits_in_a_discord_status(self):
-        for status in rotation(10**9, 6):
+        for status in rotation(10**9, 6, DECEMBER):
             self.assertLessEqual(len(status), 128, status)
+
+
+class WrappedSeasonTests(unittest.TestCase):
+    def test_points_to_wrapped_in_december(self):
+        invite, leaderboard = messages.PRESENCE_STATUSES
+
+        self.assertEqual(rotation(260_000, 6, DECEMBER),
+                         [COUNT, invite, COUNT, leaderboard, COUNT, messages.PRESENCE_WRAPPED])
+
+    def test_points_to_wrapped_in_january(self):
+        self.assertIn(messages.PRESENCE_WRAPPED, rotation(260_000, 6, JANUARY))
+
+    def test_leaves_wrapped_out_for_the_rest_of_the_year(self):
+        for month in (FEBRUARY, NOVEMBER):
+            self.assertNotIn(messages.PRESENCE_WRAPPED, rotation(260_000, 12, month), month)
+
+    def test_points_to_wrapped_before_discord_reports_a_count(self):
+        self.assertIn(messages.PRESENCE_WRAPPED, rotation(0, 3, DECEMBER))
 
 
 class RotatePresenceTests(MainTestCase):

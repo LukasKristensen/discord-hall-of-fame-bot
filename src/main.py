@@ -93,6 +93,8 @@ total_member_count = 0
 presence_rotation_minutes = 10
 # How many statuses the rotation has shown, which decides the next one (see presence_status)
 presence_index = 0
+# The months the status also points to /hof_wrapped: December and January
+wrapped_presence_months = (12, 1)
 
 
 async def ensure_bot_is_loaded(interaction: discord.Interaction) -> bool:
@@ -278,14 +280,18 @@ async def adjust_total_member_count(change: int):
     global total_member_count
     total_member_count = max(0, total_member_count + change)
 
-def presence_status(turn: int, member_count: int) -> str:
+def presence_status(turn: int, member_count: int, month: int = None) -> str:
     """
     The status for a turn of the rotation: the member count on every second turn, and the command
     pointers in order on the turns between
     :param turn: How many statuses have been shown before this one
     :param member_count: The members across every server
+    :param month: The month it is, the current one when left out
     """
-    pointers = messages.PRESENCE_STATUSES
+    pointers = list(messages.PRESENCE_STATUSES)
+    # Wrapped is only worth pointing at around the turn of the year, when members look back on it
+    if (month or datetime.now(timezone.utc).month) in wrapped_presence_months:
+        pointers.append(messages.PRESENCE_WRAPPED)
     # A total of 0 only means Discord has not reported member counts yet, so leave the count out
     # rather than advertise 0 users
     if member_count <= 0:
