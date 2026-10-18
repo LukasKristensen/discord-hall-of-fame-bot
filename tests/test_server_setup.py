@@ -209,10 +209,16 @@ class CreateDatabaseContextTests(SetupTestCase):
         board = guild.created_channels[0]
         self.assertIsNotNone(created)
         self.assertEqual(2, len(board.sent))
-        report = board.embeds[1]
-        self.assertEqual(messages.CHECK_JOIN_TITLE, report.title)
-        channel_field = next(field for field in report.fields if "Reads 1 of 2" in field.name)
-        self.assertIn("<#2>", channel_field.value)
+        self.assertIn("Check setup", board.sent[1])
+        self.assertEqual([messages.CHECK_SETUP_BUTTON], [button.label for button in board.views[1].children])
+
+    async def test_keeps_the_details_out_of_the_public_board(self):
+        """Everyone reads the board, and the findings name channels and roles meant for admins."""
+        guild, _ = await self.join(FakeJoinedGuild(channels=[FakeReactChannel(2, bot_can_read=False)]))
+
+        board = guild.created_channels[0]
+        self.assertNotIn("<#2>", board.sent[1])
+        self.assertIsNone(board.embeds[1])
 
     async def test_a_failed_report_does_not_undo_the_join(self):
         guild = FakeJoinedGuild(channels=[FakeReactChannel(1, bot_can_read=False)])

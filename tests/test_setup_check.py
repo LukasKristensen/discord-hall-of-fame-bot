@@ -177,22 +177,42 @@ class ChannelFindingTests(unittest.TestCase):
         self.assertEqual("Reads 1 of 1 channels", finding.title)
 
     def test_blocked_channels_are_listed_with_the_role_fix(self):
-        visibility = setup_check.ChannelVisibility(readable=[FakeChannel(1)], blocked=[FakeChannel(2)],
+        visibility = setup_check.ChannelVisibility(readable=[FakeChannel(1), FakeChannel(4)], blocked=[FakeChannel(2)],
                                                    private=[FakeChannel(3)], suggested_role=FakeRole(10),
                                                    suggested_role_opens=1)
         [finding] = setup_check.channel_findings(visibility)
 
         self.assertEqual(setup_check.WARN, finding.level)
-        self.assertEqual("Reads 1 of 3 channels", finding.title)
+        self.assertEqual("Reads 2 of 4 channels", finding.title)
         self.assertIn("<#2>", finding.detail)
         self.assertIn("<@&10>", finding.detail)
         self.assertIn("1 more are hidden", finding.detail)
 
-    def test_private_channels_alone_are_no_problem(self):
-        visibility = setup_check.ChannelVisibility(readable=[FakeChannel(1)], blocked=[], private=[FakeChannel(2)])
+    def test_a_few_private_channels_are_no_problem(self):
+        visibility = setup_check.ChannelVisibility(readable=[FakeChannel(1), FakeChannel(2)], blocked=[],
+                                                   private=[FakeChannel(3)])
         [finding] = setup_check.channel_findings(visibility)
 
         self.assertEqual(setup_check.OK, finding.level)
+        self.assertIn("<#3>", finding.detail)
+
+    def test_reading_fewer_than_half_is_a_warning_even_when_they_look_private(self):
+        """A new server where only the owner sees the channels looks private, but is rarely meant to be."""
+        visibility = setup_check.ChannelVisibility(readable=[FakeChannel(1)], blocked=[],
+                                                   private=[FakeChannel(2), FakeChannel(3), FakeChannel(4)])
+        [finding] = setup_check.channel_findings(visibility)
+
+        self.assertEqual(setup_check.WARN, finding.level)
+        self.assertEqual("Reads 1 of 4 channels", finding.title)
+        self.assertIn("<#2> <#3> <#4>", finding.detail)
+
+    def test_half_is_still_fine(self):
+        visibility = setup_check.ChannelVisibility(readable=[FakeChannel(1)], blocked=[], private=[FakeChannel(2)])
+        self.assertEqual(setup_check.OK, setup_check.channel_findings(visibility)[0].level)
+
+    def test_a_server_without_channels_is_fine(self):
+        visibility = setup_check.ChannelVisibility(readable=[], blocked=[], private=[])
+        self.assertEqual(setup_check.OK, setup_check.channel_findings(visibility)[0].level)
 
     def test_a_long_list_is_cut_short(self):
         listed = setup_check.list_channels([FakeChannel(index) for index in range(15)])
@@ -334,6 +354,12 @@ class SetupCheckViewTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(view.is_persistent())
         self.assertEqual(commands.CHECK_SETUP_CUSTOM_ID, view.children[0].custom_id)
         self.assertEqual(messages.CHECK_SETUP_BUTTON, view.children[0].label)
+
+    async def test_the_join_button_is_answered_by_the_same_registered_view(self):
+        view = commands.build_check_setup_view()
+
+        self.assertTrue(view.is_persistent())
+        self.assertEqual([commands.CHECK_SETUP_CUSTOM_ID], [button.custom_id for button in view.children])
 
     async def test_a_press_runs_the_registered_check(self):
         pressed = []

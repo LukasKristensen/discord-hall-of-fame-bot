@@ -58,7 +58,7 @@ class SetupCheckView(discord.ui.View):
     def __init__(self, *links: tuple[str, str]):
         super().__init__(timeout=None)
         button = discord.ui.Button(style=discord.ButtonStyle.secondary, label=messages.CHECK_SETUP_BUTTON,
-                                   emoji="🩺", custom_id=CHECK_SETUP_CUSTOM_ID)
+                                   custom_id=CHECK_SETUP_CUSTOM_ID)
         button.callback = self.check_setup
         self.add_item(button)
         for label, url in links:
@@ -68,6 +68,11 @@ class SetupCheckView(discord.ui.View):
     async def check_setup(interaction: discord.Interaction):
         if setup_check_handler is not None:
             await setup_check_handler(interaction)
+
+
+def build_check_setup_view() -> discord.ui.View:
+    # The same button as on the welcome message, so the view main registers answers it too
+    return SetupCheckView()
 
 
 def build_welcome_view() -> discord.ui.View:

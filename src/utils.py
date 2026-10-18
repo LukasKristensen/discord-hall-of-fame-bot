@@ -566,6 +566,12 @@ async def refresh_board_topic(channel, permissions) -> bool:
     return True
 
 
+def check_setup_view():
+    # Imported here, as commands imports this module
+    import commands
+    return commands.build_check_setup_view()
+
+
 def welcome_view():
     # Imported here, as commands imports this module
     import commands
@@ -585,7 +591,9 @@ async def report_setup_problems_on_join(bot, server, hall_of_fame_channel):
         findings = setup_check.join_findings(server, hall_of_fame_channel, allow_messages_in_hof_channel=False)
         if not setup_check.problems(findings):
             return
-        await hall_of_fame_channel.send(embed=setup_check.build_embed(findings, messages.CHECK_JOIN_TITLE))
+        # Only a pointer: the board is public, and the findings name channels and roles that are for admins
+        await hall_of_fame_channel.send(messages.CHECK_JOIN_NUDGE.format(command=command_refs.CHECK_SETUP),
+                                        view=check_setup_view())
         await logging(bot, f"Setup problems on join in {server.name}: "
                            f"{', '.join(finding.title for finding in setup_check.problems(findings))}",
                       server.id, log_level=log_type.SYSTEM)

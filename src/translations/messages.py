@@ -172,7 +172,10 @@ PRESENCE_WRAPPED = "✨ /hof_wrapped - your year on the board"
 # /check_setup, the Check setup button on the welcome message, and the report sent when the bot joins
 CHECK_SETUP_BUTTON = "Check setup"
 CHECK_TITLE = "🩺 Hall of Fame setup check"
-CHECK_JOIN_TITLE = "🩺 A few things to fix before posts can work"
+# Posted in the board on join instead of the findings themselves, as everyone can read the board
+CHECK_JOIN_NUDGE = ("⚠️ **Something may stop messages from reaching the Hall of Fame**, for example channels "
+                    "the bot cannot read. An admin can press **Check setup** below, or run {command}, to see "
+                    "what it is and how to fix it.")
 CHECK_SUMMARY_OK = "Everything the bot needs is in place."
 CHECK_SUMMARY_PROBLEMS = "Found {count} thing{plural} that can stop messages from reaching the board."
 CHECK_FOOTER = "Fixed something? Press Check setup or run /check_setup again."
@@ -194,7 +197,11 @@ CHECK_CHANNELS_BLOCKED = "Members can see these, but the bot cannot, so reaction
 CHECK_CHANNELS_ROLE_FIX = "Giving the bot the {role} role opens {opens} of these {total}."
 CHECK_CHANNELS_FIX = "Give the bot View Channel and Read Message History in them, or the role that opens them."
 CHECK_CHANNELS_PRIVATE = ("{count} more are hidden from regular members too, such as staff channels, so the bot "
-                          "is left out of them on purpose.")
+                          "is likely left out of them on purpose: {channels}")
+CHECK_CHANNELS_MOSTLY_CLOSED = ("The bot cannot read {channels}\n"
+                                "No regular role can see them either, but that is most of the server. If messages "
+                                "there should reach the board, give the bot View Channel and Read Message History "
+                                "in them, or the role that opens them.")
 CHECK_EMPTY_WHITELIST_TITLE = "No emoji can count"
 CHECK_EMPTY_WHITELIST = ("Only whitelisted emojis count, and the whitelist is empty. Add one with {whitelist}, "
                          "or count every emoji with {logic}.")

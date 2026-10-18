@@ -157,8 +157,18 @@ def board_findings(board_channel, bot_member, allow_messages_in_hof_channel: boo
     return findings
 
 
+def reads_too_few(visibility: ChannelVisibility) -> bool:
+    """
+    Whether the bot is shut out of most channels. A few staff channels are normal, but a bot that reads
+    fewer than half is more likely missing access by accident, even when no regular role sees them
+    either, such as on a new server where only the owner has been let in
+    """
+    return len(visibility.readable) * 2 < visibility.total
+
+
 def channel_findings(visibility: ChannelVisibility) -> list[Finding]:
     title = messages.CHECK_CHANNELS_TITLE.format(readable=len(visibility.readable), total=visibility.total)
+    too_few = reads_too_few(visibility)
     lines = []
     if visibility.blocked:
         lines.append(messages.CHECK_CHANNELS_BLOCKED.format(channels=list_channels(visibility.blocked)))
@@ -169,10 +179,12 @@ def channel_findings(visibility: ChannelVisibility) -> list[Finding]:
         else:
             lines.append(messages.CHECK_CHANNELS_FIX)
     if visibility.private:
-        lines.append(messages.CHECK_CHANNELS_PRIVATE.format(count=len(visibility.private)))
+        # Named, as the answer is only shown to the admin who asked
+        template = messages.CHECK_CHANNELS_MOSTLY_CLOSED if too_few else messages.CHECK_CHANNELS_PRIVATE
+        lines.append(template.format(count=len(visibility.private), channels=list_channels(visibility.private)))
     if not lines:
         lines.append(messages.CHECK_CHANNELS_ALL)
-    return [Finding(WARN if visibility.blocked else OK, title, "\n".join(lines))]
+    return [Finding(WARN if visibility.blocked or too_few else OK, title, "\n".join(lines))]
 
 
 def rule_findings(server_config, member_count: int | None) -> list[Finding]:
@@ -246,11 +258,11 @@ def problems(findings: list[Finding]) -> list[Finding]:
     return [finding for finding in findings if finding.level in (WARN, FAIL)]
 
 
-def build_embed(findings: list[Finding], title: str = None) -> discord.Embed:
+def build_embed(findings: list[Finding]) -> discord.Embed:
     found = problems(findings)
     failing = any(finding.level == FAIL for finding in found)
     embed = discord.Embed(
-        title=title or messages.CHECK_TITLE,
+        title=messages.CHECK_TITLE,
         description=(messages.CHECK_SUMMARY_PROBLEMS.format(count=len(found), plural="" if len(found) == 1 else "s")
                      if found else messages.CHECK_SUMMARY_OK),
         color=discord.Color.red() if failing else discord.Color.orange() if found else discord.Color.green()
