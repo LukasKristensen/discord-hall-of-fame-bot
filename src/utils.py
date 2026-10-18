@@ -125,6 +125,9 @@ async def validate_message(reaction_event: discord.RawReactionActionEvent, bot: 
                                           source_message, corrected_reactions, reaction_config)
             return
         else:
+            # The post was hidden and is now back over the threshold, so it is restored with its current
+            # count, which the leaderboards and profiles read from the database
+            hall_of_fame_message_repo.update_field_for_message(connection, guild_id, channel_id, message_id, "reaction_count", corrected_reactions)
             await message_to_update.edit(embed=await create_embed(source_message, reaction_threshold, connection, reaction_config))
             # The column is present and null for every post that is not a video, so the id itself
             # is what decides whether there is a link message to restore

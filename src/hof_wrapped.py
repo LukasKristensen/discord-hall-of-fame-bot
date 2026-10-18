@@ -309,7 +309,13 @@ def save_user_wrapped_to_db(guild_id, user, year):
 async def main(guild_id: int, bot: commands.Bot, get_reaction_threshold: int, connection):
     global rankings
     global reactionThreshold
+    global total_hall_of_fame_posts
     reactionThreshold = get_reaction_threshold
+    # Wrapped runs server after server in one process. Without starting over, every member of the
+    # servers done before would be saved again under this one, with their other servers' stats
+    users.clear()
+    total_hall_of_fame_posts = 0
+    rankings = None
 
     print(f"Hall Of Fame Wrapped {version.WRAPPED_YEAR} is being prepared... 🎁")
     guild = bot.get_guild(guild_id)
