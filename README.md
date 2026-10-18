@@ -213,8 +213,9 @@ Getting featured is meant to be worth something, so the bot keeps score.
 
 - **`/leaderboard`** ranks the server by hall of fame posts and by reactions earned, refreshed daily.
 - **`/user_profile`** shows one member's monthly, all time and across-server totals, where they sit in
-  the server for each, their best post, when they were last featured and how far they are from the
-  next rank. Call it on someone else to compare.
+  the server for each, their best post, when they were last featured, how far they are from the next
+  rank and the badges they have earned, such as monthly champion or 100 posts. Call it on someone else
+  to compare.
 - **`/hof_wrapped`** gives a member their year in review, and **`/server_hof_wrapped`** does the same
   for the whole server.
 
@@ -340,6 +341,7 @@ and `/delete_my_data`. The [Privacy Policy](PRIVACY.md) lists exactly what is ke
 - [x] Added /my_data, which sends a private file with everything stored about a member, and /delete_my_data, which removes them from every leaderboard, profile and Wrapped, with an option to stop counting them from then on. Both work in DMs through a user install.
 - [x] Added /profile_privacy for members to hide their totals across servers, and /count_in_global_profiles for admins to leave their server out of those totals.
 - [x] /user_profile is laid out in columns (this month, all time, every server) with highlights: the best post with a jump link, when the member was last featured and the gap to the next rank. The totals across servers never name a server.
+- [x] /user_profile shows the badges a member has earned: monthly champion, 10 to 500 posts, months in a row, featured for a year, a 100-reaction post, 10 posts in one month and featured in 5 or more servers. Badges are worked out from existing posts, never name a server, and leave out other servers when a member hid their totals.
 - [x] /user_profile, /leaderboard and the Wrapped commands are turned away with a private note in a Hall of Fame channel that is closed to chat.
 - [x] Every Hall of Fame post carries a "Hall of Fame" footer with the bot's logo, and the vote prompt was removed from posts. The invite suggestion moved to the footers of /user_profile, /leaderboard and /hof_wrapped.
 - [x] /invite, /vote and /help answer with link buttons, and the welcome message has Support server, Vote and Check setup buttons with shorter closing lines.
