@@ -17,9 +17,14 @@ INVITE_PERMISSIONS = 275146730576
 # integration_type=0 installs to a server, so the link keeps working if user installs are added
 INVITE_URL = ("https://discord.com/oauth2/authorize?client_id=1177041673352663070"
               f"&permissions={INVITE_PERMISSIONS}&integration_type=0&scope=bot+applications.commands")
+# integration_type=1 adds the bot to a member's own account, which offers the commands that need no server
+# set up (see USER_INSTALL in main.py) in DMs and in servers without Hall of Fame
+USER_INSTALL_URL = ("https://discord.com/oauth2/authorize?client_id=1177041673352663070"
+                    "&integration_type=1&scope=applications.commands")
 VOTE_URL = "https://top.gg/bot/1177041673352663070/vote"
 SUPPORT_SERVER_URL = "https://discord.gg/r98WC5GHcn"
 INVITE_BUTTON = "Add to a server"
+USER_INSTALL_BUTTON = "Add to your account"
 VOTE_BUTTON = "Vote on top.gg"
 SUPPORT_SERVER_BUTTON = "Support server"
 # Footer on every Hall of Fame post: the brand only, since the board is the server's showcase and an ask on
@@ -46,7 +51,8 @@ LEGACY_HOF_CHANNEL_TOPICS = (
     "https://discord.com/oauth2/authorize?client_id=1177041673352663070&permissions=275146730576"
     "&integration_type=0&scope=bot+applications.commands · Patch notes: https://discord.gg/GmFtfySetp",
 )
-INVITE_MESSAGE = "Add Hall of Fame to another server you run. Need a hand setting it up? Ask in the support server."
+INVITE_MESSAGE = ("Add Hall of Fame to a server you run, or to your account to see your own profile and data "
+                  "anywhere, DMs included. Need a hand setting it up? Ask in the support server.")
 NOT_AUTHORIZED = "You are not authorized to use this command, only for members with manage server permission"
 DEV_NOT_AUTHORIZED = "You are not authorized to use this command, only for developers"
 WHITELIST_CLEARED = "✅ Whitelist cleared. Every emoji counts toward the threshold again until one is added with {command}."
@@ -66,6 +72,8 @@ ERROR_SERVER_NOT_SETUP = ("The server is not set up yet. Try re-inviting the bot
                           "not work.")
 BOT_LOADING = "Please wait while the bot is loading..."
 COMMAND_ON_COOLDOWN = "This command is on a daily cooldown. Please try again later."
+FEEDBACK_ON_COOLDOWN = ("You have sent {limit} pieces of feedback today, the most allowed in a day. Try again "
+                        "tomorrow, or ask in the support server: <https://discord.gg/r98WC5GHcn>")
 SETTING_CHANGED = "✅ {label}: **{value}**"
 SETTING_UNCHANGED = "ℹ️ {label} is already **{value}**, so nothing changed."
 REACTION_THRESHOLD_NOTE = ("A message reaches the Hall of Fame once it has {threshold} reaction{plural}, "
@@ -158,6 +166,16 @@ COMMAND_FAILED = ("Something went wrong while running this command. Please try a
 GUILD_ONLY = "This command only works inside a server."
 LEADERBOARD_NO_DATA = "The leaderboard is currently empty. Data updates every 24 hours, so please check back later."
 PROFILE_NO_DATA = "No profile data is available for this user yet. Data is refreshed every 24 hours."
+# /user_profile through a user install, in a DM or a server without Hall of Fame. There is no server to rank
+# the member in, so the card has their totals across servers alone, and only for the member who asked
+PROFILE_EVERY_SERVER_DESCRIPTION = ("Your totals across every server with Hall of Fame. Use {command} in one of "
+                                    "them to see your standing there too.")
+PROFILE_OTHERS_OUTSIDE_SERVER = ("Outside a server with Hall of Fame you can only look up your own profile. "
+                                 "Run {command} without a member to see yours.")
+PROFILE_NOTHING_OUTSIDE_SERVER = ("You have no Hall of Fame posts yet in any server with Hall of Fame. "
+                                  "Totals update every 24 hours.")
+PROFILE_HIDDEN_OUTSIDE_SERVER_SELF = ("Your totals across servers are hidden, so there is nothing to show outside "
+                                      "a server with Hall of Fame. Show them again with {command}.")
 MISSING_HOF_CHANNEL_PERMISSIONS = ("The bot is missing the required permissions to post in {channel}.\n"
                                    "Update the channel permission for the bot to have: ``{missing_permissions}``\n"
                                    f"If the hall of channel does not exist, set it up using </set_hall_of_fame_channel:1393576242237804768> "

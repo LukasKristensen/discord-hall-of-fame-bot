@@ -72,7 +72,12 @@ def create_connection_pool():
         **environment.database_settings())
 
 message_locks = concurrency.KeyedLocks()
+# Per member, not per server, so a limit follows the member into DMs and every server, user installs
+# included. Cleared by the daily task
 daily_command_cooldowns = {}
+# How many times a member may send /feedback a day. A few, since one bug report often needs a follow-up,
+# but capped, since through a user install anyone can open the form from any DM
+feedback_daily_limit = 3
 
 # The longest a single query behind /my_data or /delete_my_data may run. psycopg2 holds the event loop
 # while a query runs, so a slow one would stall the bot in every server; the database cancels it instead
@@ -80,10 +85,13 @@ data_command_statement_timeout_ms = 10_000
 
 intents = discord.Intents.default()
 intents.message_content = True
-# Every command works on a server's configuration or its members, so none of them is offered in DMs,
-# where they could only fail
+# Most commands work on a server's configuration or its members, so by default a command is offered only
+# in servers that installed the bot. Without the explicit guild install Discord falls back to the install
+# types enabled in the Developer Portal, and turning on user installs there would offer every setting in
+# DMs, where it could only fail. The commands that make sense anywhere opt in with user_install
 bot = discord_commands.Bot(command_prefix="/", intents=intents,
-                           allowed_contexts=app_commands.AppCommandContext(guild=True))
+                           allowed_contexts=app_commands.AppCommandContext(guild=True),
+                           allowed_installs=app_commands.AppInstallationType(guild=True))
 tree = bot.tree
 server_classes = {}
 bot_stats = BotStats()
@@ -103,6 +111,30 @@ presence_rotation_minutes = 10
 presence_index = 0
 # The months the status also points to /hof_wrapped: December and January
 wrapped_presence_months = (12, 1)
+
+
+def user_install(command):
+    """
+    Offer a command through a user install too: in DMs, group DMs and servers without Hall of Fame, as
+    well as in servers that installed the bot. Only for commands that need no server set up, or that
+    check set_up_here and answer without one
+    """
+    command = app_commands.allowed_installs(guilds=True, users=True)(command)
+    return app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)(command)
+
+
+def set_up_here(interaction: discord.Interaction) -> bool:
+    """
+    Whether the command was used in a server with Hall of Fame set up. False in a DM, and in a server
+    that only reaches the bot through a member's user install, where there is no config to read
+    """
+    return interaction.guild_id is not None and server_classes.get(interaction.guild_id) is not None
+
+
+def where_used(interaction: discord.Interaction) -> str:
+    """Where a command was used, for the log. User-installable commands also run where there is no server"""
+    guild = interaction.guild
+    return getattr(guild, "name", None) or "a DM or a server without the bot"
 
 
 async def ensure_bot_is_loaded(interaction: discord.Interaction) -> bool:
@@ -508,10 +540,11 @@ async def on_guild_remove(server):
     await post_api_bot_stats()
 
 @tree.command(name="help", description="List of commands")
+@user_install
 async def get_help(interaction: discord.Interaction):
     await commands.get_help(interaction)
-    await utils.logging(bot, f"Help command used by {interaction.user.name} in {interaction.guild.name}",
-                        interaction.guild.id, log_level=log_type.COMMAND)
+    await utils.logging(bot, f"Help command used by {interaction.user.name} in {where_used(interaction)}",
+                        interaction.guild_id, log_level=log_type.COMMAND)
 
 @tree.command(name="set_reaction_threshold", description="Configure the amount of reactions needed to post a message in the Hall of Fame")
 @app_commands.describe(reaction_threshold=f"Reactions a message needs to reach the Hall of Fame "
@@ -550,8 +583,13 @@ async def configure_bot(interaction: discord.Interaction,
                         interaction.guild.id, reaction_threshold, log_level=log_type.COMMAND)
 
 @tree.command(name="feedback", description="Send feedback to the developer")
+@user_install
 async def send_feedback(interaction: discord.Interaction):
-    await utils.create_feedback_form(interaction, bot)
+    if daily_uses(interaction.user.id, "feedback") >= feedback_daily_limit:
+        await send_error(interaction, messages.FEEDBACK_ON_COOLDOWN.format(limit=feedback_daily_limit))
+        return
+    await utils.create_feedback_form(interaction, bot,
+                                     on_sent=lambda user_id: start_daily_cooldown(user_id, "feedback"))
 
 @tree.command(name="include_authors_reaction", description="Should the author's own reaction be included in the reaction threshold calculation?")
 async def include_author_own_reaction_in_threshold(interaction: discord.Interaction, include: bool):
@@ -593,11 +631,12 @@ async def require_image_or_video(interaction: discord.Interaction, require: bool
                         interaction.guild.id, str(require), log_level=log_type.COMMAND)
 
 @tree.command(name="vote", description="Vote for the bot on top.gg")
+@user_install
 async def vote(interaction: discord.Interaction):
     # noinspection PyUnresolvedReferences
     await interaction.response.send_message(messages.VOTE_MESSAGE, view=commands.build_vote_view())
-    await utils.logging(bot, f"Vote command used by {interaction.user.name} in {interaction.guild.name}",
-                        interaction.guild.id, log_level=log_type.COMMAND)
+    await utils.logging(bot, f"Vote command used by {interaction.user.name} in {where_used(interaction)}",
+                        interaction.guild_id, log_level=log_type.COMMAND)
 
 @tree.command(name="custom_emoji_check_logic",
               description="Here you can decide if it only should be whitelisted emojis or all emojis")
@@ -809,11 +848,12 @@ async def set_post_due_date(interaction: discord.Interaction,
                         interaction.guild.id, post_due_date, log_level=log_type.COMMAND)
 
 @tree.command(name="invite", description="Invite the bot to your server")
+@user_install
 async def invite(interaction: discord.Interaction):
     # noinspection PyUnresolvedReferences
     await interaction.response.send_message(messages.INVITE_MESSAGE, view=commands.build_invite_view())
-    await utils.logging(bot, f"Invite command used by {interaction.user.name} in {interaction.guild.name}",
-                        interaction.guild.id, log_level=log_type.COMMAND)
+    await utils.logging(bot, f"Invite command used by {interaction.user.name} in {where_used(interaction)}",
+                        interaction.guild_id, log_level=log_type.COMMAND)
 
 @tree.command(name="ignore_bot_messages", description="Should the bot ignore messages from other bots?")
 async def ignore_bot_messages(interaction: discord.Interaction, should_ignore_bot_messages: bool):
@@ -870,7 +910,9 @@ async def hide_hall_of_fame_posts_when_they_are_below_threshold(interaction: dis
                         interaction.guild.id, str(hide), log_level=log_type.COMMAND)
 
 @tree.command(name="user_profile", description="Get the server profile of a user")
-@app_commands.describe(specific_user="The member to look up, yourself when left out")
+@user_install
+@app_commands.describe(specific_user="The member to look up, yourself when left out. Only yourself outside "
+                                     "servers with Hall of Fame")
 async def user_server_profile(interaction: discord.Interaction, specific_user: discord.User = None):
     """
     Get the server profile of a user, with their totals across every server at the bottom unless
@@ -887,6 +929,10 @@ async def user_server_profile(interaction: discord.Interaction, specific_user: d
     user = specific_user or interaction.user
     if getattr(user, "bot", False):
         await send_error(interaction, messages.PROFILE_BOT_USER)
+        return
+
+    if not set_up_here(interaction):
+        await answer_profile_outside_server(interaction, user)
         return
 
     async with get_db_connection(connection_pool) as connection:
@@ -911,15 +957,41 @@ async def user_server_profile(interaction: discord.Interaction, specific_user: d
     await utils.logging(bot, f"Get user server profile command used by {interaction.user.name} in {interaction.guild.name}",
                         interaction.guild.id, str(user.id), log_level=log_type.COMMAND)
 
-def where_used(interaction: discord.Interaction) -> str:
-    """Where a command was used, for the log. The data commands also run in DMs, where there is no server"""
-    guild = interaction.guild
-    return getattr(guild, "name", None) or "a DM or a server without the bot"
+async def answer_profile_outside_server(interaction: discord.Interaction, user):
+    """
+    /user_profile through a user install, in a DM or a server without Hall of Fame. There is no server to
+    show standings for, so the card has the member's totals across servers alone, and only when they
+    have not hidden them.
+
+    Only the member who asked can be looked up here. Inside a server with the bot, profiles show what
+    that server's own board and leaderboard already show. Outside one, a lookup would carry someone's
+    totals into a DM or a server that never added the bot, which the member never agreed to
+    """
+    if user.id != interaction.user.id:
+        await send_error(interaction, messages.PROFILE_OTHERS_OUTSIDE_SERVER.format(command=command_refs.USER_PROFILE))
+        await utils.logging(bot, f"User profile command used in {where_used(interaction)} for another member, "
+                                 f"refused outside a server with the bot", interaction.guild_id,
+                            log_level=log_type.COMMAND)
+        return
+
+    async with get_db_connection(connection_pool) as connection:
+        hidden = global_profile_repo.is_hidden(connection, user.id)
+        global_profile = None if hidden else global_profile_repo.get_global_profile(connection, user.id)
+
+    if hidden:
+        await send_error(interaction, messages.PROFILE_HIDDEN_OUTSIDE_SERVER_SELF.format(
+            command=command_refs.PROFILE_PRIVACY))
+    elif not global_profile["posts"]:
+        await send_error(interaction, messages.PROFILE_NOTHING_OUTSIDE_SERVER)
+    else:
+        # noinspection PyUnresolvedReferences
+        await interaction.response.send_message(embed=commands.build_global_profile_embed(user, global_profile))
+    await utils.logging(bot, f"User profile command used in {where_used(interaction)}, outside a server with the bot",
+                        interaction.guild_id, str(user.id), log_level=log_type.COMMAND)
 
 
 @tree.command(name="profile_privacy", description="Hide or show your totals across servers on your profile")
-@app_commands.allowed_installs(guilds=True, users=True)
-@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+@user_install
 @app_commands.describe(visibility="Hide your totals across servers from your profile, or show them again")
 @app_commands.choices(visibility=[
     app_commands.Choice(name="Hide", value="hide"),
@@ -965,6 +1037,11 @@ def on_daily_cooldown(user_id: int, command_name: str) -> bool:
     return command_name in daily_command_cooldowns.get(user_id, [])
 
 
+def daily_uses(user_id: int, command_name: str) -> int:
+    """How many times a member used a command since the daily task last cleared the cooldowns"""
+    return daily_command_cooldowns.get(user_id, []).count(command_name)
+
+
 def start_daily_cooldown(user_id: int, command_name: str):
     daily_command_cooldowns.setdefault(user_id, []).append(command_name)
 
@@ -974,8 +1051,7 @@ def plural_suffix(count: int, singular: str, many: str) -> str:
 
 
 @tree.command(name="my_data", description="See everything Hall of Fame stores about you")
-@app_commands.allowed_installs(guilds=True, users=True)
-@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+@user_install
 async def my_data(interaction: discord.Interaction):
     if not await ensure_bot_is_loaded(interaction):
         return
@@ -1035,8 +1111,7 @@ async def delete_member_data(user_id: int, stop_counting: bool = False) -> int:
 
 
 @tree.command(name="delete_my_data", description="Delete everything Hall of Fame stores about you")
-@app_commands.allowed_installs(guilds=True, users=True)
-@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+@user_install
 async def delete_my_data(interaction: discord.Interaction):
     if not await ensure_bot_is_loaded(interaction):
         return

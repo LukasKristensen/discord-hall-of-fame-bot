@@ -15,6 +15,7 @@ import discord
 
 import main
 import commands
+from enums import command_refs
 from commands import ConfirmDeleteView, CountAgainView, build_my_data_export
 from repositories import (
     global_profile_repo,
@@ -738,10 +739,131 @@ class DataCommandContextTests(unittest.TestCase):
                 self.assertTrue(command.allowed_contexts.dm_channel)
 
     def test_the_server_commands_stay_inside_servers(self):
-        for command in (main.user_server_profile, main.count_in_global_profiles):
+        for command in (main.count_in_global_profiles, main.leaderboard, main.hof_wrapped_command):
             with self.subTest(command=command.name):
                 self.assertIsNone(command.allowed_installs)
                 self.assertIsNone(command.allowed_contexts)
+
+
+def user_with_avatar(user_id):
+    user = FakeUser(user_id=user_id)
+    user.display_avatar = types.SimpleNamespace(url=f"https://cdn.example/{user_id}.png")
+    return user
+
+
+def outside_a_server(guild_id=None):
+    """A user install answers in a DM (no guild) or in a server the bot is not in."""
+    interaction = FakeInteraction()
+    interaction.guild_id = guild_id
+    interaction.guild = None
+    interaction.user = user_with_avatar(77)
+    return interaction
+
+
+class UserProfileOutsideServerTests(CommandTestCase):
+    """/user_profile through a user install shows your own totals across servers, and only yours."""
+
+    def setUp(self):
+        super().setUp()
+        self.hidden = set()
+        self.profile = dict(PROFILE)
+        self.server_reads = []
+        self.profile_reads = []
+        self.patch(global_profile_repo, "is_hidden", lambda _connection, user_id: user_id in self.hidden)
+
+        def read_profile(_connection, user_id):
+            self.profile_reads.append(user_id)
+            return self.profile
+
+        self.patch(global_profile_repo, "get_global_profile", read_profile)
+        self.patch(main.server_user_repo, "get_server_user",
+                   lambda *args: self.server_reads.append(args) or {"total_hall_of_fame_messages": 40})
+
+    async def test_a_dm_gets_your_totals_card_without_reading_a_server(self):
+        interaction = outside_a_server()
+        await main.user_server_profile.callback(interaction, None)
+
+        embed = interaction.response.messages[0]
+        self.assertIsInstance(embed, discord.Embed)
+        self.assertEqual([messages.GLOBAL_PROFILE_HEADING, messages.BADGES_HEADING],
+                         [field.name for field in embed.fields])
+        self.assertIn("**47** posts", embed.fields[0].value)
+        self.assertEqual([False], interaction.response.ephemeral)
+        self.assertEqual([], self.server_reads)
+
+    async def test_naming_yourself_is_the_same_as_leaving_it_out(self):
+        interaction = outside_a_server()
+        await main.user_server_profile.callback(interaction, user_with_avatar(77))
+
+        self.assertIsInstance(interaction.response.messages[0], discord.Embed)
+
+    async def test_a_server_without_the_bot_gets_the_same_card(self):
+        interaction = outside_a_server(guild_id=999)
+        await main.user_server_profile.callback(interaction, None)
+
+        self.assertIsInstance(interaction.response.messages[0], discord.Embed)
+        self.assertEqual([], self.server_reads)
+
+    async def test_another_member_cannot_be_looked_up_outside_a_server_with_the_bot(self):
+        """Their totals would reach a DM or a server that never added the bot."""
+        for guild_id in (None, 999):
+            with self.subTest(guild_id=guild_id):
+                interaction = outside_a_server(guild_id=guild_id)
+                await main.user_server_profile.callback(interaction, user_with_avatar(88))
+
+                self.assertEqual([messages.PROFILE_OTHERS_OUTSIDE_SERVER.format(command=command_refs.USER_PROFILE)],
+                                 interaction.response.messages)
+                self.assertEqual([True], interaction.response.ephemeral)
+        self.assertEqual([], self.profile_reads)
+        self.assertEqual(0, self.pool.handed_out)
+
+    async def test_no_posts_anywhere_says_so(self):
+        self.profile = {field: 0 for field in global_profile_repo.PROFILE_FIELDS}
+        interaction = outside_a_server()
+        await main.user_server_profile.callback(interaction, None)
+
+        self.assertEqual([messages.PROFILE_NOTHING_OUTSIDE_SERVER], interaction.response.messages)
+        self.assertEqual([True], interaction.response.ephemeral)
+
+    async def test_hidden_totals_are_not_shown_even_to_you(self):
+        """The card is posted in the channel, so showing them to you shows them to everyone there."""
+        self.hidden.add(77)
+        interaction = outside_a_server()
+        await main.user_server_profile.callback(interaction, None)
+
+        self.assertEqual([messages.PROFILE_HIDDEN_OUTSIDE_SERVER_SELF.format(command=command_refs.PROFILE_PRIVACY)],
+                         interaction.response.messages)
+        self.assertEqual([True], interaction.response.ephemeral)
+        self.assertEqual([], self.profile_reads)
+
+    async def test_a_server_with_the_bot_can_still_look_up_other_members(self):
+        recorded = []
+
+        async def record(_interaction, user, *_args, **_kwargs):
+            recorded.append(user.id)
+
+        self.patch(main.commands, "user_server_profile", record)
+        await main.user_server_profile.callback(FakeInteraction(), FakeUser(user_id=88))
+
+        self.assertEqual([88], recorded)
+        self.assertEqual(1, len(self.server_reads))
+
+
+class GlobalProfileEmbedTests(unittest.TestCase):
+    def test_names_and_links_no_server(self):
+        embed = commands.build_global_profile_embed(user_with_avatar(88), dict(PROFILE, servers=6))
+        text = " ".join([embed.description or ""] + [f"{field.name} {field.value}" for field in embed.fields])
+
+        self.assertNotIn("discord.com/channels", text)
+        self.assertNotIn("<#", text)
+        self.assertIn(messages.BADGE_SERVERS.format(servers=6), text)
+
+    def test_leaves_the_badges_out_when_none_are_earned(self):
+        small = {"posts": 2, "reactions": 9, "servers": 1, "biggest_post": 5, "best_month": 1, "top_of_board": 0}
+        embed = commands.build_global_profile_embed(user_with_avatar(88), small)
+
+        self.assertEqual([messages.GLOBAL_PROFILE_HEADING], [field.name for field in embed.fields])
+
 
 
 if __name__ == "__main__":

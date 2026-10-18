@@ -155,6 +155,14 @@ class InviteUrlTests(unittest.TestCase):
         self.assertIn("integration_type=0", messages.INVITE_URL)
         self.assertIn("client_id=1177041673352663070", messages.INVITE_URL)
 
+    def test_the_account_link_adds_only_the_commands_to_the_member(self):
+        """A user install has no bot member, so it takes no bot scope and no permissions."""
+        self.assertIn("integration_type=1", messages.USER_INSTALL_URL)
+        self.assertIn("scope=applications.commands", messages.USER_INSTALL_URL)
+        self.assertNotIn("bot", messages.USER_INSTALL_URL.split("scope=")[1])
+        self.assertNotIn("permissions=", messages.USER_INSTALL_URL)
+        self.assertIn("client_id=1177041673352663070", messages.USER_INSTALL_URL)
+
 
 class BoardTopicTests(unittest.TestCase):
     def test_carries_the_install_link(self):
@@ -179,8 +187,9 @@ def link_buttons(view):
 class LinkButtonTests(unittest.IsolatedAsyncioTestCase):
     """The buttons under /invite, /vote and /help. Views need a running event loop, hence async tests."""
 
-    async def test_invite_offers_the_install_link_first_then_support(self):
+    async def test_invite_offers_the_install_link_first_then_the_account_link_then_support(self):
         self.assertEqual([(messages.INVITE_BUTTON, messages.INVITE_URL),
+                          (messages.USER_INSTALL_BUTTON, messages.USER_INSTALL_URL),
                           (messages.SUPPORT_SERVER_BUTTON, messages.SUPPORT_SERVER_URL)],
                          link_buttons(commands.build_invite_view()))
 
@@ -197,7 +206,8 @@ class LinkButtonTests(unittest.IsolatedAsyncioTestCase):
                     self.assertTrue(button.url.startswith("https://"))
 
     async def test_labels_fit_discords_button_limit(self):
-        for label in (messages.INVITE_BUTTON, messages.VOTE_BUTTON, messages.SUPPORT_SERVER_BUTTON):
+        for label in (messages.INVITE_BUTTON, messages.USER_INSTALL_BUTTON, messages.VOTE_BUTTON,
+                      messages.SUPPORT_SERVER_BUTTON):
             with self.subTest(label=label):
                 self.assertLessEqual(len(label), 80)
 

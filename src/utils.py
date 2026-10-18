@@ -770,11 +770,13 @@ async def logging(bot: discord.Client, message, server_id=None, new_value=None, 
 
 
 # noinspection PyTypeChecker
-async def create_feedback_form(interaction: discord.Interaction, bot):
+async def create_feedback_form(interaction: discord.Interaction, bot, on_sent=None):
     """
     Create a feedback form for the user and send the feedback to the feedback channel
     :param interaction:
     :param bot:
+    :param on_sent: Called with the member's user ID once the feedback reached the channel, so a form
+        that is closed or fails does not count toward the member's daily limit
     :return:
     """
     class FeedbackModal(discord.ui.Modal, title="Feedback Form"):
@@ -802,9 +804,12 @@ async def create_feedback_form(interaction: discord.Interaction, bot):
             embed.add_field(name=self.fb_title.label, value=self.fb_title.value, inline=False)
             embed.add_field(name=self.message.label, value=self.message.value, inline=False)
             embed.set_author(name=feedback_interaction.user.name, icon_url=feedback_interaction.user.avatar.url if feedback_interaction.user.avatar else None)
-            embed.add_field(name="Guild", value=feedback_interaction.guild.id, inline=True)
+            # None in a DM or a server that only has the bot through a user install
+            embed.add_field(name="Guild", value=feedback_interaction.guild_id or "None (user install)", inline=True)
             embed.add_field(name="UserId", value=feedback_interaction.user.id, inline=True)
             await target_channel.send(embed=embed)
+            if on_sent is not None:
+                on_sent(feedback_interaction.user.id)
             await feedback_interaction.response.send_message(f"Thanks for your feedback, {feedback_interaction.user.mention}")
             await asyncio.sleep(5)
             await feedback_interaction.delete_original_response()

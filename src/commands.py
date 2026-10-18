@@ -29,8 +29,11 @@ def build_link_buttons(*links: tuple[str, str]) -> discord.ui.View:
     return view
 
 
+USER_INSTALL_LINK = (messages.USER_INSTALL_BUTTON, messages.USER_INSTALL_URL)
+
+
 def build_invite_view() -> discord.ui.View:
-    return build_link_buttons(INVITE_LINK, SUPPORT_SERVER_LINK)
+    return build_link_buttons(INVITE_LINK, USER_INSTALL_LINK, SUPPORT_SERVER_LINK)
 
 
 def build_vote_view() -> discord.ui.View:
@@ -149,6 +152,7 @@ def build_help_embed() -> discord.Embed:
         name="🔗 Links",
         value=f"[Support server]({messages.SUPPORT_SERVER_URL}) · "
               f"[Add to a server]({messages.INVITE_URL}) · "
+              f"[Add to your account]({messages.USER_INSTALL_URL}) · "
               f"[Vote]({messages.VOTE_URL}) · "
               f"[Source](https://github.com/LukasKristensen/discord-hall-of-fame-bot)\n"
               f"Found a bug or have an idea? {command_refs.FEEDBACK}\n"
@@ -255,6 +259,32 @@ async def user_server_profile(interaction, user, user_stats, connection, month_e
     embed.set_thumbnail(url=user.display_avatar.url)
     embed.set_footer(text=messages.GLOBAL_STATS_FOOTER if show_global else messages.STATS_FOOTER)
     await interaction.response.send_message(embed=embed)
+
+
+def build_global_profile_embed(user, global_profile: dict) -> discord.Embed:
+    """
+    /user_profile used through a user install, in a DM or a server without Hall of Fame: the totals
+    across servers of the member who asked, alone, as there is no server here to show standings, highlights or ranks for.
+
+    Built from the same totals as the every-server column, so like it nothing on the card can name or
+    point to a server. Only the badges that come from those totals can be earned here.
+    :param user: The member who asked, the only one who can be looked up there
+    :param global_profile: Their totals from global_profile_repo.get_global_profile, never hidden ones
+    :return: The embed to send
+    """
+    embed = discord.Embed(
+        title=f"📊 {user.name}'s Hall of Fame Profile",
+        description=messages.PROFILE_EVERY_SERVER_DESCRIPTION.format(command=command_refs.USER_PROFILE),
+        color=discord.Color.gold()
+    )
+    embed.add_field(name=messages.GLOBAL_PROFILE_HEADING, inline=True,
+                    value=global_profile_column_value(global_profile))
+    badges = earned_badges({}, global_profile)
+    if badges:
+        embed.add_field(name=messages.BADGES_HEADING, value=" · ".join(badges), inline=False)
+    embed.set_thumbnail(url=user.display_avatar.url)
+    embed.set_footer(text=messages.GLOBAL_STATS_FOOTER)
+    return embed
 
 
 # Each badge shows only its highest tier reached, so the field stays one short line

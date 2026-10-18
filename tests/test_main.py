@@ -1085,13 +1085,174 @@ class CommandErrorHandlerTests(MainTestCase):
 
 
 class CommandContextTests(unittest.TestCase):
-    def test_commands_are_only_offered_in_servers(self):
-        """Every command reads the server it was used in, so in a DM it could only fail."""
+    # The commands that need no server set up, or answer without one
+    USER_INSTALLABLE = {"help", "feedback", "vote", "invite", "user_profile", "profile_privacy", "my_data",
+                        "delete_my_data"}
+
+    def test_commands_are_only_offered_in_servers_by_default(self):
+        """Most commands read the server they were used in, so in a DM they could only fail."""
         contexts = main.tree.allowed_contexts
 
         self.assertTrue(contexts.guild)
         self.assertFalse(contexts.dm_channel)
         self.assertFalse(contexts.private_channel)
+
+    def test_commands_are_only_installed_to_servers_by_default(self):
+        """Left unset, Discord would offer every setting to user installs once they are on in the portal."""
+        installs = main.tree.allowed_installs
+
+        self.assertTrue(installs.guild)
+        self.assertFalse(installs.user)
+        self.assertEqual([discord.app_commands.AppInstallationType.GUILD], installs.to_array())
+
+    def test_only_the_commands_that_work_anywhere_are_user_installable(self):
+        user_installable = set()
+        for command in main.tree.get_commands():
+            payload = command.to_dict(main.tree)
+            if discord.app_commands.AppInstallationType.USER in (payload.get("integration_types") or []):
+                user_installable.add(command.name)
+                with self.subTest(command=command.name):
+                    self.assertIn(discord.app_commands.AppCommandContext.DM_CHANNEL, payload["contexts"])
+            else:
+                with self.subTest(command=command.name):
+                    self.assertEqual([discord.app_commands.AppInstallationType.GUILD],
+                                     payload["integration_types"])
+                    self.assertEqual([discord.app_commands.AppCommandContext.GUILD], payload["contexts"])
+
+        self.assertEqual(self.USER_INSTALLABLE, user_installable)
+
+
+def outside_a_server(interaction, guild_id=None):
+    """A user install answers in a DM (no guild) or in a server the bot is not in."""
+    interaction.guild_id = guild_id
+    interaction.guild = None
+    return interaction
+
+
+class UserInstallLinkCommandTests(MainTestCase):
+    """The commands that need no server answer in a DM without reaching for one."""
+
+    async def test_help_vote_and_invite_answer_in_a_dm(self):
+        for command in (main.get_help, main.vote, main.invite):
+            with self.subTest(command=command.name):
+                interaction = outside_a_server(FakeInteraction())
+                await command.callback(interaction)
+
+                self.assertEqual(1, len(interaction.response.messages))
+                self.assertIn("a DM or a server without the bot", self.logged[-1])
+
+
+
+class FeedbackCooldownTests(MainTestCase):
+    """/feedback is open to anyone with the bot on their account, so it is capped per member and day."""
+
+    def setUp(self):
+        super().setUp()
+        self.patch(main, "daily_command_cooldowns", {})
+        self.forms = []
+
+        async def open_form(interaction, _bot, on_sent=None):
+            self.forms.append(on_sent)
+
+        self.patch(utils, "create_feedback_form", open_form)
+
+    async def send(self, interaction):
+        """Open the form and submit it, as a member who fills it in would"""
+        opened = len(self.forms)
+        await main.send_feedback.callback(interaction)
+        if len(self.forms) > opened:
+            self.forms[-1](interaction.user.id)
+
+    async def test_refuses_once_the_daily_limit_is_reached(self):
+        for _ in range(main.feedback_daily_limit):
+            await self.send(FakeInteraction())
+
+        refused = FakeInteraction()
+        await self.send(refused)
+
+        self.assertEqual(main.feedback_daily_limit, len(self.forms))
+        self.assertEqual([messages.FEEDBACK_ON_COOLDOWN.format(limit=main.feedback_daily_limit)],
+                         refused.response.messages)
+        self.assertEqual([True], refused.response.ephemeral)
+
+    async def test_the_limit_follows_the_member_into_dms(self):
+        """Keyed by member, so a user install cannot be used to get a fresh limit per server or DM."""
+        for guild_id in (GUILD_ID, 999, None):
+            await self.send(outside_a_server(FakeInteraction(), guild_id=guild_id))
+
+        refused = outside_a_server(FakeInteraction())
+        await self.send(refused)
+
+        self.assertEqual([messages.FEEDBACK_ON_COOLDOWN.format(limit=main.feedback_daily_limit)],
+                         refused.response.messages)
+
+    async def test_a_closed_form_does_not_count(self):
+        for _ in range(main.feedback_daily_limit + 2):
+            await main.send_feedback.callback(FakeInteraction())
+
+        self.assertEqual(main.feedback_daily_limit + 2, len(self.forms))
+        self.assertEqual(0, main.daily_uses(77, "feedback"))
+
+    async def test_other_members_keep_their_own_limit(self):
+        for _ in range(main.feedback_daily_limit):
+            await self.send(FakeInteraction())
+
+        other = FakeInteraction()
+        other.user = FakeUser(user_id=78)
+        await main.send_feedback.callback(other)
+
+        self.assertEqual(main.feedback_daily_limit + 1, len(self.forms))
+        self.assertEqual([], other.response.messages)
+
+
+class FeedbackFormTests(unittest.IsolatedAsyncioTestCase):
+    """The form reports the send back only once the feedback reached the developer channel."""
+
+    async def open_form(self, on_sent):
+        modals = []
+        interaction = types.SimpleNamespace(response=types.SimpleNamespace())
+
+        async def send_modal(modal):
+            modals.append(modal)
+
+        interaction.response.send_modal = send_modal
+        await utils.create_feedback_form(interaction, self.bot, on_sent=on_sent)
+        return modals[0]
+
+    def setUp(self):
+        self.posted = []
+
+        async def post(embed=None):
+            self.posted.append(embed)
+
+        channel = types.SimpleNamespace(send=post)
+        self.bot = types.SimpleNamespace(get_guild=lambda _id: types.SimpleNamespace(get_channel=lambda _id: channel))
+
+    def submitter(self, guild_id=None):
+        async def nothing(*_args, **_kwargs):
+            return None
+
+        return types.SimpleNamespace(
+            user=types.SimpleNamespace(id=77, name="Member", avatar=None, mention="<@77>"),
+            guild_id=guild_id,
+            response=types.SimpleNamespace(send_message=nothing),
+            delete_original_response=nothing)
+
+    async def test_a_sent_form_counts_and_works_from_a_dm(self):
+        sent = []
+        modal = await self.open_form(sent.append)
+        modal.fb_title._value = "Title"
+        modal.message._value = "Body"
+
+        async def no_wait(_seconds):
+            return None
+
+        with mock.patch.object(utils.asyncio, "sleep", no_wait):
+            await modal.on_submit(self.submitter())
+
+        self.assertEqual([77], sent)
+        self.assertEqual(1, len(self.posted))
+        self.assertIn("user install", [field.value for field in self.posted[0].fields][2])
 
 
 if __name__ == "__main__":

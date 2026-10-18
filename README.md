@@ -95,8 +95,11 @@ messages being reacted to. The bot checks this when it joins and posts what to f
 
 ## Commands
 
-All commands are slash commands and work inside a server, except the three under
-[Your data](#your-data), which also work in DMs. The configuration ones need the **Manage Server**
+All commands are slash commands and work inside a server with the bot. Add Hall of Fame to your own
+account (the **Add to your account** button under `/invite`) and `/user_profile`, the three under
+[Your data](#your-data), `/help`, `/invite`, `/vote` and `/feedback` also work in DMs and in servers
+without the bot; see [Can I use it outside a server?](#can-i-use-it-outside-a-server). The rest need the
+server's configuration, so they stay in servers that added the bot. The configuration ones need the **Manage Server**
 permission, and say so on each group; everything under [Recognition](#recognition-commands),
 [Your data](#your-data) and [Bot and help](#bot-and-help) is open to every member. If a command is
 refused, for example because a value is out of range, only you see the reply.
@@ -145,7 +148,7 @@ Open to everyone.
 | Command | Parameters | What it does |
 |:---|:---|:---|
 | `/leaderboard` | | Rank the server by hall of fame posts and reactions earned. Refreshed daily. |
-| `/user_profile` | `specific_user` (optional) | All time and monthly totals and ranks for a member. Defaults to you. When the member has been featured in other servers too, the card ends with their posts, reactions and titles added up across every server with the bot, without naming any server. Earned badges, such as monthly champion or a 100-reaction post, sit under the columns; badges that come from other servers are left out when the member hid their totals. |
+| `/user_profile` | `specific_user` (optional) | All time and monthly totals and ranks for a member. Defaults to you. When the member has been featured in other servers too, the card ends with their posts, reactions and titles added up across every server with the bot, without naming any server. Earned badges, such as monthly champion or a 100-reaction post, sit under the columns; badges that come from other servers are left out when the member hid their totals. Used in a DM or a server without the bot, it only looks you up, and shows your totals across servers alone. |
 | `/hof_wrapped` | | Your personal Hall of Fame Wrapped for the year. |
 | `/server_hof_wrapped` | | The Hall of Fame Wrapped for the whole server. |
 
@@ -167,9 +170,9 @@ Open to everyone.
 |:---|:---|:---|
 | `/help` | | List every command, grouped by what it changes. Mentioning the bot on its own shows the same overview. |
 | `/get_server_config` | | Show every setting for this server, with the command that changes it. |
-| `/invite` | | A button for adding the bot to another server. |
+| `/invite` | | Buttons for adding the bot to another server or to your own account. |
 | `/vote` | | A button for voting for the bot on top.gg. |
-| `/feedback` | | Send a feature request or bug report to the developer. |
+| `/feedback` | | Send a feature request or bug report to the developer. Up to three a day. |
 
 <br>
 
@@ -262,6 +265,15 @@ and monthly standing, and `/hof_wrapped` gives them a year in review.
 
 Yes, with `/require_image_or_video`, which suits servers where the board is meant to be a gallery rather
 than a quote wall.
+
+### Can I use it outside a server?
+
+Yes, once you add it to your account with the **Add to your account** button under `/invite`. In DMs
+and in servers without Hall of Fame you can look up your own profile with `/user_profile`, which then
+shows your posts and reactions added up across every server with the bot. Other members can only be
+looked up inside a server with the bot. You can also manage your data with `/my_data`,
+`/delete_my_data` and `/profile_privacy`. Leaderboards, Wrapped and settings belong to a server, so
+they only work in servers that added the bot.
 
 ### Is the bot free?
 

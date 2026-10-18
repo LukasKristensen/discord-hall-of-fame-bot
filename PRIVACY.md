@@ -16,7 +16,8 @@ described here. Contact: githublukas@gmail.com, or the
 - **Member statistics:** per-server totals and ranks for featured messages and reactions.
 - **Totals across servers:** your posts, reactions, titles and badges added up across every server that
   uses the bot, worked out from the data above and shown at the bottom of your profile in any of those
-  servers. They are numbers only, never a server name, server ID or message content. If you hide them
+  servers. If you add the bot to your own account, you can also show your own profile in DMs and in servers
+  without the bot, where it shows these totals alone. Nobody else can look you up there. They are numbers only, never a server name, server ID or message content. If you hide them
   with `/profile_privacy`, your user ID is stored with the date you hid them. Server admins can leave
   their server out of everyone's totals with `/count_in_global_profiles`.
 - **Hall of Fame Wrapped:** yearly statistics per member, including most-used channels and emojis and
@@ -40,8 +41,10 @@ cannot see. The result is posted in that server and is not saved.
 ## 3. How the data is used
 
 Only to provide the bot's features: posting to the Hall of Fame, leaderboards, profiles and Wrapped,
-plus support and troubleshooting. Your totals across servers can be shown in any server with the bot, but only
-as totals, so it does not reveal which servers you are in. Aggregated statistics that cannot identify anyone are used to improve
+plus support and troubleshooting. Your totals across servers can be shown in any server with the bot. Outside
+those servers, only you can show them, through the bot added to your own account. They are only ever
+shown as totals, so they do not reveal which servers you are in, and once you hide them
+with `/profile_privacy` they are not shown anywhere. Aggregated statistics that cannot identify anyone are used to improve
 the bot. Data is never used for advertising, sold, used to track who people are or which servers they
 are in, or used to train AI models. The legal basis is our legitimate interest in running the features a server has chosen to
 use.
