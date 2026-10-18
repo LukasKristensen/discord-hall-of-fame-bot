@@ -237,6 +237,51 @@ def get_member_highlights(connection, guild_id, author_id) -> dict:
         "last_featured": latest[0] if latest else None,
     }
 
+def get_member_badge_facts(connection, guild_id, author_id) -> dict:
+    """
+    What the badges on /user_profile are worked out from, for one member in one guild. Read from the
+    posts themselves, so nothing about badges is ever stored
+    :param connection: The database connection
+    :param guild_id: The guild the profile is for
+    :param author_id: The member's user ID
+    :return: posts_by_month as (month start, posts) pairs oldest first, first_featured as a datetime or
+        None, biggest_post as a reaction count, and champion_months: the calendar months in which the
+        member had the most posts here, ties going to the lowest user ID the same way the ranks do
+    """
+    cursor = connection.cursor()
+    cursor.execute("""
+        SELECT DATE_TRUNC('month', created_at) AS month, COUNT(*), MAX(reaction_count), MIN(created_at)
+        FROM hall_of_fame_message
+        WHERE guild_id = %s AND author_id = %s
+        GROUP BY month
+        ORDER BY month
+    """, (guild_id, author_id))
+    months = cursor.fetchall()
+    # Calendar months, not the rolling window the monthly counters use, since past windows are not kept
+    # and calendar months can always be rebuilt from the posts. Posts whose author was removed have
+    # nobody to crown, so they do not compete
+    cursor.execute("""
+        WITH monthly AS (
+            SELECT author_id, DATE_TRUNC('month', created_at) AS month, COUNT(*) AS posts
+            FROM hall_of_fame_message
+            WHERE guild_id = %(guild_id)s AND author_id <> %(no_author)s
+            GROUP BY author_id, month
+        ),
+        ranked AS (
+            SELECT author_id, ROW_NUMBER() OVER (PARTITION BY month ORDER BY posts DESC, author_id ASC) AS place
+            FROM monthly
+        )
+        SELECT COUNT(*) FROM ranked WHERE author_id = %(author_id)s AND place = 1
+    """, {"guild_id": guild_id, "author_id": author_id, "no_author": NO_AUTHOR_ID})
+    champion = cursor.fetchone()
+    cursor.close()
+    return {
+        "posts_by_month": [(month, int(posts)) for month, posts, _biggest, _first in months],
+        "first_featured": months[0][3] if months else None,
+        "biggest_post": max((int(biggest) for _month, _posts, biggest, _first in months), default=0),
+        "champion_months": int(champion[0]) if champion else 0,
+    }
+
 def remove_author(connection, author_id) -> int:
     """
     Detach a member from every post they wrote. The posts stay on their servers' boards, since they

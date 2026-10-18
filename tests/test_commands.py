@@ -341,6 +341,9 @@ class UserServerProfileTests(unittest.IsolatedAsyncioTestCase):
         for target, name, replacement in (
                 (hall_of_fame_message_repo, "get_member_highlights",
                  lambda *_args: {"best_post": None, "last_featured": None}),
+                (hall_of_fame_message_repo, "get_member_badge_facts",
+                 lambda *_args: {"posts_by_month": [], "first_featured": None, "biggest_post": 0,
+                                 "champion_months": 0}),
                 (server_user_repo, "get_stat_at_rank", lambda *_args: None)):
             patcher = mock.patch.object(target, name, replacement)
             patcher.start()

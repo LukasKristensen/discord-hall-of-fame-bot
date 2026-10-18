@@ -14,8 +14,8 @@ described here. Contact: githublukas@gmail.com, or the
   time, and the ID of the bot's repost. The text, images and usernames are not stored in our database.
   The repost itself lives in your server's Hall of Fame channel on Discord.
 - **Member statistics:** per-server totals and ranks for featured messages and reactions.
-- **Totals across servers:** your posts, reactions and titles added up across every server that uses
-  the bot, worked out from the data above and shown at the bottom of your profile in any of those
+- **Totals across servers:** your posts, reactions, titles and badges added up across every server that
+  uses the bot, worked out from the data above and shown at the bottom of your profile in any of those
   servers. They are numbers only, never a server name, server ID or message content. If you hide them
   with `/profile_privacy`, your user ID is stored with the date you hid them. Server admins can leave
   their server out of everyone's totals with `/count_in_global_profiles`.

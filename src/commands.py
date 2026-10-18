@@ -1,3 +1,4 @@
+import datetime
 import json
 from datetime import timezone
 import discord
@@ -239,6 +240,11 @@ async def user_server_profile(interaction, user, user_stats, connection, month_e
         embed.add_field(name=messages.GLOBAL_PROFILE_HEADING, inline=True,
                         value=global_profile_column_value(global_profile))
 
+    badges = earned_badges(hall_of_fame_message_repo.get_member_badge_facts(connection, interaction.guild.id, user.id),
+                           global_profile)
+    if badges:
+        embed.add_field(name=messages.BADGES_HEADING, value=" · ".join(badges), inline=False)
+
     if user_stats:
         highlights = hall_of_fame_message_repo.get_member_highlights(connection, interaction.guild.id, user.id)
         gap = rank_gap_line(user_stats, lambda stat, rank_field, rank: server_user_repo.get_stat_at_rank(
@@ -249,6 +255,70 @@ async def user_server_profile(interaction, user, user_stats, connection, month_e
     embed.set_thumbnail(url=user.display_avatar.url)
     embed.set_footer(text=messages.GLOBAL_STATS_FOOTER if show_global else messages.STATS_FOOTER)
     await interaction.response.send_message(embed=embed)
+
+
+# Each badge shows only its highest tier reached, so the field stays one short line
+POST_BADGE_TIERS = (500, 100, 50, 10)
+STREAK_BADGE_MONTHS = 3
+BIG_POST_REACTIONS = 100
+BIG_MONTH_POSTS = 10
+SERVERS_BADGE_MINIMUM = 5
+
+
+def _longest_month_streak(posts_by_month) -> int:
+    """The most calendar months in a row with at least one post, from (month start, posts) pairs"""
+    longest = run = 0
+    previous = None
+    for month, _posts_in_month in posts_by_month:
+        index = month.year * 12 + month.month
+        run = run + 1 if previous is not None and index == previous + 1 else 1
+        longest = max(longest, run)
+        previous = index
+    return longest
+
+
+def earned_badges(facts: dict, global_profile: dict | None, now: datetime.datetime | None = None) -> list[str]:
+    """
+    The badges a member has earned, worked out from existing posts and totals, in the order shown.
+
+    Most come from this server alone. The reaction and month badges also count other servers when the
+    member's totals across servers are shown, and the servers badge only exists then. A member who hid
+    those totals gets global_profile None, so nothing from another server reaches the card. A badge
+    about other servers gives a count, never a name or a link.
+    :param facts: From hall_of_fame_message_repo.get_member_badge_facts for this server
+    :param global_profile: The totals from global_profile_repo.get_global_profile, or None when hidden
+    :param now: The current time, taken from the clock when not supplied
+    :return: The badge labels, empty when the member has earned none
+    """
+    now = now or datetime.datetime.now(timezone.utc)
+    posts_by_month = facts.get("posts_by_month") or []
+    posts_here = sum(posts for _month, posts in posts_by_month)
+    everywhere = global_profile or {}
+
+    badges = []
+    if facts.get("champion_months"):
+        badges.append(messages.BADGE_MONTHLY_CHAMPION)
+    tier = next((tier for tier in POST_BADGE_TIERS if posts_here >= tier), None)
+    if tier:
+        badges.append(messages.BADGE_POSTS.format(posts=tier))
+    streak = _longest_month_streak(posts_by_month)
+    if streak >= STREAK_BADGE_MONTHS:
+        badges.append(messages.BADGE_STREAK.format(months=streak))
+    first = facts.get("first_featured")
+    if first is not None:
+        # Stored as naive UTC
+        if first.tzinfo is None:
+            first = first.replace(tzinfo=timezone.utc)
+        if now - first >= datetime.timedelta(days=365):
+            badges.append(messages.BADGE_VETERAN)
+    if max(facts.get("biggest_post") or 0, everywhere.get("biggest_post", 0)) >= BIG_POST_REACTIONS:
+        badges.append(messages.BADGE_BIG_POST)
+    best_month_here = max((posts for _month, posts in posts_by_month), default=0)
+    if max(best_month_here, everywhere.get("best_month", 0)) >= BIG_MONTH_POSTS:
+        badges.append(messages.BADGE_BIG_MONTH)
+    if everywhere.get("servers", 0) >= SERVERS_BADGE_MINIMUM:
+        badges.append(messages.BADGE_SERVERS.format(servers=everywhere["servers"]))
+    return badges
 
 
 def _posts(count: int) -> str:

@@ -262,6 +262,99 @@ class HighlightsTests(unittest.TestCase):
         self.assertEqual("", commands.highlights_value(200, {"best_post": None, "last_featured": None}, None))
 
 
+NOW = datetime.datetime(2026, 10, 18, 12, 0, tzinfo=datetime.timezone.utc)
+NO_FACTS = {"posts_by_month": [], "first_featured": None, "biggest_post": 0, "champion_months": 0}
+EMPTY_PROFILE = {field: 0 for field in global_profile_repo.PROFILE_FIELDS}
+
+
+def months(*pairs):
+    """(year, month, posts) triples as the (month start, posts) pairs the badge facts hold"""
+    return [(datetime.datetime(year, month, 1), posts) for year, month, posts in pairs]
+
+
+class EarnedBadgesTests(unittest.TestCase):
+    def badges(self, global_profile=EMPTY_PROFILE, **facts):
+        return commands.earned_badges(dict(NO_FACTS, **facts), global_profile, now=NOW)
+
+    def test_nothing_earned_means_no_badges(self):
+        self.assertEqual([], self.badges())
+        self.assertEqual([], self.badges(global_profile=None))
+
+    def test_monthly_champion(self):
+        self.assertEqual([messages.BADGE_MONTHLY_CHAMPION], self.badges(champion_months=2))
+
+    def test_post_count_shows_the_highest_tier_only(self):
+        for posts, expected in ((9, None), (10, 10), (49, 10), (50, 50), (100, 100), (499, 100), (500, 500)):
+            with self.subTest(posts=posts):
+                # Spread over two months that are not in a row, so no other badge is earned
+                earned = self.badges(posts_by_month=months((2026, 1, posts - posts // 2), (2026, 5, posts // 2)))
+                posts_badges = [badge for badge in earned if badge.startswith("📈")]
+                self.assertEqual([messages.BADGE_POSTS.format(posts=expected)] if expected else [], posts_badges)
+
+    def test_streak_counts_calendar_months_in_a_row(self):
+        streak = months((2025, 11, 1), (2025, 12, 1), (2026, 1, 1), (2026, 3, 1))
+        self.assertIn(messages.BADGE_STREAK.format(months=3), self.badges(posts_by_month=streak))
+
+    def test_no_streak_badge_for_two_months_in_a_row(self):
+        two = months((2026, 1, 1), (2026, 2, 1), (2026, 4, 1), (2026, 5, 1))
+        self.assertEqual([], self.badges(posts_by_month=two))
+
+    def test_shows_the_longest_streak(self):
+        streak = months((2025, 1, 1), (2025, 2, 1), (2025, 3, 1), (2025, 4, 1), (2025, 9, 1), (2025, 10, 1))
+        self.assertIn(messages.BADGE_STREAK.format(months=4), self.badges(posts_by_month=streak))
+
+    def test_featured_for_a_year(self):
+        a_year_ago = datetime.datetime(2025, 10, 18, 12, 0)
+        just_under = datetime.datetime(2025, 10, 19, 12, 0)
+
+        self.assertEqual([messages.BADGE_VETERAN], self.badges(first_featured=a_year_ago))
+        self.assertEqual([], self.badges(first_featured=just_under))
+
+    def test_hundred_reaction_post_here(self):
+        self.assertEqual([messages.BADGE_BIG_POST], self.badges(global_profile=None, biggest_post=100))
+        self.assertEqual([], self.badges(global_profile=None, biggest_post=99))
+
+    def test_hundred_reaction_post_elsewhere_only_counts_when_totals_are_shown(self):
+        elsewhere = dict(EMPTY_PROFILE, biggest_post=150, posts=1, servers=1)
+
+        self.assertEqual([messages.BADGE_BIG_POST], self.badges(global_profile=elsewhere))
+        self.assertEqual([], self.badges(global_profile=None))
+
+    def test_ten_post_month_here(self):
+        self.assertIn(messages.BADGE_BIG_MONTH, self.badges(global_profile=None, posts_by_month=months((2026, 2, 10))))
+        self.assertNotIn(messages.BADGE_BIG_MONTH,
+                         self.badges(global_profile=None, posts_by_month=months((2026, 2, 9), (2026, 4, 9))))
+
+    def test_ten_post_month_elsewhere_only_counts_when_totals_are_shown(self):
+        elsewhere = dict(EMPTY_PROFILE, best_month=12, posts=12, servers=1)
+
+        self.assertEqual([messages.BADGE_BIG_MONTH], self.badges(global_profile=elsewhere))
+        self.assertEqual([], self.badges(global_profile=None))
+
+    def test_servers_badge_from_five_servers(self):
+        """The every-server column already shows the count, so the badge is kept for a real milestone."""
+        self.assertEqual([messages.BADGE_SERVERS.format(servers=5)],
+                         self.badges(global_profile=dict(EMPTY_PROFILE, servers=5)))
+        self.assertEqual([], self.badges(global_profile=dict(EMPTY_PROFILE, servers=4)))
+
+    def test_hidden_totals_leave_every_other_server_out(self):
+        """global_profile is None when the member hid their totals."""
+        local = dict(posts_by_month=months((2026, 2, 3)), biggest_post=40)
+        self.assertEqual([], self.badges(global_profile=None, **local))
+
+    def test_no_badge_names_or_points_to_a_server(self):
+        everything = dict(PROFILE, servers=12)
+        earned = self.badges(global_profile=everything, champion_months=1, biggest_post=500,
+                             first_featured=datetime.datetime(2020, 1, 1),
+                             posts_by_month=months((2026, 1, 200), (2026, 2, 200), (2026, 3, 200)))
+
+        self.assertEqual(7, len(earned))
+        for badge in earned:
+            self.assertNotIn("discord.com", badge)
+            self.assertNotIn("<#", badge)
+            self.assertNotIn(str(GUILD_ID), badge)
+
+
 class UserProfileTotalsTests(CommandTestCase):
     """/user_profile ends with the member's totals across servers, unless they hid them."""
 
@@ -351,8 +444,23 @@ class UserProfileEmbedTests(unittest.IsolatedAsyncioTestCase):
         embed = await self.build(PROFILE)
 
         self.assertEqual(["🏆 This month", "🌟 All time", messages.GLOBAL_PROFILE_HEADING],
-                         [field.name for field in embed.fields])
-        self.assertTrue(all(field.inline for field in embed.fields))
+                         [field.name for field in embed.fields][:3])
+        self.assertTrue(all(field.inline for field in embed.fields[:3]))
+
+    async def test_badges_sit_under_the_columns_in_one_field(self):
+        embed = await self.build(dict(PROFILE, servers=5))
+        badges = embed.fields[3]
+
+        self.assertEqual(messages.BADGES_HEADING, badges.name)
+        self.assertFalse(badges.inline)
+        self.assertEqual(" · ".join([messages.BADGE_BIG_POST, messages.BADGE_BIG_MONTH,
+                                     messages.BADGE_SERVERS.format(servers=5)]), badges.value)
+
+    async def test_hidden_totals_leave_out_the_badges_from_other_servers(self):
+        """Nothing featured here, so every badge PROFILE would earn comes from another server."""
+        embed = await self.build(None)
+
+        self.assertNotIn(messages.BADGES_HEADING, [field.name for field in embed.fields])
 
     async def test_asks_for_the_install_once(self):
         """The footer carries the ask, so the column does not repeat it."""

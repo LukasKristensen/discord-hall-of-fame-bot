@@ -101,6 +101,16 @@ HIGHLIGHT_BEHIND = "🎯 {posts} behind #{rank} {period}"
 HIGHLIGHT_LEVEL_WITH = "🎯 Level with #{rank} {period}"
 HIGHLIGHT_LEADING = "🎯 Leading {period} by {posts}"
 HIGHLIGHT_SHARING_FIRST = "🎯 Sharing first place {period}"
+# The badges field on /user_profile, one line of the badges a member has earned. A badge about other
+# servers says how many, never which
+BADGES_HEADING = "🏅 Badges"
+BADGE_MONTHLY_CHAMPION = "🥇 Monthly champion"
+BADGE_POSTS = "📈 {posts} posts"
+BADGE_STREAK = "🔥 {months} months in a row"
+BADGE_VETERAN = "🎂 Featured for a year"
+BADGE_BIG_POST = "💯 100-reaction post"
+BADGE_BIG_MONTH = "📅 10 posts in one month"
+BADGE_SERVERS = "🌐 Featured in {servers} servers"
 # Replaces STATS_FOOTER when the every-server column is shown, so the card carries one ask, not two
 GLOBAL_STATS_FOOTER = "Updated every 24 hours · Only servers with Hall of Fame count · Add it to yours with /invite"
 PROFILE_PRIVACY_HIDDEN = ("🔒 Your totals across servers are now hidden. Your profile shows only the numbers from the "
