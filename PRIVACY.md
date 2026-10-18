@@ -33,6 +33,10 @@ described here. Contact: githublukas@gmail.com, or the
 To work, the bot reads reactions and the content and attachments of messages that reach the threshold,
 so it can count them and repost them in the same server. Message content is not saved to our database.
 
+When the bot joins a server, and whenever an admin runs `/check_setup`, it also reads the server's
+channels, roles, channel permissions and member count, to find setup problems such as channels it
+cannot see. The result is posted in that server and is not saved.
+
 ## 3. How the data is used
 
 Only to provide the bot's features: posting to the Hall of Fame, leaderboards, profiles and Wrapped,
