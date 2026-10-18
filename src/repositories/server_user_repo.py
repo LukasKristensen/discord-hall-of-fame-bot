@@ -232,7 +232,10 @@ def _ranking_clause(stat_field) -> str:
     """
     if stat_field.endswith("_rank"):
         return f"AND {stat_field} IS NOT NULL ORDER BY {stat_field} ASC"
-    return f"AND {stat_field} > 0 ORDER BY {stat_field} DESC"
+    # Ties are broken by user ID, lowest first, the same way rebuild_user_stats_for_guild ranks them.
+    # Without it a tie comes back in whatever order the rows are stored, and the champion title could
+    # go to the member ranked second
+    return f"AND {stat_field} > 0 ORDER BY {stat_field} DESC, user_id ASC"
 
 
 def get_stat_at_rank(connection, guild_id, stat_field, rank_field, rank):
