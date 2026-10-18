@@ -3,7 +3,7 @@
 Copy for the Hall of Fame page in the Discord App Directory. Paste each block into the matching field in
 the Developer Portal. Keep this file in step with the README when commands or defaults change.
 
-Last checked against the bot: 2.1.1.
+Last checked against the bot: 2.2.0.
 
 <br>
 
@@ -22,10 +22,16 @@ Turn your server's best messages into a Hall of Fame. Any emoji can feature a me
 ## Description
 
 Developer Portal > General Information > Description. Shown on the bot's profile when someone clicks
-it in a server. Limit 400 characters.
+it in a server. Limit 400 characters. Kept to links only, as it is live.
 
 ```
-Hall of Fame reposts your server's most reacted messages to a hall of fame channel, with images, videos and reply context. Every emoji counts. Members who land there get credit: /leaderboard ranks the server, /user_profile shows monthly and all time standing, and /hof_wrapped gives everyone their year in review. Free, with no vote locks.
+💬 Join the support server: https://discord.gg/r98WC5GHcn
+
+➕ Invite the bot: https://discord.com/oauth2/authorize?client_id=1177041673352663070
+
+💻 Contribute to the bot: https://github.com/LukasKristensen/discord-hall-of-fame-bot
+
+Privacy policy: https://gist.github.com/LukasKristensen/275512598501456098f57ae2051379c8
 ```
 
 <br>
@@ -51,7 +57,8 @@ When a message gets enough reactions, Hall of Fame reposts it to your hall of fa
 **The recognition**
 
 - /leaderboard ranks the server by posts and reactions earned.
-- /user_profile shows a member's monthly and all time totals and rank.
+- /user_profile shows a member's month, all time and every-server totals, their best post and the gap to the next rank.
+- Badges for milestones: monthly champion, 10 to 500 posts, months in a row, a 100-reaction post and more.
 - /hof_wrapped and /server_hof_wrapped give each member, and the server, a year in review.
 
 **Count it your way**
@@ -59,13 +66,21 @@ When a message gets enough reactions, Hall of Fame reposts it to your hall of fa
 - Most reactions on one emoji, total reactions, or unique people who reacted.
 - Choose whether authors' own reactions count, how old a message can be, and whether only images and videos qualify.
 
+**Your data, your call**
+
+- /profile_privacy hides a member's totals across servers. Totals across servers never name a server.
+- /my_data sends a member a private copy of everything stored about them, and /delete_my_data removes them from every leaderboard, profile and Wrapped.
+
 **Getting started**
 
 1. Add the app and accept the permissions it asks for.
 2. It creates a #hall-of-fame channel and picks a starting threshold from your member count.
-3. React as normal. Change the threshold with /set_reaction_threshold, or use an existing channel with /set_hall_of_fame_channel.
+3. Press Check setup on the welcome message, or run /check_setup, to see whether the bot can read your channels and post to the board.
+4. React as normal. Change the threshold with /set_reaction_threshold, or use an existing channel with /set_hall_of_fame_channel.
 
-If most of your channels are hidden behind a role, give the bot that role so it can see them.
+**Looking for a starboard?**
+
+A starboard archives messages that collected enough stars. Hall of Fame is about recognition: any emoji can feature a message, and the members behind them get ranked for it. If a plain star archive is all you need, a starboard bot will do the job.
 
 Free to use, with nothing held back behind voting. Questions or ideas? Join the support server or use /feedback.
 ```
@@ -75,14 +90,15 @@ Free to use, with nothing held back behind voting. Questions or ideas? Join the 
 
 ## Tags
 
-Up to 5. Picked for what people type when they look for this kind of bot.
+Up to 5. Picked for what people type when they look for this kind of bot. `starboard` is there because
+many people search for one; the listing itself only ever compares against it, never calls the bot one.
 
 ```
 hall of fame
+starboard
 leaderboard
 reactions
 highlights
-community
 ```
 
 <br>
@@ -159,5 +175,5 @@ The current listing also asks for Manage Threads, Create Public Threads and Pin 
 ## Popular commands
 
 The directory lists a handful of commands with their descriptions. If the portal lets you choose them,
-show the ones members use: `/leaderboard`, `/user_profile`, `/hof_wrapped`, `/server_hof_wrapped` and
+show the ones members use: `/leaderboard`, `/user_profile`, `/hof_wrapped`, `/check_setup` and
 `/set_reaction_threshold`.
