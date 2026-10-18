@@ -9,6 +9,9 @@ that removes and re-adds the bot inherits its old board.
 import unittest
 from unittest import mock
 
+import discord
+
+import setup_check
 import utils
 from caches import ExpiringSet
 from enums import calculation_method_type
@@ -31,6 +34,9 @@ class FakeCreatedChannel:
         self.permissions = []
         self.sent = []
         self.views = []
+        self.embeds = []
+        self.mention = f"<#{channel_id}>"
+        self.bot_permissions = FakePermissions()
 
     async def edit(self, **kwargs):
         self.edits.append(kwargs)
@@ -38,9 +44,13 @@ class FakeCreatedChannel:
     async def set_permissions(self, target, **kwargs):
         self.permissions.append((target, kwargs))
 
-    async def send(self, content=None, view=None):
+    def permissions_for(self, _member):
+        return self.bot_permissions
+
+    async def send(self, content=None, view=None, embed=None):
         self.sent.append(content)
         self.views.append(view)
+        self.embeds.append(embed)
 
 
 class FakeBotMember:
@@ -48,13 +58,29 @@ class FakeBotMember:
         self.guild_permissions = FakePermissions(**permissions)
 
 
+class FakeReactChannel:
+    """A channel members react in, which the bot can or cannot read."""
+
+    def __init__(self, channel_id, bot_can_read=True):
+        self.id = channel_id
+        self.type = discord.ChannelType.text
+        self.mention = f"<#{channel_id}>"
+        self.bot_can_read = bot_can_read
+
+    def permissions_for(self, target):
+        can_read = self.bot_can_read if isinstance(target, FakeBotMember) else True
+        return FakePermissions(view_channel=can_read, read_message_history=can_read)
+
+
 class FakeJoinedGuild:
-    def __init__(self, member_count=50, manage_channels=True, guild_id=GUILD_ID):
+    def __init__(self, member_count=50, manage_channels=True, guild_id=GUILD_ID, channels=()):
         self.id = guild_id
         self.name = "Test Server"
         self.member_count = member_count
         self.me = FakeBotMember(manage_channels=manage_channels)
         self.default_role = "@everyone"
+        self.roles = []
+        self.channels = list(channels)
         self.created_channels = []
 
     async def create_text_channel(self, name):
@@ -166,9 +192,39 @@ class CreateDatabaseContextTests(SetupTestCase):
         guild, _ = await self.join()
 
         view = guild.created_channels[0].views[0]
-        self.assertEqual([(messages.SUPPORT_SERVER_BUTTON, messages.SUPPORT_SERVER_URL),
+        self.assertEqual([(messages.CHECK_SETUP_BUTTON, None),
+                          (messages.SUPPORT_SERVER_BUTTON, messages.SUPPORT_SERVER_URL),
                           (messages.VOTE_BUTTON, messages.VOTE_URL)],
                          [(button.label, button.url) for button in view.children])
+
+    async def test_says_nothing_more_when_the_setup_is_fine(self):
+        guild, _ = await self.join(FakeJoinedGuild(channels=[FakeReactChannel(1), FakeReactChannel(2)]))
+
+        self.assertEqual(1, len(guild.created_channels[0].sent))
+
+    async def test_reports_channels_members_see_but_the_bot_cannot(self):
+        guild, created = await self.join(FakeJoinedGuild(channels=[FakeReactChannel(1),
+                                                                   FakeReactChannel(2, bot_can_read=False)]))
+
+        board = guild.created_channels[0]
+        self.assertIsNotNone(created)
+        self.assertEqual(2, len(board.sent))
+        report = board.embeds[1]
+        self.assertEqual(messages.CHECK_JOIN_TITLE, report.title)
+        channel_field = next(field for field in report.fields if "Reads 1 of 2" in field.name)
+        self.assertIn("<#2>", channel_field.value)
+
+    async def test_a_failed_report_does_not_undo_the_join(self):
+        guild = FakeJoinedGuild(channels=[FakeReactChannel(1, bot_can_read=False)])
+
+        def broken(*_args, **_kwargs):
+            raise RuntimeError("boom")
+
+        self.patch(setup_check, "join_findings", broken)
+        _, created = await self.join(guild)
+
+        self.assertIsNotNone(created)
+        self.assertTrue(any("Failed to report setup problems" in line for line in self.logged))
 
     async def test_names_the_starting_threshold_in_the_welcome_message(self):
         guild, created = await self.join(FakeJoinedGuild(member_count=30))

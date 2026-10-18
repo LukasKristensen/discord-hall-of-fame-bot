@@ -39,6 +39,21 @@ class CreateTableTests(unittest.TestCase):
         self.assertTrue(any("ON hall_of_fame_message (author_id)" in index for index in indexes))
 
 
+class GetPostActivityTests(unittest.TestCase):
+    def test_reads_the_total_latest_and_today_for_one_guild(self):
+        latest = datetime.datetime(2026, 10, 17, 9, 0)
+        connection = FakeConnection(row=(40, latest, 3))
+        activity = hall_of_fame_message_repo.get_post_activity(connection, 200)
+
+        self.assertEqual({"total": 40, "latest": latest, "today": 3}, activity)
+        self.assertEqual((200,), connection.parameters[0])
+
+    def test_a_guild_without_posts_has_no_latest(self):
+        connection = FakeConnection(row=(0, None, 0))
+        self.assertEqual({"total": 0, "latest": None, "today": 0},
+                         hall_of_fame_message_repo.get_post_activity(connection, 200))
+
+
 class FindHallOfFameMessageTests(unittest.TestCase):
     def test_maps_the_row_to_its_column_names(self):
         connection = FakeConnection(row=MESSAGE_ROW, description=MESSAGE_COLUMNS)

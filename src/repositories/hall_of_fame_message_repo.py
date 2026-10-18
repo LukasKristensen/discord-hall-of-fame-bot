@@ -141,6 +141,24 @@ def find_top_messages_by_reaction_count(connection, guild_id, limit=10):
     cursor.close()
     return [dict(zip(columns, row)) for row in rows]
 
+def get_post_activity(connection, guild_id) -> dict:
+    """
+    How busy a server's board is, for /check_setup. One query, served from the guild and created_at index
+    :return: total posts, the time of the latest (None without posts) and the posts made today
+    """
+    cursor = connection.cursor()
+    cursor.execute("""
+        SELECT COUNT(*), MAX(created_at),
+               COUNT(*) FILTER (WHERE created_at >= DATE_TRUNC('day', NOW()))
+        FROM hall_of_fame_message
+        WHERE guild_id = %s
+    """, (guild_id,))
+    row = cursor.fetchone()
+    cursor.close()
+    if not row:
+        return {"total": 0, "latest": None, "today": 0}
+    return {"total": row[0] or 0, "latest": row[1], "today": row[2] or 0}
+
 def count_messages_for_guild(connection, guild_id):
     cursor = connection.cursor()
     cursor.execute("""

@@ -40,9 +40,39 @@ def build_help_view() -> discord.ui.View:
     return build_link_buttons(INVITE_LINK, VOTE_LINK, SUPPORT_SERVER_LINK)
 
 
+CHECK_SETUP_CUSTOM_ID = "hof:check_setup"
+# Set by main at startup to the coroutine that answers a press of Check setup
+setup_check_handler = None
+
+
+class SetupCheckView(discord.ui.View):
+    """
+    The welcome message's buttons: Check setup, then the given links.
+
+    The welcome message stays in the board for good, so the button has a fixed custom_id and main
+    registers this view with bot.add_view on startup. That keeps it working after a restart, where a
+    plain view would answer "This interaction failed". Link buttons need no callback, so they can sit
+    in a persistent view as they are.
+    """
+
+    def __init__(self, *links: tuple[str, str]):
+        super().__init__(timeout=None)
+        button = discord.ui.Button(style=discord.ButtonStyle.secondary, label=messages.CHECK_SETUP_BUTTON,
+                                   emoji="🩺", custom_id=CHECK_SETUP_CUSTOM_ID)
+        button.callback = self.check_setup
+        self.add_item(button)
+        for label, url in links:
+            self.add_item(discord.ui.Button(style=discord.ButtonStyle.link, label=label, url=url))
+
+    @staticmethod
+    async def check_setup(interaction: discord.Interaction):
+        if setup_check_handler is not None:
+            await setup_check_handler(interaction)
+
+
 def build_welcome_view() -> discord.ui.View:
     # The server has just installed the bot, so there is nothing to invite it to yet
-    return build_link_buttons(SUPPORT_SERVER_LINK, VOTE_LINK)
+    return SetupCheckView(SUPPORT_SERVER_LINK, VOTE_LINK)
 
 
 def build_help_embed() -> discord.Embed:
@@ -83,7 +113,8 @@ def build_help_embed() -> discord.Embed:
         value=f"{command_refs.SET_HALL_OF_FAME_CHANNEL} the channel posts go to\n"
               f"{command_refs.SET_REACTION_THRESHOLD} reactions needed\n"
               f"{command_refs.CALCULATION_METHOD} how reactions are counted\n"
-              f"{command_refs.GET_SERVER_CONFIG} every current setting",
+              f"{command_refs.GET_SERVER_CONFIG} every current setting\n"
+              f"{command_refs.CHECK_SETUP} find what stops posts, and how to fix it",
         inline=False)
 
     embed.add_field(
@@ -115,7 +146,7 @@ def build_help_embed() -> discord.Embed:
               f"[Vote]({messages.VOTE_URL}) · "
               f"[Source](https://github.com/LukasKristensen/discord-hall-of-fame-bot)\n"
               f"Found a bug or have an idea? {command_refs.FEEDBACK}\n"
-              f"Not working? Check the bot's permissions in the channel, or re-invite it.",
+              f"Not working? Run {command_refs.CHECK_SETUP}.",
         inline=False)
 
     embed.set_footer(text=f"Hall of Fame {version.VERSION} · {version.DATE}")

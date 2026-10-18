@@ -168,3 +168,46 @@ PRESENCE_STATUSES = [
 ]
 # Joins the statuses only in Wrapped season, December and January
 PRESENCE_WRAPPED = "✨ /hof_wrapped - your year on the board"
+
+# /check_setup, the Check setup button on the welcome message, and the report sent when the bot joins
+CHECK_SETUP_BUTTON = "Check setup"
+CHECK_TITLE = "🩺 Hall of Fame setup check"
+CHECK_JOIN_TITLE = "🩺 A few things to fix before posts can work"
+CHECK_SUMMARY_OK = "Everything the bot needs is in place."
+CHECK_SUMMARY_PROBLEMS = "Found {count} thing{plural} that can stop messages from reaching the board."
+CHECK_FOOTER = "Fixed something? Press Check setup or run /check_setup again."
+CHECK_AND_MORE = " and {count} more"
+CHECK_BOARD_MISSING_TITLE = "No board channel"
+CHECK_BOARD_MISSING = ("The channel posts go to was deleted, or the bot can no longer see it. "
+                       "Pick a channel with {command}.")
+CHECK_BOARD_PERMISSIONS_TITLE = "The bot cannot post on the board"
+CHECK_BOARD_PERMISSIONS = ("The bot is missing these permissions in {channel}: {missing}. "
+                           "Grant them in the channel settings.")
+CHECK_BOARD_OK_TITLE = "Board"
+CHECK_BOARD_OK = "Posting to {channel}."
+CHECK_BOARD_CLEANUP_TITLE = "The bot cannot keep the board clean"
+CHECK_BOARD_CLEANUP = ("Chat in {channel} is off, but the bot does not have Manage Messages there, so messages "
+                       "members send stay. Grant it, or allow chat with {command}.")
+CHECK_CHANNELS_TITLE = "Reads {readable} of {total} channels"
+CHECK_CHANNELS_ALL = "Reactions in every channel can count."
+CHECK_CHANNELS_BLOCKED = "Members can see these, but the bot cannot, so reactions there never count: {channels}"
+CHECK_CHANNELS_ROLE_FIX = "Giving the bot the {role} role opens {opens} of these {total}."
+CHECK_CHANNELS_FIX = "Give the bot View Channel and Read Message History in them, or the role that opens them."
+CHECK_CHANNELS_PRIVATE = ("{count} more are hidden from regular members too, such as staff channels, so the bot "
+                          "is left out of them on purpose.")
+CHECK_EMPTY_WHITELIST_TITLE = "No emoji can count"
+CHECK_EMPTY_WHITELIST = ("Only whitelisted emojis count, and the whitelist is empty. Add one with {whitelist}, "
+                         "or count every emoji with {logic}.")
+CHECK_THRESHOLD_UNREACHABLE_TITLE = "The threshold is higher than the member count"
+CHECK_THRESHOLD_UNREACHABLE = ("A message needs {threshold} reactions, but the server has {members} members, so "
+                               "none can reach it. Lower it with {command}.")
+CHECK_DAILY_LIMIT_TITLE = "Daily post limit reached"
+CHECK_DAILY_LIMIT = "The board has had {limit} posts today, the most allowed in a day. Posting resumes at midnight UTC."
+CHECK_NO_POSTS_TITLE = "No posts yet"
+CHECK_NO_POSTS = ("No message has reached {threshold} reactions in the {days} days since the bot joined. "
+                  "A lower threshold with {command} usually gets the board going.")
+CHECK_NO_POSTS_YET_TITLE = "No posts yet"
+CHECK_NO_POSTS_YET = "The bot joined recently. The first post appears once a message reaches the threshold."
+CHECK_LAST_POST_TITLE = "Activity"
+CHECK_LAST_POST = "Last post {when}, {total} in total."
+CHECK_LAST_POST_STALE = "Nothing has reached the board in a month. If reactions are still coming in, try a lower threshold with {command}."

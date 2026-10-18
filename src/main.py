@@ -10,6 +10,7 @@ import environment
 import commands
 import concurrency
 import events
+import setup_check
 import utils
 import validation
 from constants import version
@@ -238,6 +239,11 @@ async def on_ready():
         version.DATE = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         await events.bot_login(bot, tree)
         await utils.logging(bot, f"Logged in as {bot.user}", log_level=log_type.SYSTEM, validate_for_duplicates=False)
+
+        # Answers Check setup on every welcome message ever sent, including those from before this boot.
+        # Registering again after a reconnect only replaces the same entry
+        commands.setup_check_handler = run_setup_check
+        bot.add_view(commands.build_welcome_view())
 
         try:
             async with get_db_connection(connection_pool) as connection:
@@ -730,6 +736,43 @@ async def get_server_config(interaction: discord.Interaction):
     await interaction.response.send_message(embed=embed)
     await utils.logging(bot, f"Get server config command used by {interaction.user.name} in {interaction.guild.name}",
                         interaction.guild.id, log_level=log_type.COMMAND)
+
+async def run_setup_check(interaction: discord.Interaction):
+    """
+    Check everything that can stop messages from reaching the board, and tell the admin how to fix it.
+    Shared by /check_setup and the Check setup button on the welcome message. Only the admin sees the
+    answer, as it names channels members may not be able to see
+    :param interaction: The command or button press to answer
+    """
+    if not await ensure_bot_is_loaded(interaction):
+        return
+    if not await check_if_user_has_manage_server_permission(interaction, False):
+        return
+
+    guild = interaction.guild
+    server_class = server_classes.get(interaction.guild_id)
+    if server_class is None:
+        await send_error(interaction, messages.ERROR_SERVER_NOT_SETUP)
+        return
+
+    # The activity query can outlast the three seconds Discord waits for an answer
+    # noinspection PyUnresolvedReferences
+    await interaction.response.defer(ephemeral=True)
+    async with get_db_connection(connection_pool) as connection:
+        activity = hall_of_fame_message_repo.get_post_activity(connection, interaction.guild_id)
+
+    board_channel = guild.get_channel(server_class.hall_of_fame_channel_id)
+    findings = setup_check.check_server(guild, board_channel, server_class, activity, utils.daily_post_limit)
+    await interaction.followup.send(embed=setup_check.build_embed(findings), ephemeral=True)
+
+    found = setup_check.problems(findings)
+    await utils.logging(bot, f"Setup check used by {interaction.user.name} in {guild.name}: "
+                             f"{', '.join(finding.title for finding in found) or 'no problems'}",
+                        interaction.guild.id, log_level=log_type.COMMAND)
+
+@tree.command(name="check_setup", description="Check that everything the bot needs to post is in place")
+async def check_setup(interaction: discord.Interaction):
+    await run_setup_check(interaction)
 
 @tree.command(
     name="set_post_due_date",

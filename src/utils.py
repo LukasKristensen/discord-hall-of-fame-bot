@@ -10,6 +10,7 @@ from repositories import (server_config_repo, hall_of_fame_message_repo, server_
                           hof_wrapped_guild_status_repo, opt_out_repo)
 from caches import ExpiringSet
 from translations import messages
+import setup_check
 
 daily_post_limit = 100
 duplicate_log_window_seconds = 600
@@ -568,6 +569,28 @@ def welcome_view():
     return commands.build_welcome_view()
 
 
+async def report_setup_problems_on_join(bot, server, hall_of_fame_channel):
+    """
+    Right after the welcome message, point out anything that already stops posts, most often channels
+    the bot cannot read because they sit behind a role it was never given. Silent when all is well
+    :param bot: The Discord bot
+    :param server: The server just joined
+    :param hall_of_fame_channel: The board
+    """
+    try:
+        # A new board starts with chat off
+        findings = setup_check.join_findings(server, hall_of_fame_channel, allow_messages_in_hof_channel=False)
+        if not setup_check.problems(findings):
+            return
+        await hall_of_fame_channel.send(embed=setup_check.build_embed(findings, messages.CHECK_JOIN_TITLE))
+        await logging(bot, f"Setup problems on join in {server.name}: "
+                           f"{', '.join(finding.title for finding in setup_check.problems(findings))}",
+                      server.id, log_level=log_type.SYSTEM)
+    except Exception as e:
+        # The server is set up either way, so a failed report must not undo the join
+        await logging(bot, f"Failed to report setup problems on join: {e}", server.id)
+
+
 async def create_database_context(bot, server, connection, custom_channel=None) -> server_class.Server:
     """
     Create a database context for the server
@@ -627,6 +650,7 @@ async def create_database_context(bot, server, connection, custom_channel=None) 
         f"💬 **Questions or ideas?** Ask in the support server.\n",
         view=welcome_view()
     )
+    await report_setup_problems_on_join(bot, server, hall_of_fame_channel)
 
     new_server_class = server_class.Server(
         hall_of_fame_channel_id=hall_of_fame_channel.id,
