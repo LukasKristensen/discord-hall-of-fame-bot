@@ -1,3 +1,4 @@
+import datetime
 import types
 import unittest
 from unittest import mock
@@ -139,6 +140,10 @@ class DailyPermissionCheckTests(unittest.IsolatedAsyncioTestCase):
         logged_on.start()
         self.addCleanup(logged_on.stop)
 
+        warned = mock.patch.object(events, "permission_warnings_sent", {})
+        warned.start()
+        self.addCleanup(warned.stop)
+
         notify = mock.patch("events.utils.send_message_to_highest_prio_channel", new=self.record_warning)
         notify.start()
         self.addCleanup(notify.stop)
@@ -152,6 +157,7 @@ class DailyPermissionCheckTests(unittest.IsolatedAsyncioTestCase):
 
     async def record_warning(self, _bot, guild, content):
         self.warnings.append((guild.id, content))
+        return True
 
     async def sweep(self, permissions, allow_messages=False, channel_missing=False, topic=None):
         channel = FakeTextChannel(channel_id=self.HOF_CHANNEL_ID, permissions=permissions, topic=topic)
@@ -178,6 +184,45 @@ class DailyPermissionCheckTests(unittest.IsolatedAsyncioTestCase):
         # Manage Messages leaves chat in the channel undeleted, and the server is not told about it
         self.assertEqual([], await self.sweep(FakePermissions(manage_messages=False)))
         self.assertEqual([], await self.sweep(FakePermissions(manage_messages=False), allow_messages=True))
+
+    async def test_does_not_repeat_a_warning_the_next_day(self):
+        """Kept in memory rather than found again by reading a channel's history every day."""
+        await self.sweep(FakePermissions(send_messages=False))
+        warnings = await self.sweep(FakePermissions(send_messages=False))
+
+        self.assertEqual(1, len(warnings))
+
+    async def test_warns_again_once_the_last_warning_is_old_enough(self):
+        await self.sweep(FakePermissions(send_messages=False))
+        missing, _ = events.permission_warnings_sent[200]
+        long_ago = datetime.date.today() - datetime.timedelta(days=events.permission_warning_repeat_days)
+        events.permission_warnings_sent[200] = (missing, long_ago)
+
+        self.assertEqual(2, len(await self.sweep(FakePermissions(send_messages=False))))
+
+    async def test_warns_again_when_a_different_permission_goes_missing(self):
+        await self.sweep(FakePermissions(send_messages=False))
+        warnings = await self.sweep(FakePermissions(send_messages=False, view_channel=False))
+
+        self.assertEqual(2, len(warnings))
+        self.assertIn("View Channel", warnings[1][1])
+
+    async def test_warns_again_when_a_fixed_permission_breaks_again(self):
+        await self.sweep(FakePermissions(send_messages=False))
+        await self.sweep(FakePermissions())
+        warnings = await self.sweep(FakePermissions(send_messages=False))
+
+        self.assertEqual(2, len(warnings))
+
+    async def test_tries_again_tomorrow_when_the_warning_could_not_be_posted(self):
+        async def nowhere_to_post(_bot, guild, content):
+            self.warnings.append((guild.id, content))
+            return False
+
+        with mock.patch("events.utils.send_message_to_highest_prio_channel", new=nowhere_to_post):
+            await self.sweep(FakePermissions(send_messages=False))
+
+        self.assertNotIn(200, events.permission_warnings_sent)
 
     async def test_reports_view_channel_alongside_the_others(self):
         warnings = await self.sweep(FakePermissions(send_messages=False, view_channel=False))

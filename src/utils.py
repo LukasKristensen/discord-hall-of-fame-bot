@@ -701,31 +701,6 @@ def delete_database_context(server_id: int, connection):
     hof_wrapped_guild_status_repo.delete_progress_for_guild(connection, server_id)
 
 
-async def send_server_owner_error_message(owner, e, bot):
-    """
-    Send an error message to the server owner
-    :param owner: The owner of the server
-    :param e: The error message
-    :param bot: The Discord bot
-    :return: None
-    """
-    if owner:
-        try:
-            # Fetch the message history of the owner
-            messages = []
-            async for message in owner.history(limit=1):
-                messages.append(message)
-            # Check if the specific message has already been sent
-            message_already_sent = any("Failed to setup" in msg.content for msg in messages)
-            if not message_already_sent:
-                await logging(bot, f"Sending error message {e} to server owner {owner.name}")
-                await owner.send(f"{e}")
-            else:
-                await logging(bot, f"Error message already sent to server owner {owner.name}")
-        except Exception as history_error:
-            await logging(bot, f"Failed to send error message to server owner {owner.name}: {history_error}")
-
-
 async def logging(bot: discord.Client, message, server_id=None, new_value=None, log_level=log_type.ERROR,
                   validate_for_duplicates=False, ping_developer=True):
     """
@@ -997,31 +972,25 @@ async def post_server_perms(bot, server):
                              f"Server member count: {server.member_count}", log_level=log_type.SYSTEM)
 
 
-async def send_message_to_highest_prio_channel(bot: discord.Client, guild: discord.Guild, message_content: str,
-                                               history_limit: int = 100):
+async def send_message_to_highest_prio_channel(bot: discord.Client, guild: discord.Guild, message_content: str) -> bool:
     """
-    Send a message to the highest priority channel in the guild where the bot has permission to send messages
+    Send a message to the highest priority channel in the guild where the bot has permission to send messages.
+    Callers keep track of what they already said themselves, as reading channel history to find out costs an
+    API call per server
     :param bot: The Discord bot
     :param guild: The guild to send the message to
     :param message_content: The content of the message to send
-    :param history_limit: The number of messages to check for recent similar messages
-    :return:
+    :return: True when the message was posted
     """
     for alt_channel in sorted(guild.text_channels, key=lambda c: c.position):
         alt_permissions = alt_channel.permissions_for(guild.me)
-        if alt_permissions.send_messages and alt_permissions.view_channel and alt_permissions.read_message_history:
-            if history_limit > 0:
-                recent_messages = [msg async for msg in alt_channel.history(limit=history_limit)]
-                if any(message_content[:20] in msg.content for msg in
-                       recent_messages):
-                    await logging(bot, f"Missing permissions message already sent to {alt_channel.name} in "
-                                             f"server {guild.name} recently", guild.id)
-                    break
+        if alt_permissions.send_messages and alt_permissions.view_channel:
             try:
                 await alt_channel.send(message_content)
                 await logging(bot, f"Sent missing permissions message to {alt_channel.name} in "
                                          f"server {guild.name}", guild.id)
-                break
+                return True
             except Exception as e:
                 await logging(bot, f"Failed to send missing permissions message to {alt_channel.name} in server "
                                    f"{guild.name}: {e}", guild.id)
+    return False

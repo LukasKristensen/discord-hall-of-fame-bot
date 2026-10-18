@@ -121,12 +121,18 @@ class Post:
 
 
 class Board:
-    """The Hall of Fame channel: what the bot sends there is kept, and can be fetched back"""
+    """
+    The Hall of Fame channel: what the bot sends there is kept, and can be fetched back. Also stands in
+    for any other text channel the bot posts a notice in
+    """
 
-    def __init__(self, channel_id, guild, name="hall-of-fame"):
+    def __init__(self, channel_id, guild, name="hall-of-fame", position=0):
         self.id = channel_id
         self.guild = guild
         self.name = name
+        self.position = position
+        # Names of the permissions taken away from the bot here, such as "send_messages"
+        self.missing_permissions = set()
         self.topic = None
         self.mention = f"<#{channel_id}>"
         self.posts = {}
@@ -151,8 +157,10 @@ class Board:
         pass
 
     def permissions_for(self, _member):
-        return types.SimpleNamespace(read_messages=True, view_channel=True, send_messages=True,
-                                     read_message_history=True, embed_links=True)
+        granted = dict(read_messages=True, view_channel=True, send_messages=True, read_message_history=True,
+                       embed_links=True, manage_channels=True)
+        granted.update({name: False for name in self.missing_permissions})
+        return types.SimpleNamespace(**granted)
 
 
 class Bot:

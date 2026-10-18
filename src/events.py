@@ -3,6 +3,7 @@ import asyncio
 import datetime
 import concurrency
 import utils
+from caches import ExpiringSet
 from translations import messages
 from enums import command_refs, log_type
 from repositories import server_config_repo, hall_of_fame_message_repo, guild_lifecycle_event_repo
@@ -25,6 +26,18 @@ daily_task_statement_timeout_ms = 20_000
 departed_guild_grace_days = 7
 departed_guild_max_missing_share = 0.1
 departed_guild_fetch_timeout_seconds = 30
+
+# Guild ID to the permissions it was last warned about missing and the day it was warned. Kept in memory
+# instead of searching a channel's history for the old warning, which cost an API call per server every
+# day. A server is warned again once the missing permissions change or this many days have passed, and a
+# restart can cost at most one repeat
+permission_warnings_sent = {}
+permission_warning_repeat_days = 7
+
+# Guilds told recently that setting up failed. Every retry of /set_hall_of_fame_channel on a server that is
+# not set up comes through here, and should not post the same notice publicly again
+setup_failure_notice_seconds = 3600
+recent_setup_failure_notices = ExpiringSet(ttl_seconds=setup_failure_notice_seconds)
 
 
 async def post_wrapped():
@@ -174,8 +187,9 @@ async def guild_join(server, connection, bot, custom_channel: discord.TextChanne
         return await utils.create_database_context(bot, server, connection, custom_channel)
     except Exception as e:
         await utils.logging(bot, f"Failed to create database context for server {server.name}: {e}", server.id)
-        await utils.send_message_to_highest_prio_channel(bot, server,
-                                                         messages.FAILED_SETUP_HOF.format(serverName=server.name), 0)
+        if recent_setup_failure_notices.add_if_absent(server.id):
+            await utils.send_message_to_highest_prio_channel(bot, server,
+                                                             messages.FAILED_SETUP_HOF.format(serverName=server.name))
 
 
 async def guild_remove(server, connection):
@@ -310,6 +324,22 @@ async def bot_has_left_guild(bot: discord.Client, guild_id: int) -> bool:
     return False
 
 
+def permission_warning_due(guild_id: int, missing_permissions: list) -> bool:
+    """
+    Whether a server should be warned about missing Hall of Fame channel permissions today
+    :param guild_id: The ID of the server
+    :param missing_permissions: The permissions the bot is missing in the channel
+    :return: True when it was never warned, the missing permissions changed, or the last warning is old enough
+    """
+    last_warning = permission_warnings_sent.get(guild_id)
+    if last_warning is None:
+        return True
+    warned_about, warned_on = last_warning
+    if warned_about != frozenset(missing_permissions):
+        return True
+    return (datetime.date.today() - warned_on).days >= permission_warning_repeat_days
+
+
 async def check_write_permissions_to_hall_of_fame_channel(bot: discord.Client, server_classes):
     """
     Check if the bot has write permissions to the Hall of Fame channel for each server
@@ -342,10 +372,16 @@ async def check_write_permissions_to_hall_of_fame_channel(bot: discord.Client, s
             missing_permissions.append("Read Message History")
 
         if not missing_permissions:
+            # Forgotten once fixed, so the server hears about it straight away if it breaks again
+            permission_warnings_sent.pop(guild.id, None)
+            return
+        if not permission_warning_due(guild.id, missing_permissions):
             return
         channel_ref = f"<#{channel.id}>"
-        await utils.send_message_to_highest_prio_channel(bot, guild, messages.MISSING_HOF_CHANNEL_PERMISSIONS.format(
+        posted = await utils.send_message_to_highest_prio_channel(bot, guild, messages.MISSING_HOF_CHANNEL_PERMISSIONS.format(
                         missing_permissions=", ".join(missing_permissions), channel=channel_ref))
+        if posted:
+            permission_warnings_sent[guild.id] = (frozenset(missing_permissions), datetime.date.today())
 
     async def report_permission_failure(server_class, error):
         await utils.logging(bot, f"Error checking Hall of Fame channel permissions for server "

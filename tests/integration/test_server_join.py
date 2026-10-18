@@ -14,6 +14,7 @@ from unittest import mock
 
 import events
 import utils
+from caches import ExpiringSet
 from repositories import guild_lifecycle_event_repo, server_config_repo
 
 from tests.integration.database import DatabaseTestCase, skip_without_database
@@ -39,6 +40,10 @@ class ServerJoinTests(DatabaseTestCase):
         patcher = mock.patch.object(utils, "logging", record_log)
         patcher.start()
         self.addCleanup(patcher.stop)
+
+        notices = mock.patch.object(events, "recent_setup_failure_notices", ExpiringSet(ttl_seconds=3600))
+        notices.start()
+        self.addCleanup(notices.stop)
 
     async def join(self, guild, custom_channel=None):
         return await utils.create_database_context(Bot(guild), guild, self.connection, custom_channel)
@@ -107,6 +112,48 @@ class ServerJoinTests(DatabaseTestCase):
 
         self.assertIsNone(result)
         self.assertIsNone(self.stored(9001))
+
+    def failing_guild(self, guild_id=9001):
+        """A server the bot cannot create its board in, with a channel to post the notice in."""
+        guild = Guild(guild_id)
+
+        async def refuse(_name):
+            raise RuntimeError("Missing Permissions")
+
+        guild.create_text_channel = refuse
+        general = Board(guild_id * 10, guild, name="general")
+        guild.text_channels = [general]
+        return guild, general
+
+    async def test_a_failed_setup_tells_the_server_once_however_often_it_is_retried(self):
+        """Every /set_hall_of_fame_channel retry on a server that is not set up fails through here."""
+        guild, general = self.failing_guild()
+
+        for _ in range(3):
+            self.assertIsNone(await events.guild_join(guild, self.connection, Bot(guild)))
+
+        self.assertEqual(1, len(general.sent))
+        self.assertIn("Failed to setup", general.sent[0].content)
+        self.assertIsNone(self.stored(9001))
+
+    async def test_a_failed_setup_in_one_server_does_not_silence_another(self):
+        first, first_general = self.failing_guild(9001)
+        second, second_general = self.failing_guild(9002)
+
+        await events.guild_join(first, self.connection, Bot(first))
+        await events.guild_join(second, self.connection, Bot(second))
+
+        self.assertEqual(1, len(first_general.sent))
+        self.assertEqual(1, len(second_general.sent))
+
+    async def test_a_setup_that_works_after_failing_is_stored(self):
+        guild, general = self.failing_guild()
+        await events.guild_join(guild, self.connection, Bot(guild))
+        del guild.create_text_channel
+
+        self.assertIsNotNone(await events.guild_join(guild, self.connection, Bot(guild)))
+        self.assertIsNotNone(self.stored(9001))
+        self.assertEqual(1, len(general.sent))
 
     async def test_the_start_up_sweep_sets_up_servers_added_while_offline(self):
         known, new = Guild(9001), Guild(9002)

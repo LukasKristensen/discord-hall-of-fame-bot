@@ -37,8 +37,9 @@ class DailyMaintenanceTests(DatabaseTestCase):
         self.channel = SourceChannel(500, self.guild)
         self.board = Board(600, self.guild)
         self.others = [Guild(guild_id) for guild_id in OTHER_GUILDS]
+        self.other_boards = {}
         for guild in self.others:
-            Board(guild.id * 10, guild)
+            self.other_boards[guild.id] = Board(guild.id * 10, guild)
         self.bot = Bot(self.guild, *self.others)
 
         # Three leaderboard slots already on the board, which the task fills in
@@ -74,7 +75,8 @@ class DailyMaintenanceTests(DatabaseTestCase):
         async def no_log(*_args, **_kwargs):
             pass
 
-        for target, name, value in ((utils, "logging", no_log), (utils, "create_embed", post_embed)):
+        for target, name, value in ((utils, "logging", no_log), (utils, "create_embed", post_embed),
+                                    (events, "permission_warnings_sent", {})):
             patcher = mock.patch.object(target, name, value)
             patcher.start()
             self.addCleanup(patcher.stop)
@@ -143,6 +145,57 @@ class DailyMaintenanceTests(DatabaseTestCase):
         await self.run_task()
 
         self.assertEqual([("0",)], self.rows("SHOW statement_timeout"))
+
+    def break_board(self, guild_id=OTHER_GUILDS[0]):
+        """Take Send Messages away on a server's board, and give it a channel the warning can go to."""
+        guild = self.bot.get_guild(guild_id)
+        self.other_boards[guild_id].missing_permissions = {"send_messages"}
+        general = Board(guild_id * 10 + 1, guild, name="general")
+        guild.text_channels = [general]
+        return general
+
+    async def test_warns_a_server_whose_board_is_missing_a_permission(self):
+        general = self.break_board()
+        await self.run_task()
+
+        self.assertEqual(1, len(general.sent))
+        self.assertIn("Send Messages", general.sent[0].content)
+
+    async def test_does_not_repeat_the_warning_on_the_next_run(self):
+        """Remembered in memory instead of found again by reading the channel's history."""
+        general = self.break_board()
+        await self.run_task()
+        await self.run_task()
+
+        self.assertEqual(1, len(general.sent))
+
+    async def test_warns_again_once_the_board_breaks_after_being_fixed(self):
+        general = self.break_board()
+        await self.run_task()
+        self.other_boards[OTHER_GUILDS[0]].missing_permissions = set()
+        await self.run_task()
+        self.other_boards[OTHER_GUILDS[0]].missing_permissions = {"send_messages"}
+        await self.run_task()
+
+        self.assertEqual(2, len(general.sent))
+
+    async def test_a_warned_server_does_not_change_what_the_others_are_told(self):
+        first = self.break_board(OTHER_GUILDS[0])
+        await self.run_task()
+        second = self.break_board(OTHER_GUILDS[1])
+        await self.run_task()
+
+        self.assertEqual(1, len(first.sent))
+        self.assertEqual(1, len(second.sent))
+
+    async def test_the_warning_leaves_the_stored_rows_alone(self):
+        await self.run_task()
+        before = (self.stored_counts(), self.rows("SELECT * FROM server_user ORDER BY user_id, guild_id"))
+        self.break_board()
+        await self.run_task()
+
+        self.assertEqual(before, (self.stored_counts(),
+                                  self.rows("SELECT * FROM server_user ORDER BY user_id, guild_id")))
 
     async def test_running_twice_gives_the_same_result(self):
         await self.run_task()

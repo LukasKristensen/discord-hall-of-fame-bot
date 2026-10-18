@@ -417,6 +417,10 @@ class DailyTaskPermissionSweepTests(unittest.IsolatedAsyncioTestCase):
         utils.recently_logged_messages = ExpiringSet(ttl_seconds=600)
         self.addCleanup(self.restore_cache)
 
+        warned = mock.patch.object(events, "permission_warnings_sent", {})
+        warned.start()
+        self.addCleanup(warned.stop)
+
     def restore_cache(self):
         utils.recently_logged_messages = self.original_cache
 
@@ -460,6 +464,7 @@ class DailyTaskPermissionSweepTests(unittest.IsolatedAsyncioTestCase):
                     await asyncio.sleep(30)
                 await asyncio.sleep(0.005)
                 checked.append(guild.id)
+                return True
             finally:
                 test.in_flight -= 1
 
