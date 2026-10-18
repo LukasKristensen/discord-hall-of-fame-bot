@@ -97,4 +97,13 @@ def database_settings() -> dict:
         "database": os.getenv(f"POSTGRES_DB{prefix}"),
         "user": os.getenv(f"POSTGRES_USER{prefix}"),
         "password": os.getenv(f"POSTGRES_PASSWORD{prefix}"),
+        "options": DATABASE_SESSION_OPTIONS,
     }
+
+
+# Every session runs in UTC, whatever time zone the database server is set to. Post times are stored in
+# TIMESTAMP columns, which have no time zone: PostgreSQL turns the bot's UTC times into the session's
+# local time before storing them, while the code reads them back as UTC. This also puts the daily post
+# limit's day boundary at midnight UTC. Rows stored before this was set may be an hour or two off,
+# which is accepted rather than rewritten
+DATABASE_SESSION_OPTIONS = "-c TimeZone=UTC"
