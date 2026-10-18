@@ -14,8 +14,30 @@ jobs:
     name: Unit Tests
     runs-on: ubuntu-latest
 
-    # A throwaway database for tests/integration, which run the real SQL behind /delete_my_data and
-    # are skipped without it. Nothing else connects to it, and it is gone when the job ends
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      # No database here, so tests/integration is skipped; the job below runs it
+      - name: Run unit tests
+        run: python -m unittest discover -s tests -t . -v
+
+  database-tests:
+    name: Database Tests
+    runs-on: ubuntu-latest
+
+    # A throwaway database for tests/integration, which runs the real SQL behind /delete_my_data and
+    # the clean-up of departed servers. Nothing else connects to it, and it is gone when the job ends
     services:
       postgres:
         image: postgres:16
@@ -47,5 +69,5 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Run unit tests
-        run: python -m unittest discover -s tests -t . -v
+      - name: Run database tests
+        run: python -m unittest discover -s tests/integration -t . -v
