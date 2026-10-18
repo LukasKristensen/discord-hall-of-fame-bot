@@ -697,10 +697,10 @@ class DepartedGuildCleanupTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual([self.departed], await self.clean_up())
 
-    async def test_records_the_leave_for_the_server_statistics(self):
+    async def test_records_the_leave_for_the_server_statistics_dated_when_it_was_first_missing(self):
         await self.clean_up()
 
-        self.assertEqual([(self.departed, "LEAVE", self.NOW)], self.lifecycle)
+        self.assertEqual([(self.departed, "LEAVE", self.missing_since[self.departed])], self.lifecycle)
 
     async def test_records_no_leave_without_a_join_to_match_it(self):
         for latest_event in (None, "LEAVE"):

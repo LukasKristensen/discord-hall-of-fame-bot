@@ -41,7 +41,16 @@ async def post_wrapped():
 async def check_for_new_server_classes(bot, connection):
     new_server_classes = {}
     for guild in bot.guilds:
-        if not server_config_repo.check_if_guild_exists(connection, guild.id) and guild.me.guild_permissions.manage_channels:
+        if server_config_repo.check_if_guild_exists(connection, guild.id):
+            continue
+        # Added while the bot was offline, so no join event fired. Recorded whether or not it can be set
+        # up, the same as a join while online
+        try:
+            record_guild_join(connection, guild)
+        except Exception as e:
+            connection.rollback()
+            await utils.logging(bot, f"Could not record the join of server {guild.name}: {e}", guild.id)
+        if guild.me.guild_permissions.manage_channels:
             await utils.logging(bot, f"Guild {guild.name} not found in database, creating...", guild.id)
             try:
                 new_server_class = await utils.create_database_context(bot, guild, connection)
@@ -49,6 +58,27 @@ async def check_for_new_server_classes(bot, connection):
             except Exception as e:
                 await utils.logging(bot, f"Failed to create database context for server {guild.name}: {e}", guild.id)
     return new_server_classes
+
+
+def record_guild_join(connection, guild):
+    """
+    Record a join found at startup, dated when the bot actually joined. A server the bot cannot set up
+    is checked on every startup, so nothing is written when its last recorded event is already a join
+    """
+    if guild_lifecycle_event_repo.get_latest_event_type(connection, guild.id) == "JOIN":
+        return
+    joined_at = getattr(guild.me, "joined_at", None) or datetime.datetime.now(datetime.timezone.utc)
+    guild_lifecycle_event_repo.insert_guild_lifecycle_event(connection, guild.id, "JOIN", joined_at)
+
+
+def record_guild_leave(connection, guild_id, occurred_at):
+    """
+    Record a leave unless the last recorded event is not a join. Discord can send the remove event for a
+    server more than once, and a leave without a matching join would leave the server below zero in the
+    activity statistics
+    """
+    if guild_lifecycle_event_repo.get_latest_event_type(connection, guild_id) == "JOIN":
+        guild_lifecycle_event_repo.insert_guild_lifecycle_event(connection, guild_id, "LEAVE", occurred_at)
 
 
 async def bot_login(bot: discord.Client, tree):
@@ -253,9 +283,9 @@ async def clean_up_departed_guilds(bot: discord.Client, connection, server_class
                                          f"Not deleting it")
                 continue
             utils.delete_database_context(guild_id, connection)
-            # A leave without a matching join would leave the server below zero in the activity statistics
-            if guild_lifecycle_event_repo.get_latest_event_type(connection, guild_id) == "JOIN":
-                guild_lifecycle_event_repo.insert_guild_lifecycle_event(connection, guild_id, "LEAVE", now)
+            # Dated when the server was first found missing rather than today, so the statistics count
+            # the departure in the month it happened instead of after the grace period
+            record_guild_leave(connection, guild_id, since)
         except Exception as e:
             connection.rollback()
             await utils.logging(bot, f"Could not clean up departed server {guild_id}: {e}", guild_id)

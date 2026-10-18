@@ -485,8 +485,16 @@ async def on_guild_join(server):
 
 @bot.event
 async def on_guild_remove(server):
-    # Case where discord sends a guild remove event for a server which has already been removed
+    # Case where discord sends a guild remove event for a server which has already been removed, or one
+    # the bot never set up. The leave is still recorded when the last event is a join, and any data left
+    # behind is removed by the daily cleanup
     if server_classes is None or server.id not in server_classes:
+        try:
+            async with get_db_connection(connection_pool) as connection:
+                events.record_guild_leave(connection, server.id, datetime.now(timezone.utc))
+        except Exception as e:
+            await utils.logging(bot, f"Error recording the leave in on_guild_remove: {e}", server.id,
+                                log_level=log_type.ERROR)
         return
     await utils.logging(bot, f"Left server {server.name}", server.id, log_level=log_type.SYSTEM)
     async with get_db_connection(connection_pool) as connection:

@@ -8,12 +8,13 @@ sets up servers which added the bot while it was offline.
 They need HOF_TEST_DATABASE_URL, see tests/integration/database.py, and are skipped without it.
 """
 
+import datetime
 import unittest
 from unittest import mock
 
 import events
 import utils
-from repositories import server_config_repo
+from repositories import guild_lifecycle_event_repo, server_config_repo
 
 from tests.integration.database import DatabaseTestCase, skip_without_database
 from tests.integration.discord_world import Board, Bot, Guild
@@ -124,6 +125,56 @@ class ServerJoinTests(DatabaseTestCase):
 
         self.assertEqual({}, created)
         self.assertIsNone(self.stored(9003))
+
+    def lifecycle(self, guild_id):
+        return self.rows("SELECT event_type, occurred_at FROM guild_lifecycle_event "
+                         "WHERE guild_id = %s ORDER BY id", (guild_id,))
+
+    async def test_the_start_up_sweep_records_the_join_dated_when_the_bot_joined(self):
+        new = Guild(9002)
+        new.me.joined_at = datetime.datetime(2026, 10, 1, tzinfo=datetime.timezone.utc)
+
+        await events.check_for_new_server_classes(Bot(new), self.connection)
+
+        self.assertEqual([("JOIN", new.me.joined_at)], self.lifecycle(9002))
+
+    async def test_the_start_up_sweep_records_the_join_of_a_server_it_cannot_set_up_once(self):
+        no_permission = Guild(9003, manage_channels=False)
+
+        await events.check_for_new_server_classes(Bot(no_permission), self.connection)
+        await events.check_for_new_server_classes(Bot(no_permission), self.connection)
+
+        self.assertEqual(["JOIN"], [event for event, _ in self.lifecycle(9003)])
+
+    async def test_the_start_up_sweep_records_a_return_after_a_leave(self):
+        guild_lifecycle_event_repo.insert_guild_lifecycle_event(
+            self.connection, 9002, "JOIN", datetime.datetime(2026, 5, 1, tzinfo=datetime.timezone.utc))
+        guild_lifecycle_event_repo.insert_guild_lifecycle_event(
+            self.connection, 9002, "LEAVE", datetime.datetime(2026, 6, 1, tzinfo=datetime.timezone.utc))
+
+        await events.check_for_new_server_classes(Bot(Guild(9002)), self.connection)
+
+        self.assertEqual("JOIN", guild_lifecycle_event_repo.get_latest_event_type(self.connection, 9002))
+
+    async def test_the_start_up_sweep_records_nothing_for_servers_already_set_up(self):
+        known = Guild(9001)
+        await self.join(known)
+
+        await events.check_for_new_server_classes(Bot(known), self.connection)
+
+        self.assertEqual([], self.lifecycle(9001))
+
+    def test_a_repeated_leave_is_recorded_once(self):
+        guild_lifecycle_event_repo.insert_guild_lifecycle_event(
+            self.connection, 9002, "JOIN", datetime.datetime(2026, 5, 1, tzinfo=datetime.timezone.utc))
+        left = datetime.datetime(2026, 6, 1, tzinfo=datetime.timezone.utc)
+
+        events.record_guild_leave(self.connection, 9002, left)
+        events.record_guild_leave(self.connection, 9002, left)
+        events.record_guild_leave(self.connection, 4242, left)
+
+        self.assertEqual(["JOIN", "LEAVE"], [event for event, _ in self.lifecycle(9002)])
+        self.assertEqual([], self.lifecycle(4242))
 
 
 if __name__ == "__main__":
