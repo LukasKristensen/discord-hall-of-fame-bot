@@ -44,16 +44,26 @@ class SingleConnectionPool:
 class DatabaseTestCase(unittest.IsolatedAsyncioTestCase):
     """Every test gets an empty schema of its own, with every table the bot creates on start."""
 
+    # Off for the tests that build an older schema themselves and then upgrade it
+    create_tables = True
+
     def setUp(self):
         self.connection = psycopg2.connect(database_url())
         self.schema = f"hof_test_{uuid.uuid4().hex[:12]}"
         cursor = self.connection.cursor()
         cursor.execute(f"CREATE SCHEMA {self.schema}")
         cursor.execute(f"SET search_path TO {self.schema}")
+        # Timestamps are written and compared in the session's time zone, so it is fixed here rather than
+        # left to whatever the test database's machine is set to
+        cursor.execute("SET TimeZone TO 'UTC'")
         cursor.close()
         self.connection.commit()
         self.addCleanup(self.drop_schema)
+        if self.create_tables:
+            self.setup_databases()
 
+    def setup_databases(self):
+        """The bot's own start-up table setup, run on this test's schema"""
         import main
         # The setup prints a line per table, which is noise in a test run
         with contextlib.redirect_stdout(io.StringIO()):
@@ -81,3 +91,17 @@ class DatabaseTestCase(unittest.IsolatedAsyncioTestCase):
         cursor.close()
         self.connection.commit()
         return result
+
+    def tables(self):
+        return [row[0] for row in self.rows(
+            "SELECT table_name FROM information_schema.tables WHERE table_schema = %s ORDER BY table_name",
+            (self.schema,))]
+
+    def columns(self, table):
+        return {row[0] for row in self.rows(
+            "SELECT column_name FROM information_schema.columns WHERE table_schema = %s AND table_name = %s",
+            (self.schema, table))}
+
+    def indexes(self, table):
+        return {row[0] for row in self.rows(
+            "SELECT indexname FROM pg_indexes WHERE schemaname = %s AND tablename = %s", (self.schema, table))}
