@@ -167,8 +167,8 @@ Open to everyone.
 |:---|:---|:---|
 | `/help` | | List every command, grouped by what it changes. Mentioning the bot on its own shows the same overview. |
 | `/get_server_config` | | Show every setting for this server, with the command that changes it. |
-| `/invite` | | Invite link for adding the bot elsewhere. |
-| `/vote` | | Vote for the bot on top.gg. |
+| `/invite` | | A button for adding the bot to another server. |
+| `/vote` | | A button for voting for the bot on top.gg. |
 | `/feedback` | | Send a feature request or bug report to the developer. |
 
 <br>
@@ -212,8 +212,9 @@ of counting a message:
 Getting featured is meant to be worth something, so the bot keeps score.
 
 - **`/leaderboard`** ranks the server by hall of fame posts and by reactions earned, refreshed daily.
-- **`/user_profile`** shows one member's all time and monthly totals, and where they sit in the server
-  for each. Call it on someone else to compare.
+- **`/user_profile`** shows one member's monthly, all time and across-server totals, where they sit in
+  the server for each, their best post, when they were last featured and how far they are from the
+  next rank. Call it on someone else to compare.
 - **`/hof_wrapped`** gives a member their year in review, and **`/server_hof_wrapped`** does the same
   for the whole server.
 
@@ -287,6 +288,11 @@ python -m unittest discover -s tests -t .
 
 The same command runs on every pull request through the ``Tests`` workflow.
 
+`tests/integration` runs the real SQL against PostgreSQL: the reaction path, joins, the daily task,
+Wrapped, data deletion and schema upgrades. It is skipped unless `HOF_TEST_DATABASE_URL` points at a
+throwaway database, see [tests/integration/database.py](tests/integration/database.py). The
+``Tests`` workflow starts one for it.
+
 For behaviour under load, `tests/stress/reaction_storm.py` drives the real reaction handler with
 hundreds of concurrent reactions. It is run by hand, see [tests/stress/README.md](tests/stress/README.md).
 
@@ -327,6 +333,34 @@ and `/delete_my_data`. The [Privacy Policy](PRIVACY.md) lists exactly what is ke
 
 
 ## Development Log
+
+### 2.2
+- [x] Added /check_setup and a Check setup button on the welcome message, which check the board's permissions, how many channels the bot can read and which ones members see but the bot cannot (with the role that would open most of them), an empty emoji whitelist, a threshold above the member count, the daily post limit and the last post.
+- [x] When the bot joins, it runs the board and channel checks and, if something is wrong, posts a short note with a Check setup button on the board instead of the full report, since the board is public.
+- [x] Added /my_data, which sends a private file with everything stored about a member, and /delete_my_data, which removes them from every leaderboard, profile and Wrapped, with an option to stop counting them from then on. Both work in DMs through a user install.
+- [x] Added /profile_privacy for members to hide their totals across servers, and /count_in_global_profiles for admins to leave their server out of those totals.
+- [x] /user_profile is laid out in columns (this month, all time, every server) with highlights: the best post with a jump link, when the member was last featured and the gap to the next rank. The totals across servers never name a server.
+- [x] /user_profile, /leaderboard and the Wrapped commands are turned away with a private note in a Hall of Fame channel that is closed to chat.
+- [x] Every Hall of Fame post carries a "Hall of Fame" footer with the bot's logo, and the vote prompt was removed from posts. The invite suggestion moved to the footers of /user_profile, /leaderboard and /hof_wrapped.
+- [x] /invite, /vote and /help answer with link buttons, and the welcome message has Support server, Vote and Check setup buttons with shorter closing lines.
+- [x] The invite link asks for exactly the permissions the bot uses instead of the Developer Portal defaults, which included thread management. Existing servers keep what they granted.
+- [x] The bot's status rotates every ten minutes between the member count and pointers to /invite, /leaderboard and, in December and January, /hof_wrapped. The member count is kept in memory and adjusted as servers join and leave.
+- [x] The board channel topic links to the App Directory page. Topics the bot set in an earlier version are moved over by the daily check, and a topic an admin wrote is never changed.
+- [x] Servers that removed the bot while it was offline are cleaned up by the daily task after a grace period.
+- [x] Rewrote the Privacy Policy and Terms of Service to match what the bot stores, and moved both into the repository as PRIVACY.md and TERMS.md.
+- [x] Fixed /user_profile and /leaderboard picking a different champion than the ranks when members tied, or putting an unranked member first.
+- [x] Fixed new posts being stored an hour or two off on a database not set to UTC. The daily post limit now resets at midnight UTC, as its notice says.
+- [x] Fixed a hidden post that climbed back over the threshold keeping its old reaction count on leaderboards and profiles until the next reaction.
+- [x] Fixed the daily post limit notice being posted more than once when reactions arrived together, and the limit being re-checked on every reaction for the rest of the day.
+- [x] Fixed Wrapped carrying one server's members over into the next server it generated. Wrapped was switched off, so nothing was affected.
+- [x] Fixed the monthly snapshot timestamp shifting on every startup on servers not running in UTC.
+- [x] Added indexes for the per-server and per-member queries, and run the daily stats rebuild and the data commands under a statement timeout.
+- [x] Quieted recurring log lines from servers with a deleted board, top.gg stats posts and chat that was already deleted.
+- [x] Production credentials and the production database are only loaded in production, so a development run cannot reach them.
+- [x] Message locks are recreated on each run, so none stays bound to a closed event loop.
+- [x] Removed the MongoDB-era tooling, the unused manual sweep and the Google Drive backup script.
+- [x] Added integration tests that run the reaction path, joins, the daily task, Wrapped, data deletion, schema upgrades and the stats queries against a real PostgreSQL, which CI now starts for them.
+- [x] Added project skills and an expanded CLAUDE.md for development.
 
 ### 2.1
 - [x] Mentioning the bot on its own now answers with a help card listing the commands, with a per-channel cooldown so it cannot be spammed.
