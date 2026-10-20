@@ -204,6 +204,16 @@ async def on_ready():
         await events.bot_login(bot, tree)
         await utils.logging(bot, f"Logged in as {bot.user}", log_level=log_type.SYSTEM, validate_for_duplicates=False)
 
+        if bot_loaded:
+            # on_ready fires again when Discord drops the session and the bot logs in anew, which is
+            # likeliest during the daily task. The daily task holds a transaction open on server_configs,
+            # so setting up the tables again waits on its lock, and psycopg2 holds the event loop while
+            # it waits, so the daily task never gets to commit: the bot hangs until it is restarted.
+            # Everything below is already running or loaded from the first login
+            await utils.logging(bot, "Reconnected to Discord, so the startup setup was skipped",
+                                log_level=log_type.SYSTEM)
+            return
+
         try:
             async with get_db_connection(connection_pool) as connection:
                 setup_databases(connection)
