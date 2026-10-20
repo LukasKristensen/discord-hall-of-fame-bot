@@ -584,7 +584,12 @@ def my_data_summary(summary: dict, note: str = None) -> str:
         lines.append(messages.MY_DATA_NOT_FEATURED)
     else:
         # A member who is not featured has no totals to show or hide
-        lines.append(messages.MY_DATA_TOTALS_HIDDEN if summary["hidden"] else messages.MY_DATA_TOTALS_SHOWN)
+        if summary["hidden"]:
+            lines.append(messages.MY_DATA_TOTALS_HIDDEN)
+        else:
+            # The totals are added up from the posts credited to the member, so without any there are none yet
+            lines.append(messages.MY_DATA_TOTALS_SHOWN if summary["posts"]
+                         else messages.MY_DATA_TOTALS_SHOWN_ONCE_FEATURED)
     lines.append(messages.MY_DATA_FOOTER)
     return "\n".join(lines)
 

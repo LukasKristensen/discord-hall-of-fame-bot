@@ -609,6 +609,14 @@ class MyDataPanelTests(MyDataPanelTestCase):
         self.assertIn(messages.MY_DATA_NOTHING_STORED, interaction.followup.messages[0])
         self.assertTrue(view.download_button.disabled)
 
+    async def test_without_credited_posts_there_are_no_totals_to_show_yet(self):
+        """Right after a deletion the member's posts are on boards but credited to nobody."""
+        self.posts, self.standings = [], []
+        interaction, _view = await self.open_panel()
+
+        self.assertIn(messages.MY_DATA_TOTALS_SHOWN_ONCE_FEATURED, interaction.followup.messages[0])
+        self.assertNotIn(messages.MY_DATA_TOTALS_SHOWN, interaction.followup.messages[0].split("\n"))
+
     async def test_opening_it_again_is_not_limited(self):
         await self.open_panel()
         again, _view = await self.open_panel()

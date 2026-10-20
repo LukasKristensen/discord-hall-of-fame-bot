@@ -130,8 +130,12 @@ GLOBAL_PROFILE_COUNTING_OFF_NOTE = ("Posts from this server no longer count towa
 PRIVACY_POLICY_URL = "https://github.com/LukasKristensen/discord-hall-of-fame-bot/blob/main/PRIVACY.md"
 MY_DATA_STORED = ("📦 Hall of Fame stores {posts} featured post{posts_plural}, your standing in {servers} "
                   "server{servers_plural} and {wrapped} Wrapped entr{wrapped_plural} about you.")
-MY_DATA_NOTHING_STORED = "📦 Hall of Fame stores nothing about you. Nothing of yours has reached a Hall of Fame yet."
+# Also shown right after a deletion, when posts of the member's are still on boards, so it must not say
+# that nothing of theirs was ever featured. It names what is not stored rather than saying nothing is,
+# since a member's choices, such as not being featured, are stored and listed below it
+MY_DATA_NOTHING_STORED = "📦 No posts, server standings or Wrapped entries are stored about you."
 MY_DATA_TOTALS_SHOWN = "🌍 Your totals across servers are shown on your profile."
+MY_DATA_TOTALS_SHOWN_ONCE_FEATURED = "🌍 Once you are featured, your totals across servers are shown on your profile."
 MY_DATA_TOTALS_HIDDEN = ("🔒 Your totals across servers are hidden. Your profile shows only the numbers from the "
                          "server it is looked up in.")
 MY_DATA_NOT_FEATURED = ("🚫 You asked not to be featured, so your messages are not reposted to any board or stored, "
