@@ -289,6 +289,11 @@ async def post_hall_of_fame_message(message: discord.Message, bot: discord.Clien
     :param config: The reaction related server configuration, fetched when not supplied
     :return:
     """
+    # A member who asked not to be featured is left off every board. Their message stays where they
+    # wrote it, but the bot neither reposts nor stores it. Checked here rather than on every reaction,
+    # so it only costs a lookup when a message is about to be posted
+    if opt_out_repo.is_opted_out(connection, message.author.id):
+        return
     target_channel = bot.get_channel(target_channel_id)
     if target_channel is None:
         await report_missing_hall_of_fame_channel(bot, message.guild.id, target_channel_id)
@@ -303,17 +308,13 @@ async def post_hall_of_fame_message(message: discord.Message, bot: discord.Clien
     hall_of_fame_message = await target_channel.send(embed=embed)
 
     try:
-        # A member who asked not to be counted still gets onto the server's board, but the post is
-        # stored without them, so it never reaches a leaderboard, profile or Wrapped
-        author_id = (hall_of_fame_message_repo.NO_AUTHOR_ID
-                     if opt_out_repo.is_opted_out(connection, message.author.id) else int(message.author.id))
         hall_of_fame_message_repo.insert_hall_of_fame_message(connection,
                                                               int(message.id),
                                                               int(message.channel.id),
                                                               int(message.guild.id),
                                                               int(hall_of_fame_message.id),
                                                               int(await reaction_count(message, connection, config)),
-                                                              author_id,
+                                                              int(message.author.id),
                                                               datetime.datetime.now(timezone.utc),
                                                               int(video_message.id) if video_link else None)
     except Exception as e:

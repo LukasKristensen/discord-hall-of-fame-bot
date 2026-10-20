@@ -1,6 +1,6 @@
 # Privacy Policy for Hall of Fame
 
-Effective date: 18 October 2026
+Effective date: 10 November 2026
 
 Hall of Fame is a Discord bot operated by Lukas Kristensen, Denmark, who is responsible for the data
 described here. Contact: githublukas@gmail.com, or the
@@ -18,12 +18,12 @@ described here. Contact: githublukas@gmail.com, or the
   uses the bot, worked out from the data above and shown at the bottom of your profile in any of those
   servers. If you add the bot to your own account, you can also show your own profile in DMs and in servers
   without the bot, where it shows these totals alone. Nobody else can look you up there. They are numbers only, never a server name, server ID or message content. If you hide them
-  with `/profile_privacy`, your user ID is stored with the date you hid them. Server admins can leave
+  with the button on `/my_data`, your user ID is stored with the date you hid them. Server admins can leave
   their server out of everyone's totals with `/count_in_global_profiles`.
 - **Hall of Fame Wrapped:** yearly statistics per member, including most-used channels and emojis and
   which members react to each other's posts most often.
-- **Not counted:** if you choose "Delete and stop counting me" on `/delete_my_data`, your user ID is
-  stored with the date, so the bot remembers to leave you out of posts featured from then on.
+- **Not featured:** if you choose "Delete and stop featuring me" on `/my_data`, your user ID
+  is stored with the date, so the bot remembers not to repost or store your messages from then on.
 - **Support:** feedback sent with `/feedback` and custom profile requests, delivered to a private
   developer channel on Discord.
 - **Logs:** which commands were used, with the username and server name, posted to private developer
@@ -44,7 +44,7 @@ Only to provide the bot's features: posting to the Hall of Fame, leaderboards, p
 plus support and troubleshooting. Your totals across servers can be shown in any server with the bot. Outside
 those servers, only you can show them, through the bot added to your own account. They are only ever
 shown as totals, so they do not reveal which servers you are in, and once you hide them
-with `/profile_privacy` they are not shown anywhere. Aggregated statistics that cannot identify anyone are used to improve
+on `/my_data` they are not shown anywhere. Aggregated statistics that cannot identify anyone are used to improve
 the bot. Data is never used for advertising, sold, used to track who people are or which servers they
 are in, or used to train AI models. The legal basis is our legitimate interest in running the features a server has chosen to
 use.
@@ -67,23 +67,25 @@ Nothing else is shared.
 - Join and leave dates and monthly member counts are kept as anonymous server statistics.
 - Your choice to hide your totals across servers is kept until you show it again or delete your data.
 - Other data is kept while the bot is in the server, and deleted on request as described in section 6.
-- `/delete_my_data` immediately deletes your member statistics, Wrapped data and privacy choice,
+- Deleting your data on `/my_data` immediately deletes your member statistics, Wrapped data and privacy choice,
   removes you from other members' Wrapped, and removes your user ID from your featured messages. The
   reposts stay in each server's Hall of Fame channel, since they belong to that server, but are no
   longer linked to you. Messages of yours featured after that are stored again as usual, unless you
-  choose "Delete and stop counting me". Then they can still be reposted to a server's Hall of Fame, but
-  are stored without your user ID, until you run `/delete_my_data` again and choose to be counted again.
+  choose "Delete and stop featuring me". Then your messages are not reposted to any Hall of Fame or
+  stored at all, until you choose "Feature me again" on `/my_data`.
 
 ## 6. Your rights
 
-- **See your data:** `/my_data` sends you a file with everything stored about you.
-- **Delete your data:** `/delete_my_data` deletes it after you confirm, as described in section 5.
-- **Object to being counted:** choose "Delete and stop counting me" on `/delete_my_data`, and the bot
-  stops crediting posts to you from then on.
-- **Hide your totals across servers:** `/profile_privacy`.
+Everything below is done from `/my_data`, which shows what is stored about you with a button for each:
 
-These three commands only answer you, and work in any server with the bot and in DMs once you add the
-bot to your account.
+- **See your data:** "Download my data" sends you a file with everything stored about you.
+- **Delete your data:** "Delete my data" deletes it after you confirm, as described in section 5.
+- **Object to being featured:** choose "Delete and stop featuring me" when deleting, and the bot stops
+  reposting and storing your messages from then on.
+- **Hide your totals across servers:** "Hide my totals across servers".
+
+`/my_data` only answers you, and works in any server with the bot and in DMs once you add the bot to
+your account.
 
 You can also ask us to correct your data, limit or object to its use, or send it in a portable format,
 by messaging us in the support server. Requests must come from your own Discord account so we know who

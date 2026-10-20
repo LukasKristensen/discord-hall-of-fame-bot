@@ -1,9 +1,8 @@
 """
-Members who asked not to be counted, through "Delete and stop counting me" on /delete_my_data.
+Members who asked not to be featured, through "Delete and stop featuring me" on /my_data.
 
-Their posts can still reach a server's board, since the board belongs to the server, but the post is
-stored without an author, so it never reaches a leaderboard, profile or Wrapped. Keeping the user ID
-here is the least the bot can store to remember the request.
+Their messages are not reposted to any board or stored, so they never reach a leaderboard, profile or
+Wrapped. Keeping the user ID here is the least the bot can store to remember the request.
 """
 
 
@@ -29,10 +28,10 @@ def is_opted_out(connection, user_id) -> bool:
 
 def set_opted_out(connection, user_id, opted_out: bool, commit: bool = True):
     """
-    Stop or start counting a member
+    Stop or start featuring a member's messages
     :param connection: The database connection
     :param user_id: The member's user ID
-    :param opted_out: True to stop counting them
+    :param opted_out: True to stop featuring them
     :param commit: False to leave the commit to the caller, as part of a larger transaction
     """
     cursor = connection.cursor()

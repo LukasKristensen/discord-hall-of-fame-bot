@@ -31,7 +31,7 @@ class CreateTableTests(unittest.TestCase):
         self.assertEqual(1, connection.commits)
 
     def test_indexes_the_table_by_author(self):
-        """/my_data, /delete_my_data and the global profile read one member's posts across guilds."""
+        """/my_data, deleting a member's data and the global profile read one member's posts across guilds."""
         connection = FakeConnection()
         hall_of_fame_message_repo.create_hall_of_fame_message_table(connection)
 

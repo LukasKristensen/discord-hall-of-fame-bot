@@ -158,9 +158,7 @@ Open to everyone, answered only to you, and usable in DMs as well as servers.
 
 | Command | Parameters | What it does |
 |:---|:---|:---|
-| `/my_data` | | A file with everything the bot stores about you. Once a day. |
-| `/delete_my_data` | | Remove you from every leaderboard, profile and Wrapped, after you confirm. Your posts stay on the boards but are no longer credited to you. Choose **Delete and stop counting me** to also be left out of posts featured from then on; running the command again offers to count you again. Once a day. |
-| `/profile_privacy` | `visibility` (hide or show) | Hide your totals across servers from your profile, or show them again. Your profile then shows only the numbers from the server it is looked up in. |
+| `/my_data` | | What the bot stores about you, privately, with buttons to manage it. **Download my data** sends a file with every row (once a day). **Hide my totals across servers** leaves them off your profile, which then shows only the server it is looked up in. **Delete my data** removes you from every leaderboard, profile and Wrapped after you confirm; your posts stay on the boards but are no longer credited to you, and **Delete and stop featuring me** also stops the bot reposting your messages from then on. A member who stopped being featured gets **Feature me again** instead. |
 
 ### Bot and help
 
@@ -271,8 +269,8 @@ than a quote wall.
 Yes, once you add it to your account with the **Add to your account** button under `/invite`. In DMs
 and in servers without Hall of Fame you can look up your own profile with `/user_profile`, which then
 shows your posts and reactions added up across every server with the bot. Other members can only be
-looked up inside a server with the bot. You can also manage your data with `/my_data`,
-`/delete_my_data` and `/profile_privacy`. Leaderboards, Wrapped and settings belong to a server, so
+looked up inside a server with the bot. You can also see, download or delete your data with
+`/my_data`. Leaderboards, Wrapped and settings belong to a server, so
 they only work in servers that added the bot.
 
 ### Is the bot free?
@@ -338,8 +336,8 @@ one](https://discord.com/oauth2/authorize?client_id=1177041673352663070&permissi
 ## Privacy and terms
 
 The bot stores IDs, reaction counts and statistics, not the text or images of your messages. Removing it
-from a server deletes that server's data, and any member can see or delete their own with `/my_data`
-and `/delete_my_data`. The [Privacy Policy](PRIVACY.md) lists exactly what is kept, and the
+from a server deletes that server's data, and any member can see, download or delete their own with
+`/my_data`. The [Privacy Policy](PRIVACY.md) lists exactly what is kept, and the
 [Terms of Service](TERMS.md) cover using the bot.
 
 <br>
@@ -350,8 +348,8 @@ and `/delete_my_data`. The [Privacy Policy](PRIVACY.md) lists exactly what is ke
 ### 2.2
 - [x] Added /check_setup and a Check setup button on the welcome message, which check the board's permissions, how many channels the bot can read and which ones members see but the bot cannot (with the role that would open most of them), an empty emoji whitelist, a threshold above the member count, the daily post limit and the last post.
 - [x] When the bot joins, it runs the board and channel checks and, if something is wrong, posts a short note with a Check setup button on the board instead of the full report, since the board is public.
-- [x] Added /my_data, which sends a private file with everything stored about a member, and /delete_my_data, which removes them from every leaderboard, profile and Wrapped, with an option to stop counting them from then on. Both work in DMs through a user install.
-- [x] Added /profile_privacy for members to hide their totals across servers, and /count_in_global_profiles for admins to leave their server out of those totals.
+- [x] Added /my_data, where a member sees what is stored about them and manages it with buttons: download it as a file, hide their totals across servers, and delete it, which removes them from every leaderboard, profile and Wrapped, with an option to stop featuring their messages from then on. It works in DMs through a user install.
+- [x] Added /count_in_global_profiles for admins to leave their server out of members' totals across servers.
 - [x] /user_profile is laid out in columns (this month, all time, every server) with highlights: the best post with a jump link, when the member was last featured and the gap to the next rank. The totals across servers never name a server.
 - [x] /user_profile shows the badges a member has earned: monthly champion, 10 to 500 posts, months in a row, featured for a year, a 100-reaction post, 10 posts in one month and featured in 5 or more servers. Badges are worked out from existing posts, never name a server, and leave out other servers when a member hid their totals.
 - [x] /user_profile, /leaderboard and the Wrapped commands are turned away with a private note in a Hall of Fame channel that is closed to chat.

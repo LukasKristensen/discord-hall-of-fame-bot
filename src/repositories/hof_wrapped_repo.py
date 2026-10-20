@@ -21,7 +21,7 @@ def create_hof_wrapped_table(connection):
         )
     """)
     # The unique key starts with the guild, so looking a member up across guilds (/my_data and
-    # /delete_my_data) would otherwise scan the whole table
+    # deleting a member's data) would otherwise scan the whole table
     cursor.execute("CREATE INDEX IF NOT EXISTS hof_wrapped_user_idx ON hof_wrapped (user_id)")
     connection.commit()
     cursor.close()
@@ -95,6 +95,19 @@ def get_hof_wrapped_for_user(connection, user_id) -> list[dict]:
     results = [{key: value for key, value in zip(columns, row) if key != "id"} for row in cursor.fetchall()]
     cursor.close()
     return results
+
+def count_hof_wrapped_for_user(connection, user_id) -> int:
+    """
+    How many Wrapped rows a member has, across guilds and years, for the /my_data summary
+    :param connection: The database connection
+    :param user_id: The member's user ID
+    :return: The number of rows
+    """
+    cursor = connection.cursor()
+    cursor.execute("SELECT COUNT(*) FROM hof_wrapped WHERE user_id = %s", (user_id,))
+    row = cursor.fetchone()
+    cursor.close()
+    return row[0] if row else 0
 
 def delete_hof_wrapped_for_user(connection, user_id, commit: bool = True) -> int:
     """

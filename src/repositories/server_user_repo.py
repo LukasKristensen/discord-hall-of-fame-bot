@@ -63,6 +63,20 @@ def get_server_users_for_user(connection, user_id) -> list[dict]:
     cursor.close()
     return results
 
+def count_server_users_for_user(connection, user_id) -> int:
+    """
+    How many guilds hold a standing for a member, for the /my_data summary
+    :param connection: The database connection
+    :param user_id: The member's user ID
+    :return: The number of guilds
+    """
+    cursor = connection.cursor()
+    cursor.execute("SELECT COUNT(*) FROM server_user WHERE user_id = %s", (user_id,))
+    row = cursor.fetchone()
+    cursor.close()
+    return row[0] if row else 0
+
+
 def delete_server_users_for_user(connection, user_id, commit: bool = True) -> int:
     """
     Delete a member's standing in every guild. The daily rebuild writes it again from

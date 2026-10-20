@@ -68,8 +68,8 @@ When a message gets enough reactions, Hall of Fame reposts it to your hall of fa
 
 **Your data, your call**
 
-- /profile_privacy hides a member's totals across servers. Totals across servers never name a server.
-- /my_data sends a member a private copy of everything stored about them, and /delete_my_data removes them from every leaderboard, profile and Wrapped.
+- /my_data shows a member what is stored about them, privately, with buttons to download it, hide their totals across servers, or delete it, which removes them from every leaderboard, profile and Wrapped.
+- Totals across servers never name a server.
 
 **Getting started**
 

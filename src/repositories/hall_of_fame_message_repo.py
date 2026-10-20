@@ -20,7 +20,7 @@ def create_hall_of_fame_message_table(connection):
         CREATE INDEX IF NOT EXISTS hall_of_fame_message_guild_created_idx
         ON hall_of_fame_message (guild_id, created_at)
     """)
-    # /my_data, /delete_my_data and the global profile read one member's posts across every guild.
+    # /my_data, deleting a member's data and the global profile read one member's posts across every guild.
     # Without this each of them scans the whole table, and psycopg2 holds the event loop while it does
     cursor.execute("""
         CREATE INDEX IF NOT EXISTS hall_of_fame_message_author_idx
@@ -45,7 +45,9 @@ def insert_hall_of_fame_message(connection, message_id, channel_id, guild_id, ha
             guild_id=EXCLUDED.guild_id,
             hall_of_fame_message_id=EXCLUDED.hall_of_fame_message_id,
             reaction_count=EXCLUDED.reaction_count,
-            author_id=EXCLUDED.author_id,
+            -- A post whose author was removed stays removed, so storing it again never credits a
+            -- member who deleted their data
+            author_id=CASE WHEN hall_of_fame_message.author_id = 0 THEN 0 ELSE EXCLUDED.author_id END,
             created_at=EXCLUDED.created_at,
             video_link_message_id=EXCLUDED.video_link_message_id
     """, (message_id, channel_id, guild_id, hall_of_fame_message_id, reaction_count, author_id, created_at, video_link_message_id))
@@ -187,7 +189,7 @@ def get_monthly_message_counts_by_guild(connection, month_start, month_end):
     return [{"guild_id": row[0], "message_count": row[1]} for row in rows]
 
 # Posts whose author is unknown or removed. The stats rebuild already skips it, which is what lets
-# /delete_my_data take a member off every leaderboard without deleting the server's posts
+# deleting a member's data take them off every leaderboard without deleting the server's posts
 NO_AUTHOR_ID = 0
 
 def get_messages_by_author(connection, author_id) -> list[dict]:
@@ -208,6 +210,20 @@ def get_messages_by_author(connection, author_id) -> list[dict]:
     results = [dict(zip(columns, row)) for row in cursor.fetchall()]
     cursor.close()
     return results
+
+def count_messages_by_author(connection, author_id) -> int:
+    """
+    How many featured posts one member has across every guild, for the /my_data summary. Served from
+    the author index, so it stays cheap however much history the member has
+    :param connection: The database connection
+    :param author_id: The member's user ID
+    :return: The number of posts
+    """
+    cursor = connection.cursor()
+    cursor.execute("SELECT COUNT(*) FROM hall_of_fame_message WHERE author_id = %s", (author_id,))
+    row = cursor.fetchone()
+    cursor.close()
+    return row[0] if row else 0
 
 def get_member_highlights(connection, guild_id, author_id) -> dict:
     """

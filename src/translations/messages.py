@@ -121,45 +121,50 @@ BADGE_BIG_MONTH = "📅 10 posts in one month"
 BADGE_SERVERS = "🌐 Featured in {servers} servers"
 # Replaces STATS_FOOTER when the every-server column is shown, so the card carries one ask, not two
 GLOBAL_STATS_FOOTER = "Updated every 24 hours · Only servers with Hall of Fame count · Add it to yours with /invite"
-PROFILE_PRIVACY_HIDDEN = ("🔒 Your totals across servers are now hidden. Your profile shows only the numbers from the "
-                          "server it is looked up in.")
-PROFILE_PRIVACY_SHOWN = "🌍 Your profile shows your totals across servers again."
-PROFILE_PRIVACY_UNCHANGED = "ℹ️ Your totals across servers are already {state}, so nothing changed."
 GLOBAL_PROFILE_COUNTING_ON_NOTE = ("Members' totals across servers include their posts from this server. The server itself "
                                    "is never named.")
 GLOBAL_PROFILE_COUNTING_OFF_NOTE = ("Posts from this server no longer count toward anyone's totals across servers. Profiles "
                                     "inside this server are unchanged.")
 
-# /my_data and /delete_my_data, answered privately to the member who asked
+# /my_data and its buttons, answered privately to the member who asked
 PRIVACY_POLICY_URL = "https://github.com/LukasKristensen/discord-hall-of-fame-bot/blob/main/PRIVACY.md"
-MY_DATA_INTRO = ("Everything Hall of Fame stores about you is in the attached file: {posts} featured "
-                 "post{posts_plural}, your standing in {servers} server{servers_plural} and {wrapped} Wrapped "
-                 "entr{wrapped_plural}. Message text, images and your username are not stored. "
-                 "Privacy policy: <" + PRIVACY_POLICY_URL + ">")
-MY_DATA_EMPTY = ("Hall of Fame stores nothing about you. Nothing of yours has reached a Hall of Fame yet. "
-                 "Privacy policy: <" + PRIVACY_POLICY_URL + ">")
+MY_DATA_STORED = ("📦 Hall of Fame stores {posts} featured post{posts_plural}, your standing in {servers} "
+                  "server{servers_plural} and {wrapped} Wrapped entr{wrapped_plural} about you.")
+MY_DATA_NOTHING_STORED = "📦 Hall of Fame stores nothing about you. Nothing of yours has reached a Hall of Fame yet."
+MY_DATA_TOTALS_SHOWN = "🌍 Your totals across servers are shown on your profile."
+MY_DATA_TOTALS_HIDDEN = ("🔒 Your totals across servers are hidden. Your profile shows only the numbers from the "
+                         "server it is looked up in.")
+MY_DATA_NOT_FEATURED = ("🚫 You asked not to be featured, so your messages are not reposted to any board or stored, "
+                        "and you are on no leaderboard, profile or Wrapped.")
+MY_DATA_FOOTER = ("Message text, images and your username are never stored. "
+                  "Privacy policy: <" + PRIVACY_POLICY_URL + ">")
+MY_DATA_DOWNLOAD_BUTTON = "Download my data"
+HIDE_TOTALS_BUTTON = "Hide my totals across servers"
+SHOW_TOTALS_BUTTON = "Show my totals across servers"
+MY_DATA_EXPORT = "Everything Hall of Fame stores about you is in the attached file."
+MY_DATA_DOWNLOAD_ON_COOLDOWN = "You already downloaded your data today. You can download it again tomorrow."
+MY_DATA_DELETE_ON_COOLDOWN = "You already deleted your data today. You can delete it again tomorrow."
+MY_DATA_NOT_YOURS = "Only the member who ran this command can use these buttons."
 DELETE_MY_DATA_CONFIRM = ("⚠️ This removes you from every member leaderboard, profile and Wrapped, in every "
                           "server, and cannot be undone. Your posts stay on the boards and among each server's top "
                           "posts, since they belong to those servers, but they are no longer credited to you. "
                           "If you hid your totals across servers, that choice is deleted too.\n"
-                          "**Delete my data** counts posts of yours that reach a Hall of Fame later, as usual. "
-                          "**Delete and stop counting me** also leaves you out of them from now on.")
+                          "**Delete my data** lets messages of yours reach a Hall of Fame later, as usual. "
+                          "**Delete and stop featuring me** also stops the bot from reposting your messages from "
+                          "now on.")
 DELETE_MY_DATA_BUTTON = "Delete my data"
-DELETE_AND_STOP_BUTTON = "Delete and stop counting me"
-DELETE_MY_DATA_DONE_STOPPED = ("✅ Your data is deleted, and you are not counted from now on. Your posts can still "
-                               "reach a server's Hall of Fame, since that is the server's board, but they are not "
-                               "credited to you. Run {command} again to be counted again.")
-NOT_COUNTED_STATUS = ("You asked not to be counted, so Hall of Fame stores nothing new about you: posts of yours "
-                      "that reach a board are not credited to you, and you are on no leaderboard, profile or Wrapped.")
-COUNT_ME_AGAIN_BUTTON = "Count me again"
-COUNTED_AGAIN = ("✅ You are counted again from now on. Posts featured while you were not counted stay "
-                 "uncredited.")
+DELETE_AND_STOP_BUTTON = "Delete and stop featuring me"
+DELETE_MY_DATA_DONE_STOPPED = ("✅ Your data is deleted, and your messages are not featured from now on: the bot "
+                               "does not repost or store them. Posts already on a board stay there, no longer "
+                               "credited to you. Run {command} to be featured again.")
+FEATURE_ME_AGAIN_BUTTON = "Feature me again"
+COUNTED_AGAIN = ("✅ Your messages can be featured again from now on. Posts from before you deleted your data "
+                 "stay uncredited.")
 CANCEL_BUTTON = "Cancel"
 DELETE_MY_DATA_DONE = ("✅ Your data is deleted. You are no longer on any leaderboard, profile or Wrapped. To have "
                        "a repost removed from a board, ask that server's admins.")
 DELETE_MY_DATA_CANCELLED = "Nothing was deleted."
 DELETE_MY_DATA_EXPIRED = "This confirmation expired and nothing was deleted. Run {command} again to delete your data."
-DELETE_MY_DATA_NOT_YOURS = "Only the member who asked can confirm this."
 # Sent for any command that fails in a way nothing more specific covers, so it must not assume the
 # command was changing a setting
 COMMAND_FAILED = ("Something went wrong while running this command. Please try again in a moment. If it keeps "
@@ -176,7 +181,7 @@ PROFILE_OTHERS_OUTSIDE_SERVER = ("Outside a server with Hall of Fame you can onl
 PROFILE_NOTHING_OUTSIDE_SERVER = ("You have no Hall of Fame posts yet in any server with Hall of Fame. "
                                   "Totals update every 24 hours.")
 PROFILE_HIDDEN_OUTSIDE_SERVER_SELF = ("Your totals across servers are hidden, so there is nothing to show outside "
-                                      "a server with Hall of Fame. Show them again with {command}.")
+                                      "a server with Hall of Fame. Show them again from {command}.")
 MISSING_HOF_CHANNEL_PERMISSIONS = ("The bot is missing the required permissions to post in {channel}.\n"
                                    "Update the channel permission for the bot to have: ``{missing_permissions}``\n"
                                    f"If the hall of channel does not exist, set it up using </set_hall_of_fame_channel:1393576242237804768> "

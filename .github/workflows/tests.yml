@@ -36,7 +36,7 @@ jobs:
     name: Database Tests
     runs-on: ubuntu-latest
 
-    # A throwaway database for tests/integration, which runs the real SQL behind /delete_my_data and
+    # A throwaway database for tests/integration, which runs the real SQL behind deleting a member's data and
     # the clean-up of departed servers. Nothing else connects to it, and it is gone when the job ends
     services:
       postgres:

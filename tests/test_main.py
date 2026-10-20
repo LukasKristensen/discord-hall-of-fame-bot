@@ -45,7 +45,7 @@ class FakeResponse:
     async def edit_message(self, content=None, view=None):
         self.edits.append((content, view))
 
-    async def defer(self, ephemeral=False):
+    async def defer(self, ephemeral=False, thinking=False):
         self.deferred = True
         self.deferred_ephemeral = ephemeral
 
@@ -58,11 +58,13 @@ class FakeFollowup:
         self.messages = []
         self.ephemeral = []
         self.files = []
+        self.views = []
 
-    async def send(self, content=None, embed=None, ephemeral=False, file=None):
+    async def send(self, content=None, embed=None, ephemeral=False, file=None, view=None):
         self.messages.append(embed if embed is not None else content)
         self.ephemeral.append(ephemeral)
         self.files.append(file)
+        self.views.append(view)
 
 
 class FakeUser:
@@ -1115,8 +1117,7 @@ class CommandErrorHandlerTests(MainTestCase):
 
 class CommandContextTests(unittest.TestCase):
     # The commands that need no server set up, or answer without one
-    USER_INSTALLABLE = {"help", "feedback", "vote", "invite", "user_profile", "profile_privacy", "my_data",
-                        "delete_my_data"}
+    USER_INSTALLABLE = {"help", "feedback", "vote", "invite", "user_profile", "my_data"}
 
     def test_commands_are_only_offered_in_servers_by_default(self):
         """Most commands read the server they were used in, so in a DM they could only fail."""

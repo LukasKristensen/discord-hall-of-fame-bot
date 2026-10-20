@@ -95,5 +95,5 @@ def get_global_profile(connection, user_id) -> dict:
 
 
 def delete_for_user(connection, user_id, commit: bool = True):
-    """Forget a member's privacy choice, as part of /delete_my_data"""
+    """Forget a member's privacy choice, as part of deleting their data on /my_data"""
     set_hidden(connection, user_id, False, commit=commit)

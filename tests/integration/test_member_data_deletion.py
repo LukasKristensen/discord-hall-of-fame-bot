@@ -1,4 +1,4 @@
-"""/delete_my_data against a real PostgreSQL database.
+"""Deleting a member's data from /my_data, against a real PostgreSQL database.
 
 Deleting someone's data is the one thing the bot does that cannot be undone, and the promise in the
 privacy policy is twofold: everything about the member goes, and nothing else changes. These tests
@@ -40,7 +40,7 @@ NOBODY = 999999999999999999
 SHARED, SECOND, OTHERS_ONLY, OPTED_OUT_SERVER = 9001, 9002, 9003, 9004
 GUILDS = (SHARED, SECOND, OTHERS_ONLY, OPTED_OUT_SERVER)
 
-# Every table that holds a member's user ID, and so has to be handled by /delete_my_data
+# Every table that holds a member's user ID, and so has to be handled by deleting a member's data
 TABLES_WITH_MEMBER_IDS = {"hall_of_fame_message", "server_user", "hof_wrapped", "hidden_global_profile",
                           "opted_out_member"}
 # Text columns of hof_wrapped that hold JSON, compared parsed so formatting does not matter
@@ -183,11 +183,11 @@ class MemberDataDeletionTestCase(DatabaseTestCase):
         # Changing a value can change where a row sorts, so the order is worked out again
         return {table: in_order(rows) for table, rows in expected.items()}
 
-    def assert_only_the_member_changed(self, before, after, user_id, stop_counting):
+    def assert_only_the_member_changed(self, before, after, user_id, stop_featuring):
         expected = self.expected_after_deleting(before, user_id)
         # The opt-out row carries the moment it was made, so it is checked on its own
         added = [row for row in after["opted_out_member"] if row["user_id"] == user_id]
-        self.assertEqual(stop_counting, bool(added))
+        self.assertEqual(stop_featuring, bool(added))
         after = dict(after, opted_out_member=[row for row in after["opted_out_member"] if row["user_id"] != user_id])
         expected["opted_out_member"] = [row for row in expected["opted_out_member"] if row["user_id"] != user_id]
 
@@ -207,20 +207,20 @@ class DeletionTests(MemberDataDeletionTestCase):
         before = self.snapshot()
         await main.delete_member_data(DELETED)
 
-        self.assert_only_the_member_changed(before, self.snapshot(), DELETED, stop_counting=False)
+        self.assert_only_the_member_changed(before, self.snapshot(), DELETED, stop_featuring=False)
 
     async def test_only_the_member_changes_when_they_stop_being_counted(self):
         before = self.snapshot()
-        await main.delete_member_data(DELETED, stop_counting=True)
+        await main.delete_member_data(DELETED, stop_featuring=True)
 
-        self.assert_only_the_member_changed(before, self.snapshot(), DELETED, stop_counting=True)
+        self.assert_only_the_member_changed(before, self.snapshot(), DELETED, stop_featuring=True)
 
     async def test_deleting_another_member_leaves_this_one_alone(self):
         """The same check from the other side, so the result does not depend on who is deleted."""
         before = self.snapshot()
         await main.delete_member_data(OTHER)
 
-        self.assert_only_the_member_changed(before, self.snapshot(), OTHER, stop_counting=False)
+        self.assert_only_the_member_changed(before, self.snapshot(), OTHER, stop_featuring=False)
 
     async def test_detaches_every_post_by_the_member(self):
         await main.delete_member_data(DELETED)
@@ -313,7 +313,7 @@ class DeletionTests(MemberDataDeletionTestCase):
         self.assertFalse(global_profile_repo.is_hidden(self.connection, DELETED))
 
     async def test_other_members_keep_their_privacy_and_counting_choices(self):
-        await main.delete_member_data(DELETED, stop_counting=True)
+        await main.delete_member_data(DELETED, stop_featuring=True)
 
         self.assertTrue(global_profile_repo.is_hidden(self.connection, OTHER))
         self.assertTrue(opt_out_repo.is_opted_out(self.connection, THIRD))
@@ -374,7 +374,7 @@ class DeletionTests(MemberDataDeletionTestCase):
                 await main.delete_member_data(DELETED)
         await main.delete_member_data(DELETED)
 
-        self.assert_only_the_member_changed(before, self.snapshot(), DELETED, stop_counting=False)
+        self.assert_only_the_member_changed(before, self.snapshot(), DELETED, stop_featuring=False)
 
     async def test_resets_the_statement_timeout_afterwards(self):
         """The connection goes back to the pool, and a leftover timeout would cut short the daily task."""
@@ -408,9 +408,17 @@ class DeletionTests(MemberDataDeletionTestCase):
 
 
 class StopCountingTests(MemberDataDeletionTestCase):
+    def setUp(self):
+        super().setUp()
+        self.sent = []
+
     async def post(self, author_id, message_id=900):
-        """Feature a new message through the bot's own posting code, with the Discord side faked"""
+        """
+        Feature a new message through the bot's own posting code, with the Discord side faked
+        :return: The author stored for it, or None when it was not stored
+        """
         async def send(*_args, **_kwargs):
+            self.sent.append(message_id)
             return types.SimpleNamespace(id=message_id + 5000)
 
         async def no_embed(*_args, **_kwargs):
@@ -428,10 +436,11 @@ class StopCountingTests(MemberDataDeletionTestCase):
                 mock.patch.object(utils, "reaction_count", five), \
                 mock.patch.object(utils, "check_video_extension", lambda _message: None):
             await utils.post_hall_of_fame_message(message, bot, self.connection, SHARED * 10, 5)
-        return self.rows("SELECT author_id FROM hall_of_fame_message WHERE message_id = %s", (message_id,))[0][0]
+        stored = self.rows("SELECT author_id FROM hall_of_fame_message WHERE message_id = %s", (message_id,))
+        return stored[0][0] if stored else None
 
     async def test_records_that_the_member_is_not_counted(self):
-        await main.delete_member_data(DELETED, stop_counting=True)
+        await main.delete_member_data(DELETED, stop_featuring=True)
 
         self.assertTrue(opt_out_repo.is_opted_out(self.connection, DELETED))
 
@@ -440,47 +449,44 @@ class StopCountingTests(MemberDataDeletionTestCase):
 
         self.assertFalse(opt_out_repo.is_opted_out(self.connection, DELETED))
 
-    async def test_a_new_post_by_a_member_not_counted_is_stored_without_them(self):
-        await main.delete_member_data(DELETED, stop_counting=True)
+    async def test_a_new_message_by_a_member_not_featured_is_not_stored(self):
+        await main.delete_member_data(DELETED, stop_featuring=True)
 
-        self.assertEqual(hall_of_fame_message_repo.NO_AUTHOR_ID, await self.post(DELETED))
+        self.assertIsNone(await self.post(DELETED))
 
-    async def test_the_post_still_reaches_the_board(self):
-        """The board belongs to the server, so opting out does not stop the repost."""
-        await main.delete_member_data(DELETED, stop_counting=True)
+    async def test_a_new_message_by_a_member_not_featured_is_not_reposted(self):
+        """Their name, avatar and words would be on the card, which is what they asked to stop."""
+        await main.delete_member_data(DELETED, stop_featuring=True)
         await self.post(DELETED, message_id=901)
 
-        self.assertEqual([(5901,)], self.rows(
-            "SELECT hall_of_fame_message_id FROM hall_of_fame_message WHERE message_id = 901"))
+        self.assertEqual([], self.sent)
 
     async def test_a_new_post_by_anybody_else_keeps_its_author(self):
-        await main.delete_member_data(DELETED, stop_counting=True)
+        await main.delete_member_data(DELETED, stop_featuring=True)
 
         self.assertEqual(OTHER, await self.post(OTHER))
 
     async def test_the_member_stays_off_the_statistics_after_new_posts(self):
-        await main.delete_member_data(DELETED, stop_counting=True)
+        await main.delete_member_data(DELETED, stop_featuring=True)
         await self.post(DELETED)
         self.rebuild_all()
 
         self.assertEqual([], server_user_repo.get_server_users_for_user(self.connection, DELETED))
 
-    async def test_counting_again_credits_new_posts(self):
-        await main.delete_member_data(DELETED, stop_counting=True)
+    async def test_featuring_again_credits_new_posts(self):
+        await main.delete_member_data(DELETED, stop_featuring=True)
         opt_out_repo.set_opted_out(self.connection, DELETED, False)
 
         self.assertEqual(DELETED, await self.post(DELETED))
 
-    async def test_counting_again_leaves_earlier_posts_uncredited(self):
-        await main.delete_member_data(DELETED, stop_counting=True)
-        await self.post(DELETED, message_id=902)
+    async def test_featuring_again_leaves_the_posts_from_before_the_deletion_uncredited(self):
+        await main.delete_member_data(DELETED, stop_featuring=True)
         opt_out_repo.set_opted_out(self.connection, DELETED, False)
 
-        self.assertEqual([(0,)], self.rows("SELECT author_id FROM hall_of_fame_message WHERE message_id = 902"))
         self.assertEqual([], self.posts_by(DELETED))
 
-    async def test_counting_again_only_removes_this_member(self):
-        await main.delete_member_data(DELETED, stop_counting=True)
+    async def test_featuring_again_only_removes_this_member(self):
+        await main.delete_member_data(DELETED, stop_featuring=True)
         opt_out_repo.set_opted_out(self.connection, DELETED, False)
 
         self.assertTrue(opt_out_repo.is_opted_out(self.connection, THIRD))
@@ -489,7 +495,7 @@ class StopCountingTests(MemberDataDeletionTestCase):
 class CoverageGuardTests(MemberDataDeletionTestCase):
     def test_every_table_holding_member_ids_is_handled_by_the_deletion(self):
         """
-        A new table with a user_id or author_id column holds member data, so /delete_my_data has to
+        A new table with a user_id or author_id column holds member data, so deleting a member's data has to
         handle it and this test has to be told about it. Without this, a new feature could keep data
         that a member was promised is deleted.
         """

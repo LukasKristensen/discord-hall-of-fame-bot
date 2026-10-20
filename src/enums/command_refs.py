@@ -23,7 +23,5 @@ SERVER_HOF_WRAPPED = "</server_hof_wrapped:1455717613056299029>"
 # TODO: replace with </name:id> mentions once Discord has synced these commands and assigned their IDs.
 # Plain text until then, since a mention with a made-up ID links nowhere
 MY_DATA = "`/my_data`"
-DELETE_MY_DATA = "`/delete_my_data`"
-PROFILE_PRIVACY = "`/profile_privacy`"
 COUNT_IN_GLOBAL_PROFILES = "`/count_in_global_profiles`"
 CHECK_SETUP = "`/check_setup`"

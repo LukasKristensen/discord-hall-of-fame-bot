@@ -112,9 +112,8 @@ def build_help_embed() -> discord.Embed:
 
     embed.add_field(
         name="🔒 Your data",
-        value=f"{command_refs.MY_DATA} see everything stored about you\n"
-              f"{command_refs.DELETE_MY_DATA} delete it\n"
-              f"{command_refs.PROFILE_PRIVACY} hide or show your totals across servers",
+        value=f"{command_refs.MY_DATA} see, download or delete what is stored about you, and hide your "
+              f"totals across servers",
         inline=False)
 
     embed.add_field(
@@ -463,7 +462,7 @@ def global_profile_column_value(profile: dict) -> str:
 def build_my_data_export(user_id: int, posts: list, standings: list, wrapped: list, profile_hidden: bool,
                          not_counted: bool = False) -> bytes:
     """
-    The file /my_data attaches: every row stored about a member, as JSON.
+    The file the Download button on /my_data sends: every row stored about a member, as JSON.
 
     Only ever sent privately to the member it describes, so unlike the totals on a profile it does include
     the server and message IDs, which are the member's own data.
@@ -472,7 +471,7 @@ def build_my_data_export(user_id: int, posts: list, standings: list, wrapped: li
     :param standings: Their per-server statistics, from server_user
     :param wrapped: Their Wrapped rows, from hof_wrapped
     :param profile_hidden: Whether they hid their totals across servers
-    :param not_counted: Whether they asked not to be counted from now on
+    :param not_counted: Whether they asked not to be featured from now on
     :return: The file's contents
     """
     export = {
@@ -499,15 +498,15 @@ def build_my_data_export(user_id: int, posts: list, standings: list, wrapped: li
 
 class ConfirmDeleteView(discord.ui.View):
     """
-    The confirm and cancel buttons under /delete_my_data. Deleting cannot be undone, so it only
-    happens on a deliberate second click, and only the member who asked can make it
+    The confirm and cancel buttons /my_data shows after Delete my data. Deleting cannot be undone, so
+    it only happens on a deliberate second click, and only the member who asked can make it
     """
 
     def __init__(self, owner_id: int, on_confirm, timeout_seconds: float = 120):
         """
         :param owner_id: The member whose data would be deleted
         :param on_confirm: Coroutine function taking the button's interaction and whether the member
-            also asked not to be counted from now on, which deletes and answers
+            also asked not to be featured from now on, which deletes and answers
         :param timeout_seconds: How long the buttons stay usable
         """
         super().__init__(timeout=timeout_seconds)
@@ -517,19 +516,19 @@ class ConfirmDeleteView(discord.ui.View):
         self.finished = False
 
         confirm = discord.ui.Button(style=discord.ButtonStyle.danger, label=messages.DELETE_MY_DATA_BUTTON)
-        stop_counting = discord.ui.Button(style=discord.ButtonStyle.danger, label=messages.DELETE_AND_STOP_BUTTON)
+        stop_featuring = discord.ui.Button(style=discord.ButtonStyle.danger, label=messages.DELETE_AND_STOP_BUTTON)
         cancel = discord.ui.Button(style=discord.ButtonStyle.secondary, label=messages.CANCEL_BUTTON)
         confirm.callback = self.confirm
-        stop_counting.callback = self.confirm_and_stop_counting
+        stop_featuring.callback = self.confirm_and_stop_featuring
         cancel.callback = self.cancel
         self.add_item(confirm)
-        self.add_item(stop_counting)
+        self.add_item(stop_featuring)
         self.add_item(cancel)
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         # The prompt is ephemeral, so nobody else should see it, but a click is checked all the same
         if interaction.user.id != self.owner_id:
-            await interaction.response.send_message(messages.DELETE_MY_DATA_NOT_YOURS, ephemeral=True)
+            await interaction.response.send_message(messages.MY_DATA_NOT_YOURS, ephemeral=True)
             return False
         return True
 
@@ -538,7 +537,7 @@ class ConfirmDeleteView(discord.ui.View):
         self.stop()
         await self.on_confirm(interaction, False)
 
-    async def confirm_and_stop_counting(self, interaction: discord.Interaction):
+    async def confirm_and_stop_featuring(self, interaction: discord.Interaction):
         self.finished = True
         self.stop()
         await self.on_confirm(interaction, True)
@@ -553,32 +552,111 @@ class ConfirmDeleteView(discord.ui.View):
             return
         try:
             await self.original_interaction.edit_original_response(
-                content=messages.DELETE_MY_DATA_EXPIRED.format(command=command_refs.DELETE_MY_DATA), view=None)
+                content=messages.DELETE_MY_DATA_EXPIRED.format(command=command_refs.MY_DATA), view=None)
         except discord.HTTPException:
             # The member dismissed the prompt, so there is nothing left to update
             pass
 
 
-class CountAgainView(discord.ui.View):
-    """The button /delete_my_data offers a member who asked not to be counted"""
+def has_stored_data(summary: dict) -> bool:
+    """Whether anything at all is stored about a member, their two choices included"""
+    return bool(summary["posts"] or summary["servers"] or summary["wrapped"]
+                or summary["hidden"] or summary["opted_out"])
 
-    def __init__(self, owner_id: int, on_count_again, timeout_seconds: float = 120):
+
+def my_data_summary(summary: dict, note: str = None) -> str:
+    """
+    The private message /my_data answers with: what is stored, and the member's two choices
+    :param summary: posts, servers and wrapped counts, and whether the totals are hidden and the
+        member asked not to be featured
+    :param note: A line to lead with, such as the result of a button just pressed
+    :return: The message
+    """
+    lines = [note] if note else []
+    if summary["posts"] or summary["servers"] or summary["wrapped"]:
+        lines.append(messages.MY_DATA_STORED.format(
+            posts=summary["posts"], posts_plural="" if summary["posts"] == 1 else "s",
+            servers=summary["servers"], servers_plural="" if summary["servers"] == 1 else "s",
+            wrapped=summary["wrapped"], wrapped_plural="y" if summary["wrapped"] == 1 else "ies"))
+    else:
+        lines.append(messages.MY_DATA_NOTHING_STORED)
+    if summary["opted_out"]:
+        lines.append(messages.MY_DATA_NOT_FEATURED)
+    else:
+        # A member who is not featured has no totals to show or hide
+        lines.append(messages.MY_DATA_TOTALS_HIDDEN if summary["hidden"] else messages.MY_DATA_TOTALS_SHOWN)
+    lines.append(messages.MY_DATA_FOOTER)
+    return "\n".join(lines)
+
+
+class MyDataView(discord.ui.View):
+    """
+    The buttons under /my_data, the one place a member manages what the bot stores about them:
+    download it, hide or show their totals across servers, and delete it, or be featured again once
+    they asked not to be. Only the member who ran the command can use them
+    """
+
+    def __init__(self, owner_id: int, summary: dict, on_download, on_toggle_totals, on_delete,
+                 on_feature_again, timeout_seconds: float = 120):
+        """
+        :param owner_id: The member the data belongs to
+        :param summary: What is stored, as my_data_summary takes it. The buttons follow it
+        :param on_download, on_toggle_totals, on_delete, on_feature_again: Coroutine functions taking
+            the button's interaction and this view, which act and answer
+        :param timeout_seconds: How long the buttons stay usable
+        """
         super().__init__(timeout=timeout_seconds)
         self.owner_id = owner_id
-        self.on_count_again = on_count_again
-        button = discord.ui.Button(style=discord.ButtonStyle.primary, label=messages.COUNT_ME_AGAIN_BUTTON)
-        button.callback = self.count_again
-        self.add_item(button)
+        self.summary = summary
+        self.original_interaction = None
+        self.finished = False
+
+        self.download_button = discord.ui.Button(style=discord.ButtonStyle.primary,
+                                                 label=messages.MY_DATA_DOWNLOAD_BUTTON)
+        self.totals_button = discord.ui.Button(style=discord.ButtonStyle.secondary)
+        self.delete_button = discord.ui.Button(style=discord.ButtonStyle.danger, label=messages.DELETE_MY_DATA_BUTTON)
+        self.feature_again_button = discord.ui.Button(style=discord.ButtonStyle.primary,
+                                                      label=messages.FEATURE_ME_AGAIN_BUTTON)
+        for button, handler in ((self.download_button, on_download), (self.totals_button, on_toggle_totals),
+                                (self.delete_button, on_delete), (self.feature_again_button, on_feature_again)):
+            button.callback = self._calling(handler)
+        self.refresh()
+
+    def _calling(self, handler):
+        async def callback(interaction: discord.Interaction):
+            await handler(interaction, self)
+        return callback
+
+    def refresh(self):
+        """Lay the buttons out for the current summary"""
+        self.clear_items()
+        self.download_button.disabled = not has_stored_data(self.summary)
+        self.totals_button.label = (messages.SHOW_TOTALS_BUTTON if self.summary["hidden"]
+                                    else messages.HIDE_TOTALS_BUTTON)
+        self.add_item(self.download_button)
+        # A member who asked not to be featured has no totals to hide and nothing new stored to delete,
+        # so they are only offered the way back. Hiding would store a choice about totals they cannot have
+        if self.summary["opted_out"]:
+            self.add_item(self.feature_again_button)
+        else:
+            self.add_item(self.totals_button)
+            self.add_item(self.delete_button)
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        # The message is ephemeral, so nobody else should see it, but a click is checked all the same
         if interaction.user.id != self.owner_id:
-            await interaction.response.send_message(messages.DELETE_MY_DATA_NOT_YOURS, ephemeral=True)
+            await interaction.response.send_message(messages.MY_DATA_NOT_YOURS, ephemeral=True)
             return False
         return True
 
-    async def count_again(self, interaction: discord.Interaction):
-        self.stop()
-        await self.on_count_again(interaction)
+    async def on_timeout(self):
+        if self.finished or self.original_interaction is None:
+            return
+        try:
+            await self.original_interaction.edit_original_response(view=None)
+        except discord.HTTPException:
+            # The member dismissed the message, so there is nothing left to update
+            pass
 
 
 async def server_leaderboard(interaction, connection, month_emoji: str, all_time_emoji: str):

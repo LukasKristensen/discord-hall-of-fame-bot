@@ -130,7 +130,7 @@ class WrappedGenerationTests(DatabaseTestCase):
         self.assertEqual(2, self.wrapped(FIRST, ALICE.id)["hof_message_posts"])
 
     async def test_a_deleted_member_is_not_generated_again(self):
-        """After /delete_my_data the member's posts have no author, so Wrapped has nobody to credit."""
+        """After deleting their data the member's posts have no author, so Wrapped has nobody to credit."""
         hall_of_fame_message_repo.remove_author(self.connection, ALICE.id)
         await self.generate(FIRST)
 

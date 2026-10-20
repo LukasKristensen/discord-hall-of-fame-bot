@@ -16,7 +16,7 @@ import discord
 import main
 import commands
 from enums import command_refs
-from commands import ConfirmDeleteView, CountAgainView, build_my_data_export
+from commands import ConfirmDeleteView, MyDataView, build_my_data_export
 from repositories import (
     global_profile_repo,
     hall_of_fame_message_repo,
@@ -86,7 +86,7 @@ class GlobalProfileRepoTests(unittest.TestCase):
 
 class MemberDataRepoTests(unittest.TestCase):
     def test_each_deletion_step_can_leave_the_commit_to_the_caller(self):
-        """/delete_my_data runs them as one transaction, so none of them may commit on its own."""
+        """Deleting a member's data runs them as one transaction, so none of them may commit on its own."""
         steps = (lambda c: opt_out_repo.set_opted_out(c, 77, True, commit=False),
                  lambda c: hall_of_fame_message_repo.remove_author(c, 77, commit=False),
                  lambda c: server_user_repo.delete_server_users_for_user(c, 77, commit=False),
@@ -220,7 +220,7 @@ class ConfirmDeleteViewTests(unittest.IsolatedAsyncioTestCase):
         stranger.user = FakeUser(user_id=99)
 
         self.assertFalse(await view.interaction_check(stranger))
-        self.assertEqual([messages.DELETE_MY_DATA_NOT_YOURS], stranger.response.messages)
+        self.assertEqual([messages.MY_DATA_NOT_YOURS], stranger.response.messages)
 
     async def test_cancelling_deletes_nothing(self):
         confirmed = []
@@ -516,32 +516,6 @@ class UserProfileEmbedTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("**7** posts · #2", fields["🌟 All time"])
 
 
-class ProfilePrivacyCommandTests(CommandTestCase):
-    def setUp(self):
-        super().setUp()
-        self.hidden = set()
-        self.patch(global_profile_repo, "is_hidden", lambda _connection, user_id: user_id in self.hidden)
-
-        def set_hidden(_connection, user_id, hidden):
-            (self.hidden.add if hidden else self.hidden.discard)(user_id)
-
-        self.patch(global_profile_repo, "set_hidden", set_hidden)
-
-    async def test_hides_the_profile_privately(self):
-        interaction = FakeInteraction()
-        await main.profile_privacy.callback(interaction, discord.app_commands.Choice(name="Hide", value="hide"))
-
-        self.assertEqual({77}, self.hidden)
-        self.assertEqual([messages.PROFILE_PRIVACY_HIDDEN], interaction.response.messages)
-        self.assertEqual([True], interaction.response.ephemeral)
-
-    async def test_says_so_when_nothing_changes(self):
-        interaction = FakeInteraction()
-        await main.profile_privacy.callback(interaction, discord.app_commands.Choice(name="Show", value="show"))
-
-        self.assertIn("already visible", interaction.response.messages[0])
-
-
 class CountInGlobalProfilesCommandTests(CommandTestCase):
     async def test_stores_the_setting(self):
         interaction = FakeInteraction()
@@ -557,84 +531,181 @@ class CountInGlobalProfilesCommandTests(CommandTestCase):
         self.assertEqual([], self.writes)
 
 
-class MyDataCommandTests(CommandTestCase):
+class MyDataPanelTestCase(CommandTestCase):
+    """/my_data with what is stored faked, and its buttons pressed the way Discord would."""
+
     def setUp(self):
         super().setUp()
         self.patch(main, "daily_command_cooldowns", {})
         self.posts = [{"guild_id": 200, "message_id": 400, "reaction_count": 9, "created_at": "2026-01-01"}]
+        self.standings = [{"guild_id": 200}]
+        self.wrapped = []
+        self.hidden = set()
+        self.opted_out = set()
+        self.calls = []
+        self.patch(hall_of_fame_message_repo, "count_messages_by_author", lambda *_args: len(self.posts))
+        self.patch(server_user_repo, "count_server_users_for_user", lambda *_args: len(self.standings))
+        self.patch(hof_wrapped_repo, "count_hof_wrapped_for_user", lambda *_args: len(self.wrapped))
         self.patch(hall_of_fame_message_repo, "get_messages_by_author", lambda *_args: self.posts)
-        self.patch(server_user_repo, "get_server_users_for_user", lambda *_args: [{"guild_id": 200}])
-        self.patch(hof_wrapped_repo, "get_hof_wrapped_for_user", lambda *_args: [])
-        self.patch(global_profile_repo, "is_hidden", lambda *_args: False)
+        self.patch(server_user_repo, "get_server_users_for_user", lambda *_args: self.standings)
+        self.patch(hof_wrapped_repo, "get_hof_wrapped_for_user", lambda *_args: self.wrapped)
+        self.patch(global_profile_repo, "is_hidden", lambda _c, user_id: user_id in self.hidden)
+        self.patch(opt_out_repo, "is_opted_out", lambda _c, user_id: user_id in self.opted_out)
 
-    async def test_sends_the_export_privately(self):
+        def set_hidden(_c, user_id, hidden, commit=True):
+            (self.hidden.add if hidden else self.hidden.discard)(user_id)
+
+        def set_opted_out(_c, user_id, opted_out, commit=True):
+            self.calls.append(("opt_out", opted_out))
+            (self.opted_out.add if opted_out else self.opted_out.discard)(user_id)
+
+        self.patch(global_profile_repo, "set_hidden", set_hidden)
+        self.patch(opt_out_repo, "set_opted_out", set_opted_out)
+        self.patch(hall_of_fame_message_repo, "remove_author", lambda *_args, **_kw: self.calls.append("posts") or 3)
+        self.patch(server_user_repo, "delete_server_users_for_user", lambda *_args, **_kw: self.calls.append("stats"))
+        self.patch(hof_wrapped_repo, "delete_hof_wrapped_for_user", lambda *_args, **_kw: self.calls.append("wrapped"))
+        self.patch(global_profile_repo, "delete_for_user", lambda *_args, **_kw: self.calls.append("privacy"))
+
+    async def open_panel(self):
         interaction = FakeInteraction()
         await main.my_data.callback(interaction)
+        return interaction, interaction.followup.views[0]
+
+    @staticmethod
+    async def press(button):
+        interaction = FakeInteraction()
+        await button.callback(interaction)
+        return interaction
+
+    async def ask_to_delete(self):
+        """Open /my_data and press Delete, which swaps the summary for the confirmation"""
+        _interaction, panel = await self.open_panel()
+        pressed = await self.press(panel.delete_button)
+        return pressed.response.edits[0][1]
+
+
+class MyDataPanelTests(MyDataPanelTestCase):
+    async def test_answers_privately_with_a_summary_and_buttons(self):
+        interaction, view = await self.open_panel()
 
         self.assertTrue(interaction.response.deferred_ephemeral)
         self.assertEqual([True], interaction.followup.ephemeral)
-        self.assertIsInstance(interaction.followup.files[0], discord.File)
         self.assertIn("1 featured post,", interaction.followup.messages[0])
-
-    async def test_says_so_when_nothing_is_stored(self):
-        self.posts = []
-        self.patch(server_user_repo, "get_server_users_for_user", lambda *_args: [])
-        interaction = FakeInteraction()
-        await main.my_data.callback(interaction)
-
-        self.assertEqual([messages.MY_DATA_EMPTY], interaction.followup.messages)
+        self.assertIsInstance(view, MyDataView)
         self.assertEqual([None], interaction.followup.files)
 
-    async def test_once_a_day(self):
-        await main.my_data.callback(FakeInteraction())
-        again = FakeInteraction()
-        await main.my_data.callback(again)
+    async def test_the_summary_does_not_read_the_rows_themselves(self):
+        """The full export is the expensive part, so only the Download button reads it."""
+        def must_not_run(*_args):
+            raise AssertionError("the summary read every post")
 
-        self.assertEqual([messages.COMMAND_ON_COOLDOWN], again.response.messages)
+        self.patch(hall_of_fame_message_repo, "get_messages_by_author", must_not_run)
+        await self.open_panel()
+
+    async def test_says_so_when_nothing_is_stored(self):
+        self.posts, self.standings = [], []
+        interaction, view = await self.open_panel()
+
+        self.assertIn(messages.MY_DATA_NOTHING_STORED, interaction.followup.messages[0])
+        self.assertTrue(view.download_button.disabled)
+
+    async def test_opening_it_again_is_not_limited(self):
+        await self.open_panel()
+        again, _view = await self.open_panel()
+
+        self.assertIn("1 featured post,", again.followup.messages[0])
+
+    async def test_queries_run_under_a_statement_timeout(self):
+        await self.open_panel()
+
+        self.assertTrue(any("statement_timeout" in query for query in self.pool.connection.queries))
+
+    async def test_only_the_member_who_ran_it_can_press_the_buttons(self):
+        _interaction, view = await self.open_panel()
+        stranger = FakeInteraction()
+        stranger.user = FakeUser(user_id=99)
+
+        self.assertFalse(await view.interaction_check(stranger))
+        self.assertEqual([messages.MY_DATA_NOT_YOURS], stranger.response.messages)
+
+    async def test_offers_delete_and_not_feature_again_to_a_featured_member(self):
+        _interaction, view = await self.open_panel()
+
+        self.assertIn(view.delete_button, view.children)
+        self.assertNotIn(view.feature_again_button, view.children)
+
+
+class DownloadMyDataTests(MyDataPanelTestCase):
+    async def test_sends_the_file_privately(self):
+        _interaction, view = await self.open_panel()
+        pressed = await self.press(view.download_button)
+
+        self.assertTrue(pressed.response.deferred_ephemeral)
+        self.assertEqual([messages.MY_DATA_EXPORT], pressed.followup.messages)
+        self.assertEqual([True], pressed.followup.ephemeral)
+        self.assertIsInstance(pressed.followup.files[0], discord.File)
+
+    async def test_once_a_day(self):
+        _interaction, view = await self.open_panel()
+        await self.press(view.download_button)
+        again = await self.press(view.download_button)
+
+        self.assertEqual([messages.MY_DATA_DOWNLOAD_ON_COOLDOWN], again.response.messages)
         self.assertEqual([True], again.response.ephemeral)
 
-    async def test_a_failure_does_not_use_up_the_day(self):
+    async def test_a_failure_is_reported_and_does_not_use_up_the_day(self):
         def fail(*_args):
             raise RuntimeError("database went away")
 
         self.patch(hall_of_fame_message_repo, "get_messages_by_author", fail)
-        with self.assertRaises(RuntimeError):
-            await main.my_data.callback(FakeInteraction())
+        _interaction, view = await self.open_panel()
+        pressed = await self.press(view.download_button)
 
+        self.assertEqual([messages.COMMAND_FAILED], pressed.followup.messages)
         self.assertFalse(main.on_daily_cooldown(77, "my_data"))
 
-    async def test_queries_run_under_a_statement_timeout(self):
-        await main.my_data.callback(FakeInteraction())
 
-        self.assertTrue(any("statement_timeout" in query for query in self.pool.connection.queries))
+class TotalsAcrossServersButtonTests(MyDataPanelTestCase):
+    async def test_hides_the_totals(self):
+        _interaction, view = await self.open_panel()
+        pressed = await self.press(view.totals_button)
+
+        self.assertEqual({77}, self.hidden)
+        content, new_view = pressed.response.edits[0]
+        self.assertIn(messages.MY_DATA_TOTALS_HIDDEN, content)
+        self.assertEqual(messages.SHOW_TOTALS_BUTTON, new_view.totals_button.label)
+
+    async def test_shows_them_again(self):
+        self.hidden.add(77)
+        _interaction, view = await self.open_panel()
+        self.assertEqual(messages.SHOW_TOTALS_BUTTON, view.totals_button.label)
+        pressed = await self.press(view.totals_button)
+
+        self.assertEqual(set(), self.hidden)
+        self.assertIn(messages.MY_DATA_TOTALS_SHOWN, pressed.response.edits[0][0])
+
+    async def test_is_not_held_back_by_the_download_limit(self):
+        main.start_daily_cooldown(77, "my_data")
+        _interaction, view = await self.open_panel()
+        await self.press(view.totals_button)
+
+        self.assertEqual({77}, self.hidden)
 
 
-class DeleteMyDataCommandTests(CommandTestCase):
-    def setUp(self):
-        super().setUp()
-        self.patch(main, "daily_command_cooldowns", {})
-        self.calls = []
-        self.patch(hall_of_fame_message_repo, "remove_author", lambda _c, user_id, **_kw: self.calls.append("posts") or 3)
-        self.patch(server_user_repo, "delete_server_users_for_user", lambda _c, user_id, **_kw: self.calls.append("stats"))
-        self.patch(hof_wrapped_repo, "delete_hof_wrapped_for_user", lambda _c, user_id, **_kw: self.calls.append("wrapped"))
-        self.patch(global_profile_repo, "delete_for_user", lambda _c, user_id, **_kw: self.calls.append("privacy"))
+class DeleteMyDataTests(MyDataPanelTestCase):
+    async def test_asks_for_confirmation_before_deleting(self):
+        _interaction, panel = await self.open_panel()
+        pressed = await self.press(panel.delete_button)
 
-    async def ask(self):
-        interaction = FakeInteraction()
-        await main.delete_my_data.callback(interaction)
-        return interaction, interaction.response.views[0]
-
-    async def test_asks_for_confirmation_privately_before_deleting(self):
-        interaction, view = await self.ask()
-
-        self.assertEqual([messages.DELETE_MY_DATA_CONFIRM], interaction.response.messages)
-        self.assertEqual([True], interaction.response.ephemeral)
+        content, view = pressed.response.edits[0]
+        self.assertEqual(messages.DELETE_MY_DATA_CONFIRM, content)
         self.assertIsInstance(view, ConfirmDeleteView)
         self.assertEqual([], self.calls)
+        self.assertTrue(panel.is_finished())
 
     async def test_confirming_deletes_everything_posts_first(self):
         """The rebuild recreates statistics from the posts, so the posts must lose their author first."""
-        _interaction, view = await self.ask()
+        view = await self.ask_to_delete()
         button = FakeInteraction()
         await view.confirm(button)
 
@@ -643,7 +714,7 @@ class DeleteMyDataCommandTests(CommandTestCase):
 
     async def test_answers_the_button_before_deleting(self):
         """The deletes can outlast the three seconds Discord waits for a button to be answered."""
-        _interaction, view = await self.ask()
+        view = await self.ask_to_delete()
         button = FakeInteraction()
         deferred_first = []
         self.patch(hall_of_fame_message_repo, "remove_author",
@@ -660,7 +731,7 @@ class DeleteMyDataCommandTests(CommandTestCase):
                            (hof_wrapped_repo, "delete_hof_wrapped_for_user"),
                            (global_profile_repo, "delete_for_user")):
             self.patch(repo, name, lambda *_args, **kw: kwargs.append(kw) or 0)
-        _interaction, view = await self.ask()
+        view = await self.ask_to_delete()
         await view.confirm(FakeInteraction())
 
         self.assertEqual([{"commit": False}] * 4, kwargs)
@@ -670,95 +741,100 @@ class DeleteMyDataCommandTests(CommandTestCase):
             raise RuntimeError("canceling statement due to statement timeout")
 
         self.patch(server_user_repo, "delete_server_users_for_user", fail)
-        _interaction, view = await self.ask()
+        view = await self.ask_to_delete()
         button = FakeInteraction()
         await view.confirm(button)
 
         self.assertEqual([(messages.COMMAND_FAILED, None)], button.original_edits)
         self.assertTrue(any("Error deleting a member's data" in entry for entry in self.logged))
         self.assertGreater(self.pool.connection.rollbacks, 0)
-        again = FakeInteraction()
-        await main.delete_my_data.callback(again)
-        self.assertEqual([messages.DELETE_MY_DATA_CONFIRM], again.response.messages)
+        self.assertIsInstance(await self.ask_to_delete(), ConfirmDeleteView)
 
     async def test_the_log_does_not_name_the_member(self):
-        _interaction, view = await self.ask()
+        view = await self.ask_to_delete()
         await view.confirm(FakeInteraction())
 
         entry = [entry for entry in self.logged if "deleted their data" in entry][0]
         self.assertNotIn("Member", entry)
 
     async def test_once_a_day(self):
-        _interaction, view = await self.ask()
+        view = await self.ask_to_delete()
         await view.confirm(FakeInteraction())
-        again = FakeInteraction()
-        await main.delete_my_data.callback(again)
+        _interaction, panel = await self.open_panel()
+        pressed = await self.press(panel.delete_button)
 
-        self.assertEqual([messages.COMMAND_ON_COOLDOWN], again.response.messages)
+        self.assertEqual([messages.MY_DATA_DELETE_ON_COOLDOWN], pressed.response.messages)
+        self.assertEqual([], pressed.response.edits)
+
+    async def test_is_not_held_back_by_the_download_limit(self):
+        main.start_daily_cooldown(77, "my_data")
+
+        self.assertIsInstance(await self.ask_to_delete(), ConfirmDeleteView)
 
 
-class StopCountingTests(CommandTestCase):
-    """Delete and stop counting me: the lasting way to object to being counted."""
-
-    def setUp(self):
-        super().setUp()
-        self.patch(main, "daily_command_cooldowns", {})
-        self.calls = []
-        self.opted_out = set()
-        self.patch(opt_out_repo, "is_opted_out", lambda _c, user_id: user_id in self.opted_out)
-
-        def set_opted_out(_c, user_id, opted_out, commit=True):
-            self.calls.append(("opt_out", opted_out))
-            (self.opted_out.add if opted_out else self.opted_out.discard)(user_id)
-
-        self.patch(opt_out_repo, "set_opted_out", set_opted_out)
-        self.patch(hall_of_fame_message_repo, "remove_author", lambda *_args, **_kw: self.calls.append("posts") or 0)
-        self.patch(server_user_repo, "delete_server_users_for_user", lambda *_args, **_kw: self.calls.append("stats"))
-        self.patch(hof_wrapped_repo, "delete_hof_wrapped_for_user", lambda *_args, **_kw: self.calls.append("wrapped"))
-        self.patch(global_profile_repo, "delete_for_user", lambda *_args, **_kw: self.calls.append("privacy"))
-
-    async def ask(self):
-        interaction = FakeInteraction()
-        await main.delete_my_data.callback(interaction)
-        return interaction
+class StopFeaturingTests(MyDataPanelTestCase):
+    """Delete and stop featuring me: the lasting way to object to being featured."""
 
     async def test_records_the_request_with_the_deletion(self):
-        view = (await self.ask()).response.views[0]
+        view = await self.ask_to_delete()
         button = FakeInteraction()
-        await view.confirm_and_stop_counting(button)
+        await view.confirm_and_stop_featuring(button)
 
         self.assertEqual([("opt_out", True), "posts", "stats", "wrapped", "privacy"], self.calls)
-        self.assertIn("not counted from now on", button.original_edits[0][0])
+        self.assertIn("not featured from now on", button.original_edits[0][0])
+        self.assertIn(command_refs.MY_DATA, button.original_edits[0][0])
 
-    async def test_plain_deletion_does_not_stop_counting(self):
-        view = (await self.ask()).response.views[0]
+    async def test_plain_deletion_does_not_stop_featuring(self):
+        view = await self.ask_to_delete()
         await view.confirm(FakeInteraction())
 
         self.assertNotIn(("opt_out", True), self.calls)
 
-    async def test_offers_to_count_again_instead_of_deleting(self):
+    async def test_offers_to_feature_again_instead_of_deleting(self):
         self.opted_out.add(77)
-        interaction = await self.ask()
+        interaction, view = await self.open_panel()
 
-        self.assertEqual([messages.NOT_COUNTED_STATUS], interaction.response.messages)
-        self.assertEqual([True], interaction.response.ephemeral)
-        self.assertIsInstance(interaction.response.views[0], CountAgainView)
+        self.assertIn(messages.MY_DATA_NOT_FEATURED, interaction.followup.messages[0])
+        self.assertIn(view.feature_again_button, view.children)
+        self.assertNotIn(view.delete_button, view.children)
 
-    async def test_counting_again_is_not_held_back_by_the_cooldown(self):
+    async def test_a_member_who_is_not_featured_has_no_totals_to_hide(self):
+        """Their totals are always zero, and hiding them would store a choice for nothing."""
+        self.opted_out.add(77)
+        interaction, view = await self.open_panel()
+
+        self.assertNotIn(view.totals_button, view.children)
+        self.assertNotIn(messages.MY_DATA_TOTALS_SHOWN, interaction.followup.messages[0])
+        self.assertNotIn(messages.MY_DATA_TOTALS_HIDDEN, interaction.followup.messages[0])
+
+    async def test_featuring_again_brings_the_totals_button_back(self):
+        self.opted_out.add(77)
+        _interaction, view = await self.open_panel()
+        pressed = await self.press(view.feature_again_button)
+
+        content, new_view = pressed.response.edits[0]
+        self.assertIn(new_view.totals_button, new_view.children)
+        self.assertIn(messages.MY_DATA_TOTALS_SHOWN, content)
+
+    async def test_featuring_again_is_not_held_back_by_the_cooldowns(self):
         self.opted_out.add(77)
         main.start_daily_cooldown(77, "delete_my_data")
-        interaction = await self.ask()
-
-        self.assertEqual([messages.NOT_COUNTED_STATUS], interaction.response.messages)
-
-    async def test_count_me_again(self):
-        self.opted_out.add(77)
-        view = (await self.ask()).response.views[0]
-        button = FakeInteraction()
-        await view.count_again(button)
+        main.start_daily_cooldown(77, "my_data")
+        _interaction, view = await self.open_panel()
+        await self.press(view.feature_again_button)
 
         self.assertEqual(set(), self.opted_out)
-        self.assertEqual([(messages.COUNTED_AGAIN, None)], button.response.edits)
+
+    async def test_feature_me_again(self):
+        self.opted_out.add(77)
+        _interaction, view = await self.open_panel()
+        pressed = await self.press(view.feature_again_button)
+
+        self.assertEqual(set(), self.opted_out)
+        content, new_view = pressed.response.edits[0]
+        self.assertTrue(content.startswith(messages.COUNTED_AGAIN))
+        self.assertNotIn(messages.MY_DATA_NOT_FEATURED, content)
+        self.assertIn(new_view.delete_button, new_view.children)
 
 
 class WrappedWithoutTheAuthorTests(unittest.IsolatedAsyncioTestCase):
@@ -775,10 +851,11 @@ class WrappedWithoutTheAuthorTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual([], fetched)
 
 
-class PostingWithoutTheAuthorTests(unittest.IsolatedAsyncioTestCase):
-    async def test_a_post_by_a_member_who_is_not_counted_is_stored_without_them(self):
+class NotFeaturedPostingTests(unittest.IsolatedAsyncioTestCase):
+    async def test_a_message_by_a_member_who_is_not_featured_is_neither_posted_nor_stored(self):
         import utils
         stored = []
+        sent = []
 
         def record(_connection, *args):
             stored.append(args)
@@ -786,6 +863,7 @@ class PostingWithoutTheAuthorTests(unittest.IsolatedAsyncioTestCase):
         channel = types.SimpleNamespace(send=None)
 
         async def send(*_args, **_kwargs):
+            sent.append(_args)
             return types.SimpleNamespace(id=999)
 
         channel.send = send
@@ -806,14 +884,14 @@ class PostingWithoutTheAuthorTests(unittest.IsolatedAsyncioTestCase):
                 unittest.mock.patch.object(utils, "check_video_extension", lambda _m: None):
             await utils.post_hall_of_fame_message(message, bot, FakeConnection(), 100, 5)
 
-        # The sixth value stored is the author
-        self.assertEqual(hall_of_fame_message_repo.NO_AUTHOR_ID, stored[0][5])
+        self.assertEqual([], sent)
+        self.assertEqual([], stored)
 
 
 class DataCommandContextTests(unittest.TestCase):
     def test_data_commands_work_outside_servers(self):
         """Someone who left every server with the bot must still be able to reach their data."""
-        for command in (main.my_data, main.delete_my_data, main.profile_privacy):
+        for command in (main.my_data,):
             with self.subTest(command=command.name):
                 self.assertTrue(command.allowed_installs.user)
                 self.assertTrue(command.allowed_contexts.dm_channel)
@@ -911,7 +989,7 @@ class UserProfileOutsideServerTests(CommandTestCase):
         interaction = outside_a_server()
         await main.user_server_profile.callback(interaction, None)
 
-        self.assertEqual([messages.PROFILE_HIDDEN_OUTSIDE_SERVER_SELF.format(command=command_refs.PROFILE_PRIVACY)],
+        self.assertEqual([messages.PROFILE_HIDDEN_OUTSIDE_SERVER_SELF.format(command=command_refs.MY_DATA)],
                          interaction.response.messages)
         self.assertEqual([True], interaction.response.ephemeral)
         self.assertEqual([], self.profile_reads)

@@ -19,6 +19,7 @@ import discord
 import main
 import utils
 from repositories import global_profile_repo, hall_of_fame_message_repo, server_config_repo
+from translations import messages
 
 from tests.integration.database import DatabaseTestCase, SingleConnectionPool, skip_without_database
 from tests.test_server_class import build_server
@@ -156,12 +157,16 @@ class ServerSettingsTests(DatabaseTestCase):
 class FakeResponse:
     def __init__(self):
         self.sent = []
+        self.edits = []
         self.deferred = False
 
     async def send_message(self, content=None, embed=None, ephemeral=False, view=None):
         self.sent.append((content, ephemeral))
 
-    async def defer(self, ephemeral=False):
+    async def edit_message(self, content=None, view=None):
+        self.edits.append((content, view))
+
+    async def defer(self, ephemeral=False, thinking=False):
         self.deferred = True
 
     def is_done(self):
@@ -171,9 +176,11 @@ class FakeResponse:
 class FakeFollowup:
     def __init__(self):
         self.sent = []
+        self.views = []
 
-    async def send(self, content=None, embed=None, ephemeral=False, file=None):
+    async def send(self, content=None, embed=None, ephemeral=False, file=None, view=None):
         self.sent.append((content, ephemeral, file))
+        self.views.append(view)
 
 
 def interaction(user_id=101, manage_guild=True):
@@ -218,21 +225,29 @@ class CommandsEndToEndTests(DatabaseTestCase):
 
         self.assertTrue(server_config_repo.get_parameter_value(self.connection, GUILD, "count_in_global_profiles"))
 
-    async def test_profile_privacy_stores_and_clears_the_choice(self):
-        await main.profile_privacy.callback(interaction(), discord.app_commands.Choice(name="Hide", value="hide"))
+    async def open_my_data(self, user_id=101):
+        command = interaction(user_id=user_id)
+        await main.my_data.callback(command)
+        return command, command.followup.views[0]
+
+    async def test_the_totals_button_stores_and_clears_the_choice(self):
+        _command, view = await self.open_my_data()
+        await view.totals_button.callback(interaction())
         self.assertTrue(global_profile_repo.is_hidden(self.connection, 101))
 
-        await main.profile_privacy.callback(interaction(), discord.app_commands.Choice(name="Show", value="show"))
+        await view.totals_button.callback(interaction())
         self.assertFalse(global_profile_repo.is_hidden(self.connection, 101))
 
     async def test_my_data_exports_the_real_rows(self):
         posted = datetime.datetime(2026, 9, 1, 12, 0)
         hall_of_fame_message_repo.insert_hall_of_fame_message(self.connection, 1, 500, GUILD, 5001, 9, 101, posted)
         hall_of_fame_message_repo.insert_hall_of_fame_message(self.connection, 2, 500, GUILD, 5002, 4, 202, posted)
-        command = interaction()
-        await main.my_data.callback(command)
+        command, view = await self.open_my_data()
+        self.assertIn("1 featured post,", command.followup.sent[0][0])
+        pressed = interaction()
+        await view.download_button.callback(pressed)
 
-        content, ephemeral, file = command.followup.sent[0]
+        content, ephemeral, file = pressed.followup.sent[0]
         export = json.loads(file.fp.read())
         self.assertTrue(ephemeral)
         self.assertEqual(["1"], [post["message_id"] for post in export["featured_posts"]])
@@ -240,12 +255,13 @@ class CommandsEndToEndTests(DatabaseTestCase):
         self.assertEqual("101", export["user_id"])
 
     async def test_my_data_for_a_member_with_nothing_stored(self):
-        command = interaction(user_id=777)
-        await main.my_data.callback(command)
+        command, view = await self.open_my_data(user_id=777)
 
         content, ephemeral, file = command.followup.sent[0]
+        self.assertIn(messages.MY_DATA_NOTHING_STORED, content)
         self.assertIsNone(file)
         self.assertTrue(ephemeral)
+        self.assertTrue(view.download_button.disabled)
 
 
 if __name__ == "__main__":

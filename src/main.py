@@ -79,7 +79,7 @@ daily_command_cooldowns = {}
 # but capped, since through a user install anyone can open the form from any DM
 feedback_daily_limit = 3
 
-# The longest a single query behind /my_data, /delete_my_data or /user_profile may run. psycopg2 holds
+# The longest a single query behind /my_data or /user_profile may run. psycopg2 holds
 # the event loop while a query runs, so a slow one would stall the bot in every server; the database
 # cancels it instead
 data_command_statement_timeout_ms = 10_000
@@ -996,7 +996,7 @@ async def answer_profile_outside_server(interaction: discord.Interaction, user):
 
     if hidden:
         await send_error(interaction, messages.PROFILE_HIDDEN_OUTSIDE_SERVER_SELF.format(
-            command=command_refs.PROFILE_PRIVACY))
+            command=command_refs.MY_DATA))
     elif not global_profile["posts"]:
         await send_error(interaction, messages.PROFILE_NOTHING_OUTSIDE_SERVER)
     else:
@@ -1004,33 +1004,6 @@ async def answer_profile_outside_server(interaction: discord.Interaction, user):
         await interaction.response.send_message(embed=commands.build_global_profile_embed(user, global_profile))
     await utils.logging(bot, f"User profile command used in {where_used(interaction)}, outside a server with the bot",
                         interaction.guild_id, str(user.id), log_level=log_type.COMMAND)
-
-
-@tree.command(name="profile_privacy", description="Hide or show your totals across servers on your profile")
-@user_install
-@app_commands.describe(visibility="Hide your totals across servers from your profile, or show them again")
-@app_commands.choices(visibility=[
-    app_commands.Choice(name="Hide", value="hide"),
-    app_commands.Choice(name="Show", value="show"),
-])
-async def profile_privacy(interaction: discord.Interaction, visibility: app_commands.Choice[str]):
-    if not await ensure_bot_is_loaded(interaction):
-        return
-
-    hide = visibility.value == "hide"
-    async with get_db_connection(connection_pool) as connection:
-        currently_hidden = global_profile_repo.is_hidden(connection, interaction.user.id)
-        if currently_hidden != hide:
-            global_profile_repo.set_hidden(connection, interaction.user.id, hide)
-
-    if currently_hidden == hide:
-        content = messages.PROFILE_PRIVACY_UNCHANGED.format(state="hidden" if hide else "visible")
-    else:
-        content = messages.PROFILE_PRIVACY_HIDDEN if hide else messages.PROFILE_PRIVACY_SHOWN
-    # noinspection PyUnresolvedReferences
-    await interaction.response.send_message(content, ephemeral=True)
-    await utils.logging(bot, f"Profile privacy command used in {where_used(interaction)}", interaction.guild_id,
-                        visibility.value, log_level=log_type.COMMAND)
 
 
 @tree.command(name="count_in_global_profiles", description="Should posts in this server count toward members' totals across servers?")
@@ -1066,58 +1039,48 @@ def plural_suffix(count: int, singular: str, many: str) -> str:
     return singular if count == 1 else many
 
 
-@tree.command(name="my_data", description="See everything Hall of Fame stores about you")
-@user_install
-async def my_data(interaction: discord.Interaction):
-    if not await ensure_bot_is_loaded(interaction):
-        return
+async def read_my_data_summary(user_id: int) -> dict:
+    """
+    What /my_data shows before any button is pressed: counts and the member's two choices. Counting is
+    cheap, so the command answers at once, and the full rows are only read for the Download button
+    """
+    async with get_db_connection(connection_pool) as connection:
+        with utils.statement_timeout(connection, data_command_statement_timeout_ms):
+            return {
+                "posts": hall_of_fame_message_repo.count_messages_by_author(connection, user_id),
+                "servers": server_user_repo.count_server_users_for_user(connection, user_id),
+                "wrapped": hof_wrapped_repo.count_hof_wrapped_for_user(connection, user_id),
+                "hidden": global_profile_repo.is_hidden(connection, user_id),
+                "opted_out": opt_out_repo.is_opted_out(connection, user_id),
+            }
 
-    user_id = interaction.user.id
-    if on_daily_cooldown(user_id, "my_data"):
-        await send_error(interaction, messages.COMMAND_ON_COOLDOWN)
-        return
 
-    # noinspection PyUnresolvedReferences
-    await interaction.response.defer(ephemeral=True)
+async def read_my_data_export(user_id: int) -> bytes:
+    """Every row stored about a member, as the file the Download button sends"""
     async with get_db_connection(connection_pool) as connection:
         with utils.statement_timeout(connection, data_command_statement_timeout_ms):
             posts = hall_of_fame_message_repo.get_messages_by_author(connection, user_id)
             standings = server_user_repo.get_server_users_for_user(connection, user_id)
             wrapped = hof_wrapped_repo.get_hof_wrapped_for_user(connection, user_id)
             hidden = global_profile_repo.is_hidden(connection, user_id)
-            not_counted = opt_out_repo.is_opted_out(connection, user_id)
-
-    if not posts and not standings and not wrapped and not hidden and not not_counted:
-        await interaction.followup.send(messages.MY_DATA_EMPTY, ephemeral=True)
-    else:
-        export = commands.build_my_data_export(user_id, posts, standings, wrapped, hidden, not_counted)
-        servers = len({row["guild_id"] for row in standings})
-        content = messages.MY_DATA_INTRO.format(
-            posts=len(posts), posts_plural=plural(len(posts)),
-            servers=servers, servers_plural=plural(servers),
-            wrapped=len(wrapped), wrapped_plural=plural_suffix(len(wrapped), "y", "ies"))
-        await interaction.followup.send(content, ephemeral=True,
-                                        file=discord.File(io.BytesIO(export), filename="hall-of-fame-my-data.json"))
-    # Only once it worked, so a failed attempt does not lock the member out for the day
-    start_daily_cooldown(user_id, "my_data")
-    await utils.logging(bot, f"My data command used in {where_used(interaction)}", interaction.guild_id,
-                        log_level=log_type.COMMAND)
+            not_featured = opt_out_repo.is_opted_out(connection, user_id)
+    return commands.build_my_data_export(user_id, posts, standings, wrapped, hidden, not_featured)
 
 
-async def delete_member_data(user_id: int, stop_counting: bool = False) -> int:
+async def delete_member_data(user_id: int, stop_featuring: bool = False) -> int:
     """
     Remove a member from everything the bot stores: their posts lose their author, and their
     statistics, Wrapped rows, place in other members' Wrapped and privacy choice are deleted
     :param user_id: The member's user ID
-    :param stop_counting: Also leave the member out of posts featured from now on
+    :param stop_featuring: Also stop featuring the member's messages from now on
     :return: How many posts were detached from them
     """
     async with get_db_connection(connection_pool) as connection:
         # One transaction, committed by statement_timeout once every step worked. A step that fails
         # rolls back the rest, so a member is never left opted out with their data still stored, which
-        # /delete_my_data could not finish since it only offers to count an opted-out member again
+        # /my_data could not finish since it only offers an opted-out member to be featured again
         with utils.statement_timeout(connection, data_command_statement_timeout_ms):
-            if stop_counting:
+            if stop_featuring:
                 opt_out_repo.set_opted_out(connection, user_id, True, commit=False)
             # The posts before the statistics: the daily rebuild recreates server_user from them, so
             # deleting the statistics alone would undo itself overnight
@@ -1128,31 +1091,74 @@ async def delete_member_data(user_id: int, stop_counting: bool = False) -> int:
     return detached
 
 
-@tree.command(name="delete_my_data", description="Delete everything Hall of Fame stores about you")
+@tree.command(name="my_data", description="See, download or delete what Hall of Fame stores about you")
 @user_install
-async def delete_my_data(interaction: discord.Interaction):
+async def my_data(interaction: discord.Interaction):
+    """
+    The one place a member manages their data: a private summary of what is stored, with buttons to
+    download it, hide or show their totals across servers, and delete it or be featured again
+    """
     if not await ensure_bot_is_loaded(interaction):
         return
 
     user_id = interaction.user.id
-    async with get_db_connection(connection_pool) as connection:
-        opted_out = opt_out_repo.is_opted_out(connection, user_id)
-    if opted_out:
-        # Checked before the cooldown, so being counted again is never held back by it
-        await offer_to_count_again(interaction, user_id)
-        return
+    # noinspection PyUnresolvedReferences
+    await interaction.response.defer(ephemeral=True)
+    summary = await read_my_data_summary(user_id)
 
-    if on_daily_cooldown(user_id, "delete_my_data"):
-        await send_error(interaction, messages.COMMAND_ON_COOLDOWN)
-        return
+    async def download(button_interaction: discord.Interaction, _view):
+        # The export reads every row stored about the member, so it is the part limited to once a day
+        if on_daily_cooldown(user_id, "my_data"):
+            # noinspection PyUnresolvedReferences
+            await button_interaction.response.send_message(messages.MY_DATA_DOWNLOAD_ON_COOLDOWN, ephemeral=True)
+            return
+        # noinspection PyUnresolvedReferences
+        await button_interaction.response.defer(ephemeral=True, thinking=True)
+        try:
+            export = await read_my_data_export(user_id)
+        except Exception as e:
+            await button_interaction.followup.send(messages.COMMAND_FAILED, ephemeral=True)
+            await utils.logging(bot, f"Error reading a member's data export: {e}", interaction.guild_id,
+                                log_level=log_type.ERROR)
+            return
+        await button_interaction.followup.send(messages.MY_DATA_EXPORT, ephemeral=True,
+                                               file=discord.File(io.BytesIO(export), filename="hall-of-fame-my-data.json"))
+        # Only once it worked, so a failed attempt does not lock the member out for the day
+        start_daily_cooldown(user_id, "my_data")
+        await utils.logging(bot, f"A member downloaded their data in {where_used(interaction)}", interaction.guild_id,
+                            log_level=log_type.COMMAND)
 
-    async def confirmed(button_interaction: discord.Interaction, stop_counting: bool):
+    async def toggle_totals(button_interaction: discord.Interaction, view):
+        hide = not view.summary["hidden"]
+        async with get_db_connection(connection_pool) as connection:
+            global_profile_repo.set_hidden(connection, user_id, hide)
+        view.summary["hidden"] = hide
+        view.refresh()
+        # noinspection PyUnresolvedReferences
+        await button_interaction.response.edit_message(content=commands.my_data_summary(view.summary), view=view)
+        await utils.logging(bot, f"A member {'hid' if hide else 'showed'} their totals across servers",
+                            interaction.guild_id, log_level=log_type.COMMAND)
+
+    async def delete(button_interaction: discord.Interaction, view):
+        if on_daily_cooldown(user_id, "delete_my_data"):
+            # noinspection PyUnresolvedReferences
+            await button_interaction.response.send_message(messages.MY_DATA_DELETE_ON_COOLDOWN, ephemeral=True)
+            return
+        # The summary gives way to the confirmation, so its own buttons stop here
+        view.finished = True
+        view.stop()
+        confirm_view = commands.ConfirmDeleteView(user_id, confirmed)
+        confirm_view.original_interaction = interaction
+        # noinspection PyUnresolvedReferences
+        await button_interaction.response.edit_message(content=messages.DELETE_MY_DATA_CONFIRM, view=confirm_view)
+
+    async def confirmed(button_interaction: discord.Interaction, stop_featuring: bool):
         # Answered before the deletes run, since they can take longer than the three seconds Discord
         # waits for a button to be answered
         # noinspection PyUnresolvedReferences
         await button_interaction.response.defer()
         try:
-            detached = await delete_member_data(user_id, stop_counting)
+            detached = await delete_member_data(user_id, stop_featuring)
         except Exception as e:
             # Nothing was deleted, since the deletes run in one transaction, so no cooldown is started
             await button_interaction.edit_original_response(content=messages.COMMAND_FAILED, view=None)
@@ -1160,36 +1166,30 @@ async def delete_my_data(interaction: discord.Interaction):
                                 log_level=log_type.ERROR)
             return
         start_daily_cooldown(user_id, "delete_my_data")
-        content = (messages.DELETE_MY_DATA_DONE_STOPPED.format(command=command_refs.DELETE_MY_DATA)
-                   if stop_counting else messages.DELETE_MY_DATA_DONE)
+        content = (messages.DELETE_MY_DATA_DONE_STOPPED.format(command=command_refs.MY_DATA)
+                   if stop_featuring else messages.DELETE_MY_DATA_DONE)
         await button_interaction.edit_original_response(content=content, view=None)
         # No name in the log: the member has just asked to be forgotten
         await utils.logging(bot, f"A member deleted their data, detaching {detached} post{plural(detached)}"
-                                 + (", and asked not to be counted" if stop_counting else ""),
+                                 + (", and asked not to be featured" if stop_featuring else ""),
                             interaction.guild_id, log_level=log_type.COMMAND)
 
-    view = commands.ConfirmDeleteView(user_id, confirmed)
-    view.original_interaction = interaction
-    # noinspection PyUnresolvedReferences
-    await interaction.response.send_message(messages.DELETE_MY_DATA_CONFIRM, view=view, ephemeral=True)
-
-
-async def offer_to_count_again(interaction: discord.Interaction, user_id: int):
-    """
-    /delete_my_data for a member who is not counted: there is nothing stored to delete, so the
-    command explains that and offers to count them again
-    """
-    async def count_again(button_interaction: discord.Interaction):
+    async def feature_again(button_interaction: discord.Interaction, view):
         async with get_db_connection(connection_pool) as connection:
             opt_out_repo.set_opted_out(connection, user_id, False)
+        view.summary["opted_out"] = False
+        view.refresh()
         # noinspection PyUnresolvedReferences
-        await button_interaction.response.edit_message(content=messages.COUNTED_AGAIN, view=None)
-        await utils.logging(bot, "A member asked to be counted again", interaction.guild_id,
+        await button_interaction.response.edit_message(
+            content=commands.my_data_summary(view.summary, note=messages.COUNTED_AGAIN), view=view)
+        await utils.logging(bot, "A member asked to be featured again", interaction.guild_id,
                             log_level=log_type.COMMAND)
 
-    view = commands.CountAgainView(user_id, count_again)
-    # noinspection PyUnresolvedReferences
-    await interaction.response.send_message(messages.NOT_COUNTED_STATUS, view=view, ephemeral=True)
+    view = commands.MyDataView(user_id, summary, download, toggle_totals, delete, feature_again)
+    view.original_interaction = interaction
+    await interaction.followup.send(commands.my_data_summary(summary), view=view, ephemeral=True)
+    await utils.logging(bot, f"My data command used in {where_used(interaction)}", interaction.guild_id,
+                        log_level=log_type.COMMAND)
 
 
 @tree.command(name="leaderboard", description="Get the server leaderboard")
