@@ -90,6 +90,10 @@ class FakeInteraction:
         self.response = FakeResponse()
         self.followup = FakeFollowup()
         self.command = types.SimpleNamespace(name="test_command")
+        self.original_edits = []
+
+    async def edit_original_response(self, content=None, view=None):
+        self.original_edits.append((content, view))
 
     @property
     def replies(self):
@@ -216,6 +220,31 @@ class BotLoadingTests(MainTestCase):
 
         self.assertTrue(await main.ensure_bot_is_loaded(interaction))
         self.assertEqual([], interaction.response.messages)
+
+
+class ReconnectTests(MainTestCase):
+    """on_ready fires again whenever Discord drops the session, often while the daily task runs."""
+
+    def setUp(self):
+        super().setUp()
+
+        async def login(_bot, _tree):
+            pass
+
+        self.patch(main.events, "bot_login", login)
+        self.patch(main, "bot", types.SimpleNamespace(user="Hall Of Fame", add_view=lambda _view: None))
+        self.pool = FakePool()
+        self.patch(main, "connection_pool", self.pool)
+        self.set_up = []
+        self.patch(main, "setup_databases", lambda connection: self.set_up.append(connection))
+
+    async def test_does_not_set_up_the_tables_again_after_a_reconnect(self):
+        """Setting them up waits on the daily task's lock while holding the event loop, a hang for good."""
+        self.patch(main, "bot_loaded", True)
+        await main.on_ready()
+
+        self.assertEqual([], self.set_up)
+        self.assertEqual(0, self.pool.handed_out)
 
 
 class SetupDatabasesTests(unittest.TestCase):

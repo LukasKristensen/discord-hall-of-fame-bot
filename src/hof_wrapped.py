@@ -100,6 +100,10 @@ async def process_hof_messages_from_db(guild: discord.Guild, connection):
     print("rows fetched from DB:", len(messages))
 
     for message in messages:
+        # A post whose author was removed by /delete_my_data or an opt-out is credited to nobody,
+        # even though Discord still knows who wrote it
+        if message['author_id'] == hall_of_fame_message_repo.NO_AUTHOR_ID:
+            continue
         channel_id = message['channel_id']
         message_id = message['message_id']
         channel = guild.get_channel(channel_id)

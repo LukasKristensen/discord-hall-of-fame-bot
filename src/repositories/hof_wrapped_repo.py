@@ -96,12 +96,13 @@ def get_hof_wrapped_for_user(connection, user_id) -> list[dict]:
     cursor.close()
     return results
 
-def delete_hof_wrapped_for_user(connection, user_id) -> int:
+def delete_hof_wrapped_for_user(connection, user_id, commit: bool = True) -> int:
     """
     Delete a member's own Wrapped rows, and take their ID out of everybody else's fan lists, where
     it is stored as a key of the JSON objects fan_of_users and users_fans
     :param connection: The database connection
     :param user_id: The member's user ID
+    :param commit: False to leave the commit to the caller, as part of a larger transaction
     :return: The number of the member's own rows deleted
     """
     cursor = connection.cursor()
@@ -117,7 +118,8 @@ def delete_hof_wrapped_for_user(connection, user_id) -> int:
             SET {column} = ({column}::jsonb - %s)::text
             WHERE {column} LIKE %s
         """, (key, pattern))
-    connection.commit()
+    if commit:
+        connection.commit()
     cursor.close()
     return deleted
 

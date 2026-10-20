@@ -79,8 +79,9 @@ daily_command_cooldowns = {}
 # but capped, since through a user install anyone can open the form from any DM
 feedback_daily_limit = 3
 
-# The longest a single query behind /my_data or /delete_my_data may run. psycopg2 holds the event loop
-# while a query runs, so a slow one would stall the bot in every server; the database cancels it instead
+# The longest a single query behind /my_data, /delete_my_data or /user_profile may run. psycopg2 holds
+# the event loop while a query runs, so a slow one would stall the bot in every server; the database
+# cancels it instead
 data_command_statement_timeout_ms = 10_000
 
 intents = discord.Intents.default()
@@ -276,6 +277,16 @@ async def on_ready():
         # Registering again after a reconnect only replaces the same entry
         commands.setup_check_handler = run_setup_check
         bot.add_view(commands.build_welcome_view())
+
+        if bot_loaded:
+            # on_ready fires again when Discord drops the session and the bot logs in anew, which is
+            # likeliest during the daily task. The daily task holds a transaction open on server_configs,
+            # so setting up the tables again waits on its lock, and psycopg2 holds the event loop while
+            # it waits, so the daily task never gets to commit: the bot hangs until it is restarted.
+            # Everything below is already running or loaded from the first login
+            await utils.logging(bot, "Reconnected to Discord, so the startup setup was skipped",
+                                log_level=log_type.SYSTEM)
+            return
 
         try:
             async with get_db_connection(connection_pool) as connection:
@@ -936,11 +947,12 @@ async def user_server_profile(interaction: discord.Interaction, specific_user: d
         return
 
     async with get_db_connection(connection_pool) as connection:
-        user_stats = server_user_repo.get_server_user(connection, user.id, interaction.guild_id)
-        # The profile is posted in the channel, so a member who hid their totals has them left out
-        # even when they look themselves up
-        global_profile = (None if global_profile_repo.is_hidden(connection, user.id)
-                          else global_profile_repo.get_global_profile(connection, user.id))
+        with utils.statement_timeout(connection, data_command_statement_timeout_ms):
+            user_stats = server_user_repo.get_server_user(connection, user.id, interaction.guild_id)
+            # The profile is posted in the channel, so a member who hid their totals has them left out
+            # even when they look themselves up
+            global_profile = (None if global_profile_repo.is_hidden(connection, user.id)
+                              else global_profile_repo.get_global_profile(connection, user.id))
 
     # A member featured only in other servers still has a card worth showing: zeros for this
     # server, and their totals across servers below
@@ -952,8 +964,11 @@ async def user_server_profile(interaction: discord.Interaction, specific_user: d
         return
 
     async with get_db_connection(connection_pool) as connection:
-        await commands.user_server_profile(interaction, user, user_stats, connection, month_emoji, all_time_emoji,
-                                           global_profile)
+        # The badges and highlights read every post in the server, so a big one is cut off rather
+        # than left to stall the bot
+        with utils.statement_timeout(connection, data_command_statement_timeout_ms):
+            await commands.user_server_profile(interaction, user, user_stats, connection, month_emoji,
+                                               all_time_emoji, global_profile)
     await utils.logging(bot, f"Get user server profile command used by {interaction.user.name} in {interaction.guild.name}",
                         interaction.guild.id, str(user.id), log_level=log_type.COMMAND)
 
@@ -975,8 +990,9 @@ async def answer_profile_outside_server(interaction: discord.Interaction, user):
         return
 
     async with get_db_connection(connection_pool) as connection:
-        hidden = global_profile_repo.is_hidden(connection, user.id)
-        global_profile = None if hidden else global_profile_repo.get_global_profile(connection, user.id)
+        with utils.statement_timeout(connection, data_command_statement_timeout_ms):
+            hidden = global_profile_repo.is_hidden(connection, user.id)
+            global_profile = None if hidden else global_profile_repo.get_global_profile(connection, user.id)
 
     if hidden:
         await send_error(interaction, messages.PROFILE_HIDDEN_OUTSIDE_SERVER_SELF.format(
@@ -1097,16 +1113,18 @@ async def delete_member_data(user_id: int, stop_counting: bool = False) -> int:
     :return: How many posts were detached from them
     """
     async with get_db_connection(connection_pool) as connection:
+        # One transaction, committed by statement_timeout once every step worked. A step that fails
+        # rolls back the rest, so a member is never left opted out with their data still stored, which
+        # /delete_my_data could not finish since it only offers to count an opted-out member again
         with utils.statement_timeout(connection, data_command_statement_timeout_ms):
-            # Recorded first, so a post featured while the rest runs is already stored without them
             if stop_counting:
-                opt_out_repo.set_opted_out(connection, user_id, True)
+                opt_out_repo.set_opted_out(connection, user_id, True, commit=False)
             # The posts before the statistics: the daily rebuild recreates server_user from them, so
             # deleting the statistics alone would undo itself overnight
-            detached = hall_of_fame_message_repo.remove_author(connection, user_id)
-            server_user_repo.delete_server_users_for_user(connection, user_id)
-            hof_wrapped_repo.delete_hof_wrapped_for_user(connection, user_id)
-            global_profile_repo.delete_for_user(connection, user_id)
+            detached = hall_of_fame_message_repo.remove_author(connection, user_id, commit=False)
+            server_user_repo.delete_server_users_for_user(connection, user_id, commit=False)
+            hof_wrapped_repo.delete_hof_wrapped_for_user(connection, user_id, commit=False)
+            global_profile_repo.delete_for_user(connection, user_id, commit=False)
     return detached
 
 
@@ -1129,12 +1147,22 @@ async def delete_my_data(interaction: discord.Interaction):
         return
 
     async def confirmed(button_interaction: discord.Interaction, stop_counting: bool):
-        detached = await delete_member_data(user_id, stop_counting)
+        # Answered before the deletes run, since they can take longer than the three seconds Discord
+        # waits for a button to be answered
+        # noinspection PyUnresolvedReferences
+        await button_interaction.response.defer()
+        try:
+            detached = await delete_member_data(user_id, stop_counting)
+        except Exception as e:
+            # Nothing was deleted, since the deletes run in one transaction, so no cooldown is started
+            await button_interaction.edit_original_response(content=messages.COMMAND_FAILED, view=None)
+            await utils.logging(bot, f"Error deleting a member's data: {e}", interaction.guild_id,
+                                log_level=log_type.ERROR)
+            return
         start_daily_cooldown(user_id, "delete_my_data")
         content = (messages.DELETE_MY_DATA_DONE_STOPPED.format(command=command_refs.DELETE_MY_DATA)
                    if stop_counting else messages.DELETE_MY_DATA_DONE)
-        # noinspection PyUnresolvedReferences
-        await button_interaction.response.edit_message(content=content, view=None)
+        await button_interaction.edit_original_response(content=content, view=None)
         # No name in the log: the member has just asked to be forgotten
         await utils.logging(bot, f"A member deleted their data, detaching {detached} post{plural(detached)}"
                                  + (", and asked not to be counted" if stop_counting else ""),

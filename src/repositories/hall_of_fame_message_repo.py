@@ -119,11 +119,12 @@ def update_field_for_message(connection, guild_id, channel_id, message_id, field
     cursor.close()
 
 def find_members_for_guild(connection, guild_id):
+    # Posts whose author was removed belong to nobody, so they bring in no member
     cursor = connection.cursor()
     cursor.execute("""
-        SELECT DISTINCT author_id FROM hall_of_fame_message 
-        WHERE guild_id = %s
-    """, (guild_id,))
+        SELECT DISTINCT author_id FROM hall_of_fame_message
+        WHERE guild_id = %s AND author_id <> %s
+    """, (guild_id, NO_AUTHOR_ID))
     rows = cursor.fetchall()
     cursor.close()
     return [row[0] for row in rows]
@@ -282,18 +283,20 @@ def get_member_badge_facts(connection, guild_id, author_id) -> dict:
         "champion_months": int(champion[0]) if champion else 0,
     }
 
-def remove_author(connection, author_id) -> int:
+def remove_author(connection, author_id, commit: bool = True) -> int:
     """
     Detach a member from every post they wrote. The posts stay on their servers' boards, since they
     belong to those servers, but nothing links them to the member any more
     :param connection: The database connection
     :param author_id: The member's user ID
+    :param commit: False to leave the commit to the caller, as part of a larger transaction
     :return: The number of posts changed
     """
     cursor = connection.cursor()
     cursor.execute("UPDATE hall_of_fame_message SET author_id = %s WHERE author_id = %s",
                    (NO_AUTHOR_ID, author_id))
     changed = cursor.rowcount
-    connection.commit()
+    if commit:
+        connection.commit()
     cursor.close()
     return changed

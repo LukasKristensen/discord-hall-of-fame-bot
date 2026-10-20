@@ -63,18 +63,20 @@ def get_server_users_for_user(connection, user_id) -> list[dict]:
     cursor.close()
     return results
 
-def delete_server_users_for_user(connection, user_id) -> int:
+def delete_server_users_for_user(connection, user_id, commit: bool = True) -> int:
     """
     Delete a member's standing in every guild. The daily rebuild writes it again from
     hall_of_fame_message, so this only sticks once the member's posts no longer carry their ID
     :param connection: The database connection
     :param user_id: The member's user ID
+    :param commit: False to leave the commit to the caller, as part of a larger transaction
     :return: The number of rows deleted
     """
     cursor = connection.cursor()
     cursor.execute("DELETE FROM server_user WHERE user_id = %s", (user_id,))
     deleted = cursor.rowcount
-    connection.commit()
+    if commit:
+        connection.commit()
     cursor.close()
     return deleted
 

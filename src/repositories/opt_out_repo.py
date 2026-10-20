@@ -27,12 +27,13 @@ def is_opted_out(connection, user_id) -> bool:
     return opted_out
 
 
-def set_opted_out(connection, user_id, opted_out: bool):
+def set_opted_out(connection, user_id, opted_out: bool, commit: bool = True):
     """
     Stop or start counting a member
     :param connection: The database connection
     :param user_id: The member's user ID
     :param opted_out: True to stop counting them
+    :param commit: False to leave the commit to the caller, as part of a larger transaction
     """
     cursor = connection.cursor()
     if opted_out:
@@ -40,5 +41,6 @@ def set_opted_out(connection, user_id, opted_out: bool):
                        (user_id,))
     else:
         cursor.execute("DELETE FROM opted_out_member WHERE user_id = %s", (user_id,))
-    connection.commit()
+    if commit:
+        connection.commit()
     cursor.close()

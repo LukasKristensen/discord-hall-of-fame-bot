@@ -85,6 +85,26 @@ class GlobalProfileRepoTests(unittest.TestCase):
 
 
 class MemberDataRepoTests(unittest.TestCase):
+    def test_each_deletion_step_can_leave_the_commit_to_the_caller(self):
+        """/delete_my_data runs them as one transaction, so none of them may commit on its own."""
+        steps = (lambda c: opt_out_repo.set_opted_out(c, 77, True, commit=False),
+                 lambda c: hall_of_fame_message_repo.remove_author(c, 77, commit=False),
+                 lambda c: server_user_repo.delete_server_users_for_user(c, 77, commit=False),
+                 lambda c: hof_wrapped_repo.delete_hof_wrapped_for_user(c, 77, commit=False),
+                 lambda c: global_profile_repo.delete_for_user(c, 77, commit=False))
+        for step in steps:
+            connection = FakeConnection()
+            step(connection)
+            self.assertEqual(0, connection.commits)
+
+    def test_detached_posts_bring_no_member_into_wrapped(self):
+        """Wrapped makes a member of every author it finds, and author 0 is nobody."""
+        connection = FakeConnection(rows=[])
+        hall_of_fame_message_repo.find_members_for_guild(connection, 200)
+
+        self.assertIn("author_id <> %s", connection.queries[0])
+        self.assertEqual((200, hall_of_fame_message_repo.NO_AUTHOR_ID), connection.parameters[0])
+
     def test_removing_an_author_uses_the_id_the_rebuild_skips(self):
         """The daily rebuild leaves author 0 out, so the member drops off every leaderboard for good."""
         connection = FakeConnection()
@@ -384,6 +404,13 @@ class UserProfileTotalsTests(CommandTestCase):
 
         self.assertEqual([PROFILE], self.given)
 
+    async def test_queries_run_under_a_statement_timeout(self):
+        """The badges read every post in the server, so a slow lookup is cut off instead of stalling the bot."""
+        await main.user_server_profile.callback(FakeInteraction(), FakeUser(user_id=88))
+
+        timeouts = [query for query in self.pool.connection.queries if query.startswith("SET statement_timeout")]
+        self.assertEqual(2, len(timeouts))
+
     async def test_leaves_hidden_totals_out_without_reading_them(self):
         self.hidden.add(88)
         await main.user_server_profile.callback(FakeInteraction(), FakeUser(user_id=88))
@@ -587,10 +614,10 @@ class DeleteMyDataCommandTests(CommandTestCase):
         super().setUp()
         self.patch(main, "daily_command_cooldowns", {})
         self.calls = []
-        self.patch(hall_of_fame_message_repo, "remove_author", lambda _c, user_id: self.calls.append("posts") or 3)
-        self.patch(server_user_repo, "delete_server_users_for_user", lambda _c, user_id: self.calls.append("stats"))
-        self.patch(hof_wrapped_repo, "delete_hof_wrapped_for_user", lambda _c, user_id: self.calls.append("wrapped"))
-        self.patch(global_profile_repo, "delete_for_user", lambda _c, user_id: self.calls.append("privacy"))
+        self.patch(hall_of_fame_message_repo, "remove_author", lambda _c, user_id, **_kw: self.calls.append("posts") or 3)
+        self.patch(server_user_repo, "delete_server_users_for_user", lambda _c, user_id, **_kw: self.calls.append("stats"))
+        self.patch(hof_wrapped_repo, "delete_hof_wrapped_for_user", lambda _c, user_id, **_kw: self.calls.append("wrapped"))
+        self.patch(global_profile_repo, "delete_for_user", lambda _c, user_id, **_kw: self.calls.append("privacy"))
 
     async def ask(self):
         interaction = FakeInteraction()
@@ -612,7 +639,47 @@ class DeleteMyDataCommandTests(CommandTestCase):
         await view.confirm(button)
 
         self.assertEqual(["posts", "stats", "wrapped", "privacy"], self.calls)
-        self.assertEqual([(messages.DELETE_MY_DATA_DONE, None)], button.response.edits)
+        self.assertEqual([(messages.DELETE_MY_DATA_DONE, None)], button.original_edits)
+
+    async def test_answers_the_button_before_deleting(self):
+        """The deletes can outlast the three seconds Discord waits for a button to be answered."""
+        _interaction, view = await self.ask()
+        button = FakeInteraction()
+        deferred_first = []
+        self.patch(hall_of_fame_message_repo, "remove_author",
+                   lambda *_args, **_kw: deferred_first.append(button.response.deferred) or 0)
+        await view.confirm(button)
+
+        self.assertEqual([True], deferred_first)
+
+    async def test_deletes_in_one_transaction(self):
+        """Each step leaves the commit to the end, so a failure part way deletes nothing."""
+        kwargs = []
+        for repo, name in ((hall_of_fame_message_repo, "remove_author"),
+                           (server_user_repo, "delete_server_users_for_user"),
+                           (hof_wrapped_repo, "delete_hof_wrapped_for_user"),
+                           (global_profile_repo, "delete_for_user")):
+            self.patch(repo, name, lambda *_args, **kw: kwargs.append(kw) or 0)
+        _interaction, view = await self.ask()
+        await view.confirm(FakeInteraction())
+
+        self.assertEqual([{"commit": False}] * 4, kwargs)
+
+    async def test_a_failed_deletion_is_reported_and_can_be_retried(self):
+        def fail(*_args, **_kw):
+            raise RuntimeError("canceling statement due to statement timeout")
+
+        self.patch(server_user_repo, "delete_server_users_for_user", fail)
+        _interaction, view = await self.ask()
+        button = FakeInteraction()
+        await view.confirm(button)
+
+        self.assertEqual([(messages.COMMAND_FAILED, None)], button.original_edits)
+        self.assertTrue(any("Error deleting a member's data" in entry for entry in self.logged))
+        self.assertGreater(self.pool.connection.rollbacks, 0)
+        again = FakeInteraction()
+        await main.delete_my_data.callback(again)
+        self.assertEqual([messages.DELETE_MY_DATA_CONFIRM], again.response.messages)
 
     async def test_the_log_does_not_name_the_member(self):
         _interaction, view = await self.ask()
@@ -640,29 +707,28 @@ class StopCountingTests(CommandTestCase):
         self.opted_out = set()
         self.patch(opt_out_repo, "is_opted_out", lambda _c, user_id: user_id in self.opted_out)
 
-        def set_opted_out(_c, user_id, opted_out):
+        def set_opted_out(_c, user_id, opted_out, commit=True):
             self.calls.append(("opt_out", opted_out))
             (self.opted_out.add if opted_out else self.opted_out.discard)(user_id)
 
         self.patch(opt_out_repo, "set_opted_out", set_opted_out)
-        self.patch(hall_of_fame_message_repo, "remove_author", lambda *_args: self.calls.append("posts") or 0)
-        self.patch(server_user_repo, "delete_server_users_for_user", lambda *_args: self.calls.append("stats"))
-        self.patch(hof_wrapped_repo, "delete_hof_wrapped_for_user", lambda *_args: self.calls.append("wrapped"))
-        self.patch(global_profile_repo, "delete_for_user", lambda *_args: self.calls.append("privacy"))
+        self.patch(hall_of_fame_message_repo, "remove_author", lambda *_args, **_kw: self.calls.append("posts") or 0)
+        self.patch(server_user_repo, "delete_server_users_for_user", lambda *_args, **_kw: self.calls.append("stats"))
+        self.patch(hof_wrapped_repo, "delete_hof_wrapped_for_user", lambda *_args, **_kw: self.calls.append("wrapped"))
+        self.patch(global_profile_repo, "delete_for_user", lambda *_args, **_kw: self.calls.append("privacy"))
 
     async def ask(self):
         interaction = FakeInteraction()
         await main.delete_my_data.callback(interaction)
         return interaction
 
-    async def test_records_the_request_before_deleting(self):
-        """A post featured while the deletion runs is then already stored without the member."""
+    async def test_records_the_request_with_the_deletion(self):
         view = (await self.ask()).response.views[0]
         button = FakeInteraction()
         await view.confirm_and_stop_counting(button)
 
         self.assertEqual([("opt_out", True), "posts", "stats", "wrapped", "privacy"], self.calls)
-        self.assertIn("not counted from now on", button.response.edits[0][0])
+        self.assertIn("not counted from now on", button.original_edits[0][0])
 
     async def test_plain_deletion_does_not_stop_counting(self):
         view = (await self.ask()).response.views[0]
@@ -693,6 +759,20 @@ class StopCountingTests(CommandTestCase):
 
         self.assertEqual(set(), self.opted_out)
         self.assertEqual([(messages.COUNTED_AGAIN, None)], button.response.edits)
+
+
+class WrappedWithoutTheAuthorTests(unittest.IsolatedAsyncioTestCase):
+    async def test_a_detached_post_is_credited_to_nobody(self):
+        """Discord still knows who wrote it, so it must not be fetched and handed back to them."""
+        import hof_wrapped
+        rows = [{"channel_id": 2, "message_id": 1, "author_id": hall_of_fame_message_repo.NO_AUTHOR_ID}]
+        fetched = []
+        guild = types.SimpleNamespace(id=200, get_channel=lambda channel_id: fetched.append(channel_id))
+        with unittest.mock.patch.object(hof_wrapped.hall_of_fame_message_repo,
+                                        "get_all_hall_of_fame_messages_for_guild", lambda *_args: rows):
+            await hof_wrapped.process_hof_messages_from_db(guild, FakeConnection())
+
+        self.assertEqual([], fetched)
 
 
 class PostingWithoutTheAuthorTests(unittest.IsolatedAsyncioTestCase):

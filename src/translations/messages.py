@@ -138,9 +138,10 @@ MY_DATA_INTRO = ("Everything Hall of Fame stores about you is in the attached fi
                  "Privacy policy: <" + PRIVACY_POLICY_URL + ">")
 MY_DATA_EMPTY = ("Hall of Fame stores nothing about you. Nothing of yours has reached a Hall of Fame yet. "
                  "Privacy policy: <" + PRIVACY_POLICY_URL + ">")
-DELETE_MY_DATA_CONFIRM = ("⚠️ This removes you from every Hall of Fame leaderboard, profile and Wrapped, in every "
-                          "server, and cannot be undone. Your posts stay on the boards, since they belong to those "
-                          "servers, but they are no longer credited to you.\n"
+DELETE_MY_DATA_CONFIRM = ("⚠️ This removes you from every member leaderboard, profile and Wrapped, in every "
+                          "server, and cannot be undone. Your posts stay on the boards and among each server's top "
+                          "posts, since they belong to those servers, but they are no longer credited to you. "
+                          "If you hid your totals across servers, that choice is deleted too.\n"
                           "**Delete my data** counts posts of yours that reach a Hall of Fame later, as usual. "
                           "**Delete and stop counting me** also leaves you out of them from now on.")
 DELETE_MY_DATA_BUTTON = "Delete my data"

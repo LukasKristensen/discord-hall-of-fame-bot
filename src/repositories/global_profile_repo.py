@@ -34,12 +34,13 @@ def is_hidden(connection, user_id) -> bool:
     return hidden
 
 
-def set_hidden(connection, user_id, hidden: bool):
+def set_hidden(connection, user_id, hidden: bool, commit: bool = True):
     """
     Hide or show a member's global profile
     :param connection: The database connection
     :param user_id: The member's user ID
     :param hidden: True to hide it from everybody else
+    :param commit: False to leave the commit to the caller, as part of a larger transaction
     """
     cursor = connection.cursor()
     if hidden:
@@ -47,7 +48,8 @@ def set_hidden(connection, user_id, hidden: bool):
                        (user_id,))
     else:
         cursor.execute("DELETE FROM hidden_global_profile WHERE user_id = %s", (user_id,))
-    connection.commit()
+    if commit:
+        connection.commit()
     cursor.close()
 
 
@@ -92,6 +94,6 @@ def get_global_profile(connection, user_id) -> dict:
     return {field: int(value or 0) for field, value in zip(PROFILE_FIELDS, row)}
 
 
-def delete_for_user(connection, user_id):
+def delete_for_user(connection, user_id, commit: bool = True):
     """Forget a member's privacy choice, as part of /delete_my_data"""
-    set_hidden(connection, user_id, False)
+    set_hidden(connection, user_id, False, commit=commit)
