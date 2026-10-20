@@ -158,7 +158,7 @@ Open to everyone, answered only to you, and usable in DMs as well as servers.
 
 | Command | Parameters | What it does |
 |:---|:---|:---|
-| `/my_data` | | What the bot stores about you, privately, with buttons to manage it. **Download my data** sends a file with every row (once a day). **Hide my totals across servers** leaves them off your profile, which then shows only the server it is looked up in. **Delete my data** removes you from every leaderboard, profile and Wrapped after you confirm; your posts stay on the boards but are no longer credited to you, and **Delete and stop featuring me** also stops the bot reposting your messages from then on. A member who stopped being featured gets **Feature me again** instead. |
+| `/my_data` | | What the bot stores about you, privately, with buttons to manage it. **Download my data** sends a file with every row (once a day). **Hide my totals across servers** leaves them off your profile, which then shows only the server it is looked up in. **Delete my data** removes you from every leaderboard, profile and Wrapped after you confirm; your posts stay on the boards but are no longer credited to you, and **Delete existing data, but keep a preference that I opted out of being featured** also stops the bot reposting your messages from then on. A member who stopped being featured gets **Feature me again** instead. |
 
 ### Bot and help
 

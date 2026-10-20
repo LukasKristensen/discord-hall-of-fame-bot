@@ -412,13 +412,15 @@ class StopCountingTests(MemberDataDeletionTestCase):
         super().setUp()
         self.sent = []
 
-    async def post(self, author_id, message_id=900):
+    async def post(self, author_id, message_id=900, while_sending=None):
         """
         Feature a new message through the bot's own posting code, with the Discord side faked
         :return: The author stored for it, or None when it was not stored
         """
         async def send(*_args, **_kwargs):
             self.sent.append(message_id)
+            if while_sending is not None:
+                await while_sending()
             return types.SimpleNamespace(id=message_id + 5000)
 
         async def no_embed(*_args, **_kwargs):
@@ -460,6 +462,14 @@ class StopCountingTests(MemberDataDeletionTestCase):
         await self.post(DELETED, message_id=901)
 
         self.assertEqual([], self.sent)
+
+    async def test_a_member_who_opts_out_while_their_post_is_sent_is_not_credited(self):
+        """Sending the repost lets other events run, so the request can land between the check and the store."""
+        async def opt_out():
+            await main.delete_member_data(DELETED, stop_featuring=True)
+
+        self.assertEqual(hall_of_fame_message_repo.NO_AUTHOR_ID, await self.post(DELETED, while_sending=opt_out))
+        self.assertEqual([], self.posts_by(DELETED))
 
     async def test_a_new_post_by_anybody_else_keeps_its_author(self):
         await main.delete_member_data(DELETED, stop_featuring=True)

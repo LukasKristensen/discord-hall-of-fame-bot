@@ -1,5 +1,6 @@
 """
-Members who asked not to be featured, through "Delete and stop featuring me" on /my_data.
+Members who asked not to be featured, through "Delete existing data, but keep a preference that I opted out of being featured"
+on /my_data.
 
 Their messages are not reposted to any board or stored, so they never reach a leaderboard, profile or
 Wrapped. Keeping the user ID here is the least the bot can store to remember the request.
@@ -24,6 +25,20 @@ def is_opted_out(connection, user_id) -> bool:
     opted_out = cursor.fetchone() is not None
     cursor.close()
     return opted_out
+
+
+def opted_out_since(connection, user_id):
+    """
+    When a member asked not to be featured, for the /my_data summary, which shows it in place of a file
+    :param connection: The database connection
+    :param user_id: The member's user ID
+    :return: The time they asked, or None when they did not
+    """
+    cursor = connection.cursor()
+    cursor.execute("SELECT opted_out_at FROM opted_out_member WHERE user_id = %s", (user_id,))
+    row = cursor.fetchone()
+    cursor.close()
+    return row[0] if row else None
 
 
 def set_opted_out(connection, user_id, opted_out: bool, commit: bool = True):

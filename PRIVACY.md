@@ -22,8 +22,11 @@ described here. Contact: githublukas@gmail.com, or the
   their server out of everyone's totals with `/count_in_global_profiles`.
 - **Hall of Fame Wrapped:** yearly statistics per member, including most-used channels and emojis and
   which members react to each other's posts most often.
-- **Not featured:** if you choose "Delete and stop featuring me" on `/my_data`, your user ID
-  is stored with the date, so the bot remembers not to repost or store your messages from then on.
+- **Not featured:** if you choose "Delete existing data, but keep a preference that I opted out of being featured"
+  on `/my_data`, your user ID is stored with the date, so the bot remembers not to repost or store your
+  messages from then on.
+  Without it, the bot would have no way to know to leave your future messages out. Everything else
+  about you is deleted, and choosing "Feature me again" deletes this too.
 - **Support:** feedback sent with `/feedback` and custom profile requests, delivered to a private
   developer channel on Discord.
 - **Logs:** which commands were used, with the username and server name, posted to private developer
@@ -71,17 +74,19 @@ Nothing else is shared.
   removes you from other members' Wrapped, and removes your user ID from your featured messages. The
   reposts stay in each server's Hall of Fame channel, since they belong to that server, but are no
   longer linked to you. Messages of yours featured after that are stored again as usual, unless you
-  choose "Delete and stop featuring me". Then your messages are not reposted to any Hall of Fame or
-  stored at all, until you choose "Feature me again" on `/my_data`.
+  choose "Delete existing data, but keep a preference that I opted out of being featured". Then your
+  messages are not reposted to any Hall of Fame or stored at all, until you choose "Feature me again" on `/my_data`.
 
 ## 6. Your rights
 
 Everything below is done from `/my_data`, which shows what is stored about you with a button for each:
 
-- **See your data:** "Download my data" sends you a file with everything stored about you.
+- **See your data:** `/my_data` lists what is stored about you, including the dates of your choices.
+  When posts, server standings or Wrapped entries are stored, "Download my data" sends you a file with
+  every row.
 - **Delete your data:** "Delete my data" deletes it after you confirm, as described in section 5.
-- **Object to being featured:** choose "Delete and stop featuring me" when deleting, and the bot stops
-  reposting and storing your messages from then on.
+- **Object to being featured:** choose "Delete existing data, but keep a preference that I opted out of being featured"
+  when deleting, and the bot stops reposting and storing your messages from then on.
 - **Hide your totals across servers:** "Hide my totals across servers".
 
 `/my_data` only answers you, and works in any server with the bot and in DMs once you add the bot to

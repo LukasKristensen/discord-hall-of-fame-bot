@@ -261,7 +261,7 @@ class CommandsEndToEndTests(DatabaseTestCase):
         self.assertIn(messages.MY_DATA_NOTHING_STORED, content)
         self.assertIsNone(file)
         self.assertTrue(ephemeral)
-        self.assertTrue(view.download_button.disabled)
+        self.assertNotIn(view.download_button, view.children)
 
 
 if __name__ == "__main__":

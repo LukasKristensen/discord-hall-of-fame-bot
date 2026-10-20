@@ -34,6 +34,20 @@ def is_hidden(connection, user_id) -> bool:
     return hidden
 
 
+def hidden_since(connection, user_id):
+    """
+    When a member hid their totals across servers, for the /my_data summary
+    :param connection: The database connection
+    :param user_id: The member's user ID
+    :return: The time they hid them, or None when they are shown
+    """
+    cursor = connection.cursor()
+    cursor.execute("SELECT hidden_at FROM hidden_global_profile WHERE user_id = %s", (user_id,))
+    row = cursor.fetchone()
+    cursor.close()
+    return row[0] if row else None
+
+
 def set_hidden(connection, user_id, hidden: bool, commit: bool = True):
     """
     Hide or show a member's global profile

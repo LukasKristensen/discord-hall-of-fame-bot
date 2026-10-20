@@ -136,10 +136,14 @@ MY_DATA_STORED = ("📦 Hall of Fame stores {posts} featured post{posts_plural},
 MY_DATA_NOTHING_STORED = "📦 No posts, server standings or Wrapped entries are stored about you."
 MY_DATA_TOTALS_SHOWN = "🌍 Your totals across servers are shown on your profile."
 MY_DATA_TOTALS_SHOWN_ONCE_FEATURED = "🌍 Once you are featured, your totals across servers are shown on your profile."
-MY_DATA_TOTALS_HIDDEN = ("🔒 Your totals across servers are hidden. Your profile shows only the numbers from the "
-                         "server it is looked up in.")
+MY_DATA_TOTALS_HIDDEN = ("🔒 Your totals across servers are hidden, so your profile shows only the numbers from the "
+                         "server it is looked up in. Hall of Fame keeps your user ID and the date you hid them "
+                         "({since}) to remember this.")
 MY_DATA_NOT_FEATURED = ("🚫 You asked not to be featured, so your messages are not reposted to any board or stored, "
-                        "and you are on no leaderboard, profile or Wrapped.")
+                        "and you are on no leaderboard, profile or Wrapped. Hall of Fame keeps only your user ID and "
+                        "the date you asked ({since}), since without them it would have no way to know that your "
+                        "future messages should be left out. **Feature me again** deletes them, and your messages "
+                        "can be featured from then on.")
 MY_DATA_FOOTER = ("Message text, images and your username are never stored. "
                   "Privacy policy: <" + PRIVACY_POLICY_URL + ">")
 MY_DATA_DOWNLOAD_BUTTON = "Download my data"
@@ -149,15 +153,18 @@ MY_DATA_EXPORT = "Everything Hall of Fame stores about you is in the attached fi
 MY_DATA_DOWNLOAD_ON_COOLDOWN = "You already downloaded your data today. You can download it again tomorrow."
 MY_DATA_DELETE_ON_COOLDOWN = "You already deleted your data today. You can delete it again tomorrow."
 MY_DATA_NOT_YOURS = "Only the member who ran this command can use these buttons."
-DELETE_MY_DATA_CONFIRM = ("⚠️ This removes you from every member leaderboard, profile and Wrapped, in every "
-                          "server, and cannot be undone. Your posts stay on the boards and among each server's top "
-                          "posts, since they belong to those servers, but they are no longer credited to you. "
-                          "If you hid your totals across servers, that choice is deleted too.\n"
-                          "**Delete my data** lets messages of yours reach a Hall of Fame later, as usual. "
-                          "**Delete and stop featuring me** also stops the bot from reposting your messages from "
-                          "now on.")
+DELETE_MY_DATA_CONFIRM = ("Here is what happens when you delete your data. You are taken off every member "
+                          "leaderboard, profile and Wrapped, in every server, and this cannot be undone. Your posts "
+                          "stay on the boards, since they belong to those servers, but they are no longer credited to "
+                          "you. If you hid your totals across servers, that choice is deleted too.\n\n"
+                          "If you choose **Delete my data**, nothing about you is kept, and your messages can be "
+                          "featured again in the future.\n\n"
+                          "If you choose **Delete existing data, but keep a preference that I opted out of being "
+                          "featured**, we keep just your user ID and the date, because otherwise the bot would have no "
+                          "way to know it should skip your messages. Change your mind any time with **Feature me "
+                          "again** on {command}.")
 DELETE_MY_DATA_BUTTON = "Delete my data"
-DELETE_AND_STOP_BUTTON = "Delete and stop featuring me"
+DELETE_AND_STOP_BUTTON = "Delete existing data, but keep a preference that I opted out of being featured"
 DELETE_MY_DATA_DONE_STOPPED = ("✅ Your data is deleted, and your messages are not featured from now on: the bot "
                                "does not repost or store them. Posts already on a board stay there, no longer "
                                "credited to you. Run {command} to be featured again.")

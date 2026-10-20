@@ -1050,8 +1050,8 @@ async def read_my_data_summary(user_id: int) -> dict:
                 "posts": hall_of_fame_message_repo.count_messages_by_author(connection, user_id),
                 "servers": server_user_repo.count_server_users_for_user(connection, user_id),
                 "wrapped": hof_wrapped_repo.count_hof_wrapped_for_user(connection, user_id),
-                "hidden": global_profile_repo.is_hidden(connection, user_id),
-                "opted_out": opt_out_repo.is_opted_out(connection, user_id),
+                "hidden_since": global_profile_repo.hidden_since(connection, user_id),
+                "opted_out_since": opt_out_repo.opted_out_since(connection, user_id),
             }
 
 
@@ -1129,18 +1129,27 @@ async def my_data(interaction: discord.Interaction):
                             log_level=log_type.COMMAND)
 
     async def toggle_totals(button_interaction: discord.Interaction, view):
-        hide = not view.summary["hidden"]
+        hide = view.summary["hidden_since"] is None
         async with get_db_connection(connection_pool) as connection:
-            global_profile_repo.set_hidden(connection, user_id, hide)
-        view.summary["hidden"] = hide
+            # A /my_data opened before the member asked not to be featured still shows this button.
+            # They have no totals then, and storing the choice would keep data about them for nothing
+            stored = not opt_out_repo.is_opted_out(connection, user_id)
+            if stored:
+                global_profile_repo.set_hidden(connection, user_id, hide)
+        # Read again rather than patched, so a /my_data opened before the member deleted their data or
+        # opted out shows what is stored now
+        view.summary = await read_my_data_summary(user_id)
         view.refresh()
         # noinspection PyUnresolvedReferences
         await button_interaction.response.edit_message(content=commands.my_data_summary(view.summary), view=view)
-        await utils.logging(bot, f"A member {'hid' if hide else 'showed'} their totals across servers",
-                            interaction.guild_id, log_level=log_type.COMMAND)
+        if stored:
+            await utils.logging(bot, f"A member {'hid' if hide else 'showed'} their totals across servers",
+                                interaction.guild_id, log_level=log_type.COMMAND)
 
     async def delete(button_interaction: discord.Interaction, view):
-        if on_daily_cooldown(user_id, "delete_my_data"):
+        # Limited because a deletion scans every table for the member. With no rows stored there is
+        # nothing to scan, so a member who just deleted can still come back and stop being featured
+        if commands.has_stored_rows(view.summary) and on_daily_cooldown(user_id, "delete_my_data"):
             # noinspection PyUnresolvedReferences
             await button_interaction.response.send_message(messages.MY_DATA_DELETE_ON_COOLDOWN, ephemeral=True)
             return
@@ -1150,7 +1159,8 @@ async def my_data(interaction: discord.Interaction):
         confirm_view = commands.ConfirmDeleteView(user_id, confirmed)
         confirm_view.original_interaction = interaction
         # noinspection PyUnresolvedReferences
-        await button_interaction.response.edit_message(content=messages.DELETE_MY_DATA_CONFIRM, view=confirm_view)
+        await button_interaction.response.edit_message(
+            content=messages.DELETE_MY_DATA_CONFIRM.format(command=command_refs.MY_DATA), view=confirm_view)
 
     async def confirmed(button_interaction: discord.Interaction, stop_featuring: bool):
         # Answered before the deletes run, since they can take longer than the three seconds Discord
@@ -1177,7 +1187,7 @@ async def my_data(interaction: discord.Interaction):
     async def feature_again(button_interaction: discord.Interaction, view):
         async with get_db_connection(connection_pool) as connection:
             opt_out_repo.set_opted_out(connection, user_id, False)
-        view.summary["opted_out"] = False
+        view.summary["opted_out_since"] = None
         view.refresh()
         # noinspection PyUnresolvedReferences
         await button_interaction.response.edit_message(

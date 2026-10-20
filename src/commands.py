@@ -558,34 +558,41 @@ class ConfirmDeleteView(discord.ui.View):
             pass
 
 
-def has_stored_data(summary: dict) -> bool:
-    """Whether anything at all is stored about a member, their two choices included"""
-    return bool(summary["posts"] or summary["servers"] or summary["wrapped"]
-                or summary["hidden"] or summary["opted_out"])
+def has_stored_rows(summary: dict) -> bool:
+    """
+    Whether posts, standings or Wrapped entries are stored about a member. Their two choices are not
+    counted: the summary already shows everything stored for those, so a file would only repeat it
+    """
+    return bool(summary["posts"] or summary["servers"] or summary["wrapped"])
+
+
+def discord_date(moment) -> str:
+    """A date Discord shows in each reader's own language and time zone"""
+    return f"<t:{int(moment.timestamp())}:D>"
 
 
 def my_data_summary(summary: dict, note: str = None) -> str:
     """
     The private message /my_data answers with: what is stored, and the member's two choices
-    :param summary: posts, servers and wrapped counts, and whether the totals are hidden and the
-        member asked not to be featured
+    :param summary: posts, servers and wrapped counts, and when the totals were hidden and the member
+        asked not to be featured, None for either they did not do
     :param note: A line to lead with, such as the result of a button just pressed
     :return: The message
     """
     lines = [note] if note else []
-    if summary["posts"] or summary["servers"] or summary["wrapped"]:
+    if has_stored_rows(summary):
         lines.append(messages.MY_DATA_STORED.format(
             posts=summary["posts"], posts_plural="" if summary["posts"] == 1 else "s",
             servers=summary["servers"], servers_plural="" if summary["servers"] == 1 else "s",
             wrapped=summary["wrapped"], wrapped_plural="y" if summary["wrapped"] == 1 else "ies"))
     else:
         lines.append(messages.MY_DATA_NOTHING_STORED)
-    if summary["opted_out"]:
-        lines.append(messages.MY_DATA_NOT_FEATURED)
+    if summary["opted_out_since"]:
+        lines.append(messages.MY_DATA_NOT_FEATURED.format(since=discord_date(summary["opted_out_since"])))
     else:
         # A member who is not featured has no totals to show or hide
-        if summary["hidden"]:
-            lines.append(messages.MY_DATA_TOTALS_HIDDEN)
+        if summary["hidden_since"]:
+            lines.append(messages.MY_DATA_TOTALS_HIDDEN.format(since=discord_date(summary["hidden_since"])))
         else:
             # The totals are added up from the posts credited to the member, so without any there are none yet
             lines.append(messages.MY_DATA_TOTALS_SHOWN if summary["posts"]
@@ -635,13 +642,13 @@ class MyDataView(discord.ui.View):
     def refresh(self):
         """Lay the buttons out for the current summary"""
         self.clear_items()
-        self.download_button.disabled = not has_stored_data(self.summary)
-        self.totals_button.label = (messages.SHOW_TOTALS_BUTTON if self.summary["hidden"]
+        self.totals_button.label = (messages.SHOW_TOTALS_BUTTON if self.summary["hidden_since"]
                                     else messages.HIDE_TOTALS_BUTTON)
-        self.add_item(self.download_button)
+        if has_stored_rows(self.summary):
+            self.add_item(self.download_button)
         # A member who asked not to be featured has no totals to hide and nothing new stored to delete,
         # so they are only offered the way back. Hiding would store a choice about totals they cannot have
-        if self.summary["opted_out"]:
+        if self.summary["opted_out_since"]:
             self.add_item(self.feature_again_button)
         else:
             self.add_item(self.totals_button)

@@ -531,6 +531,11 @@ class CountInGlobalProfilesCommandTests(CommandTestCase):
         self.assertEqual([], self.writes)
 
 
+# When the member made a choice, shown on /my_data as a Discord timestamp
+CHOSEN = datetime.datetime(2026, 10, 21, 12, 0, tzinfo=datetime.timezone.utc)
+CHOSEN_SHOWN = f"<t:{int(CHOSEN.timestamp())}:D>"
+
+
 class MyDataPanelTestCase(CommandTestCase):
     """/my_data with what is stored faked, and its buttons pressed the way Discord would."""
 
@@ -551,6 +556,9 @@ class MyDataPanelTestCase(CommandTestCase):
         self.patch(hof_wrapped_repo, "get_hof_wrapped_for_user", lambda *_args: self.wrapped)
         self.patch(global_profile_repo, "is_hidden", lambda _c, user_id: user_id in self.hidden)
         self.patch(opt_out_repo, "is_opted_out", lambda _c, user_id: user_id in self.opted_out)
+        self.patch(global_profile_repo, "hidden_since", lambda _c, user_id: CHOSEN if user_id in self.hidden else None)
+        self.patch(opt_out_repo, "opted_out_since",
+                   lambda _c, user_id: CHOSEN if user_id in self.opted_out else None)
 
         def set_hidden(_c, user_id, hidden, commit=True):
             (self.hidden.add if hidden else self.hidden.discard)(user_id)
@@ -607,7 +615,16 @@ class MyDataPanelTests(MyDataPanelTestCase):
         interaction, view = await self.open_panel()
 
         self.assertIn(messages.MY_DATA_NOTHING_STORED, interaction.followup.messages[0])
-        self.assertTrue(view.download_button.disabled)
+        self.assertNotIn(view.download_button, view.children)
+
+    async def test_offers_no_file_when_only_choices_are_stored(self):
+        """The summary already shows everything stored for a choice, so a file would only repeat it."""
+        self.posts, self.standings = [], []
+        self.hidden.add(77)
+        interaction, view = await self.open_panel()
+
+        self.assertNotIn(view.download_button, view.children)
+        self.assertIn(messages.MY_DATA_TOTALS_HIDDEN.format(since=CHOSEN_SHOWN), interaction.followup.messages[0])
 
     async def test_without_credited_posts_there_are_no_totals_to_show_yet(self):
         """Right after a deletion the member's posts are on boards but credited to nobody."""
@@ -680,7 +697,8 @@ class TotalsAcrossServersButtonTests(MyDataPanelTestCase):
 
         self.assertEqual({77}, self.hidden)
         content, new_view = pressed.response.edits[0]
-        self.assertIn(messages.MY_DATA_TOTALS_HIDDEN, content)
+        self.assertIn("Your totals across servers are hidden", content)
+        self.assertIn("<t:", content)
         self.assertEqual(messages.SHOW_TOTALS_BUTTON, new_view.totals_button.label)
 
     async def test_shows_them_again(self):
@@ -699,6 +717,18 @@ class TotalsAcrossServersButtonTests(MyDataPanelTestCase):
 
         self.assertEqual({77}, self.hidden)
 
+    async def test_stores_nothing_for_a_member_who_opted_out_since_the_panel_opened(self):
+        """Their totals are always empty, so the choice would be data kept about them for nothing."""
+        _interaction, view = await self.open_panel()
+        self.posts, self.standings = [], []
+        self.opted_out.add(77)
+        pressed = await self.press(view.totals_button)
+
+        self.assertEqual(set(), self.hidden)
+        content, new_view = pressed.response.edits[0]
+        self.assertIn("You asked not to be featured", content)
+        self.assertNotIn(new_view.totals_button, new_view.children)
+
 
 class DeleteMyDataTests(MyDataPanelTestCase):
     async def test_asks_for_confirmation_before_deleting(self):
@@ -706,7 +736,7 @@ class DeleteMyDataTests(MyDataPanelTestCase):
         pressed = await self.press(panel.delete_button)
 
         content, view = pressed.response.edits[0]
-        self.assertEqual(messages.DELETE_MY_DATA_CONFIRM, content)
+        self.assertEqual(messages.DELETE_MY_DATA_CONFIRM.format(command=command_refs.MY_DATA), content)
         self.assertIsInstance(view, ConfirmDeleteView)
         self.assertEqual([], self.calls)
         self.assertTrue(panel.is_finished())
@@ -779,9 +809,24 @@ class DeleteMyDataTests(MyDataPanelTestCase):
 
         self.assertIsInstance(await self.ask_to_delete(), ConfirmDeleteView)
 
+    async def test_a_member_with_nothing_stored_can_still_stop_being_featured_the_same_day(self):
+        """With nothing left to scan the limit has no purpose, and it would block the change of mind."""
+        view = await self.ask_to_delete()
+        await view.confirm(FakeInteraction())
+        self.posts, self.standings = [], []
+
+        self.assertIsInstance(await self.ask_to_delete(), ConfirmDeleteView)
+
+    async def test_the_confirmation_says_why_stopping_keeps_the_user_id(self):
+        _interaction, panel = await self.open_panel()
+        content = (await self.press(panel.delete_button)).response.edits[0][0]
+
+        self.assertIn("we keep just your user ID and the date", content)
+        self.assertIn("no way to know it should skip your messages", content)
+
 
 class StopFeaturingTests(MyDataPanelTestCase):
-    """Delete and stop featuring me: the lasting way to object to being featured."""
+    """Delete existing data, but keep a preference that I opted out of being featured: the lasting way to object to being featured."""
 
     async def test_records_the_request_with_the_deletion(self):
         view = await self.ask_to_delete()
@@ -799,12 +844,15 @@ class StopFeaturingTests(MyDataPanelTestCase):
         self.assertNotIn(("opt_out", True), self.calls)
 
     async def test_offers_to_feature_again_instead_of_deleting(self):
+        # Opting out deleted everything else, so only the choice is stored
+        self.posts, self.standings = [], []
         self.opted_out.add(77)
         interaction, view = await self.open_panel()
 
-        self.assertIn(messages.MY_DATA_NOT_FEATURED, interaction.followup.messages[0])
+        self.assertIn(messages.MY_DATA_NOT_FEATURED.format(since=CHOSEN_SHOWN), interaction.followup.messages[0])
         self.assertIn(view.feature_again_button, view.children)
         self.assertNotIn(view.delete_button, view.children)
+        self.assertNotIn(view.download_button, view.children)
 
     async def test_a_member_who_is_not_featured_has_no_totals_to_hide(self):
         """Their totals are always zero, and hiding them would store a choice for nothing."""
@@ -841,8 +889,42 @@ class StopFeaturingTests(MyDataPanelTestCase):
         self.assertEqual(set(), self.opted_out)
         content, new_view = pressed.response.edits[0]
         self.assertTrue(content.startswith(messages.COUNTED_AGAIN))
-        self.assertNotIn(messages.MY_DATA_NOT_FEATURED, content)
+        self.assertNotIn("You asked not to be featured", content)
         self.assertIn(new_view.delete_button, new_view.children)
+
+
+class OptingOutWhileAPostIsSentTests(unittest.IsolatedAsyncioTestCase):
+    async def test_the_post_is_stored_without_the_member(self):
+        import utils
+        stored = []
+        answers = iter([False, True])
+
+        def record(_connection, *args):
+            stored.append(args)
+
+        async def send(*_args, **_kwargs):
+            return types.SimpleNamespace(id=999)
+
+        async def no_embed(*_args, **_kwargs):
+            return None
+
+        async def count(*_args, **_kwargs):
+            return 5
+
+        channel = types.SimpleNamespace(send=send)
+        bot = types.SimpleNamespace(get_channel=lambda _id: channel)
+        message = types.SimpleNamespace(id=1, channel=types.SimpleNamespace(id=2), guild=types.SimpleNamespace(id=3),
+                                        author=types.SimpleNamespace(id=77))
+        # Featured when the post is checked, opted out by the time it is stored
+        with unittest.mock.patch.object(opt_out_repo, "is_opted_out", lambda *_args: next(answers)), \
+                unittest.mock.patch.object(hall_of_fame_message_repo, "insert_hall_of_fame_message", record), \
+                unittest.mock.patch.object(utils, "create_embed", no_embed), \
+                unittest.mock.patch.object(utils, "reaction_count", count), \
+                unittest.mock.patch.object(utils, "check_video_extension", lambda _m: None):
+            await utils.post_hall_of_fame_message(message, bot, FakeConnection(), 100, 5)
+
+        # The sixth value stored is the author
+        self.assertEqual(hall_of_fame_message_repo.NO_AUTHOR_ID, stored[0][5])
 
 
 class WrappedWithoutTheAuthorTests(unittest.IsolatedAsyncioTestCase):

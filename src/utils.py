@@ -308,13 +308,17 @@ async def post_hall_of_fame_message(message: discord.Message, bot: discord.Clien
     hall_of_fame_message = await target_channel.send(embed=embed)
 
     try:
+        # Checked again, since sending the repost gave the member time to ask not to be featured. Their
+        # earlier posts were detached when they asked, so this one is stored detached the same way
+        author_id = (hall_of_fame_message_repo.NO_AUTHOR_ID
+                     if opt_out_repo.is_opted_out(connection, message.author.id) else int(message.author.id))
         hall_of_fame_message_repo.insert_hall_of_fame_message(connection,
                                                               int(message.id),
                                                               int(message.channel.id),
                                                               int(message.guild.id),
                                                               int(hall_of_fame_message.id),
                                                               int(await reaction_count(message, connection, config)),
-                                                              int(message.author.id),
+                                                              author_id,
                                                               datetime.datetime.now(timezone.utc),
                                                               int(video_message.id) if video_link else None)
     except Exception as e:

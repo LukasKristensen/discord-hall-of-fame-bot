@@ -45,6 +45,21 @@ def initialize_users(connection, guild_id: int):
         users[user_id] = User(user_id)
 
 
+def leave_out_members_who_are_gone(still_members):
+    """
+    Drop the members who deleted their data or asked not to be featured while Wrapped was being
+    prepared, and take them out of everyone else's fan lists, so nothing is saved about them
+    :param still_members: The IDs that are still the author of a post in the server
+    """
+    gone = set(users) - set(still_members)
+    for user_id in gone:
+        del users[user_id]
+    for user in users.values():
+        for fans in (user.usersFans, user.fanOfUsers):
+            for user_id in gone:
+                fans.pop(user_id, None)
+
+
 async def process_message_reactions(message: discord.Message, connection):
     global total_hall_of_fame_posts
 
@@ -326,6 +341,9 @@ async def main(guild_id: int, bot: commands.Bot, get_reaction_threshold: int, co
 
     initialize_users(connection, guild_id)
     await process_hof_messages_from_db(guild, connection)
+    # Deleting data and opting out both detach the member's posts, so whoever is no longer an author
+    # here asked to be left out while the posts were being read
+    leave_out_members_who_are_gone(hall_of_fame_message_repo.find_members_for_guild(connection, guild_id))
 
     rankings = rank_stats(users)
 
