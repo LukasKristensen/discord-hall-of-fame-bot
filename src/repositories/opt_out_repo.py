@@ -1,5 +1,5 @@
 """
-Members who asked not to be featured, through "Delete existing data, but keep a preference that I opted out of being featured"
+Members who asked not to be featured, through "Stop featuring me", offered after deleting their data
 on /my_data.
 
 Their messages are not reposted to any board or stored, so they never reach a leaderboard, profile or

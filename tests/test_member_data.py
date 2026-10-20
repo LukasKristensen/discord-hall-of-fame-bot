@@ -16,7 +16,7 @@ import discord
 import main
 import commands
 from enums import command_refs
-from commands import ConfirmDeleteView, MyDataView, build_my_data_export
+from commands import ConfirmDeleteView, MyDataView, StopFeaturingView, build_my_data_export
 from repositories import (
     global_profile_repo,
     hall_of_fame_message_repo,
@@ -536,6 +536,10 @@ CHOSEN = datetime.datetime(2026, 10, 21, 12, 0, tzinfo=datetime.timezone.utc)
 CHOSEN_SHOWN = f"<t:{int(CHOSEN.timestamp())}:D>"
 
 
+SAMPLE_POST = {"guild_id": 1234567890123456789, "channel_id": 1234567890123456789, "message_id": 0,
+               "hall_of_fame_message_id": 1234567890123456789, "reaction_count": 12, "created_at": "2026-01-01 12:00:00"}
+
+
 class MyDataPanelTestCase(CommandTestCase):
     """/my_data with what is stored faked, and its buttons pressed the way Discord would."""
 
@@ -614,8 +618,12 @@ class MyDataPanelTests(MyDataPanelTestCase):
         self.posts, self.standings = [], []
         interaction, view = await self.open_panel()
 
-        self.assertIn(messages.MY_DATA_NOTHING_STORED, interaction.followup.messages[0])
-        self.assertNotIn(view.download_button, view.children)
+        self.assertIn(messages.MY_DATA_NOTHING_AT_ALL, interaction.followup.messages[0])
+        # Still there, so the panel looks the same for everyone, but greyed out
+        self.assertIn(view.download_button, view.children)
+        self.assertTrue(view.download_button.disabled)
+        self.assertIn(view.delete_button, view.children)
+        self.assertTrue(view.delete_button.disabled)
 
     async def test_offers_no_file_when_only_choices_are_stored(self):
         """The summary already shows everything stored for a choice, so a file would only repeat it."""
@@ -623,8 +631,12 @@ class MyDataPanelTests(MyDataPanelTestCase):
         self.hidden.add(77)
         interaction, view = await self.open_panel()
 
-        self.assertNotIn(view.download_button, view.children)
+        self.assertTrue(view.download_button.disabled)
+        self.assertFalse(view.delete_button.disabled)
         self.assertIn(messages.MY_DATA_TOTALS_HIDDEN.format(since=CHOSEN_SHOWN), interaction.followup.messages[0])
+        # A choice is stored, so it must not say there is nothing to delete
+        self.assertIn(messages.MY_DATA_NOTHING_STORED, interaction.followup.messages[0])
+        self.assertNotIn(messages.MY_DATA_NOTHING_AT_ALL, interaction.followup.messages[0])
 
     async def test_without_credited_posts_there_are_no_totals_to_show_yet(self):
         """Right after a deletion the member's posts are on boards but credited to nobody."""
@@ -653,11 +665,13 @@ class MyDataPanelTests(MyDataPanelTestCase):
         self.assertFalse(await view.interaction_check(stranger))
         self.assertEqual([messages.MY_DATA_NOT_YOURS], stranger.response.messages)
 
-    async def test_offers_delete_and_not_feature_again_to_a_featured_member(self):
+    async def test_offers_stop_featuring_and_delete_to_a_featured_member(self):
         _interaction, view = await self.open_panel()
 
-        self.assertIn(view.delete_button, view.children)
-        self.assertNotIn(view.feature_again_button, view.children)
+        self.assertIn(view.featuring_button, view.children)
+        self.assertEqual(messages.STOP_FEATURING_BUTTON, view.featuring_button.label)
+        self.assertFalse(view.download_button.disabled)
+        self.assertFalse(view.delete_button.disabled)
 
 
 class DownloadMyDataTests(MyDataPanelTestCase):
@@ -717,8 +731,8 @@ class TotalsAcrossServersButtonTests(MyDataPanelTestCase):
 
         self.assertEqual({77}, self.hidden)
 
-    async def test_stores_nothing_for_a_member_who_opted_out_since_the_panel_opened(self):
-        """Their totals are always empty, so the choice would be data kept about them for nothing."""
+    async def test_stores_nothing_for_a_member_who_has_no_totals_since_the_panel_opened(self):
+        """Not featured and nothing credited: the choice would be data kept about them for nothing."""
         _interaction, view = await self.open_panel()
         self.posts, self.standings = [], []
         self.opted_out.add(77)
@@ -726,7 +740,7 @@ class TotalsAcrossServersButtonTests(MyDataPanelTestCase):
 
         self.assertEqual(set(), self.hidden)
         content, new_view = pressed.response.edits[0]
-        self.assertIn("You asked not to be featured", content)
+        self.assertIn("New messages of yours are not featured", content)
         self.assertNotIn(new_view.totals_button, new_view.children)
 
 
@@ -736,7 +750,7 @@ class DeleteMyDataTests(MyDataPanelTestCase):
         pressed = await self.press(panel.delete_button)
 
         content, view = pressed.response.edits[0]
-        self.assertEqual(messages.DELETE_MY_DATA_CONFIRM.format(command=command_refs.MY_DATA), content)
+        self.assertEqual(messages.DELETE_MY_DATA_CONFIRM, content)
         self.assertIsInstance(view, ConfirmDeleteView)
         self.assertEqual([], self.calls)
         self.assertTrue(panel.is_finished())
@@ -747,8 +761,10 @@ class DeleteMyDataTests(MyDataPanelTestCase):
         button = FakeInteraction()
         await view.confirm(button)
 
-        self.assertEqual(["posts", "stats", "wrapped", "privacy"], self.calls)
-        self.assertEqual([(messages.DELETE_MY_DATA_DONE, None)], button.original_edits)
+        self.assertEqual(["posts", "stats", "wrapped", "privacy", ("opt_out", False)], self.calls)
+        content, offer = button.original_edits[0]
+        self.assertEqual(messages.DELETE_MY_DATA_DONE.format(command=command_refs.MY_DATA), content)
+        self.assertIsInstance(offer, StopFeaturingView)
 
     async def test_answers_the_button_before_deleting(self):
         """The deletes can outlast the three seconds Discord waits for a button to be answered."""
@@ -809,88 +825,139 @@ class DeleteMyDataTests(MyDataPanelTestCase):
 
         self.assertIsInstance(await self.ask_to_delete(), ConfirmDeleteView)
 
-    async def test_a_member_with_nothing_stored_can_still_stop_being_featured_the_same_day(self):
-        """With nothing left to scan the limit has no purpose, and it would block the change of mind."""
+    async def test_a_member_with_nothing_stored_is_not_held_to_the_limit(self):
+        """With nothing left to scan the limit has no purpose."""
         view = await self.ask_to_delete()
         await view.confirm(FakeInteraction())
         self.posts, self.standings = [], []
+        self.hidden.add(77)
 
         self.assertIsInstance(await self.ask_to_delete(), ConfirmDeleteView)
 
-    async def test_the_confirmation_says_why_stopping_keeps_the_user_id(self):
+    async def test_the_confirmation_warns_that_the_choice_not_to_be_featured_goes_too(self):
+        self.opted_out.add(77)
         _interaction, panel = await self.open_panel()
         content = (await self.press(panel.delete_button)).response.edits[0][0]
 
-        self.assertIn("we keep just your user ID and the date", content)
-        self.assertIn("no way to know it should skip your messages", content)
+        self.assertTrue(content.endswith(messages.DELETE_MY_DATA_CONFIRM_OPT_OUT))
+
+    async def test_the_confirmation_says_nothing_about_featuring_to_a_featured_member(self):
+        _interaction, panel = await self.open_panel()
+        content = (await self.press(panel.delete_button)).response.edits[0][0]
+
+        self.assertEqual(messages.DELETE_MY_DATA_CONFIRM, content)
 
 
 class StopFeaturingTests(MyDataPanelTestCase):
-    """Delete existing data, but keep a preference that I opted out of being featured: the lasting way to object to being featured."""
+    """Stop featuring me: a setting of its own on /my_data, which concerns new messages only."""
 
-    async def test_records_the_request_with_the_deletion(self):
-        view = await self.ask_to_delete()
-        button = FakeInteraction()
-        await view.confirm_and_stop_featuring(button)
-
-        self.assertEqual([("opt_out", True), "posts", "stats", "wrapped", "privacy"], self.calls)
-        self.assertIn("not featured from now on", button.original_edits[0][0])
-        self.assertIn(command_refs.MY_DATA, button.original_edits[0][0])
-
-    async def test_plain_deletion_does_not_stop_featuring(self):
-        view = await self.ask_to_delete()
-        await view.confirm(FakeInteraction())
-
-        self.assertNotIn(("opt_out", True), self.calls)
-
-    async def test_offers_to_feature_again_instead_of_deleting(self):
-        # Opting out deleted everything else, so only the choice is stored
-        self.posts, self.standings = [], []
-        self.opted_out.add(77)
-        interaction, view = await self.open_panel()
-
-        self.assertIn(messages.MY_DATA_NOT_FEATURED.format(since=CHOSEN_SHOWN), interaction.followup.messages[0])
-        self.assertIn(view.feature_again_button, view.children)
-        self.assertNotIn(view.delete_button, view.children)
-        self.assertNotIn(view.download_button, view.children)
-
-    async def test_a_member_who_is_not_featured_has_no_totals_to_hide(self):
-        """Their totals are always zero, and hiding them would store a choice for nothing."""
-        self.opted_out.add(77)
-        interaction, view = await self.open_panel()
-
-        self.assertNotIn(view.totals_button, view.children)
-        self.assertNotIn(messages.MY_DATA_TOTALS_SHOWN, interaction.followup.messages[0])
-        self.assertNotIn(messages.MY_DATA_TOTALS_HIDDEN, interaction.followup.messages[0])
-
-    async def test_featuring_again_brings_the_totals_button_back(self):
-        self.opted_out.add(77)
+    async def test_the_panel_button_stops_featuring_without_deleting(self):
         _interaction, view = await self.open_panel()
-        pressed = await self.press(view.feature_again_button)
+        pressed = await self.press(view.featuring_button)
 
+        self.assertEqual({77}, self.opted_out)
+        self.assertEqual([("opt_out", True)], self.calls)
         content, new_view = pressed.response.edits[0]
-        self.assertIn(new_view.totals_button, new_view.children)
-        self.assertIn(messages.MY_DATA_TOTALS_SHOWN, content)
-
-    async def test_featuring_again_is_not_held_back_by_the_cooldowns(self):
-        self.opted_out.add(77)
-        main.start_daily_cooldown(77, "delete_my_data")
-        main.start_daily_cooldown(77, "my_data")
-        _interaction, view = await self.open_panel()
-        await self.press(view.feature_again_button)
-
-        self.assertEqual(set(), self.opted_out)
+        self.assertTrue(content.startswith(messages.STOPPED_FEATURING))
+        self.assertEqual(messages.FEATURE_ME_AGAIN_BUTTON, new_view.featuring_button.label)
 
     async def test_feature_me_again(self):
         self.opted_out.add(77)
         _interaction, view = await self.open_panel()
-        pressed = await self.press(view.feature_again_button)
+        self.assertEqual(messages.FEATURE_ME_AGAIN_BUTTON, view.featuring_button.label)
+        pressed = await self.press(view.featuring_button)
 
         self.assertEqual(set(), self.opted_out)
         content, new_view = pressed.response.edits[0]
         self.assertTrue(content.startswith(messages.COUNTED_AGAIN))
-        self.assertNotIn("You asked not to be featured", content)
-        self.assertIn(new_view.delete_button, new_view.children)
+        self.assertNotIn("New messages of yours are not featured", content)
+        self.assertEqual(messages.STOP_FEATURING_BUTTON, new_view.featuring_button.label)
+
+    async def test_earlier_posts_and_statistics_are_kept(self):
+        """Only new messages are left out, so the history and everything to manage it stays."""
+        self.opted_out.add(77)
+        interaction, view = await self.open_panel()
+
+        content = interaction.followup.messages[0]
+        self.assertIn(messages.MY_DATA_NOT_FEATURED.format(since=CHOSEN_SHOWN), content)
+        self.assertIn(messages.MY_DATA_EARLIER_KEPT, content)
+        for button in (view.download_button, view.totals_button, view.delete_button):
+            self.assertIn(button, view.children)
+
+    async def test_with_only_the_choice_stored_it_can_still_be_deleted(self):
+        """The choice is data about the member too, so Delete is offered for it; there is nothing to hide or download."""
+        self.posts, self.standings = [], []
+        self.opted_out.add(77)
+        interaction, view = await self.open_panel()
+
+        content = interaction.followup.messages[0]
+        self.assertNotIn(messages.MY_DATA_EARLIER_KEPT, content)
+        self.assertNotIn(messages.MY_DATA_TOTALS_SHOWN_ONCE_FEATURED, content)
+        self.assertEqual([view.download_button, view.featuring_button, view.delete_button], view.children)
+        self.assertTrue(view.download_button.disabled)
+        self.assertFalse(view.delete_button.disabled)
+
+    async def test_delete_is_offered_while_something_is_stored(self):
+        """A member who only hid their totals still has that choice to delete."""
+        self.posts, self.standings = [], []
+        self.hidden.add(77)
+        _interaction, view = await self.open_panel()
+
+        self.assertFalse(view.delete_button.disabled)
+
+    async def test_delete_is_greyed_out_for_a_member_with_nothing_stored(self):
+        self.posts, self.standings = [], []
+        _interaction, view = await self.open_panel()
+
+        self.assertTrue(view.delete_button.disabled)
+
+    async def test_the_buttons_come_alive_once_something_is_stored(self):
+        """Hiding the totals stores a choice, so there is something to delete from then on."""
+        self.posts, self.standings = [], []
+        _interaction, view = await self.open_panel()
+        pressed = await self.press(view.totals_button)
+
+        self.assertFalse(pressed.response.edits[0][1].delete_button.disabled)
+
+    async def test_is_not_held_back_by_the_cooldowns(self):
+        main.start_daily_cooldown(77, "delete_my_data")
+        main.start_daily_cooldown(77, "my_data")
+        _interaction, view = await self.open_panel()
+        await self.press(view.featuring_button)
+
+        self.assertEqual({77}, self.opted_out)
+
+    async def test_deleting_offers_to_stop_featuring(self):
+        view = await self.ask_to_delete()
+        button = FakeInteraction()
+        await view.confirm(button)
+        offer = button.original_edits[0][1]
+        pressed = await self.press(offer.children[0])
+
+        self.assertEqual({77}, self.opted_out)
+        self.assertEqual(["posts", "stats", "wrapped", "privacy", ("opt_out", False), ("opt_out", True)], self.calls)
+        self.assertEqual([(messages.DELETE_MY_DATA_DONE_STOPPED.format(command=command_refs.MY_DATA), None)],
+                         pressed.response.edits)
+
+    async def test_deleting_also_deletes_the_choice_not_to_be_featured(self):
+        """Deleting removes everything stored, and then offers to stop featuring the member afresh."""
+        self.opted_out.add(77)
+        view = await self.ask_to_delete()
+        button = FakeInteraction()
+        await view.confirm(button)
+
+        self.assertEqual(set(), self.opted_out)
+        content, offer = button.original_edits[0]
+        self.assertEqual(messages.DELETE_MY_DATA_DONE.format(command=command_refs.MY_DATA), content)
+        self.assertIsInstance(offer, StopFeaturingView)
+
+    async def test_only_the_member_can_take_the_offer(self):
+        offer = StopFeaturingView(77, on_stop=None)
+        stranger = FakeInteraction()
+        stranger.user = FakeUser(user_id=99)
+
+        self.assertFalse(await offer.interaction_check(stranger))
+        self.assertEqual([messages.MY_DATA_NOT_YOURS], stranger.response.messages)
 
 
 class OptingOutWhileAPostIsSentTests(unittest.IsolatedAsyncioTestCase):

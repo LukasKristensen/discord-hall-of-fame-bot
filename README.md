@@ -158,7 +158,7 @@ Open to everyone, answered only to you, and usable in DMs as well as servers.
 
 | Command | Parameters | What it does |
 |:---|:---|:---|
-| `/my_data` | | What the bot stores about you, privately, with buttons to manage it. **Download my data** sends a file with every row (once a day). **Hide my totals across servers** leaves them off your profile, which then shows only the server it is looked up in. **Delete my data** removes you from every leaderboard, profile and Wrapped after you confirm; your posts stay on the boards but are no longer credited to you, and **Delete existing data, but keep a preference that I opted out of being featured** also stops the bot reposting your messages from then on. A member who stopped being featured gets **Feature me again** instead. |
+| `/my_data` | | What the bot stores about you, privately, with buttons to manage it. **Download my data** sends a file with every row (once a day). **Hide my totals across servers** leaves them off your profile, which then shows only the server it is looked up in. **Stop featuring me** stops the bot reposting or storing new messages of yours, keeping only your user ID and the date to remember it; **Feature me again** undoes it. **Delete my data** removes everything stored about you after you confirm, including a choice not to be featured; your posts stay on the boards but are no longer credited to you, and the done message offers **Stop featuring me** again. |
 
 ### Bot and help
 
@@ -348,7 +348,7 @@ from a server deletes that server's data, and any member can see, download or de
 ### 2.2
 - [x] Added /check_setup and a Check setup button on the welcome message, which check the board's permissions, how many channels the bot can read and which ones members see but the bot cannot (with the role that would open most of them), an empty emoji whitelist, a threshold above the member count, the daily post limit and the last post.
 - [x] When the bot joins, it runs the board and channel checks and, if something is wrong, posts a short note with a Check setup button on the board instead of the full report, since the board is public.
-- [x] Added /my_data, where a member sees what is stored about them and manages it with buttons: download it as a file, hide their totals across servers, and delete it, which removes them from every leaderboard, profile and Wrapped, with an option to stop featuring their messages from then on. It works in DMs through a user install.
+- [x] Added /my_data, where a member sees what is stored about them and manages it with buttons: download it as a file, hide their totals across servers, stop the bot featuring their new messages, and delete it, which removes them from every leaderboard, profile and Wrapped. It works in DMs through a user install.
 - [x] Added /count_in_global_profiles for admins to leave their server out of members' totals across servers.
 - [x] /user_profile is laid out in columns (this month, all time, every server) with highlights: the best post with a jump link, when the member was last featured and the gap to the next rank. The totals across servers never name a server.
 - [x] /user_profile shows the badges a member has earned: monthly champion, 10 to 500 posts, months in a row, featured for a year, a 100-reaction post, 10 posts in one month and featured in 5 or more servers. Badges are worked out from existing posts, never name a server, and leave out other servers when a member hid their totals.

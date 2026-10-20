@@ -15,7 +15,7 @@ from unittest import mock
 import hof_wrapped
 import utils
 from constants import version
-from repositories import hall_of_fame_message_repo, hof_wrapped_repo, opt_out_repo, server_config_repo
+from repositories import hall_of_fame_message_repo, hof_wrapped_repo, server_config_repo
 
 from tests.integration.database import DatabaseTestCase, database_url, skip_without_database
 from tests.integration.discord_world import Author, Bot, Guild, SourceChannel
@@ -136,34 +136,33 @@ class WrappedGenerationTests(DatabaseTestCase):
 
         self.assertIsNone(self.wrapped(FIRST, ALICE.id))
 
-    async def opt_out_while_reading(self, member):
-        """Run Wrapped with the member asking not to be featured after the posts were read"""
+    async def delete_while_reading(self, member):
+        """Run Wrapped with the member deleting their data after the posts were read"""
         read_posts = hof_wrapped.process_hof_messages_from_db
 
-        async def read_then_opt_out(guild, connection):
+        async def read_then_delete(guild, connection):
             result = await read_posts(guild, connection)
-            opt_out_repo.set_opted_out(self.connection, member.id, True, commit=False)
             hall_of_fame_message_repo.remove_author(self.connection, member.id)
             return result
 
-        with mock.patch.object(hof_wrapped, "process_hof_messages_from_db", read_then_opt_out):
+        with mock.patch.object(hof_wrapped, "process_hof_messages_from_db", read_then_delete):
             await self.generate(FIRST)
 
-    async def test_a_member_who_opts_out_while_wrapped_runs_is_not_saved(self):
-        await self.opt_out_while_reading(BOB)
+    async def test_a_member_who_deletes_while_wrapped_runs_is_not_saved(self):
+        await self.delete_while_reading(BOB)
 
         self.assertIsNone(self.wrapped(FIRST, BOB.id))
 
-    async def test_a_member_who_opts_out_while_wrapped_runs_leaves_every_fan_list(self):
-        await self.opt_out_while_reading(BOB)
+    async def test_a_member_who_deletes_while_wrapped_runs_leaves_every_fan_list(self):
+        await self.delete_while_reading(BOB)
 
         alice = self.wrapped(FIRST, ALICE.id)
         self.assertEqual({}, alice["users_fans"])
         self.assertEqual({}, alice["fan_of_users"])
 
-    async def test_a_member_who_opts_out_is_not_ranked(self):
-        """Alice is first with Bob gone, rather than ranked against a member who is not saved."""
-        await self.opt_out_while_reading(ALICE)
+    async def test_a_member_who_deletes_is_not_ranked(self):
+        """Bob is first with Alice gone, rather than ranked against a member who is not saved."""
+        await self.delete_while_reading(ALICE)
 
         self.assertEqual(1, self.wrapped(FIRST, BOB.id)["user_ranks"]["hallOfFameMessagePosts"])
 

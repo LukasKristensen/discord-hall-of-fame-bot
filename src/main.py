@@ -1067,27 +1067,26 @@ async def read_my_data_export(user_id: int) -> bytes:
     return commands.build_my_data_export(user_id, posts, standings, wrapped, hidden, not_featured)
 
 
-async def delete_member_data(user_id: int, stop_featuring: bool = False) -> int:
+async def delete_member_data(user_id: int) -> int:
     """
     Remove a member from everything the bot stores: their posts lose their author, and their
-    statistics, Wrapped rows, place in other members' Wrapped and privacy choice are deleted
+    statistics, Wrapped rows, place in other members' Wrapped, hidden-totals choice and choice not to
+    be featured are deleted. Without the last, new messages of theirs can be featured again, which the
+    confirmation says and the done message offers to stop
     :param user_id: The member's user ID
-    :param stop_featuring: Also stop featuring the member's messages from now on
     :return: How many posts were detached from them
     """
     async with get_db_connection(connection_pool) as connection:
         # One transaction, committed by statement_timeout once every step worked. A step that fails
-        # rolls back the rest, so a member is never left opted out with their data still stored, which
-        # /my_data could not finish since it only offers an opted-out member to be featured again
+        # rolls back the rest, so a member is never left with only part of their data deleted
         with utils.statement_timeout(connection, data_command_statement_timeout_ms):
-            if stop_featuring:
-                opt_out_repo.set_opted_out(connection, user_id, True, commit=False)
             # The posts before the statistics: the daily rebuild recreates server_user from them, so
             # deleting the statistics alone would undo itself overnight
             detached = hall_of_fame_message_repo.remove_author(connection, user_id, commit=False)
             server_user_repo.delete_server_users_for_user(connection, user_id, commit=False)
             hof_wrapped_repo.delete_hof_wrapped_for_user(connection, user_id, commit=False)
             global_profile_repo.delete_for_user(connection, user_id, commit=False)
+            opt_out_repo.set_opted_out(connection, user_id, False, commit=False)
     return detached
 
 
@@ -1130,11 +1129,11 @@ async def my_data(interaction: discord.Interaction):
 
     async def toggle_totals(button_interaction: discord.Interaction, view):
         hide = view.summary["hidden_since"] is None
-        async with get_db_connection(connection_pool) as connection:
-            # A /my_data opened before the member asked not to be featured still shows this button.
-            # They have no totals then, and storing the choice would keep data about them for nothing
-            stored = not opt_out_repo.is_opted_out(connection, user_id)
-            if stored:
+        # A /my_data opened earlier can still show this button to a member who since has no totals,
+        # and storing the choice then would keep data about them for nothing
+        stored = commands.has_totals(await read_my_data_summary(user_id))
+        if stored:
+            async with get_db_connection(connection_pool) as connection:
                 global_profile_repo.set_hidden(connection, user_id, hide)
         # Read again rather than patched, so a /my_data opened before the member deleted their data or
         # opted out shows what is stored now
@@ -1158,17 +1157,33 @@ async def my_data(interaction: discord.Interaction):
         view.stop()
         confirm_view = commands.ConfirmDeleteView(user_id, confirmed)
         confirm_view.original_interaction = interaction
+        content = messages.DELETE_MY_DATA_CONFIRM
+        if view.summary["opted_out_since"]:
+            # Deleting everything includes the record that keeps their messages off the boards
+            content += " " + messages.DELETE_MY_DATA_CONFIRM_OPT_OUT
+        # noinspection PyUnresolvedReferences
+        await button_interaction.response.edit_message(content=content, view=confirm_view)
+
+    async def toggle_featuring(button_interaction: discord.Interaction, view):
+        stop = view.summary["opted_out_since"] is None
+        async with get_db_connection(connection_pool) as connection:
+            opt_out_repo.set_opted_out(connection, user_id, stop)
+        view.summary = await read_my_data_summary(user_id)
+        view.refresh()
+        note = messages.STOPPED_FEATURING if stop else messages.COUNTED_AGAIN
         # noinspection PyUnresolvedReferences
         await button_interaction.response.edit_message(
-            content=messages.DELETE_MY_DATA_CONFIRM.format(command=command_refs.MY_DATA), view=confirm_view)
+            content=commands.my_data_summary(view.summary, note=note), view=view)
+        await utils.logging(bot, "A member asked not to be featured" if stop else "A member asked to be featured again",
+                            interaction.guild_id, log_level=log_type.COMMAND)
 
-    async def confirmed(button_interaction: discord.Interaction, stop_featuring: bool):
+    async def confirmed(button_interaction: discord.Interaction):
         # Answered before the deletes run, since they can take longer than the three seconds Discord
         # waits for a button to be answered
         # noinspection PyUnresolvedReferences
         await button_interaction.response.defer()
         try:
-            detached = await delete_member_data(user_id, stop_featuring)
+            detached = await delete_member_data(user_id)
         except Exception as e:
             # Nothing was deleted, since the deletes run in one transaction, so no cooldown is started
             await button_interaction.edit_original_response(content=messages.COMMAND_FAILED, view=None)
@@ -1176,26 +1191,26 @@ async def my_data(interaction: discord.Interaction):
                                 log_level=log_type.ERROR)
             return
         start_daily_cooldown(user_id, "delete_my_data")
-        content = (messages.DELETE_MY_DATA_DONE_STOPPED.format(command=command_refs.MY_DATA)
-                   if stop_featuring else messages.DELETE_MY_DATA_DONE)
-        await button_interaction.edit_original_response(content=content, view=None)
+        offer = commands.StopFeaturingView(user_id, stop_featuring)
+        offer.original_interaction = button_interaction
+        await button_interaction.edit_original_response(
+            content=messages.DELETE_MY_DATA_DONE.format(command=command_refs.MY_DATA), view=offer)
         # No name in the log: the member has just asked to be forgotten
-        await utils.logging(bot, f"A member deleted their data, detaching {detached} post{plural(detached)}"
-                                 + (", and asked not to be featured" if stop_featuring else ""),
+        await utils.logging(bot, f"A member deleted their data, detaching {detached} post{plural(detached)}",
                             interaction.guild_id, log_level=log_type.COMMAND)
 
-    async def feature_again(button_interaction: discord.Interaction, view):
+    async def stop_featuring(button_interaction: discord.Interaction):
+        # The same setting as the button on /my_data, offered where a member who just deleted their
+        # data is likeliest to want it. Like that button, it concerns new messages only
         async with get_db_connection(connection_pool) as connection:
-            opt_out_repo.set_opted_out(connection, user_id, False)
-        view.summary["opted_out_since"] = None
-        view.refresh()
+            opt_out_repo.set_opted_out(connection, user_id, True)
         # noinspection PyUnresolvedReferences
         await button_interaction.response.edit_message(
-            content=commands.my_data_summary(view.summary, note=messages.COUNTED_AGAIN), view=view)
-        await utils.logging(bot, "A member asked to be featured again", interaction.guild_id,
+            content=messages.DELETE_MY_DATA_DONE_STOPPED.format(command=command_refs.MY_DATA), view=None)
+        await utils.logging(bot, "A member asked not to be featured", interaction.guild_id,
                             log_level=log_type.COMMAND)
 
-    view = commands.MyDataView(user_id, summary, download, toggle_totals, delete, feature_again)
+    view = commands.MyDataView(user_id, summary, download, toggle_totals, toggle_featuring, delete)
     view.original_interaction = interaction
     await interaction.followup.send(commands.my_data_summary(summary), view=view, ephemeral=True)
     await utils.logging(bot, f"My data command used in {where_used(interaction)}", interaction.guild_id,

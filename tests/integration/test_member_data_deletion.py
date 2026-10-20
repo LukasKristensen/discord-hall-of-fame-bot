@@ -180,16 +180,12 @@ class MemberDataDeletionTestCase(DatabaseTestCase):
                     row[column].pop(str(user_id), None)
         expected["hidden_global_profile"] = [row for row in expected["hidden_global_profile"]
                                              if row["user_id"] != user_id]
+        expected["opted_out_member"] = [row for row in expected["opted_out_member"] if row["user_id"] != user_id]
         # Changing a value can change where a row sorts, so the order is worked out again
         return {table: in_order(rows) for table, rows in expected.items()}
 
-    def assert_only_the_member_changed(self, before, after, user_id, stop_featuring):
+    def assert_only_the_member_changed(self, before, after, user_id):
         expected = self.expected_after_deleting(before, user_id)
-        # The opt-out row carries the moment it was made, so it is checked on its own
-        added = [row for row in after["opted_out_member"] if row["user_id"] == user_id]
-        self.assertEqual(stop_featuring, bool(added))
-        after = dict(after, opted_out_member=[row for row in after["opted_out_member"] if row["user_id"] != user_id])
-        expected["opted_out_member"] = [row for row in expected["opted_out_member"] if row["user_id"] != user_id]
 
         self.assertEqual(set(expected), set(after), "a table appeared or disappeared")
         for table in expected:
@@ -207,20 +203,23 @@ class DeletionTests(MemberDataDeletionTestCase):
         before = self.snapshot()
         await main.delete_member_data(DELETED)
 
-        self.assert_only_the_member_changed(before, self.snapshot(), DELETED, stop_featuring=False)
+        self.assert_only_the_member_changed(before, self.snapshot(), DELETED)
 
-    async def test_only_the_member_changes_when_they_stop_being_counted(self):
+    async def test_deleting_also_deletes_the_choice_not_to_be_featured(self):
+        """It is data about the member too, so deleting everything includes it."""
+        opt_out_repo.set_opted_out(self.connection, DELETED, True)
         before = self.snapshot()
-        await main.delete_member_data(DELETED, stop_featuring=True)
+        await main.delete_member_data(DELETED)
 
-        self.assert_only_the_member_changed(before, self.snapshot(), DELETED, stop_featuring=True)
+        self.assert_only_the_member_changed(before, self.snapshot(), DELETED)
+        self.assertFalse(opt_out_repo.is_opted_out(self.connection, DELETED))
 
     async def test_deleting_another_member_leaves_this_one_alone(self):
         """The same check from the other side, so the result does not depend on who is deleted."""
         before = self.snapshot()
         await main.delete_member_data(OTHER)
 
-        self.assert_only_the_member_changed(before, self.snapshot(), OTHER, stop_featuring=False)
+        self.assert_only_the_member_changed(before, self.snapshot(), OTHER)
 
     async def test_detaches_every_post_by_the_member(self):
         await main.delete_member_data(DELETED)
@@ -313,7 +312,7 @@ class DeletionTests(MemberDataDeletionTestCase):
         self.assertFalse(global_profile_repo.is_hidden(self.connection, DELETED))
 
     async def test_other_members_keep_their_privacy_and_counting_choices(self):
-        await main.delete_member_data(DELETED, stop_featuring=True)
+        await main.delete_member_data(DELETED)
 
         self.assertTrue(global_profile_repo.is_hidden(self.connection, OTHER))
         self.assertTrue(opt_out_repo.is_opted_out(self.connection, THIRD))
@@ -374,7 +373,7 @@ class DeletionTests(MemberDataDeletionTestCase):
                 await main.delete_member_data(DELETED)
         await main.delete_member_data(DELETED)
 
-        self.assert_only_the_member_changed(before, self.snapshot(), DELETED, stop_featuring=False)
+        self.assert_only_the_member_changed(before, self.snapshot(), DELETED)
 
     async def test_resets_the_statement_timeout_afterwards(self):
         """The connection goes back to the pool, and a leftover timeout would cut short the daily task."""
@@ -407,7 +406,7 @@ class DeletionTests(MemberDataDeletionTestCase):
         self.assertEqual([(1,), (2,), (3,)], ranks)
 
 
-class StopCountingTests(MemberDataDeletionTestCase):
+class StopFeaturingTests(MemberDataDeletionTestCase):
     def setUp(self):
         super().setUp()
         self.sent = []
@@ -441,62 +440,74 @@ class StopCountingTests(MemberDataDeletionTestCase):
         stored = self.rows("SELECT author_id FROM hall_of_fame_message WHERE message_id = %s", (message_id,))
         return stored[0][0] if stored else None
 
-    async def test_records_that_the_member_is_not_counted(self):
-        await main.delete_member_data(DELETED, stop_featuring=True)
+    def stop_featuring(self, user_id=DELETED):
+        """What the Stop featuring me button stores"""
+        opt_out_repo.set_opted_out(self.connection, user_id, True)
 
-        self.assertTrue(opt_out_repo.is_opted_out(self.connection, DELETED))
-
-    async def test_a_plain_deletion_keeps_counting_the_member(self):
+    async def test_a_plain_deletion_keeps_featuring_the_member(self):
         await main.delete_member_data(DELETED)
 
         self.assertFalse(opt_out_repo.is_opted_out(self.connection, DELETED))
 
     async def test_a_new_message_by_a_member_not_featured_is_not_stored(self):
-        await main.delete_member_data(DELETED, stop_featuring=True)
+        self.stop_featuring()
 
         self.assertIsNone(await self.post(DELETED))
 
     async def test_a_new_message_by_a_member_not_featured_is_not_reposted(self):
         """Their name, avatar and words would be on the card, which is what they asked to stop."""
-        await main.delete_member_data(DELETED, stop_featuring=True)
+        self.stop_featuring()
         await self.post(DELETED, message_id=901)
 
         self.assertEqual([], self.sent)
 
     async def test_a_member_who_opts_out_while_their_post_is_sent_is_not_credited(self):
         """Sending the repost lets other events run, so the request can land between the check and the store."""
+        before = self.posts_by(DELETED)
+
         async def opt_out():
-            await main.delete_member_data(DELETED, stop_featuring=True)
+            self.stop_featuring()
 
         self.assertEqual(hall_of_fame_message_repo.NO_AUTHOR_ID, await self.post(DELETED, while_sending=opt_out))
-        self.assertEqual([], self.posts_by(DELETED))
+        self.assertEqual(before, self.posts_by(DELETED))
+
+    async def test_stopping_keeps_the_earlier_posts_credited(self):
+        """It concerns new messages only. Removing what is stored is what deleting is for."""
+        before = self.posts_by(DELETED)
+        self.stop_featuring()
+
+        self.assertNotEqual([], before)
+        self.assertEqual(before, self.posts_by(DELETED))
 
     async def test_a_new_post_by_anybody_else_keeps_its_author(self):
-        await main.delete_member_data(DELETED, stop_featuring=True)
+        self.stop_featuring()
 
         self.assertEqual(OTHER, await self.post(OTHER))
 
-    async def test_the_member_stays_off_the_statistics_after_new_posts(self):
-        await main.delete_member_data(DELETED, stop_featuring=True)
+    async def test_new_messages_add_nothing_to_the_members_statistics(self):
+        self.stop_featuring()
+        self.rebuild_all()
+        before = server_user_repo.get_server_users_for_user(self.connection, DELETED)
         await self.post(DELETED)
         self.rebuild_all()
 
-        self.assertEqual([], server_user_repo.get_server_users_for_user(self.connection, DELETED))
+        self.assertEqual(before, server_user_repo.get_server_users_for_user(self.connection, DELETED))
 
     async def test_featuring_again_credits_new_posts(self):
-        await main.delete_member_data(DELETED, stop_featuring=True)
+        self.stop_featuring()
         opt_out_repo.set_opted_out(self.connection, DELETED, False)
 
         self.assertEqual(DELETED, await self.post(DELETED))
 
-    async def test_featuring_again_leaves_the_posts_from_before_the_deletion_uncredited(self):
-        await main.delete_member_data(DELETED, stop_featuring=True)
+    async def test_featuring_again_leaves_the_posts_from_before_a_deletion_uncredited(self):
+        await main.delete_member_data(DELETED)
+        self.stop_featuring()
         opt_out_repo.set_opted_out(self.connection, DELETED, False)
 
         self.assertEqual([], self.posts_by(DELETED))
 
     async def test_featuring_again_only_removes_this_member(self):
-        await main.delete_member_data(DELETED, stop_featuring=True)
+        self.stop_featuring()
         opt_out_repo.set_opted_out(self.connection, DELETED, False)
 
         self.assertTrue(opt_out_repo.is_opted_out(self.connection, THIRD))

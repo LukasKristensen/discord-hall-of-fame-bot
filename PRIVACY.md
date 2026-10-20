@@ -22,11 +22,11 @@ described here. Contact: githublukas@gmail.com, or the
   their server out of everyone's totals with `/count_in_global_profiles`.
 - **Hall of Fame Wrapped:** yearly statistics per member, including most-used channels and emojis and
   which members react to each other's posts most often.
-- **Not featured:** if you choose "Delete existing data, but keep a preference that I opted out of being featured"
-  on `/my_data`, your user ID is stored with the date, so the bot remembers not to repost or store your
-  messages from then on.
-  Without it, the bot would have no way to know to leave your future messages out. Everything else
-  about you is deleted, and choosing "Feature me again" deletes this too.
+- **Not featured:** if you press "Stop featuring me" on `/my_data` (it is also offered right after you
+  delete your data), your user ID is stored with the date, so the bot remembers not to repost or store
+  new messages of yours. Without it, the bot would have no way to know to leave your future messages
+  out. It only concerns new messages: what is already stored about you stays until you delete it.
+  Choosing "Feature me again" or deleting your data deletes this record.
 - **Support:** feedback sent with `/feedback` and custom profile requests, delivered to a private
   developer channel on Discord.
 - **Logs:** which commands were used, with the username and server name, posted to private developer
@@ -70,12 +70,12 @@ Nothing else is shared.
 - Join and leave dates and monthly member counts are kept as anonymous server statistics.
 - Your choice to hide your totals across servers is kept until you show it again or delete your data.
 - Other data is kept while the bot is in the server, and deleted on request as described in section 6.
-- Deleting your data on `/my_data` immediately deletes your member statistics, Wrapped data and privacy choice,
-  removes you from other members' Wrapped, and removes your user ID from your featured messages. The
-  reposts stay in each server's Hall of Fame channel, since they belong to that server, but are no
-  longer linked to you. Messages of yours featured after that are stored again as usual, unless you
-  choose "Delete existing data, but keep a preference that I opted out of being featured". Then your
-  messages are not reposted to any Hall of Fame or stored at all, until you choose "Feature me again" on `/my_data`.
+- Deleting your data on `/my_data` immediately deletes your member statistics, Wrapped data and your
+  choice to hide your totals, removes you from other members' Wrapped, and removes your user ID from
+  your featured messages. The reposts stay in each server's Hall of Fame channel, since they belong to
+  that server, but are no longer linked to you. Your choice not to be featured, if you made it, is
+  deleted too, so messages of yours featured after that are stored again as usual, unless you press
+  "Stop featuring me", which is offered right after deleting.
 
 ## 6. Your rights
 
@@ -85,8 +85,8 @@ Everything below is done from `/my_data`, which shows what is stored about you w
   When posts, server standings or Wrapped entries are stored, "Download my data" sends you a file with
   every row.
 - **Delete your data:** "Delete my data" deletes it after you confirm, as described in section 5.
-- **Object to being featured:** choose "Delete existing data, but keep a preference that I opted out of being featured"
-  when deleting, and the bot stops reposting and storing your messages from then on.
+- **Object to being featured:** press "Stop featuring me", and the bot stops reposting and storing new
+  messages of yours. What is already stored stays until you delete it. "Feature me again" undoes it.
 - **Hide your totals across servers:** "Hide my totals across servers".
 
 `/my_data` only answers you, and works in any server with the bot and in DMs once you add the bot to

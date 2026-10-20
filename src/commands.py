@@ -499,14 +499,14 @@ def build_my_data_export(user_id: int, posts: list, standings: list, wrapped: li
 class ConfirmDeleteView(discord.ui.View):
     """
     The confirm and cancel buttons /my_data shows after Delete my data. Deleting cannot be undone, so
-    it only happens on a deliberate second click, and only the member who asked can make it
+    it only happens on a deliberate second click, and only the member who asked can make it. Whether
+    to stop featuring the member is asked afterwards, by StopFeaturingView
     """
 
     def __init__(self, owner_id: int, on_confirm, timeout_seconds: float = 120):
         """
         :param owner_id: The member whose data would be deleted
-        :param on_confirm: Coroutine function taking the button's interaction and whether the member
-            also asked not to be featured from now on, which deletes and answers
+        :param on_confirm: Coroutine function taking the button's interaction, which deletes and answers
         :param timeout_seconds: How long the buttons stay usable
         """
         super().__init__(timeout=timeout_seconds)
@@ -516,13 +516,10 @@ class ConfirmDeleteView(discord.ui.View):
         self.finished = False
 
         confirm = discord.ui.Button(style=discord.ButtonStyle.danger, label=messages.DELETE_MY_DATA_BUTTON)
-        stop_featuring = discord.ui.Button(style=discord.ButtonStyle.danger, label=messages.DELETE_AND_STOP_BUTTON)
         cancel = discord.ui.Button(style=discord.ButtonStyle.secondary, label=messages.CANCEL_BUTTON)
         confirm.callback = self.confirm
-        stop_featuring.callback = self.confirm_and_stop_featuring
         cancel.callback = self.cancel
         self.add_item(confirm)
-        self.add_item(stop_featuring)
         self.add_item(cancel)
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
@@ -535,12 +532,7 @@ class ConfirmDeleteView(discord.ui.View):
     async def confirm(self, interaction: discord.Interaction):
         self.finished = True
         self.stop()
-        await self.on_confirm(interaction, False)
-
-    async def confirm_and_stop_featuring(self, interaction: discord.Interaction):
-        self.finished = True
-        self.stop()
-        await self.on_confirm(interaction, True)
+        await self.on_confirm(interaction)
 
     async def cancel(self, interaction: discord.Interaction):
         self.finished = True
@@ -558,12 +550,63 @@ class ConfirmDeleteView(discord.ui.View):
             pass
 
 
+class StopFeaturingView(discord.ui.View):
+    """
+    The button under the message a deletion ends with, offering to stop featuring the member from now
+    on: the same setting as on /my_data, offered where a member who just deleted their data is likeliest
+    to want it, with what it keeps explained right above the button
+    """
+
+    def __init__(self, owner_id: int, on_stop, timeout_seconds: float = 120):
+        """
+        :param owner_id: The member who deleted their data
+        :param on_stop: Coroutine function taking the button's interaction, which opts out and answers
+        :param timeout_seconds: How long the button stays usable
+        """
+        super().__init__(timeout=timeout_seconds)
+        self.owner_id = owner_id
+        self.on_stop = on_stop
+        self.original_interaction = None
+        self.finished = False
+        button = discord.ui.Button(style=discord.ButtonStyle.secondary, label=messages.STOP_FEATURING_BUTTON)
+        button.callback = self.stop_featuring
+        self.add_item(button)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.owner_id:
+            await interaction.response.send_message(messages.MY_DATA_NOT_YOURS, ephemeral=True)
+            return False
+        return True
+
+    async def stop_featuring(self, interaction: discord.Interaction):
+        self.finished = True
+        self.stop()
+        await self.on_stop(interaction)
+
+    async def on_timeout(self):
+        if self.finished or self.original_interaction is None:
+            return
+        try:
+            # The deletion stands; only the offer goes, and /my_data makes it again after another deletion
+            await self.original_interaction.edit_original_response(view=None)
+        except discord.HTTPException:
+            pass
+
+
 def has_stored_rows(summary: dict) -> bool:
     """
     Whether posts, standings or Wrapped entries are stored about a member. Their two choices are not
     counted: the summary already shows everything stored for those, so a file would only repeat it
     """
     return bool(summary["posts"] or summary["servers"] or summary["wrapped"])
+
+
+def has_totals(summary: dict) -> bool:
+    """
+    Whether a member has totals across servers to show or hide: posts credited to them, or the chance
+    of some, since they are featured. Not featuring a member leaves the posts they already have
+    """
+    return bool(summary["posts"] or not summary["opted_out_since"])
 
 
 def discord_date(moment) -> str:
@@ -585,35 +628,40 @@ def my_data_summary(summary: dict, note: str = None) -> str:
             posts=summary["posts"], posts_plural="" if summary["posts"] == 1 else "s",
             servers=summary["servers"], servers_plural="" if summary["servers"] == 1 else "s",
             wrapped=summary["wrapped"], wrapped_plural="y" if summary["wrapped"] == 1 else "ies"))
-    else:
+    elif summary["hidden_since"] or summary["opted_out_since"]:
         lines.append(messages.MY_DATA_NOTHING_STORED)
-    if summary["opted_out_since"]:
-        lines.append(messages.MY_DATA_NOT_FEATURED.format(since=discord_date(summary["opted_out_since"])))
     else:
-        # A member who is not featured has no totals to show or hide
+        lines.append(messages.MY_DATA_NOTHING_AT_ALL)
+    if has_totals(summary):
         if summary["hidden_since"]:
             lines.append(messages.MY_DATA_TOTALS_HIDDEN.format(since=discord_date(summary["hidden_since"])))
         else:
             # The totals are added up from the posts credited to the member, so without any there are none yet
             lines.append(messages.MY_DATA_TOTALS_SHOWN if summary["posts"]
                          else messages.MY_DATA_TOTALS_SHOWN_ONCE_FEATURED)
+    if summary["opted_out_since"]:
+        not_featured = messages.MY_DATA_NOT_FEATURED.format(since=discord_date(summary["opted_out_since"]))
+        # Not featuring a member only concerns new messages, so anything from before is still there
+        if has_stored_rows(summary):
+            not_featured += " " + messages.MY_DATA_EARLIER_KEPT
+        lines.append(not_featured)
     lines.append(messages.MY_DATA_FOOTER)
     return "\n".join(lines)
 
 
 class MyDataView(discord.ui.View):
     """
-    The buttons under /my_data, the one place a member manages what the bot stores about them:
-    download it, hide or show their totals across servers, and delete it, or be featured again once
-    they asked not to be. Only the member who ran the command can use them
+    The buttons under /my_data, the one place a member manages what the bot stores about them: two
+    settings, hiding their totals across servers and not being featured, and two actions, downloading
+    and deleting their data. Only the member who ran the command can use them
     """
 
-    def __init__(self, owner_id: int, summary: dict, on_download, on_toggle_totals, on_delete,
-                 on_feature_again, timeout_seconds: float = 120):
+    def __init__(self, owner_id: int, summary: dict, on_download, on_toggle_totals, on_toggle_featuring,
+                 on_delete, timeout_seconds: float = 120):
         """
         :param owner_id: The member the data belongs to
         :param summary: What is stored, as my_data_summary takes it. The buttons follow it
-        :param on_download, on_toggle_totals, on_delete, on_feature_again: Coroutine functions taking
+        :param on_download, on_toggle_totals, on_toggle_featuring, on_delete: Coroutine functions taking
             the button's interaction and this view, which act and answer
         :param timeout_seconds: How long the buttons stay usable
         """
@@ -626,11 +674,10 @@ class MyDataView(discord.ui.View):
         self.download_button = discord.ui.Button(style=discord.ButtonStyle.primary,
                                                  label=messages.MY_DATA_DOWNLOAD_BUTTON)
         self.totals_button = discord.ui.Button(style=discord.ButtonStyle.secondary)
+        self.featuring_button = discord.ui.Button(style=discord.ButtonStyle.secondary)
         self.delete_button = discord.ui.Button(style=discord.ButtonStyle.danger, label=messages.DELETE_MY_DATA_BUTTON)
-        self.feature_again_button = discord.ui.Button(style=discord.ButtonStyle.primary,
-                                                      label=messages.FEATURE_ME_AGAIN_BUTTON)
         for button, handler in ((self.download_button, on_download), (self.totals_button, on_toggle_totals),
-                                (self.delete_button, on_delete), (self.feature_again_button, on_feature_again)):
+                                (self.featuring_button, on_toggle_featuring), (self.delete_button, on_delete)):
             button.callback = self._calling(handler)
         self.refresh()
 
@@ -644,15 +691,21 @@ class MyDataView(discord.ui.View):
         self.clear_items()
         self.totals_button.label = (messages.SHOW_TOTALS_BUTTON if self.summary["hidden_since"]
                                     else messages.HIDE_TOTALS_BUTTON)
-        if has_stored_rows(self.summary):
-            self.add_item(self.download_button)
-        # A member who asked not to be featured has no totals to hide and nothing new stored to delete,
-        # so they are only offered the way back. Hiding would store a choice about totals they cannot have
-        if self.summary["opted_out_since"]:
-            self.add_item(self.feature_again_button)
-        else:
+        self.featuring_button.label = (messages.FEATURE_ME_AGAIN_BUTTON if self.summary["opted_out_since"]
+                                       else messages.STOP_FEATURING_BUTTON)
+        # Download and Delete are always shown, so the panel looks the same for everyone, and greyed out
+        # when there is nothing for them to act on. The summary above says why. A file is only worth it
+        # for rows: the summary already shows everything stored for a choice
+        self.download_button.disabled = not has_stored_rows(self.summary)
+        self.add_item(self.download_button)
+        # Hiding totals a member cannot have would store a choice about them for nothing
+        if has_totals(self.summary):
             self.add_item(self.totals_button)
-            self.add_item(self.delete_button)
+        self.add_item(self.featuring_button)
+        # Deleting removes everything stored, the member's two choices included
+        self.delete_button.disabled = not (has_stored_rows(self.summary) or self.summary["hidden_since"]
+                                           or self.summary["opted_out_since"])
+        self.add_item(self.delete_button)
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         # The message is ephemeral, so nobody else should see it, but a click is checked all the same

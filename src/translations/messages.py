@@ -134,16 +134,17 @@ MY_DATA_STORED = ("📦 Hall of Fame stores {posts} featured post{posts_plural},
 # that nothing of theirs was ever featured. It names what is not stored rather than saying nothing is,
 # since a member's choices, such as not being featured, are stored and listed below it
 MY_DATA_NOTHING_STORED = "📦 No posts, server standings or Wrapped entries are stored about you."
+# When not even a choice is stored, so the panel says why Download and Delete are greyed out
+MY_DATA_NOTHING_AT_ALL = "📦 Hall of Fame stores nothing about you, so there is nothing to download or delete."
 MY_DATA_TOTALS_SHOWN = "🌍 Your totals across servers are shown on your profile."
 MY_DATA_TOTALS_SHOWN_ONCE_FEATURED = "🌍 Once you are featured, your totals across servers are shown on your profile."
 MY_DATA_TOTALS_HIDDEN = ("🔒 Your totals across servers are hidden, so your profile shows only the numbers from the "
                          "server it is looked up in. Hall of Fame keeps your user ID and the date you hid them "
                          "({since}) to remember this.")
-MY_DATA_NOT_FEATURED = ("🚫 You asked not to be featured, so your messages are not reposted to any board or stored, "
-                        "and you are on no leaderboard, profile or Wrapped. Hall of Fame keeps only your user ID and "
-                        "the date you asked ({since}), since without them it would have no way to know that your "
-                        "future messages should be left out. **Feature me again** deletes them, and your messages "
-                        "can be featured from then on.")
+MY_DATA_NOT_FEATURED = ("🚫 New messages of yours are not featured: since you asked ({since}), they are not "
+                        "reposted to any board or stored. Hall of Fame keeps your user ID and that date, because "
+                        "otherwise it would have no way to know to skip your messages.")
+MY_DATA_EARLIER_KEPT = "Your earlier posts and statistics are kept until you delete them with **Delete my data**."
 MY_DATA_FOOTER = ("Message text, images and your username are never stored. "
                   "Privacy policy: <" + PRIVACY_POLICY_URL + ">")
 MY_DATA_DOWNLOAD_BUTTON = "Download my data"
@@ -156,24 +157,27 @@ MY_DATA_NOT_YOURS = "Only the member who ran this command can use these buttons.
 DELETE_MY_DATA_CONFIRM = ("Here is what happens when you delete your data. You are taken off every member "
                           "leaderboard, profile and Wrapped, in every server, and this cannot be undone. Your posts "
                           "stay on the boards, since they belong to those servers, but they are no longer credited to "
-                          "you. If you hid your totals across servers, that choice is deleted too.\n\n"
-                          "If you choose **Delete my data**, nothing about you is kept, and your messages can be "
-                          "featured again in the future.\n\n"
-                          "If you choose **Delete existing data, but keep a preference that I opted out of being "
-                          "featured**, we keep just your user ID and the date, because otherwise the bot would have no "
-                          "way to know it should skip your messages. Change your mind any time with **Feature me "
-                          "again** on {command}.")
+                          "you. If you hid your totals across servers, that choice is deleted too.")
+# Added to the confirmation for a member who asked not to be featured, since deleting everything includes
+# the record that keeps their messages off the boards
+DELETE_MY_DATA_CONFIRM_OPT_OUT = ("You asked not to be featured, and that choice is deleted too, so new messages of "
+                                  "yours can be featured again. You can stop that again right after deleting.")
 DELETE_MY_DATA_BUTTON = "Delete my data"
-DELETE_AND_STOP_BUTTON = "Delete existing data, but keep a preference that I opted out of being featured"
-DELETE_MY_DATA_DONE_STOPPED = ("✅ Your data is deleted, and your messages are not featured from now on: the bot "
-                               "does not repost or store them. Posts already on a board stay there, no longer "
-                               "credited to you. Run {command} to be featured again.")
+STOP_FEATURING_BUTTON = "Stop featuring me"
 FEATURE_ME_AGAIN_BUTTON = "Feature me again"
-COUNTED_AGAIN = ("✅ Your messages can be featured again from now on. Posts from before you deleted your data "
-                 "stay uncredited.")
+STOPPED_FEATURING = "✅ New messages of yours are not featured from now on."
+DELETE_MY_DATA_DONE_STOPPED = ("✅ New messages of yours are not featured from now on: the bot does not repost or "
+                               "store them. Run {command} and press **Feature me again** to change your mind.")
+COUNTED_AGAIN = "✅ Your messages can be featured again from now on."
 CANCEL_BUTTON = "Cancel"
+# Ends with the offer to stop being featured, the same as the button on /my_data, since a member who just
+# deleted their data is the likeliest to want it
 DELETE_MY_DATA_DONE = ("✅ Your data is deleted. You are no longer on any leaderboard, profile or Wrapped. To have "
-                       "a repost removed from a board, ask that server's admins.")
+                       "a repost removed from a board, ask that server's admins.\n\n"
+                       "New messages of yours that reach a Hall of Fame are featured and stored as usual. If you "
+                       "would rather the bot skip them from now on, press **Stop featuring me**. It keeps just your "
+                       "user ID and the date, because otherwise the bot would have no way to know it should skip "
+                       "your messages. Change your mind any time with **Feature me again** on {command}.")
 DELETE_MY_DATA_CANCELLED = "Nothing was deleted."
 DELETE_MY_DATA_EXPIRED = "This confirmation expired and nothing was deleted. Run {command} again to delete your data."
 # Sent for any command that fails in a way nothing more specific covers, so it must not assume the

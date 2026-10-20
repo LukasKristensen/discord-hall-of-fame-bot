@@ -178,8 +178,8 @@ class FakeFollowup:
         self.sent = []
         self.views = []
 
-    async def send(self, content=None, embed=None, ephemeral=False, file=None, view=None):
-        self.sent.append((content, ephemeral, file))
+    async def send(self, content=None, embed=None, ephemeral=False, file=None, files=None, view=None):
+        self.sent.append((content, ephemeral, list(files or []) + ([file] if file is not None else [])))
         self.views.append(view)
 
 
@@ -247,8 +247,9 @@ class CommandsEndToEndTests(DatabaseTestCase):
         pressed = interaction()
         await view.download_button.callback(pressed)
 
-        content, ephemeral, file = pressed.followup.sent[0]
-        export = json.loads(file.fp.read())
+        content, ephemeral, files = pressed.followup.sent[0]
+        self.assertEqual(1, len(files))
+        export = json.loads(files[0].fp.read())
         self.assertTrue(ephemeral)
         self.assertEqual(["1"], [post["message_id"] for post in export["featured_posts"]])
         self.assertEqual(str(posted), export["featured_posts"][0]["created_at"])
@@ -257,11 +258,12 @@ class CommandsEndToEndTests(DatabaseTestCase):
     async def test_my_data_for_a_member_with_nothing_stored(self):
         command, view = await self.open_my_data(user_id=777)
 
-        content, ephemeral, file = command.followup.sent[0]
-        self.assertIn(messages.MY_DATA_NOTHING_STORED, content)
-        self.assertIsNone(file)
+        content, ephemeral, files = command.followup.sent[0]
+        self.assertIn(messages.MY_DATA_NOTHING_AT_ALL, content)
+        self.assertEqual([], files)
         self.assertTrue(ephemeral)
-        self.assertNotIn(view.download_button, view.children)
+        self.assertTrue(view.download_button.disabled)
+        self.assertTrue(view.delete_button.disabled)
 
 
 if __name__ == "__main__":
