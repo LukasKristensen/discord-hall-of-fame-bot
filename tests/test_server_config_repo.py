@@ -182,5 +182,36 @@ class ServerClassMappingTests(unittest.TestCase):
         }, server.reaction_config())
 
 
+
+class FailingAlterCursor:
+    """A cursor whose ALTER TABLE statements fail, as on a database that refuses a column change."""
+
+    def __init__(self):
+        self.executed = []
+
+    def execute(self, query, params=None):
+        self.executed.append(query)
+        if query.strip().upper().startswith("ALTER TABLE"):
+            raise RuntimeError("permission denied")
+
+    def close(self):
+        pass
+
+
+class CreateTableMigrationTests(unittest.TestCase):
+    def test_a_column_that_cannot_be_added_does_not_stop_the_others(self):
+        """Each change is tried on its own and rolled back, so one refusal leaves the rest to run."""
+        connection = FakeConnection()
+        cursor = FailingAlterCursor()
+        connection.cursor = lambda: cursor
+        server_config_repo.create_server_config_table(connection)
+
+        altered = [query for query in cursor.executed if "ADD COLUMN IF NOT EXISTS" in query]
+        self.assertTrue(any("count_in_global_profiles" in query for query in altered))
+        self.assertTrue(any("missing_since" in query for query in altered))
+        self.assertEqual(len(altered), connection.rollbacks)
+
+
+
 if __name__ == "__main__":
     unittest.main()

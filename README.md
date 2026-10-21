@@ -220,6 +220,11 @@ Getting featured is meant to be worth something, so the bot keeps score.
 - **`/hof_wrapped`** gives a member their year in review, and **`/server_hof_wrapped`** does the same
   for the whole server.
 
+A member's posts count toward all of this up to 10,000 across every server. The limit keeps what the
+bot stores about any one member small enough that `/my_data` can always give them all of it. Posts past
+it still reach the board but are not credited. Reaching it takes a server's whole daily limit of 100
+posts, every day for 100 days, all by one member.
+
 <br>
 
 
@@ -350,6 +355,8 @@ from a server deletes that server's data, and any member can see, download or de
 - [x] When the bot joins, it runs the board and channel checks and, if something is wrong, posts a short note with a Check setup button on the board instead of the full report, since the board is public.
 - [x] Added /my_data, where a member sees what is stored about them and manages it with buttons: download it as a file, hide their totals across servers, stop the bot featuring their new messages, and delete it, which removes them from every leaderboard, profile and Wrapped. It works in DMs through a user install.
 - [x] Added /count_in_global_profiles for admins to leave their server out of members' totals across servers.
+- [x] A member's posts count toward leaderboards, profiles and Wrapped up to 10,000 across every server. This keeps what is stored about any one member small enough that /my_data can always export all of it. Posts past that still reach the board but are not credited, and the developer is alerted.
+- [x] A /my_data download too big for one file is sent as several complete JSON files instead of failing.
 - [x] /user_profile is laid out in columns (this month, all time, every server) with highlights: the best post with a jump link, when the member was last featured and the gap to the next rank. The totals across servers never name a server.
 - [x] /user_profile shows the badges a member has earned: monthly champion, 10 to 500 posts, months in a row, featured for a year, a 100-reaction post, 10 posts in one month and featured in 5 or more servers. Badges are worked out from existing posts, never name a server, and leave out other servers when a member hid their totals.
 - [x] /user_profile, /leaderboard and the Wrapped commands are turned away with a private note in a Hall of Fame channel that is closed to chat.

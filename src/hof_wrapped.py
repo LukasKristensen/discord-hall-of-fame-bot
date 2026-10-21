@@ -2,7 +2,7 @@ import discord as discord
 import message_reactions
 from discord.ext import commands
 import datetime
-from repositories import hof_wrapped_repo, hall_of_fame_message_repo, server_config_repo, hof_wrapped_guild_status_repo
+from repositories import opt_out_repo, hof_wrapped_repo, hall_of_fame_message_repo, server_config_repo, hof_wrapped_guild_status_repo
 import psycopg2
 import os
 import json
@@ -47,8 +47,8 @@ def initialize_users(connection, guild_id: int):
 
 def leave_out_members_who_are_gone(still_members):
     """
-    Drop the members who deleted their data while Wrapped was being prepared, and take them out of
-    everyone else's fan lists, so nothing is saved about them
+    Drop the members who deleted their data while Wrapped was being prepared or asked not to be
+    featured, and take them out of everyone else's fan lists, so nothing is saved about them
     :param still_members: The IDs that are still the author of a post in the server
     """
     gone = set(users) - set(still_members)
@@ -342,8 +342,11 @@ async def main(guild_id: int, bot: commands.Bot, get_reaction_threshold: int, co
     initialize_users(connection, guild_id)
     await process_hof_messages_from_db(guild, connection)
     # Deleting data detaches the member's posts, so whoever is no longer an author here deleted their
-    # data while the posts were being read
-    leave_out_members_who_are_gone(hall_of_fame_message_repo.find_members_for_guild(connection, guild_id))
+    # data while the posts were being read. A member who asked not to be featured keeps their earlier
+    # posts, but Wrapped records whose posts they reacted to, which is new data about them, so they are
+    # left out too. Checked after the posts were read, so asking while Wrapped runs counts
+    authors = set(hall_of_fame_message_repo.find_members_for_guild(connection, guild_id))
+    leave_out_members_who_are_gone(authors - opt_out_repo.find_opted_out(connection, users))
 
     rankings = rank_stats(users)
 

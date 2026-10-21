@@ -27,6 +27,23 @@ def is_opted_out(connection, user_id) -> bool:
     return opted_out
 
 
+def find_opted_out(connection, user_ids) -> set:
+    """
+    Which of these members asked not to be featured, in one query, for Wrapped
+    :param connection: The database connection
+    :param user_ids: The members to check
+    :return: The IDs among them that are opted out
+    """
+    user_ids = list(user_ids)
+    if not user_ids:
+        return set()
+    cursor = connection.cursor()
+    cursor.execute("SELECT user_id FROM opted_out_member WHERE user_id = ANY(%s)", (user_ids,))
+    found = {row[0] for row in cursor.fetchall()}
+    cursor.close()
+    return found
+
+
 def opted_out_since(connection, user_id):
     """
     When a member asked not to be featured, for the /my_data summary, which shows it in place of a file

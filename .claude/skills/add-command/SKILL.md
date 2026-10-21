@@ -48,6 +48,20 @@ change and say in the report which items did not apply.
 5. **`/get_server_config`** - add a line in `commands.build_server_config_embed`, in the same group as
    `/help`, with the command that changes it.
 
+## Member data and the opt-out
+
+A member can ask not to be featured (`opted_out_member`), and from then on nothing new may be stored
+about them. When a command or setting adds or changes a repository write that includes a `user_id` or
+`author_id`:
+
+- Leave the member out in the repository itself, in the same SQL statement as the write, the way
+  `insert_hall_of_fame_message` (stores author 0) and `insert_hof_wrapped` (stores nothing) do. A check
+  in the command alone is not enough, since the next caller may not make it.
+- Add the function to `OptOutWriteGuardTests.REVIEWED` in `tests/test_member_data.py` with the reason
+  it is safe, and add the new path to `every_write_the_bot_makes` in `OptedOutMemberTests`
+  (`tests/integration/test_member_data_deletion.py`).
+- Do not put an opted-out member's name or ID in anything the bot keeps, logs included.
+
 ## Tests
 
 Add to or update:

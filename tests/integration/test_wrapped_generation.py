@@ -9,15 +9,17 @@ They need HOF_TEST_DATABASE_URL, see tests/integration/database.py, and are skip
 
 import datetime
 import json
+import types
 import unittest
 from unittest import mock
 
 import hof_wrapped
+import main
 import utils
 from constants import version
-from repositories import hall_of_fame_message_repo, hof_wrapped_repo, server_config_repo
+from repositories import hall_of_fame_message_repo, hof_wrapped_repo, opt_out_repo, server_config_repo
 
-from tests.integration.database import DatabaseTestCase, database_url, skip_without_database
+from tests.integration.database import DatabaseTestCase, SingleConnectionPool, database_url, skip_without_database
 from tests.integration.discord_world import Author, Bot, Guild, SourceChannel
 
 FIRST, SECOND = 9001, 9002
@@ -27,7 +29,9 @@ YEAR_BEFORE = datetime.datetime(version.WRAPPED_YEAR - 1, 6, 1, 12, 0, tzinfo=da
 
 
 @skip_without_database
-class WrappedGenerationTests(DatabaseTestCase):
+class WrappedTestCase(DatabaseTestCase):
+    """Two servers of fake Discord messages and their posts, with Wrapped writing to this test's schema."""
+
     def setUp(self):
         super().setUp()
         self.first = Guild(FIRST)
@@ -75,6 +79,8 @@ class WrappedGenerationTests(DatabaseTestCase):
             row[column] = json.loads(row[column])
         return row
 
+
+class WrappedGenerationTests(WrappedTestCase):
     async def test_saves_a_wrapped_for_every_member_who_was_featured(self):
         await self.generate(FIRST)
 
@@ -165,6 +171,123 @@ class WrappedGenerationTests(DatabaseTestCase):
         await self.delete_while_reading(ALICE)
 
         self.assertEqual(1, self.wrapped(FIRST, BOB.id)["user_ranks"]["hallOfFameMessagePosts"])
+
+    async def test_a_member_who_asked_not_to_be_featured_gets_no_wrapped(self):
+        """Their earlier posts stay, but a Wrapped would record whose posts they reacted to."""
+        opt_out_repo.set_opted_out(self.connection, BOB.id, True)
+        await self.generate(FIRST)
+
+        self.assertIsNone(self.wrapped(FIRST, BOB.id))
+
+    async def test_a_member_who_asked_not_to_be_featured_is_in_nobodys_fan_lists(self):
+        opt_out_repo.set_opted_out(self.connection, BOB.id, True)
+        await self.generate(FIRST)
+
+        alice = self.wrapped(FIRST, ALICE.id)
+        self.assertEqual({}, alice["users_fans"])
+        self.assertEqual({}, alice["fan_of_users"])
+
+    async def test_a_member_who_asked_not_to_be_featured_is_not_ranked(self):
+        opt_out_repo.set_opted_out(self.connection, ALICE.id, True)
+        await self.generate(FIRST)
+
+        self.assertEqual(1, self.wrapped(FIRST, BOB.id)["user_ranks"]["hallOfFameMessagePosts"])
+
+
+class OptedOutFriendTests(WrappedTestCase):
+    """
+    A member's friends asking not to be featured: Alice and Bob react to each other's posts, and Alice also
+    reacts to Dave's post in the second server. Whoever opts out must vanish from the others' Wrapped, from
+    the day they ask, including a Wrapped generated before they asked
+    """
+
+    def setUp(self):
+        super().setUp()
+        patcher = mock.patch.object(main, "connection_pool", SingleConnectionPool(self.connection))
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    @staticmethod
+    def as_member(author):
+        return types.SimpleNamespace(id=author.id, mention=f"<@{author.id}>", avatar=None)
+
+    async def shown_to(self, author, guild_id=FIRST):
+        """Everything /hof_wrapped shows the member, as one text"""
+        row = hof_wrapped_repo.get_hof_wrapped(self.connection, guild_id, author.id, version.WRAPPED_YEAR)
+        embed = await hof_wrapped.create_embed(self.as_member(author), row, self.bot)
+        return " ".join([embed.description or ""] + [f"{field.name} {field.value}" for field in embed.fields])
+
+    async def test_a_friend_who_opts_out_after_wrapped_vanishes_from_the_stored_fan_lists(self):
+        await self.generate(FIRST)
+        self.assertIn(str(BOB.id), self.wrapped(FIRST, ALICE.id)["users_fans"])
+        await main.stop_featuring_member(BOB.id)
+
+        alice = self.wrapped(FIRST, ALICE.id)
+        self.assertEqual({}, alice["users_fans"])
+        self.assertEqual({}, alice["fan_of_users"])
+
+    async def test_a_friend_who_opts_out_after_wrapped_is_not_shown_in_it(self):
+        await self.generate(FIRST)
+        await main.stop_featuring_member(BOB.id)
+
+        self.assertNotIn(f"<@{BOB.id}>", await self.shown_to(ALICE))
+
+    async def test_their_reactions_no_longer_count_as_received(self):
+        await self.generate(FIRST)
+        await main.stop_featuring_member(BOB.id)
+
+        self.assertIn("0 reactions on your HOF posts", await self.shown_to(ALICE))
+
+    async def test_their_own_earlier_wrapped_stays_for_them(self):
+        """Like the rest of their earlier data, until they delete it."""
+        await self.generate(FIRST)
+        await main.stop_featuring_member(BOB.id)
+
+        self.assertIsNotNone(self.wrapped(FIRST, BOB.id))
+
+    async def test_the_servers_wrapped_leaves_them_out(self):
+        await self.generate(FIRST)
+        await main.stop_featuring_member(BOB.id)
+        rows = hof_wrapped_repo.get_all_hof_wrapped_for_guild(self.connection, FIRST, version.WRAPPED_YEAR)
+        embed = hof_wrapped.create_server_embed(types.SimpleNamespace(id=FIRST, name="First", icon=None), rows)
+        shown = " ".join([embed.description or ""] + [f"{field.name} {field.value}" for field in embed.fields])
+
+        self.assertEqual([ALICE.id], [row["user_id"] for row in rows])
+        self.assertNotIn(f"<@{BOB.id}>", shown)
+        self.assertIn(f"<@{ALICE.id}>", shown)
+
+    async def test_a_friend_who_opts_out_while_wrapped_runs_is_left_out(self):
+        read_posts = hof_wrapped.process_hof_messages_from_db
+
+        async def read_then_opt_out(guild, connection):
+            result = await read_posts(guild, connection)
+            opt_out_repo.set_opted_out(self.connection, BOB.id, True)
+            return result
+
+        with mock.patch.object(hof_wrapped, "process_hof_messages_from_db", read_then_opt_out):
+            await self.generate(FIRST)
+
+        self.assertIsNone(self.wrapped(FIRST, BOB.id))
+        self.assertEqual({}, self.wrapped(FIRST, ALICE.id)["users_fans"])
+
+    async def test_a_friend_who_opted_out_is_left_out_in_every_server(self):
+        """Alice reacted to Dave's post in the second server, where she never posted herself."""
+        await self.generate(SECOND)
+        self.assertEqual({}, self.wrapped(SECOND, DAVE.id)["users_fans"])
+
+        self.feature(self.second_channel, 11, ALICE, {"🔥": [DAVE.id]})
+        opt_out_repo.set_opted_out(self.connection, ALICE.id, True)
+        await self.generate(SECOND)
+
+        self.assertIsNone(self.wrapped(SECOND, ALICE.id))
+        self.assertEqual({}, self.wrapped(SECOND, DAVE.id)["fan_of_users"])
+
+    async def test_featuring_again_puts_them_back_in_the_next_wrapped(self):
+        await main.stop_featuring_member(BOB.id)
+        opt_out_repo.set_opted_out(self.connection, BOB.id, False)
+        await self.generate(FIRST)
+
+        self.assertEqual({str(BOB.id): 2}, self.wrapped(FIRST, ALICE.id)["users_fans"])
 
 
 if __name__ == "__main__":

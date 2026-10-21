@@ -1,6 +1,6 @@
 # Terms of Service for Hall of Fame
 
-Effective date: 18 October 2026
+Effective date: 21 October 2026
 
 These terms apply between Lukas Kristensen ("the Owner") and anyone who adds Hall of Fame (the "Bot") to
 a server or uses it. By using the Bot you agree to them. If you do not agree, remove the Bot or stop
@@ -13,6 +13,10 @@ using it.
    consent.
 2. **Rules.** You must follow Discord's Terms of Service and Community Guidelines when using the Bot.
    Do not use the Bot to break the law, harass people, or repost content you have no right to share.
+   Do not manipulate its leaderboards, profiles or Wrapped, for example with alternate accounts or
+   arranged reactions. A member's posts count toward these up to 10,000 across all servers, so that what
+   is stored about each member stays small enough to give them in full; posts past that still reach a
+   server's Hall of Fame but are not credited to them.
 3. **Content.** Messages the Bot reposts remain the property of their authors. Each server's admins
    decide what their Hall of Fame shows and can remove reposts at any time. The Owner does not review
    reposted content.

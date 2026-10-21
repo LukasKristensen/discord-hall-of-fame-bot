@@ -44,6 +44,10 @@ troubleshooting are in the `dev-environment` skill.
 - **CI must be green before a merge**, and only the user merges.
 - **Behaviour changes hit every server on deploy.** Changing counting, defaults or post layout needs a
   migration path for existing rows (`ADD COLUMN IF NOT EXISTS`) and a note on who is affected.
+- **Nothing new is stored about a member who opted out.** Any repository write of a `user_id` or
+  `author_id` must leave members in `opted_out_member` out in the same SQL statement, and be added to
+  `OptOutWriteGuardTests`. The details are in `production-check` under "Members who asked not to be
+  featured".
 - **Check the privacy policy and terms after every feature.** Before reporting a feature or behaviour
   change as done, run `policy-check` and say whether `PRIVACY.md` or `TERMS.md` needed an update.
 

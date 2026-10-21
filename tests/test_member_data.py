@@ -16,7 +16,8 @@ import discord
 import main
 import commands
 from enums import command_refs
-from commands import ConfirmDeleteView, MyDataView, StopFeaturingView, build_my_data_export
+from commands import (ConfirmDeleteView, ExportTooLarge, MyDataView, StopFeaturingView, batch_export_files,
+                      build_my_data_document, build_my_data_export, split_my_data_export)
 from repositories import (
     global_profile_repo,
     hall_of_fame_message_repo,
@@ -82,6 +83,65 @@ class GlobalProfileRepoTests(unittest.TestCase):
     def test_is_hidden_reads_the_row(self):
         self.assertTrue(global_profile_repo.is_hidden(FakeConnection(row=(1,)), 77))
         self.assertFalse(global_profile_repo.is_hidden(FakeConnection(row=None), 77))
+
+
+class OptOutWriteGuardTests(unittest.TestCase):
+    """
+    Every repository function that writes a member's user ID, and why it cannot store data about a member
+    who asked not to be featured. A new one fails this test until it is added here with its reason, and
+    tests for that reason are added in tests/integration/test_member_data_deletion.py (OptedOutMemberTests)
+    """
+
+    REVIEWED = {
+        # Stores author 0 for an opted-out member, in the same statement as the insert
+        ("hall_of_fame_message_repo", "insert_hall_of_fame_message"),
+        # Only ever replaces a member's ID with 0
+        ("hall_of_fame_message_repo", "remove_author"),
+        # Saves nothing for an opted-out member and strips them from the fan lists, in the same statement
+        ("hof_wrapped_repo", "insert_hof_wrapped"),
+        # Only ever removes a member's ID from fan lists
+        ("hof_wrapped_repo", "remove_from_fan_lists"),
+        # Rebuilt from stored posts alone, which an opted-out member gains none of
+        ("server_user_repo", "rebuild_user_stats_for_guild"),
+        # A choice the member makes themselves. /my_data offers it only while they have totals to hide
+        ("global_profile_repo", "set_hidden"),
+        # The opt-out itself, the one record the bot keeps to honour it
+        ("opt_out_repo", "set_opted_out"),
+    }
+
+    def test_every_write_of_a_member_id_is_reviewed(self):
+        import ast
+        import pathlib
+        import re
+
+        found = set()
+        for path in sorted((pathlib.Path(__file__).parent.parent / "src" / "repositories").glob("*.py")):
+            source = path.read_text(encoding="utf-8")
+            for node in ast.walk(ast.parse(source)):
+                if isinstance(node, ast.FunctionDef):
+                    body = ast.get_source_segment(source, node)
+                    if (re.search(r"\b(INSERT\s+INTO|UPDATE)\b", body, re.IGNORECASE)
+                            and re.search(r"\b(user_id|author_id)\b", body)):
+                        found.add((path.stem, node.name))
+
+        self.assertEqual(self.REVIEWED, found)
+
+    def test_no_update_can_set_a_posts_author(self):
+        """A post's author is only set when it is stored, where an opted-out member is left out."""
+        with self.assertRaises(ValueError):
+            hall_of_fame_message_repo.update_field_for_message(FakeConnection(), 1, 2, 3, "author_id", 77)
+
+    def test_storing_a_post_looks_up_the_opt_out_in_the_same_statement(self):
+        connection = FakeConnection()
+        hall_of_fame_message_repo.insert_hall_of_fame_message(connection, 1, 2, 3, 4, 5, 77, datetime.datetime(2026, 1, 1))
+
+        self.assertIn("opted_out_member", connection.queries[0])
+
+    def test_saving_a_wrapped_looks_up_the_opt_out_in_the_same_statement(self):
+        connection = FakeConnection()
+        hof_wrapped_repo.insert_hof_wrapped(connection, 1, 77, 2025, 0, 0, "{}", "{}", None, None, 0, "{}", "{}", "{}")
+
+        self.assertEqual(3, connection.queries[0].count("opted_out_member"))
 
 
 class MemberDataRepoTests(unittest.TestCase):
@@ -540,6 +600,63 @@ SAMPLE_POST = {"guild_id": 1234567890123456789, "channel_id": 123456789012345678
                "hall_of_fame_message_id": 1234567890123456789, "reaction_count": 12, "created_at": "2026-01-01 12:00:00"}
 
 
+class SplitExportTests(unittest.TestCase):
+    def document(self, posts=200, standings=20, wrapped=5):
+        return build_my_data_document(
+            77, [dict(SAMPLE_POST, message_id=number) for number in range(posts)],
+            [{"guild_id": number, "total_hall_of_fame_messages": 9} for number in range(standings)],
+            [{"guild_id": number, "year": 2025, "fan_of_users": "{}"} for number in range(wrapped)], True, False)
+
+    def test_one_file_when_it_fits(self):
+        document = self.document()
+        files = split_my_data_export(document, max_bytes=10_000_000)
+
+        self.assertEqual([build_my_data_export(77, document["featured_posts"], document["server_statistics"],
+                                               document["wrapped"], True, False)], files)
+
+    def test_every_part_fits_and_is_complete_json(self):
+        files = split_my_data_export(self.document(), max_bytes=8_000)
+
+        self.assertGreater(len(files), 1)
+        for number, data in enumerate(files, start=1):
+            with self.subTest(part=number):
+                self.assertLessEqual(len(data), 8_000)
+                part = json.loads(data)
+                self.assertEqual(f"{number} of {len(files)}", part["part"])
+                self.assertEqual("77", part["user_id"])
+                self.assertTrue(part["global_profile_hidden"])
+
+    def test_the_parts_hold_every_row_once_in_order(self):
+        document = self.document()
+        parts = [json.loads(data) for data in split_my_data_export(document, max_bytes=8_000)]
+
+        for section in ("featured_posts", "server_statistics", "wrapped"):
+            with self.subTest(section=section):
+                self.assertEqual(document[section], [row for part in parts for row in part[section]])
+
+    def test_a_row_bigger_than_a_file_cannot_be_sent(self):
+        """A Wrapped row from a huge server can carry a fan list of hundreds of thousands of IDs."""
+        document = self.document(posts=1, standings=0, wrapped=0)
+        document["wrapped"] = [{"guild_id": "1", "fan_of_users": "x" * 10_000}]
+
+        with self.assertRaises(ExportTooLarge):
+            split_my_data_export(document, max_bytes=5_000)
+
+    def test_an_empty_export_is_one_file(self):
+        self.assertEqual(1, len(split_my_data_export(self.document(0, 0, 0), max_bytes=1_000)))
+
+
+class BatchExportFilesTests(unittest.TestCase):
+    def test_keeps_each_message_within_the_size_budget(self):
+        self.assertEqual([[0, 1], [2], [3]], batch_export_files([b"a" * 4, b"b" * 5, b"c" * 8, b"d" * 3], max_bytes=10))
+
+    def test_keeps_each_message_within_the_attachment_count(self):
+        self.assertEqual([[0, 1], [2, 3], [4]], batch_export_files([b"x"] * 5, max_bytes=100, per_message=2))
+
+    def test_one_file_is_one_message(self):
+        self.assertEqual([[0]], batch_export_files([b"x"]))
+
+
 class MyDataPanelTestCase(CommandTestCase):
     """/my_data with what is stored faked, and its buttons pressed the way Discord would."""
 
@@ -606,6 +723,12 @@ class MyDataPanelTests(MyDataPanelTestCase):
         self.assertIsInstance(view, MyDataView)
         self.assertEqual([None], interaction.followup.files)
 
+    async def test_large_counts_are_written_with_thousands_separators(self):
+        self.patch(hall_of_fame_message_repo, "count_messages_by_author", lambda *_args: 2_450_000)
+        interaction, _view = await self.open_panel()
+
+        self.assertIn("2,450,000 featured posts", interaction.followup.messages[0])
+
     async def test_the_summary_does_not_read_the_rows_themselves(self):
         """The full export is the expensive part, so only the Download button reads it."""
         def must_not_run(*_args):
@@ -625,13 +748,13 @@ class MyDataPanelTests(MyDataPanelTestCase):
         self.assertIn(view.delete_button, view.children)
         self.assertTrue(view.delete_button.disabled)
 
-    async def test_offers_no_file_when_only_choices_are_stored(self):
-        """The summary already shows everything stored for a choice, so a file would only repeat it."""
+    async def test_a_stored_choice_can_be_downloaded_and_deleted(self):
+        """A choice is data about the member too, so both buttons work for it."""
         self.posts, self.standings = [], []
         self.hidden.add(77)
         interaction, view = await self.open_panel()
 
-        self.assertTrue(view.download_button.disabled)
+        self.assertFalse(view.download_button.disabled)
         self.assertFalse(view.delete_button.disabled)
         self.assertIn(messages.MY_DATA_TOTALS_HIDDEN.format(since=CHOSEN_SHOWN), interaction.followup.messages[0])
         # A choice is stored, so it must not say there is nothing to delete
@@ -682,7 +805,163 @@ class DownloadMyDataTests(MyDataPanelTestCase):
         self.assertTrue(pressed.response.deferred_ephemeral)
         self.assertEqual([messages.MY_DATA_EXPORT], pressed.followup.messages)
         self.assertEqual([True], pressed.followup.ephemeral)
-        self.assertIsInstance(pressed.followup.files[0], discord.File)
+        [file] = pressed.followup.attachments[0]
+        self.assertIsInstance(file, discord.File)
+        self.assertEqual("hall-of-fame-my-data.json", file.filename)
+
+    @staticmethod
+    def refusing_over(limit, status=413):
+        """
+        A button press whose followups Discord refuses when a message's files add up to more than limit
+        :return: The interaction, and the messages it accepted as (content, [(filename, bytes)])
+        """
+        pressed = FakeInteraction()
+        accepted = []
+
+        async def send(content=None, ephemeral=False, file=None, files=None, **_kwargs):
+            files = list(files or []) + ([file] if file is not None else [])
+            contents = [(attached.filename, attached.fp.getvalue()) for attached in files]
+            if sum(len(data) for _name, data in contents) > limit:
+                response = types.SimpleNamespace(status=status, reason="Payload Too Large")
+                raise discord.HTTPException(response, {"code": 40005, "message": "Request entity too large"})
+            accepted.append((content, contents))
+
+        pressed.followup.send = send
+        return pressed, accepted
+
+    async def test_sends_one_file_whenever_discord_accepts_it(self):
+        """Discord's own limit decides, so a file over the split budget still goes as one if it fits."""
+        self.posts = [dict(SAMPLE_POST, message_id=number) for number in range(400)]
+        self.patch(commands, "EXPORT_MESSAGE_BYTES", 20_000)
+        _interaction, view = await self.open_panel()
+        pressed, accepted = self.refusing_over(10_000_000)
+        await view.download_button.callback(pressed)
+
+        [(content, files)] = accepted
+        self.assertEqual(messages.MY_DATA_EXPORT, content)
+        self.assertEqual(["hall-of-fame-my-data.json"], [name for name, _data in files])
+        self.assertGreater(len(files[0][1]), 20_000)
+
+    async def test_an_export_discord_refuses_is_sent_in_parts(self):
+        self.posts = [dict(SAMPLE_POST, message_id=number) for number in range(400)]
+        _interaction, view = await self.open_panel()
+        pressed, accepted = self.refusing_over(40_000)
+        await view.download_button.callback(pressed)
+
+        files = [file for _content, message in accepted for file in message]
+        self.assertGreater(len(files), 1)
+        self.assertEqual(messages.MY_DATA_EXPORT_PARTS.format(parts=len(files)), accepted[0][0])
+        message_ids = [post["message_id"] for _name, data in files for post in json.loads(data)["featured_posts"]]
+        self.assertEqual([str(number) for number in range(400)], message_ids)
+        self.assertEqual(f"hall-of-fame-my-data-part-1-of-{len(files)}.json", files[0][0])
+        self.assertTrue(main.on_daily_cooldown(77, "my_data"))
+        self.assertTrue(any("after Discord refused one" in entry for entry in self.logged))
+
+    async def test_parts_discord_also_refuses_are_reported(self):
+        self.posts = [dict(SAMPLE_POST, message_id=number) for number in range(400)]
+        _interaction, view = await self.open_panel()
+        # Below even the parts, which are half of the refused file
+        pressed, accepted = self.refusing_over(1_000)
+        sent = []
+        refuse = pressed.followup.send
+
+        async def send(content=None, ephemeral=False, file=None, files=None, **kwargs):
+            if not files and file is None:
+                sent.append(content)
+                return
+            await refuse(content, ephemeral, file, files, **kwargs)
+
+        pressed.followup.send = send
+        await view.download_button.callback(pressed)
+
+        self.assertIn(sent[-1], (messages.MY_DATA_EXPORT_SEND_FAILED, messages.MY_DATA_EXPORT_TOO_LARGE))
+        self.assertFalse(main.on_daily_cooldown(77, "my_data"))
+
+    async def test_a_row_too_big_for_any_part_goes_to_the_support_server(self):
+        self.wrapped = [{"guild_id": 1, "year": 2025, "fan_of_users": "x" * 50_000}]
+        _interaction, view = await self.open_panel()
+        pressed, accepted = self.refusing_over(40_000)
+        sent = []
+        refuse = pressed.followup.send
+
+        async def send(content=None, ephemeral=False, file=None, files=None, **kwargs):
+            if not files and file is None:
+                sent.append(content)
+                return
+            await refuse(content, ephemeral, file, files, **kwargs)
+
+        pressed.followup.send = send
+        await view.download_button.callback(pressed)
+
+        self.assertEqual([messages.MY_DATA_EXPORT_TOO_LARGE], sent)
+        self.assertTrue(any("too large to send through Discord" in entry for entry in self.logged))
+        self.assertFalse(main.on_daily_cooldown(77, "my_data"))
+
+    async def test_too_many_messages_go_to_the_support_server(self):
+        self.posts = [dict(SAMPLE_POST, message_id=number) for number in range(400)]
+        self.patch(commands, "EXPORT_MAX_MESSAGES", 1)
+        self.patch(commands, "EXPORT_FILES_PER_MESSAGE", 1)
+        _interaction, view = await self.open_panel()
+        pressed, accepted = self.refusing_over(40_000)
+        sent = []
+        refuse = pressed.followup.send
+
+        async def send(content=None, ephemeral=False, file=None, files=None, **kwargs):
+            if not files and file is None:
+                sent.append(content)
+                return
+            await refuse(content, ephemeral, file, files, **kwargs)
+
+        pressed.followup.send = send
+        await view.download_button.callback(pressed)
+
+        self.assertEqual([messages.MY_DATA_EXPORT_TOO_LARGE], sent)
+
+    async def test_parts_are_not_sent_twice_when_a_later_message_is_refused(self):
+        """Resending after some parts went out would leave the member with two sets that do not match."""
+        self.posts = [dict(SAMPLE_POST, message_id=number) for number in range(400)]
+        self.patch(commands, "EXPORT_FILES_PER_MESSAGE", 1)
+        _interaction, view = await self.open_panel()
+        pressed = FakeInteraction()
+        attempts = []
+        sent = []
+
+        async def send(content=None, ephemeral=False, file=None, files=None, **_kwargs):
+            if not files and file is None:
+                sent.append(content)
+                return
+            attempts.append([attached.filename for attached in files])
+            # The whole file and the second part are refused for their size, the first part is accepted
+            if len(attempts) != 2:
+                response = types.SimpleNamespace(status=413, reason="Payload Too Large")
+                raise discord.HTTPException(response, {"code": 40005, "message": "Request entity too large"})
+
+        pressed.followup.send = send
+        await view.download_button.callback(pressed)
+
+        self.assertEqual(3, len(attempts))
+        self.assertEqual([messages.MY_DATA_EXPORT_SEND_FAILED], sent)
+        self.assertFalse(main.on_daily_cooldown(77, "my_data"))
+
+    async def test_a_refusal_that_is_not_about_size_is_reported_without_splitting(self):
+        _interaction, view = await self.open_panel()
+        pressed, accepted = self.refusing_over(0, status=503)
+        sent = []
+        refuse = pressed.followup.send
+
+        async def send(content=None, ephemeral=False, file=None, files=None, **kwargs):
+            if not files and file is None:
+                sent.append(content)
+                return
+            response = types.SimpleNamespace(status=503, reason="Service Unavailable")
+            raise discord.HTTPException(response, "Discord is down")
+
+        pressed.followup.send = send
+        await view.download_button.callback(pressed)
+
+        self.assertEqual([messages.MY_DATA_EXPORT_SEND_FAILED], sent)
+        self.assertTrue(any("Discord refused a member's data export" in entry for entry in self.logged))
+        self.assertFalse(main.on_daily_cooldown(77, "my_data"))
 
     async def test_once_a_day(self):
         _interaction, view = await self.open_panel()
@@ -857,7 +1136,7 @@ class StopFeaturingTests(MyDataPanelTestCase):
 
         self.assertEqual({77}, self.opted_out)
         self.assertEqual([("opt_out", True)], self.calls)
-        content, new_view = pressed.response.edits[0]
+        content, new_view = pressed.original_edits[0]
         self.assertTrue(content.startswith(messages.STOPPED_FEATURING))
         self.assertEqual(messages.FEATURE_ME_AGAIN_BUTTON, new_view.featuring_button.label)
 
@@ -868,7 +1147,7 @@ class StopFeaturingTests(MyDataPanelTestCase):
         pressed = await self.press(view.featuring_button)
 
         self.assertEqual(set(), self.opted_out)
-        content, new_view = pressed.response.edits[0]
+        content, new_view = pressed.original_edits[0]
         self.assertTrue(content.startswith(messages.COUNTED_AGAIN))
         self.assertNotIn("New messages of yours are not featured", content)
         self.assertEqual(messages.STOP_FEATURING_BUTTON, new_view.featuring_button.label)
@@ -884,8 +1163,8 @@ class StopFeaturingTests(MyDataPanelTestCase):
         for button in (view.download_button, view.totals_button, view.delete_button):
             self.assertIn(button, view.children)
 
-    async def test_with_only_the_choice_stored_it_can_still_be_deleted(self):
-        """The choice is data about the member too, so Delete is offered for it; there is nothing to hide or download."""
+    async def test_with_only_the_choice_stored_it_can_be_downloaded_and_deleted(self):
+        """The choice is data about the member too, so Download and Delete work for it; there are no totals to hide."""
         self.posts, self.standings = [], []
         self.opted_out.add(77)
         interaction, view = await self.open_panel()
@@ -894,8 +1173,19 @@ class StopFeaturingTests(MyDataPanelTestCase):
         self.assertNotIn(messages.MY_DATA_EARLIER_KEPT, content)
         self.assertNotIn(messages.MY_DATA_TOTALS_SHOWN_ONCE_FEATURED, content)
         self.assertEqual([view.download_button, view.featuring_button, view.delete_button], view.children)
-        self.assertTrue(view.download_button.disabled)
+        self.assertFalse(view.download_button.disabled)
         self.assertFalse(view.delete_button.disabled)
+
+    async def test_downloading_right_after_stopping_includes_the_choice(self):
+        self.posts, self.standings = [], []
+        _interaction, view = await self.open_panel()
+        stopped = (await self.press(view.featuring_button)).original_edits[0][1]
+        pressed = await self.press(stopped.download_button)
+
+        [file] = pressed.followup.attachments[0]
+        export = json.loads(file.fp.getvalue())
+        self.assertTrue(export["not_counted"])
+        self.assertEqual([], export["featured_posts"])
 
     async def test_delete_is_offered_while_something_is_stored(self):
         """A member who only hid their totals still has that choice to delete."""
@@ -937,7 +1227,7 @@ class StopFeaturingTests(MyDataPanelTestCase):
         self.assertEqual({77}, self.opted_out)
         self.assertEqual(["posts", "stats", "wrapped", "privacy", ("opt_out", False), ("opt_out", True)], self.calls)
         self.assertEqual([(messages.DELETE_MY_DATA_DONE_STOPPED.format(command=command_refs.MY_DATA), None)],
-                         pressed.response.edits)
+                         pressed.original_edits)
 
     async def test_deleting_also_deletes_the_choice_not_to_be_featured(self):
         """Deleting removes everything stored, and then offers to stop featuring the member afresh."""
@@ -1178,6 +1468,153 @@ class GlobalProfileEmbedTests(unittest.TestCase):
         embed = commands.build_global_profile_embed(user_with_avatar(88), small)
 
         self.assertEqual([messages.GLOBAL_PROFILE_HEADING], [field.name for field in embed.fields])
+
+
+
+
+class ViewOwnerAndTimeoutTests(unittest.IsolatedAsyncioTestCase):
+    """The three /my_data views: only their member may press them, and they tidy up when they expire."""
+
+    def views(self):
+        summary = {"posts": 1, "servers": 1, "wrapped": 0, "hidden_since": None, "opted_out_since": None}
+
+        async def nothing(*_args):
+            return None
+
+        return (ConfirmDeleteView(77, nothing), StopFeaturingView(77, nothing),
+                MyDataView(77, summary, nothing, nothing, nothing, nothing))
+
+    async def test_the_member_who_asked_may_press_them(self):
+        for view in self.views():
+            with self.subTest(view=type(view).__name__):
+                self.assertTrue(await view.interaction_check(FakeInteraction()))
+
+    async def test_an_expired_view_drops_its_buttons(self):
+        for view in self.views():
+            with self.subTest(view=type(view).__name__):
+                original = FakeInteraction()
+                view.original_interaction = original
+                await view.on_timeout()
+
+                self.assertEqual(1, len(original.original_edits))
+                self.assertIsNone(original.original_edits[0][1])
+
+    async def test_an_expired_confirmation_says_nothing_was_deleted(self):
+        view = self.views()[0]
+        original = FakeInteraction()
+        view.original_interaction = original
+        await view.on_timeout()
+
+        self.assertEqual(messages.DELETE_MY_DATA_EXPIRED.format(command=command_refs.MY_DATA),
+                         original.original_edits[0][0])
+
+    async def test_a_finished_view_leaves_its_message_alone(self):
+        for view in self.views():
+            with self.subTest(view=type(view).__name__):
+                original = FakeInteraction()
+                view.original_interaction = original
+                view.finished = True
+                await view.on_timeout()
+
+                self.assertEqual([], original.original_edits)
+
+    async def test_a_view_without_its_message_does_nothing(self):
+        for view in self.views():
+            with self.subTest(view=type(view).__name__):
+                await view.on_timeout()
+
+    async def test_a_dismissed_message_is_not_an_error(self):
+        async def gone(**_kwargs):
+            raise discord.HTTPException(types.SimpleNamespace(status=404, reason="Not Found"), "Unknown Message")
+
+        for view in self.views():
+            with self.subTest(view=type(view).__name__):
+                view.original_interaction = types.SimpleNamespace(edit_original_response=gone)
+                await view.on_timeout()
+
+
+class ExportEdgeTests(unittest.TestCase):
+    def test_no_files_make_no_messages(self):
+        self.assertEqual([], batch_export_files([]))
+
+    def test_a_part_that_comes_out_too_big_is_never_sent(self):
+        """Part sizes are worked out, not measured, so each part is measured again before it goes."""
+        real = commands.encode_export
+
+        def padded(document):
+            # Only parts holding rows come out bigger, so the room worked out for an empty part is right
+            return real(document) + (b" " * 10_000 if "part" in document and document["featured_posts"] else b"")
+
+        document = build_my_data_document(77, [dict(SAMPLE_POST, message_id=n) for n in range(100)], [], [], False)
+        with unittest.mock.patch.object(commands, "encode_export", padded):
+            with self.assertRaises(ExportTooLarge):
+                split_my_data_export(document, max_bytes=8_000)
+
+
+class CheckSetupButtonTests(unittest.IsolatedAsyncioTestCase):
+    async def test_a_press_before_the_bot_has_logged_in_does_nothing(self):
+        """The handler is registered at login, and a press that comes earlier must not fail."""
+        with unittest.mock.patch.object(commands, "setup_check_handler", None):
+            await commands.SetupCheckView.check_setup(FakeInteraction())
+
+    async def test_a_press_runs_the_registered_check(self):
+        pressed = []
+
+        async def handler(interaction):
+            pressed.append(interaction)
+
+        interaction = FakeInteraction()
+        with unittest.mock.patch.object(commands, "setup_check_handler", handler):
+            await commands.SetupCheckView.check_setup(interaction)
+
+        self.assertEqual([interaction], pressed)
+
+
+class TimeZoneEdgeTests(unittest.TestCase):
+    """Dates read back with a time zone already are used as they are."""
+
+    def test_a_first_feature_with_a_time_zone_still_earns_the_year_badge(self):
+        facts = {"posts_by_month": [], "biggest_post": 0, "champion_months": 0,
+                 "first_featured": datetime.datetime(2020, 1, 1, tzinfo=datetime.timezone.utc)}
+
+        self.assertIn(messages.BADGE_VETERAN, commands.earned_badges(facts, None))
+
+    def test_a_last_feature_with_a_time_zone_is_shown(self):
+        last = datetime.datetime(2026, 1, 1, tzinfo=datetime.timezone.utc)
+        value = commands.highlights_value(1, {"best_post": None, "last_featured": last}, None)
+
+        self.assertIn(f"<t:{int(last.timestamp())}:R>", value)
+
+
+class RankGapSharingFirstTests(unittest.TestCase):
+    def test_a_leader_level_with_second_place_shares_first(self):
+        stats = {"this_month_hall_of_fame_messages": 5, "monthly_message_rank": 1}
+        line = commands.rank_gap_line(stats, lambda *_args: 5)
+
+        self.assertEqual(messages.HIGHLIGHT_SHARING_FIRST.format(period="this month"), line)
+
+
+
+class RepositoryEmptyResultTests(unittest.TestCase):
+    def test_totals_across_servers_are_zero_when_nothing_comes_back(self):
+        profile = global_profile_repo.get_global_profile(FakeConnection(row=None), 77)
+
+        self.assertEqual({field: 0 for field in global_profile_repo.PROFILE_FIELDS}, profile)
+
+    def test_post_activity_is_empty_when_nothing_comes_back(self):
+        self.assertEqual({"total": 0, "latest": None, "today": 0},
+                         hall_of_fame_message_repo.get_post_activity(FakeConnection(row=None), 200))
+
+    def test_finding_opted_out_members_among_nobody_asks_nothing(self):
+        connection = FakeConnection()
+
+        self.assertEqual(set(), opt_out_repo.find_opted_out(connection, []))
+        self.assertEqual([], connection.queries)
+
+    def test_finds_the_opted_out_members_among_those_asked_about(self):
+        connection = FakeConnection(rows=[(77,)])
+
+        self.assertEqual({77}, opt_out_repo.find_opted_out(connection, {77, 88}))
 
 
 

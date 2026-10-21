@@ -12,7 +12,9 @@ described here. Contact: githublukas@gmail.com, or the
   joined, and monthly member counts.
 - **Featured messages:** the IDs of the message, its channel and its author, its reaction count and
   time, and the ID of the bot's repost. The text, images and usernames are not stored in our database.
-  The repost itself lives in your server's Hall of Fame channel on Discord.
+  The repost itself lives in your server's Hall of Fame channel on Discord. At most 10,000 featured
+  messages are linked to any one member, across all servers, so `/my_data` can always give you all of
+  your data. Messages of yours featured past that are stored without your user ID.
 - **Member statistics:** per-server totals and ranks for featured messages and reactions.
 - **Totals across servers:** your posts, reactions, titles and badges added up across every server that
   uses the bot, worked out from the data above and shown at the bottom of your profile in any of those
@@ -25,12 +27,16 @@ described here. Contact: githublukas@gmail.com, or the
 - **Not featured:** if you press "Stop featuring me" on `/my_data` (it is also offered right after you
   delete your data), your user ID is stored with the date, so the bot remembers not to repost or store
   new messages of yours. Without it, the bot would have no way to know to leave your future messages
-  out. It only concerns new messages: what is already stored about you stays until you delete it.
-  Choosing "Feature me again" or deleting your data deletes this record.
+  out. What is already stored about you stays until you delete it, but nothing new is stored about you:
+  no new posts, and no Wrapped, since a Wrapped also records whose posts you reacted to. You are left out
+  of other members' Wrapped too. Choosing "Feature me again" or deleting your data deletes this record.
 - **Support:** feedback sent with `/feedback` and custom profile requests, delivered to a private
   developer channel on Discord.
-- **Logs:** which commands were used, with the username and server name, posted to private developer
-  channels on Discord for troubleshooting.
+- **Logs:** which commands were used, when the bot joins or leaves a server and what it is allowed to do
+  there, and errors, each with the server's ID, posted to private developer channels on Discord for
+  troubleshooting. Logs do not name servers or the members who used a command. The
+  one exception is a member reaching the limit of 10,000 featured posts, whose user ID is logged so the
+  developer can check it for farmed reactions.
 
 ## 2. What the bot reads but does not store
 
@@ -81,9 +87,8 @@ Nothing else is shared.
 
 Everything below is done from `/my_data`, which shows what is stored about you with a button for each:
 
-- **See your data:** `/my_data` lists what is stored about you, including the dates of your choices.
-  When posts, server standings or Wrapped entries are stored, "Download my data" sends you a file with
-  every row.
+- **See your data:** `/my_data` lists what is stored about you, including the dates of your choices,
+  and "Download my data" sends you a file with all of it.
 - **Delete your data:** "Delete my data" deletes it after you confirm, as described in section 5.
 - **Object to being featured:** press "Stop featuring me", and the bot stops reposting and storing new
   messages of yours. What is already stored stays until you delete it. "Feature me again" undoes it.

@@ -308,6 +308,7 @@ class DeleteDatabaseContextTests(unittest.TestCase):
 class FakeGuildChannel:
     def __init__(self, name, position, permissions=None, fails=False):
         self.name = name
+        self.id = 9000 + position
         self.position = position
         self.permissions = permissions if permissions is not None else FakePermissions()
         self.fails = fails

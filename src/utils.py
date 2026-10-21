@@ -19,6 +19,31 @@ recently_logged_messages = ExpiringSet(ttl_seconds=duplicate_log_window_seconds)
 daily_limit_handled_on = {}
 # Guild IDs whose missing Hall of Fame channel has been logged, so each server is reported once per boot
 missing_channels_logged = set()
+# The most posts credited to one member, across every server. It keeps what the bot stores about any one
+# member small enough that /my_data can always send them all of it, which data protection law entitles
+# them to: 10,000 posts is a file of about 2.5 MB. Posts past it still reach the server's board, but are
+# stored without an author, so they add to no leaderboard, profile or Wrapped. Even one member writing
+# every post a server's daily limit allows would need 100 days to reach it, so a member who does is also
+# worth a look for farmed reactions
+member_post_limit = 10_000
+# Members whose reaching member_post_limit has been logged, so each is reported once per boot
+members_at_post_limit_logged = set()
+
+
+def author_to_store(connection, author_id: int) -> tuple[int, bool]:
+    """
+    Who a new post is credited to: the member, or nobody when they asked not to be featured or already
+    have member_post_limit posts credited to them. Checked when a post is stored rather than on every
+    reaction, and counted from the author index, so it costs one lookup per new post
+    :param connection: The database connection
+    :param author_id: The member who wrote the message
+    :return: The author ID to store, and whether the member is at the post limit
+    """
+    if opt_out_repo.is_opted_out(connection, author_id):
+        return hall_of_fame_message_repo.NO_AUTHOR_ID, False
+    if hall_of_fame_message_repo.count_messages_by_author(connection, author_id) >= member_post_limit:
+        return hall_of_fame_message_repo.NO_AUTHOR_ID, True
+    return author_id, False
 
 
 async def validate_message(reaction_event: discord.RawReactionActionEvent, bot: discord.Client, connection,
@@ -257,8 +282,7 @@ async def update_leaderboard(connection, bot: discord.Client, server_config: ser
             embed=await create_embed(original_message, server_config.reaction_threshold, connection, reaction_config))
 
 
-async def report_missing_hall_of_fame_channel(bot: discord.Client, guild_id: int, channel_id: int,
-                                             guild_name: str = None):
+async def report_missing_hall_of_fame_channel(bot: discord.Client, guild_id: int, channel_id: int):
     """
     Log that a server's Hall of Fame channel cannot be found, once per boot for each server
     Every reaction in such a server and the daily task all end up here, and the duplicate guard only
@@ -266,15 +290,13 @@ async def report_missing_hall_of_fame_channel(bot: discord.Client, guild_id: int
     :param bot: The Discord bot
     :param guild_id: The ID of the server
     :param channel_id: The ID of the Hall of Fame channel that could not be found
-    :param guild_name: The name of the server, when known
     :return: None
     """
     if guild_id in missing_channels_logged:
         return
     missing_channels_logged.add(guild_id)
 
-    server = f"guild {guild_id}" if guild_name is None else f"server {guild_name}"
-    await logging(bot, f"Could not find the Hall of Fame channel {channel_id} of {server}", guild_id)
+    await logging(bot, f"Could not find the Hall of Fame channel {channel_id}", guild_id)
 
 
 async def post_hall_of_fame_message(message: discord.Message, bot: discord.Client, connection, target_channel_id: int,
@@ -308,10 +330,9 @@ async def post_hall_of_fame_message(message: discord.Message, bot: discord.Clien
     hall_of_fame_message = await target_channel.send(embed=embed)
 
     try:
-        # Checked again, since sending the repost gave the member time to ask not to be featured. Their
-        # earlier posts were detached when they asked, so this one is stored detached the same way
-        author_id = (hall_of_fame_message_repo.NO_AUTHOR_ID
-                     if opt_out_repo.is_opted_out(connection, message.author.id) else int(message.author.id))
+        # The opt-out is checked again here, since sending the repost gave the member time to ask not to
+        # be featured. The post is on the board by now, so it is kept there, credited to nobody
+        author_id, at_post_limit = author_to_store(connection, int(message.author.id))
         hall_of_fame_message_repo.insert_hall_of_fame_message(connection,
                                                               int(message.id),
                                                               int(message.channel.id),
@@ -326,6 +347,14 @@ async def post_hall_of_fame_message(message: discord.Message, bot: discord.Clien
         if video_message:
             await video_message.delete()
         await logging(bot, e, message.guild.id, log_level=log_type.CRITICAL)
+        return
+
+    if at_post_limit and message.author.id not in members_at_post_limit_logged:
+        members_at_post_limit_logged.add(message.author.id)
+        # The ID is needed to look into it, and the log channel is private to the developer
+        await logging(bot, f"Member {message.author.id} has {member_post_limit} credited posts, the most allowed, so "
+                           f"new posts of theirs are stored without an author. Worth checking for farmed reactions",
+                      message.guild.id, log_level=log_type.CRITICAL, ping_developer=False)
 
 
 def format_reactions_field_value(count: int, top_reaction) -> str:
@@ -599,7 +628,7 @@ async def report_setup_problems_on_join(bot, server, hall_of_fame_channel):
         # Only a pointer: the board is public, and the findings name channels and roles that are for admins
         await hall_of_fame_channel.send(messages.CHECK_JOIN_NUDGE.format(command=command_refs.CHECK_SETUP),
                                         view=check_setup_view())
-        await logging(bot, f"Setup problems on join in {server.name}: "
+        await logging(bot, f"Setup problems on join: "
                            f"{', '.join(finding.title for finding in setup_check.problems(findings))}",
                       server.id, log_level=log_type.SYSTEM)
     except Exception as e:
@@ -630,7 +659,7 @@ async def create_database_context(bot, server, connection, custom_channel=None) 
     )
 
     if server_config_repo.check_if_guild_exists(connection, server.id):
-        await logging(bot, f"Server {server.name} already exists in the SQL database, dropping it to recreate", server.id)
+        await logging(bot, "Server already exists in the database, dropping it to recreate", server.id)
         server_config_repo.delete_server_config(connection, server.id)
 
     hall_of_fame_channel = custom_channel or await server.create_text_channel("hall-of-fame")
@@ -962,7 +991,7 @@ async def post_server_perms(bot, server):
     :param server:
     :return:
     """
-    await logging(bot, f"Joined server {server.name} (ID {server.id}) with permissions:\n"
+    await logging(bot, f"Joined a server with permissions:\n"
                              f"Can manage roles: {server.me.guild_permissions.manage_roles}\n"
                              f"Can manage channels: {server.me.guild_permissions.manage_channels}\n"
                              f"Can send messages: {server.me.guild_permissions.send_messages}\n"
@@ -974,7 +1003,7 @@ async def post_server_perms(bot, server):
                              f"Can add reactions: {server.me.guild_permissions.add_reactions}\n"
                              f"Can use external emojis: {server.me.guild_permissions.use_external_emojis}\n"
                              f"Can view channels: {server.me.guild_permissions.view_channel}\n"
-                             f"Server member count: {server.member_count}", log_level=log_type.SYSTEM)
+                             f"Server member count: {server.member_count}", server.id, log_level=log_type.SYSTEM)
 
 
 async def send_message_to_highest_prio_channel(bot: discord.Client, guild: discord.Guild, message_content: str) -> bool:
@@ -992,10 +1021,9 @@ async def send_message_to_highest_prio_channel(bot: discord.Client, guild: disco
         if alt_permissions.send_messages and alt_permissions.view_channel:
             try:
                 await alt_channel.send(message_content)
-                await logging(bot, f"Sent missing permissions message to {alt_channel.name} in "
-                                         f"server {guild.name}", guild.id)
+                await logging(bot, f"Sent the missing permissions message to channel {alt_channel.id}", guild.id)
                 return True
             except Exception as e:
-                await logging(bot, f"Failed to send missing permissions message to {alt_channel.name} in server "
-                                   f"{guild.name}: {e}", guild.id)
+                await logging(bot, f"Failed to send the missing permissions message to channel {alt_channel.id}: {e}",
+                              guild.id)
     return False

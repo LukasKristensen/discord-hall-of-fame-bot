@@ -22,23 +22,6 @@ def create_server_user_table(connection):
     connection.commit()
     cursor.close()
 
-def insert_server_user(connection, user_id, guild_id, monthly_reaction_rank,
-                       total_message_rank, total_reaction_rank, this_month_hall_of_fame_messages,
-                       total_hall_of_fame_messages, monthly_message_rank,
-                       this_month_hall_of_fame_message_reactions, total_hall_of_fame_message_reactions):
-    cursor = connection.cursor()
-    cursor.execute("""
-        INSERT INTO server_user 
-        (user_id, guild_id, monthly_reaction_rank, total_message_rank, total_reaction_rank,
-         this_month_hall_of_fame_messages, total_hall_of_fame_messages, monthly_message_rank,
-         this_month_hall_of_fame_message_reactions, total_hall_of_fame_message_reactions)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-    """, (user_id, guild_id, monthly_reaction_rank, total_message_rank, total_reaction_rank,
-          this_month_hall_of_fame_messages, total_hall_of_fame_messages, monthly_message_rank,
-          this_month_hall_of_fame_message_reactions, total_hall_of_fame_message_reactions))
-    connection.commit()
-    cursor.close()
-
 def delete_server_users(connection, guild_id):
     cursor = connection.cursor()
     cursor.execute("""
@@ -109,42 +92,6 @@ def get_server_user(connection, user_id, guild_id):
         result = None
     cursor.close()
     return result
-
-def update_user_stats(connection, stats, user_id, guild_id):
-    cursor = connection.cursor()
-    cursor.execute(
-        """
-        INSERT INTO server_user (
-            user_id, guild_id, monthly_reaction_rank, total_message_rank, total_reaction_rank,
-            this_month_hall_of_fame_messages, total_hall_of_fame_messages, monthly_message_rank,
-            this_month_hall_of_fame_message_reactions, total_hall_of_fame_message_reactions
-        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-        ON CONFLICT(user_id, guild_id) DO UPDATE SET
-            total_hall_of_fame_messages = excluded.total_hall_of_fame_messages,
-            this_month_hall_of_fame_messages = excluded.this_month_hall_of_fame_messages,
-            total_hall_of_fame_message_reactions = excluded.total_hall_of_fame_message_reactions,
-            this_month_hall_of_fame_message_reactions = excluded.this_month_hall_of_fame_message_reactions,
-            total_message_rank = excluded.total_message_rank,
-            monthly_message_rank = excluded.monthly_message_rank,
-            total_reaction_rank = excluded.total_reaction_rank,
-            monthly_reaction_rank = excluded.monthly_reaction_rank
-        """,
-        (
-            user_id,
-            guild_id,
-            stats["monthly_reaction_rank"],
-            stats["total_message_rank"],
-            stats["total_reaction_rank"],
-            stats["this_month_hall_of_fame_messages"],
-            stats["total_hall_of_fame_messages"],
-            stats["monthly_message_rank"],
-            stats["this_month_hall_of_fame_message_reactions"],
-            stats["total_hall_of_fame_message_reactions"],
-        ),
-    )
-    connection.commit()
-    cursor.close()
-
 
 def rebuild_user_stats_for_guild(connection, guild_id, monthly_window_start) -> int:
     """

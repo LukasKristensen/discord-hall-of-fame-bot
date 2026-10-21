@@ -133,9 +133,11 @@ def set_up_here(interaction: discord.Interaction) -> bool:
 
 
 def where_used(interaction: discord.Interaction) -> str:
-    """Where a command was used, for the log. User-installable commands also run where there is no server"""
-    guild = interaction.guild
-    return getattr(guild, "name", None) or "a DM or a server without the bot"
+    """
+    Where a command was used, for the log: whether it was a server with the bot, never which one or who
+    used it, since logs are kept. The server ID is added to the log on its own when there is one
+    """
+    return "a server" if getattr(interaction, "guild", None) is not None else "a DM or a server without the bot"
 
 
 async def ensure_bot_is_loaded(interaction: discord.Interaction) -> bool:
@@ -506,7 +508,7 @@ async def on_message(message: discord.Message):
 
 @bot.event
 async def on_guild_join(server):
-    await utils.logging(bot, f"Joined server {server.name}", server.id, log_level=log_type.SYSTEM)
+    await utils.logging(bot, "Joined a server", server.id, log_level=log_type.SYSTEM)
     await utils.post_server_perms(bot, server)
 
     try:
@@ -539,7 +541,7 @@ async def on_guild_remove(server):
             await utils.logging(bot, f"Error recording the leave in on_guild_remove: {e}", server.id,
                                 log_level=log_type.ERROR)
         return
-    await utils.logging(bot, f"Left server {server.name}", server.id, log_level=log_type.SYSTEM)
+    await utils.logging(bot, "Left a server", server.id, log_level=log_type.SYSTEM)
     async with get_db_connection(connection_pool) as connection:
         await events.guild_remove(server, connection)
         guild_lifecycle_event_repo.insert_guild_lifecycle_event(
@@ -554,7 +556,7 @@ async def on_guild_remove(server):
 @user_install
 async def get_help(interaction: discord.Interaction):
     await commands.get_help(interaction)
-    await utils.logging(bot, f"Help command used by {interaction.user.name} in {where_used(interaction)}",
+    await utils.logging(bot, f"Help command used in {where_used(interaction)}",
                         interaction.guild_id, log_level=log_type.COMMAND)
 
 @tree.command(name="set_reaction_threshold", description="Configure the amount of reactions needed to post a message in the Hall of Fame")
@@ -590,7 +592,7 @@ async def configure_bot(interaction: discord.Interaction,
                                                     str(server_class.reaction_count_calculation_method))
     async with get_db_connection(connection_pool) as connection:
         await commands.set_reaction_threshold(interaction, reaction_threshold, connection, method.lower(), server_class)
-    await utils.logging(bot, f"Reaction threshold configure command used by {interaction.user.name} in {interaction.guild.name}",
+    await utils.logging(bot, f"Reaction threshold configure command used in a server",
                         interaction.guild.id, reaction_threshold, log_level=log_type.COMMAND)
 
 @tree.command(name="feedback", description="Send feedback to the developer")
@@ -611,7 +613,7 @@ async def include_author_own_reaction_in_threshold(interaction: discord.Interact
         return
     await update_setting(interaction, "include_author_in_reaction_calculation", include,
                          "Author's own reaction counts toward the threshold")
-    await utils.logging(bot, f"Include author's own reaction in threshold command used by {interaction.user.name} in {interaction.guild.name}",
+    await utils.logging(bot, f"Include author's own reaction in threshold command used in a server",
                         interaction.guild.id, include, log_level=log_type.COMMAND)
 
 @tree.command(name="allow_messages_in_hof_channel", description="Should people be allowed to send messages in the Hall of Fame channel?")
@@ -625,7 +627,7 @@ async def allow_messages_in_hof_channel(interaction: discord.Interaction, allow:
     note = "" if allow else "Messages members post in the Hall of Fame channel will be removed."
     await update_setting(interaction, "allow_messages_in_hof_channel", allow,
                          "Members can chat in the Hall of Fame channel", note=note)
-    await utils.logging(bot, f"Allow messages in Hall of Fame channel command used by {interaction.user.name} in {interaction.guild.name}",
+    await utils.logging(bot, f"Allow messages in Hall of Fame channel command used in a server",
                         interaction.guild.id, allow, log_level=log_type.COMMAND)
 
 @tree.command(name="require_image_or_video", description="Should only messages with images or videos be allowed in the Hall of Fame?")
@@ -638,7 +640,7 @@ async def require_image_or_video(interaction: discord.Interaction, require: bool
 
     await update_setting(interaction, "require_image_or_video", require,
                          "Only posts with an image or video can reach the Hall of Fame")
-    await utils.logging(bot, f"Require image or video command used by {interaction.user.name} in {interaction.guild.name}",
+    await utils.logging(bot, f"Require image or video command used in a server",
                         interaction.guild.id, str(require), log_level=log_type.COMMAND)
 
 @tree.command(name="vote", description="Vote for the bot on top.gg")
@@ -646,7 +648,7 @@ async def require_image_or_video(interaction: discord.Interaction, require: bool
 async def vote(interaction: discord.Interaction):
     # noinspection PyUnresolvedReferences
     await interaction.response.send_message(messages.VOTE_MESSAGE, view=commands.build_vote_view())
-    await utils.logging(bot, f"Vote command used by {interaction.user.name} in {where_used(interaction)}",
+    await utils.logging(bot, f"Vote command used in {where_used(interaction)}",
                         interaction.guild_id, log_level=log_type.COMMAND)
 
 @tree.command(name="custom_emoji_check_logic",
@@ -675,7 +677,7 @@ async def custom_emoji_check_logic(interaction: discord.Interaction, config_opti
 
     await update_setting(interaction, "custom_emoji_check_logic", custom_emoji_check,
                          "Emojis that count toward the threshold", shown_value=config_option.name, note=note)
-    await utils.logging(bot, f"Custom emoji check logic command used by {interaction.user.name} in {interaction.guild.name}",
+    await utils.logging(bot, f"Custom emoji check logic command used in a server",
                         interaction.guild.id, str(config_option.value), log_level=log_type.COMMAND)
 
 
@@ -711,7 +713,7 @@ async def whitelist_emoji(interaction: discord.Interaction, emoji: str):
     parsed = validation.normalize_emoji(emoji)
     if parsed is None:
         await send_error(interaction, "No emoji was given.")
-        await utils.logging(bot, f"Whitelist emoji command used by {interaction.user.name} in {interaction.guild.name} "
+        await utils.logging(bot, f"Whitelist emoji command used in a server "
                                  f"with no emoji", interaction.guild.id, emoji, log_level=log_type.COMMAND)
         return
 
@@ -729,7 +731,7 @@ async def whitelist_emoji(interaction: discord.Interaction, emoji: str):
             server_class.whitelisted_emojis = whitelist
             # noinspection PyUnresolvedReferences
             await interaction.response.send_message(messages.WHITELIST_ADDED.format(emoji=parsed, count=len(whitelist)))
-    await utils.logging(bot, f"Whitelist emoji command used by {interaction.user.name} in {interaction.guild.name}",
+    await utils.logging(bot, f"Whitelist emoji command used in a server",
                         interaction.guild.id, parsed, log_level=log_type.COMMAND)
 
 
@@ -758,7 +760,7 @@ async def unwhitelist_emoji(interaction: discord.Interaction, emoji: str):
         else:
             await send_error(interaction, messages.WHITELIST_NOT_FOUND.format(
                 emoji=emoji.strip(), command=command_refs.GET_SERVER_CONFIG))
-    await utils.logging(bot, f"Unwhitelist emoji command used by {interaction.user.name} in {interaction.guild.name}",
+    await utils.logging(bot, f"Unwhitelist emoji command used in a server",
                         interaction.guild.id, emoji, log_level=log_type.COMMAND)
 
 
@@ -777,7 +779,7 @@ async def clear_whitelist(interaction: discord.Interaction):
     server_class.whitelisted_emojis = []
     # noinspection PyUnresolvedReferences
     await interaction.response.send_message(messages.WHITELIST_CLEARED.format(command=command_refs.WHITELIST_EMOJI))
-    await utils.logging(bot, f"Clear whitelist command used by {interaction.user.name} in {interaction.guild.name}",
+    await utils.logging(bot, f"Clear whitelist command used in a server",
                         interaction.guild.id, log_level=log_type.COMMAND)
 
 @tree.command(name="get_server_config", description="Get the server config")
@@ -792,7 +794,7 @@ async def get_server_config(interaction: discord.Interaction):
     embed = commands.build_server_config_embed(interaction.guild, server_classes[interaction.guild_id])
     # noinspection PyUnresolvedReferences
     await interaction.response.send_message(embed=embed)
-    await utils.logging(bot, f"Get server config command used by {interaction.user.name} in {interaction.guild.name}",
+    await utils.logging(bot, f"Get server config command used in a server",
                         interaction.guild.id, log_level=log_type.COMMAND)
 
 async def run_setup_check(interaction: discord.Interaction):
@@ -824,7 +826,7 @@ async def run_setup_check(interaction: discord.Interaction):
     await interaction.followup.send(embed=setup_check.build_embed(findings), ephemeral=True)
 
     found = setup_check.problems(findings)
-    await utils.logging(bot, f"Setup check used by {interaction.user.name} in {guild.name}: "
+    await utils.logging(bot, f"Setup check used in a server: "
                              f"{', '.join(finding.title for finding in found) or 'no problems'}",
                         interaction.guild.id, log_level=log_type.COMMAND)
 
@@ -855,7 +857,7 @@ async def set_post_due_date(interaction: discord.Interaction,
     await update_setting(interaction, "post_due_date", post_due_date, "Post due date",
                          shown_value=f"{post_due_date} day{plural(post_due_date)}",
                          note=messages.POST_DUE_DATE_NOTE.format(days=post_due_date, plural=plural(post_due_date)))
-    await utils.logging(bot, f"Set post due date command used by {interaction.user.name} in {interaction.guild.name}",
+    await utils.logging(bot, f"Set post due date command used in a server",
                         interaction.guild.id, post_due_date, log_level=log_type.COMMAND)
 
 @tree.command(name="invite", description="Invite the bot to your server")
@@ -863,7 +865,7 @@ async def set_post_due_date(interaction: discord.Interaction,
 async def invite(interaction: discord.Interaction):
     # noinspection PyUnresolvedReferences
     await interaction.response.send_message(messages.INVITE_MESSAGE, view=commands.build_invite_view())
-    await utils.logging(bot, f"Invite command used by {interaction.user.name} in {where_used(interaction)}",
+    await utils.logging(bot, f"Invite command used in {where_used(interaction)}",
                         interaction.guild_id, log_level=log_type.COMMAND)
 
 @tree.command(name="ignore_bot_messages", description="Should the bot ignore messages from other bots?")
@@ -876,7 +878,7 @@ async def ignore_bot_messages(interaction: discord.Interaction, should_ignore_bo
 
     await update_setting(interaction, "ignore_bot_messages", should_ignore_bot_messages,
                          "Ignore messages from bots")
-    await utils.logging(bot, f"Ignore bot messages command used by {interaction.user.name} in {interaction.guild.name}",
+    await utils.logging(bot, f"Ignore bot messages command used in a server",
                         interaction.guild.id, should_ignore_bot_messages, log_level=log_type.COMMAND)
 
 @tree.command(name="calculation_method", description="Set the calculation method for reactions")
@@ -897,7 +899,7 @@ async def calculation_method(interaction: discord.Interaction, method: app_comma
     label = commands.calculation_method_labels.get(method.value, method.name)
     await update_setting(interaction, "reaction_count_calculation_method", method.value,
                          "Reactions are counted as", shown_value=label)
-    await utils.logging(bot, f"Calculation method command used by {interaction.user.name} in {interaction.guild.name}",
+    await utils.logging(bot, f"Calculation method command used in a server",
                         interaction.guild.id, method.value, log_level=log_type.COMMAND)
 
 @tree.command(name="hide_hof_post_below_threshold", description="Should hall of fame posts be hidden when they go below the reaction threshold?")
@@ -917,7 +919,7 @@ async def hide_hall_of_fame_posts_when_they_are_below_threshold(interaction: dis
     note = "They show again once they are back above it." if hide else ""
     await update_setting(interaction, "hide_hof_post_below_threshold", hide,
                          "Hide Hall of Fame posts that drop below the threshold", note=note)
-    await utils.logging(bot, f"Hide hall of fame posts command used by {interaction.user.name} in {interaction.guild.name}",
+    await utils.logging(bot, f"Hide hall of fame posts command used in a server",
                         interaction.guild.id, str(hide), log_level=log_type.COMMAND)
 
 @tree.command(name="user_profile", description="Get the server profile of a user")
@@ -959,8 +961,8 @@ async def user_server_profile(interaction: discord.Interaction, specific_user: d
     if user_stats is None and not commands.global_profile_adds_something(global_profile, None):
         # noinspection PyUnresolvedReferences
         await interaction.response.send_message(messages.PROFILE_NO_DATA)
-        await utils.logging(bot, f"User server profile command used by {interaction.user.name} in {interaction.guild.name} but no data available for user {user.name}",
-                            interaction.guild.id, str(user.id), log_level=log_type.COMMAND)
+        await utils.logging(bot, f"User server profile command used in a server but no data available for the member looked up",
+                            interaction.guild.id, log_level=log_type.COMMAND)
         return
 
     async with get_db_connection(connection_pool) as connection:
@@ -969,8 +971,8 @@ async def user_server_profile(interaction: discord.Interaction, specific_user: d
         with utils.statement_timeout(connection, data_command_statement_timeout_ms):
             await commands.user_server_profile(interaction, user, user_stats, connection, month_emoji,
                                                all_time_emoji, global_profile)
-    await utils.logging(bot, f"Get user server profile command used by {interaction.user.name} in {interaction.guild.name}",
-                        interaction.guild.id, str(user.id), log_level=log_type.COMMAND)
+    await utils.logging(bot, f"Get user server profile command used in a server",
+                        interaction.guild.id, log_level=log_type.COMMAND)
 
 async def answer_profile_outside_server(interaction: discord.Interaction, user):
     """
@@ -1003,7 +1005,7 @@ async def answer_profile_outside_server(interaction: discord.Interaction, user):
         # noinspection PyUnresolvedReferences
         await interaction.response.send_message(embed=commands.build_global_profile_embed(user, global_profile))
     await utils.logging(bot, f"User profile command used in {where_used(interaction)}, outside a server with the bot",
-                        interaction.guild_id, str(user.id), log_level=log_type.COMMAND)
+                        interaction.guild_id, log_level=log_type.COMMAND)
 
 
 @tree.command(name="count_in_global_profiles", description="Should posts in this server count toward members' totals across servers?")
@@ -1018,7 +1020,7 @@ async def count_in_global_profiles(interaction: discord.Interaction, count: bool
     note = messages.GLOBAL_PROFILE_COUNTING_ON_NOTE if count else messages.GLOBAL_PROFILE_COUNTING_OFF_NOTE
     await update_setting(interaction, "count_in_global_profiles", count,
                          "Posts here count toward members' totals across servers", note=note)
-    await utils.logging(bot, f"Count in global profiles command used by {interaction.user.name} in {interaction.guild.name}",
+    await utils.logging(bot, f"Count in global profiles command used in a server",
                         interaction.guild.id, str(count), log_level=log_type.COMMAND)
 
 
@@ -1033,10 +1035,6 @@ def daily_uses(user_id: int, command_name: str) -> int:
 
 def start_daily_cooldown(user_id: int, command_name: str):
     daily_command_cooldowns.setdefault(user_id, []).append(command_name)
-
-
-def plural_suffix(count: int, singular: str, many: str) -> str:
-    return singular if count == 1 else many
 
 
 async def read_my_data_summary(user_id: int) -> dict:
@@ -1055,8 +1053,8 @@ async def read_my_data_summary(user_id: int) -> dict:
             }
 
 
-async def read_my_data_export(user_id: int) -> bytes:
-    """Every row stored about a member, as the file the Download button sends"""
+async def read_my_data_document(user_id: int) -> dict:
+    """Every row stored about a member, for the files the Download button sends"""
     async with get_db_connection(connection_pool) as connection:
         with utils.statement_timeout(connection, data_command_statement_timeout_ms):
             posts = hall_of_fame_message_repo.get_messages_by_author(connection, user_id)
@@ -1064,7 +1062,7 @@ async def read_my_data_export(user_id: int) -> bytes:
             wrapped = hof_wrapped_repo.get_hof_wrapped_for_user(connection, user_id)
             hidden = global_profile_repo.is_hidden(connection, user_id)
             not_featured = opt_out_repo.is_opted_out(connection, user_id)
-    return commands.build_my_data_export(user_id, posts, standings, wrapped, hidden, not_featured)
+    return commands.build_my_data_document(user_id, posts, standings, wrapped, hidden, not_featured)
 
 
 async def delete_member_data(user_id: int) -> int:
@@ -1088,6 +1086,20 @@ async def delete_member_data(user_id: int) -> int:
             global_profile_repo.delete_for_user(connection, user_id, commit=False)
             opt_out_repo.set_opted_out(connection, user_id, False, commit=False)
     return detached
+
+
+async def stop_featuring_member(user_id: int):
+    """
+    Record that a member asked not to be featured, and take them out of everybody's stored Wrapped fan
+    lists in the same transaction, so other members' Wrapped stop showing them, including Wrapped from
+    before they asked. Their own earlier Wrapped stays, like the rest of their earlier data
+    :param user_id: The member's user ID
+    """
+    async with get_db_connection(connection_pool) as connection:
+        # The fan lists are searched across the whole table, so the database cuts a slow search off
+        with utils.statement_timeout(connection, data_command_statement_timeout_ms):
+            opt_out_repo.set_opted_out(connection, user_id, True, commit=False)
+            hof_wrapped_repo.remove_from_fan_lists(connection, user_id, commit=False)
 
 
 @tree.command(name="my_data", description="See, download or delete what Hall of Fame stores about you")
@@ -1114,18 +1126,78 @@ async def my_data(interaction: discord.Interaction):
         # noinspection PyUnresolvedReferences
         await button_interaction.response.defer(ephemeral=True, thinking=True)
         try:
-            export = await read_my_data_export(user_id)
+            document = await read_my_data_document(user_id)
         except Exception as e:
             await button_interaction.followup.send(messages.COMMAND_FAILED, ephemeral=True)
             await utils.logging(bot, f"Error reading a member's data export: {e}", interaction.guild_id,
                                 log_level=log_type.ERROR)
             return
-        await button_interaction.followup.send(messages.MY_DATA_EXPORT, ephemeral=True,
-                                               file=discord.File(io.BytesIO(export), filename="hall-of-fame-my-data.json"))
+
+        whole = commands.encode_export(document)
+        try:
+            # One file is always tried first, so Discord's own limit decides whether it fits
+            await button_interaction.followup.send(
+                messages.MY_DATA_EXPORT, ephemeral=True,
+                files=[discord.File(io.BytesIO(whole), filename="hall-of-fame-my-data.json")])
+            parts = 1
+        except discord.HTTPException as e:
+            if not commands.is_file_too_large(e):
+                await send_export_failed(button_interaction, f"Discord refused a member's data export: {e}")
+                return
+            parts = await send_export_in_parts(button_interaction, document, len(whole))
+            if parts is None:
+                return
         # Only once it worked, so a failed attempt does not lock the member out for the day
         start_daily_cooldown(user_id, "my_data")
-        await utils.logging(bot, f"A member downloaded their data in {where_used(interaction)}", interaction.guild_id,
-                            log_level=log_type.COMMAND)
+        await utils.logging(bot, f"A member downloaded their data in {where_used(interaction)}"
+                                 + (f", split into {parts} files after Discord refused one" if parts > 1 else ""),
+                            interaction.guild_id, log_level=log_type.COMMAND)
+
+    async def send_export_failed(button_interaction: discord.Interaction, log_message: str):
+        # Whatever was sent stays, but the day is not used up, so the member can try again
+        await button_interaction.followup.send(messages.MY_DATA_EXPORT_SEND_FAILED, ephemeral=True)
+        await utils.logging(bot, log_message, interaction.guild_id, log_level=log_type.ERROR)
+
+    async def send_export_in_parts(button_interaction: discord.Interaction, document: dict, refused_bytes: int):
+        """
+        Send the export as several complete JSON files after Discord refused it as one. Discord's limit is
+        not known, so when it refuses the first message for its size too, the parts are halved again,
+        until they fit or a single row or the number of messages makes it impossible
+        :return: How many files were sent, or None when it could not be sent, which is answered here
+        """
+        budget = commands.split_budget(refused_bytes)
+        while True:
+            try:
+                files = commands.split_my_data_export(document, max_bytes=budget)
+                batches = commands.batch_export_files(files, max_bytes=budget)
+                if len(batches) > commands.EXPORT_MAX_MESSAGES:
+                    raise commands.ExportTooLarge(f"{len(files)} files in {len(batches)} messages")
+            except commands.ExportTooLarge as e:
+                await button_interaction.followup.send(messages.MY_DATA_EXPORT_TOO_LARGE, ephemeral=True)
+                await utils.logging(bot, f"A member's data export is too large to send through Discord: {e}",
+                                    interaction.guild_id, log_level=log_type.ERROR)
+                return None
+
+            names = [f"hall-of-fame-my-data-part-{number}-of-{len(files)}.json"
+                     for number in range(1, len(files) + 1)]
+            sent = 0
+            try:
+                for batch in batches:
+                    await button_interaction.followup.send(
+                        messages.MY_DATA_EXPORT_PARTS.format(parts=len(files)) if sent == 0 else None,
+                        ephemeral=True,
+                        files=[discord.File(io.BytesIO(files[index]), filename=names[index]) for index in batch])
+                    sent += 1
+            except discord.HTTPException as e:
+                # Smaller parts only help before anything went out. Once some parts are sent, sending them
+                # all again would leave the member with two sets that do not match
+                if commands.is_file_too_large(e) and sent == 0:
+                    budget //= 2
+                    continue
+                await send_export_failed(button_interaction,
+                                         f"Discord refused a member's data export split into {len(files)} files: {e}")
+                return None
+            return len(files)
 
     async def toggle_totals(button_interaction: discord.Interaction, view):
         hide = view.summary["hidden_since"] is None
@@ -1166,13 +1238,25 @@ async def my_data(interaction: discord.Interaction):
 
     async def toggle_featuring(button_interaction: discord.Interaction, view):
         stop = view.summary["opted_out_since"] is None
-        async with get_db_connection(connection_pool) as connection:
-            opt_out_repo.set_opted_out(connection, user_id, stop)
+        # Answered first, since stopping searches every stored Wrapped and can outlast the three seconds
+        # Discord waits for a button to be answered
+        # noinspection PyUnresolvedReferences
+        await button_interaction.response.defer()
+        try:
+            if stop:
+                await stop_featuring_member(user_id)
+            else:
+                async with get_db_connection(connection_pool) as connection:
+                    opt_out_repo.set_opted_out(connection, user_id, False)
+        except Exception as e:
+            await button_interaction.edit_original_response(content=messages.COMMAND_FAILED, view=None)
+            await utils.logging(bot, f"Error changing whether a member is featured: {e}", interaction.guild_id,
+                                log_level=log_type.ERROR)
+            return
         view.summary = await read_my_data_summary(user_id)
         view.refresh()
         note = messages.STOPPED_FEATURING if stop else messages.COUNTED_AGAIN
-        # noinspection PyUnresolvedReferences
-        await button_interaction.response.edit_message(
+        await button_interaction.edit_original_response(
             content=commands.my_data_summary(view.summary, note=note), view=view)
         await utils.logging(bot, "A member asked not to be featured" if stop else "A member asked to be featured again",
                             interaction.guild_id, log_level=log_type.COMMAND)
@@ -1201,11 +1285,17 @@ async def my_data(interaction: discord.Interaction):
 
     async def stop_featuring(button_interaction: discord.Interaction):
         # The same setting as the button on /my_data, offered where a member who just deleted their
-        # data is likeliest to want it. Like that button, it concerns new messages only
-        async with get_db_connection(connection_pool) as connection:
-            opt_out_repo.set_opted_out(connection, user_id, True)
+        # data is likeliest to want it
         # noinspection PyUnresolvedReferences
-        await button_interaction.response.edit_message(
+        await button_interaction.response.defer()
+        try:
+            await stop_featuring_member(user_id)
+        except Exception as e:
+            await button_interaction.edit_original_response(content=messages.COMMAND_FAILED, view=None)
+            await utils.logging(bot, f"Error changing whether a member is featured: {e}", interaction.guild_id,
+                                log_level=log_type.ERROR)
+            return
+        await button_interaction.edit_original_response(
             content=messages.DELETE_MY_DATA_DONE_STOPPED.format(command=command_refs.MY_DATA), view=None)
         await utils.logging(bot, "A member asked not to be featured", interaction.guild_id,
                             log_level=log_type.COMMAND)
@@ -1235,7 +1325,7 @@ async def leaderboard(interaction: discord.Interaction):
 
     if "leaderboard" in daily_command_cooldowns.get(interaction.user.id, []):
         await send_error(interaction, messages.COMMAND_ON_COOLDOWN)
-        await utils.logging(bot, f"Leaderboard command on cooldown for {interaction.user.name} in {interaction.guild.name}",
+        await utils.logging(bot, f"Leaderboard command on cooldown in a server",
                             interaction.guild.id, log_level=log_type.COMMAND)
         return
 
@@ -1251,7 +1341,7 @@ async def leaderboard(interaction: discord.Interaction):
     # Only put the command on cooldown once it actually produced a leaderboard
     daily_command_cooldowns.setdefault(interaction.user.id, []).append("leaderboard")
 
-    await utils.logging(bot, f"Leaderboard command used by {interaction.user.name} in {interaction.guild.name}",
+    await utils.logging(bot, f"Leaderboard command used in a server",
                         interaction.guild.id, log_level=log_type.COMMAND)
 
 @tree.command(name="set_hall_of_fame_channel", description="Manually set the Hall of Fame channel for the server")
@@ -1280,8 +1370,8 @@ async def set_hall_of_fame_channel(interaction: discord.Interaction, channel: di
     if missing_permissions:
         await send_error(interaction, messages.HOF_CHANNEL_MISSING_PERMISSIONS.format(
             channel=channel.mention, missing_permissions=", ".join(missing_permissions)))
-        await utils.logging(bot, f"Failed to set Hall of Fame channel due to missing permissions by {interaction.user.name} in "
-                                 f"{interaction.guild.name} with missing permissions: {', '.join(missing_permissions)}",
+        await utils.logging(bot, f"Failed to set the Hall of Fame channel, "
+                                 f"with missing permissions: {', '.join(missing_permissions)}",
                                  interaction.guild.id, str(channel.id), log_level=log_type.COMMAND)
         return
 
@@ -1323,13 +1413,13 @@ async def set_hall_of_fame_channel(interaction: discord.Interaction, channel: di
             allowed_mentions=discord.AllowedMentions.none())
     except discord.HTTPException as e:
         # The board has moved either way, so the member still hears that it worked
-        await utils.logging(bot, f"Could not post the Hall of Fame channel announcement in {interaction.guild.name}: {e}",
+        await utils.logging(bot, f"Could not post the Hall of Fame channel announcement: {e}",
                             interaction.guild.id, str(channel.id), log_level=log_type.COMMAND)
         await interaction.followup.send(messages.HOF_CHANNEL_SET_ANNOUNCEMENT_FAILED.format(channel=channel.mention))
         return
 
     await interaction.followup.send(messages.HOF_CHANNEL_SET.format(channel=channel.mention))
-    await utils.logging(bot, f"Set Hall of Fame channel command used by {interaction.user.name} in {interaction.guild.name}",
+    await utils.logging(bot, f"Set Hall of Fame channel command used in a server",
                         interaction.guild.id, str(channel.id), log_level=log_type.COMMAND)
 
 @tree.command(name="hof_wrapped", description="Get your Hall of Fame Wrapped for the year")
@@ -1348,16 +1438,16 @@ async def hof_wrapped_command(interaction: discord.Interaction):
     if user_wrapped is None:
         # noinspection PyUnresolvedReferences
         await interaction.response.send_message(f"No Hall of Fame Wrapped data available for you in {version.WRAPPED_YEAR}. Participate more in Hall of Fame to get your wrapped next year!")
-        await utils.logging(bot, f"HOF Wrapped command used by {interaction.user.name} in {interaction.guild.name} but no data available",
-                            interaction.guild.id, str(interaction.user.id), log_level=log_type.COMMAND)
+        await utils.logging(bot, f"HOF Wrapped command used in a server but no data available",
+                            interaction.guild.id, log_level=log_type.COMMAND)
         return
 
     embed = await hof_wrapped.create_embed(interaction.user, user_wrapped, bot)
     # noinspection PyUnresolvedReferences
     await interaction.response.send_message(embed=embed)
 
-    await utils.logging(bot, f"HOF Wrapped command used by {interaction.user.name} in {interaction.guild.name}",
-                        interaction.guild.id, str(interaction.user.id), log_level=log_type.COMMAND)
+    await utils.logging(bot, f"HOF Wrapped command used in a server",
+                        interaction.guild.id, log_level=log_type.COMMAND)
 
 @tree.command(name="server_hof_wrapped", description="Get the server's Hall of Fame Wrapped for the year")
 async def server_hof_wrapped_command(interaction: discord.Interaction):
@@ -1390,7 +1480,7 @@ async def check_if_user_has_manage_server_permission(interaction: discord.Intera
     """
     if not interaction.user.guild_permissions.manage_guild:
         await send_error(interaction, messages.NOT_AUTHORIZED)
-        await utils.logging(bot, f"User {interaction.user.name} does not have manage server permission",
+        await utils.logging(bot, "A member without the Manage Server permission was refused",
                             interaction.guild_id, log_level=log_type.COMMAND)
         return False
     if check_server_set_up and len(server_classes) > 1 and (interaction.guild_id not in server_classes or server_classes[interaction.guild_id] is None):

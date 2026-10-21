@@ -62,14 +62,14 @@ async def check_for_new_server_classes(bot, connection):
             record_guild_join(connection, guild)
         except Exception as e:
             connection.rollback()
-            await utils.logging(bot, f"Could not record the join of server {guild.name}: {e}", guild.id)
+            await utils.logging(bot, f"Could not record the join of a server: {e}", guild.id)
         if guild.me.guild_permissions.manage_channels:
-            await utils.logging(bot, f"Guild {guild.name} not found in database, creating...", guild.id)
+            await utils.logging(bot, "Server not found in the database, creating it", guild.id)
             try:
                 new_server_class = await utils.create_database_context(bot, guild, connection)
                 new_server_classes[guild.id] = new_server_class
             except Exception as e:
-                await utils.logging(bot, f"Failed to create database context for server {guild.name}: {e}", guild.id)
+                await utils.logging(bot, f"Failed to create the database context for a server: {e}", guild.id)
     return new_server_classes
 
 
@@ -186,7 +186,7 @@ async def guild_join(server, connection, bot, custom_channel: discord.TextChanne
     try:
         return await utils.create_database_context(bot, server, connection, custom_channel)
     except Exception as e:
-        await utils.logging(bot, f"Failed to create database context for server {server.name}: {e}", server.id)
+        await utils.logging(bot, f"Failed to create the database context for a server: {e}", server.id)
         if recent_setup_failure_notices.add_if_absent(server.id):
             await utils.send_message_to_highest_prio_channel(bot, server,
                                                              messages.FAILED_SETUP_HOF.format(serverName=server.name))
@@ -353,8 +353,7 @@ async def check_write_permissions_to_hall_of_fame_channel(bot: discord.Client, s
             return
         channel = guild.get_channel(server_class.hall_of_fame_channel_id)
         if not channel:
-            await utils.report_missing_hall_of_fame_channel(bot, guild.id, server_class.hall_of_fame_channel_id,
-                                                            guild.name)
+            await utils.report_missing_hall_of_fame_channel(bot, guild.id, server_class.hall_of_fame_channel_id)
             # await utils.send_message_to_highest_prio_channel(bot, guild, messages.FAILED_TO_FIND_HOF_CHANNEL)
             return
         permissions = channel.permissions_for(guild.me)

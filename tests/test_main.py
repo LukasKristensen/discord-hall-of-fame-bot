@@ -58,12 +58,15 @@ class FakeFollowup:
         self.messages = []
         self.ephemeral = []
         self.files = []
+        self.attachments = []
         self.views = []
 
-    async def send(self, content=None, embed=None, ephemeral=False, file=None, view=None):
+    async def send(self, content=None, embed=None, ephemeral=False, file=None, files=None, view=None):
         self.messages.append(embed if embed is not None else content)
         self.ephemeral.append(ephemeral)
         self.files.append(file)
+        # Every file of the message, however it was passed
+        self.attachments.append(list(files or []) + ([file] if file is not None else []))
         self.views.append(view)
 
 
@@ -171,7 +174,8 @@ class ManageServerPermissionTests(MainTestCase):
         interaction = FakeInteraction(manage_guild=False)
         await main.check_if_user_has_manage_server_permission(interaction)
 
-        self.assertTrue(any("does not have manage server permission" in entry for entry in self.logged))
+        self.assertTrue(any("without the Manage Server permission was refused" in entry for entry in self.logged))
+        self.assertFalse(any("Member" in entry for entry in self.logged))
 
     async def test_turns_away_a_server_that_is_not_set_up(self):
         self.set_server_classes([201, 202])
@@ -1283,6 +1287,277 @@ class FeedbackFormTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual([77], sent)
         self.assertEqual(1, len(self.posted))
         self.assertIn("user install", [field.value for field in self.posted[0].fields][2])
+
+
+
+class FirstLoginTests(MainTestCase):
+    """The first on_ready of a boot loads every server and starts the background tasks."""
+
+    def setUp(self):
+        super().setUp()
+
+        async def nothing(*_args, **_kwargs):
+            return None
+
+        self.started = []
+        self.patch(main.events, "bot_login", nothing)
+        self.patch(main.events, "post_wrapped", nothing)
+        self.patch(main.events, "check_for_new_server_classes", lambda *_args: self.new_servers())
+        self.patch(main, "bot", types.SimpleNamespace(user="Hall Of Fame", add_view=lambda _view: None,
+                                                      guilds=[types.SimpleNamespace(member_count=40)]))
+        self.patch(main, "connection_pool", FakePool())
+        self.patch(main, "setup_databases", lambda _connection: None)
+        self.patch(main.server_config_repo, "get_server_classes", lambda _connection: {GUILD_ID: build_server()})
+        self.patch(main, "bot_loaded", False)
+        self.patch(main, "server_classes", {})
+        self.patch(main, "daily_task", types.SimpleNamespace(start=lambda: self.started.append("daily")))
+        self.running = False
+        self.patch(main, "rotate_presence", types.SimpleNamespace(is_running=lambda: self.running,
+                                                                  start=lambda: self.started.append("presence")))
+
+    async def new_servers(self):
+        return {201: build_server(guild_id=201)}
+
+    async def test_loads_every_server_and_starts_the_tasks(self):
+        await main.on_ready()
+
+        self.assertTrue(main.bot_loaded)
+        self.assertEqual({GUILD_ID, 201}, set(main.server_classes))
+        self.assertEqual(40, main.total_member_count)
+        self.assertEqual(["presence", "daily"], self.started)
+
+    async def test_does_not_start_the_presence_rotation_twice(self):
+        self.running = True
+        await main.on_ready()
+
+        self.assertEqual(["daily"], self.started)
+
+
+class DailyTaskTests(MainTestCase):
+    def setUp(self):
+        super().setUp()
+        self.ran = []
+
+        async def daily(*_args, **_kwargs):
+            self.ran.append("daily")
+
+        async def stats():
+            self.ran.append("stats")
+
+        self.patch(main.events, "daily_task", daily)
+        self.patch(main.monthly_guild_snapshot, "run_monthly_snapshot", lambda *_args: self.ran.append("snapshot"))
+        self.patch(main, "post_api_bot_stats", stats)
+        self.patch(main, "connection_pool", FakePool())
+        self.patch(main, "bot", types.SimpleNamespace(guilds=[types.SimpleNamespace(member_count=7),
+                                                              types.SimpleNamespace(member_count=None)]))
+        self.patch(main, "daily_command_cooldowns", {77: ["my_data"]})
+
+    async def test_runs_the_day_and_starts_the_counts_over(self):
+        await main.daily_task.coro()
+
+        self.assertEqual(["daily", "snapshot", "stats"], self.ran)
+        self.assertEqual({}, main.daily_command_cooldowns)
+        self.assertEqual(7, main.total_member_count)
+
+    async def test_a_failure_is_logged_and_the_counts_still_start_over(self):
+        async def fail(*_args, **_kwargs):
+            raise RuntimeError("database went away")
+
+        self.patch(main.events, "daily_task", fail)
+        await main.daily_task.coro()
+
+        self.assertTrue(any("Error in daily_task" in entry for entry in self.logged))
+        self.assertEqual({}, main.daily_command_cooldowns)
+
+
+class GuildJoinAndRemoveTests(MainTestCase):
+    def setUp(self):
+        super().setUp()
+
+        async def nothing(*_args, **_kwargs):
+            return None
+
+        self.patch(main, "connection_pool", FakePool())
+        self.patch(main, "post_api_bot_stats", nothing)
+        self.patch(main.utils, "post_server_perms", nothing)
+        self.patch(main.guild_lifecycle_event_repo, "insert_guild_lifecycle_event", lambda *_args: None)
+        self.patch(main.server_config_repo, "insert_server_config", lambda *_args: None)
+        self.patch(main, "total_member_count", 100)
+        self.set_server_classes([GUILD_ID])
+        self.server = types.SimpleNamespace(id=201, name="New Server", member_count=25)
+
+    async def test_a_joined_server_is_set_up_and_its_members_counted(self):
+        async def join(server, _connection, _bot):
+            return build_server(guild_id=server.id)
+
+        self.patch(main.events, "guild_join", join)
+        await main.on_guild_join(self.server)
+
+        self.assertIn(201, main.server_classes)
+        self.assertEqual(125, main.total_member_count)
+
+    async def test_a_removed_server_is_forgotten_and_its_members_taken_off(self):
+        async def remove(*_args):
+            return None
+
+        self.patch(main.events, "guild_remove", remove)
+        await main.on_guild_remove(types.SimpleNamespace(id=GUILD_ID, name="Test Server", member_count=30))
+
+        self.assertNotIn(GUILD_ID, main.server_classes)
+        self.assertEqual(70, main.total_member_count)
+
+    async def test_the_leave_of_a_server_never_set_up_is_still_recorded(self):
+        recorded = []
+        self.patch(main.events, "record_guild_leave", lambda _connection, guild_id, _when: recorded.append(guild_id))
+        await main.on_guild_remove(self.server)
+
+        self.assertEqual([201], recorded)
+
+    async def test_a_failure_recording_that_leave_is_logged(self):
+        def fail(*_args):
+            raise RuntimeError("database went away")
+
+        self.patch(main.events, "record_guild_leave", fail)
+        await main.on_guild_remove(self.server)
+
+        self.assertTrue(any("Error recording the leave" in entry for entry in self.logged))
+
+
+class SetupCheckCommandTests(CommandTestCase):
+    def setUp(self):
+        super().setUp()
+        self.patch(main.hall_of_fame_message_repo, "get_post_activity",
+                   lambda *_args: {"total": 3, "latest": None, "today": 0})
+        self.checked = []
+
+        def check(guild, board, server, activity, limit):
+            self.checked.append((activity, limit))
+            return []
+
+        self.patch(main.setup_check, "check_server", check)
+        self.patch(main.setup_check, "build_embed", lambda findings: "embed")
+        self.patch(main.setup_check, "problems", lambda findings: [])
+
+    def admin(self):
+        interaction = FakeInteraction()
+        interaction.guild.get_channel = lambda _channel_id: None
+        return interaction
+
+    async def test_answers_the_admin_privately_with_the_findings(self):
+        interaction = self.admin()
+        await main.check_setup.callback(interaction)
+
+        self.assertTrue(interaction.response.deferred_ephemeral)
+        self.assertEqual(["embed"], interaction.followup.messages)
+        self.assertEqual([True], interaction.followup.ephemeral)
+        self.assertEqual([({"total": 3, "latest": None, "today": 0}, utils.daily_post_limit)], self.checked)
+        self.assertTrue(any("no problems" in entry for entry in self.logged))
+
+    async def test_refuses_a_member_without_manage_server(self):
+        interaction = FakeInteraction(manage_guild=False)
+        await main.run_setup_check(interaction)
+
+        self.assertEqual([], self.checked)
+
+    async def test_refuses_a_server_that_is_not_set_up(self):
+        interaction = self.admin()
+        interaction.guild_id = 999
+        await main.run_setup_check(interaction)
+
+        self.assertEqual([messages.ERROR_SERVER_NOT_SETUP], interaction.response.messages)
+        self.assertEqual([], self.checked)
+
+    async def test_does_nothing_before_the_bot_has_loaded(self):
+        self.patch(main, "bot_loaded", False)
+        await main.run_setup_check(self.admin())
+
+        self.assertEqual([], self.checked)
+
+
+class NotLoadedYetTests(CommandTestCase):
+    """Commands added in 2.2 answer nothing more until the bot has loaded its servers."""
+
+    async def test_they_stop_before_doing_anything(self):
+        self.patch(main, "bot_loaded", False)
+        for name, call in (("my_data", lambda i: main.my_data.callback(i)),
+                           ("count_in_global_profiles", lambda i: main.count_in_global_profiles.callback(i, True))):
+            with self.subTest(command=name):
+                interaction = FakeInteraction()
+                await call(interaction)
+
+                self.assertEqual([], interaction.followup.messages)
+                self.assertEqual([], self.writes)
+
+
+class WrappedCommandsOpenBoardTests(CommandTestCase):
+    """Outside a closed board the Wrapped commands go on to check the server."""
+
+    async def test_they_refuse_a_server_that_is_not_set_up(self):
+        for command in (main.hof_wrapped_command, main.server_hof_wrapped_command):
+            with self.subTest(command=command.name):
+                interaction = FakeInteraction(guild_id=999)
+                await command.callback(interaction)
+
+                self.assertEqual([messages.ERROR_SERVER_NOT_SETUP], interaction.response.messages)
+
+
+class FeedbackWithoutCounterTests(FeedbackFormTests):
+    async def test_sending_without_a_counter_still_posts(self):
+        modal = await self.open_form(None)
+        modal.fb_title._value = "Title"
+        modal.message._value = "Body"
+
+        async def no_wait(_seconds):
+            return None
+
+        with mock.patch.object(utils.asyncio, "sleep", no_wait):
+            await modal.on_submit(self.submitter())
+
+        self.assertEqual(1, len(self.posted))
+
+
+
+class LogPrivacyTests(unittest.TestCase):
+    """
+    Logs are kept in the developer channels, so they say what happened, with the server's ID, never who
+    or the server's name. That also keeps members who asked not to be featured out of them
+    """
+
+    # Logs that need to name a member, with why
+    NAMES_A_MEMBER = {
+        # It exists to check one member for farmed reactions
+        ("utils.py", "credited posts, the most allowed"),
+    }
+    MEMBER_IDENTITY = ("user.name", "user.id", "author.name", "author.id", ".mention", "display_name", "user.global_name")
+
+    def logging_calls(self):
+        import ast
+        import pathlib
+
+        for path in sorted((pathlib.Path(__file__).parent.parent / "src").rglob("*.py")):
+            source = path.read_text(encoding="utf-8")
+            for node in ast.walk(ast.parse(source)):
+                if isinstance(node, ast.Call) and getattr(node.func, "attr", getattr(node.func, "id", "")) == "logging":
+                    yield path.name, " ".join(ast.get_source_segment(source, node).split())
+
+    def test_no_log_names_a_member_unless_it_has_to(self):
+        for file_name, call in self.logging_calls():
+            if not any(identity in call for identity in self.MEMBER_IDENTITY):
+                continue
+            with self.subTest(call=call[:120]):
+                self.assertTrue(any(file_name == allowed_file and marker in call
+                                    for allowed_file, marker in self.NAMES_A_MEMBER))
+
+    def test_no_log_names_a_server_or_channel(self):
+        """The server ID is added to the log on its own, and a name can change or be a person's name."""
+        for _file_name, call in self.logging_calls():
+            with self.subTest(call=call[:120]):
+                for name in ("guild.name", "server.name", "guild_name", "channel.name"):
+                    self.assertNotIn(name, call)
+
+    def test_where_a_command_was_used_never_says_which_server(self):
+        self.assertEqual("a server", main.where_used(FakeInteraction()))
+        self.assertEqual("a DM or a server without the bot", main.where_used(types.SimpleNamespace(guild=None)))
 
 
 if __name__ == "__main__":

@@ -479,6 +479,20 @@ class StopFeaturingTests(MemberDataDeletionTestCase):
         self.assertNotEqual([], before)
         self.assertEqual(before, self.posts_by(DELETED))
 
+    async def test_a_member_at_the_post_limit_is_not_credited_with_new_posts(self):
+        """Counted from the member's credited posts in every server, with the real author index."""
+        credited = len(self.posts_by(OTHER))
+        with mock.patch.object(utils, "member_post_limit", credited),                 mock.patch.object(utils, "members_at_post_limit_logged", set()):
+            stored = await self.post(OTHER, message_id=950)
+
+        self.assertEqual(hall_of_fame_message_repo.NO_AUTHOR_ID, stored)
+        self.assertEqual([950], self.sent)
+        self.assertEqual(credited, len(self.posts_by(OTHER)))
+
+    async def test_a_member_under_the_post_limit_is_credited(self):
+        with mock.patch.object(utils, "member_post_limit", len(self.posts_by(OTHER)) + 1):
+            self.assertEqual(OTHER, await self.post(OTHER, message_id=951))
+
     async def test_a_new_post_by_anybody_else_keeps_its_author(self):
         self.stop_featuring()
 
@@ -511,6 +525,104 @@ class StopFeaturingTests(MemberDataDeletionTestCase):
         opt_out_repo.set_opted_out(self.connection, DELETED, False)
 
         self.assertTrue(opt_out_repo.is_opted_out(self.connection, THIRD))
+
+
+def holds_member_id(value, user_id):
+    """Whether a stored value is the member's ID or holds it, as a JSON key or value"""
+    if isinstance(value, bool):
+        return False
+    if isinstance(value, int):
+        return value == user_id
+    if isinstance(value, str):
+        return value == str(user_id)
+    if isinstance(value, dict):
+        return any(holds_member_id(key, user_id) or holds_member_id(item, user_id) for key, item in value.items())
+    if isinstance(value, (list, tuple)):
+        return any(holds_member_id(item, user_id) for item in value)
+    return False
+
+
+class OptedOutMemberTests(MemberDataDeletionTestCase):
+    """
+    While a member is opted out, nothing the bot does stores their ID anywhere new. Every table and column
+    is searched, JSON included, so a table added later is covered without changing this test. The only
+    row allowed is the opt-out itself
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.sent = []
+        # NOBODY has never been featured; DELETED has earlier posts, standings and Wrapped
+        for user_id in (NOBODY, DELETED):
+            opt_out_repo.set_opted_out(self.connection, user_id, True)
+
+    def mentions(self, user_id):
+        """Every row that holds the member's ID, by table, apart from their opt-out"""
+        found = {}
+        for table, rows in self.snapshot().items():
+            if table == "opted_out_member":
+                continue
+            hits = [row for row in rows if holds_member_id(row, user_id)]
+            if hits:
+                found[table] = hits
+        return found
+
+    async def every_write_the_bot_makes(self, user_id):
+        """Everything that writes member IDs, with the opted-out member in it everywhere it can be"""
+        # A message of theirs reaching the threshold, through the posting code
+        await StopFeaturingTests.post(self, user_id, message_id=970)
+        # The repository called directly, as a future caller might
+        hall_of_fame_message_repo.insert_hall_of_fame_message(
+            self.connection, 971, 501, SHARED, 5971, 9, user_id, NOW - datetime.timedelta(days=1))
+        # Their own Wrapped, and someone else's with them as a fan and as someone they are a fan of
+        fans = json.dumps({str(user_id): 3, str(FAN): 1})
+        hof_wrapped_repo.insert_hof_wrapped(self.connection, SHARED, user_id, 2030, 1, 1, "{}", "{}", None, None, 0,
+                                            fans, fans, "{}")
+        hof_wrapped_repo.insert_hof_wrapped(self.connection, SHARED, OTHER, 2030, 1, 1, "{}", "{}", None, None, 0,
+                                            fans, fans, "{}")
+        # The daily rebuild of every server's standings
+        self.rebuild_all()
+
+    async def test_a_member_never_featured_leaves_no_trace(self):
+        await self.every_write_the_bot_makes(NOBODY)
+
+        self.assertEqual({}, self.mentions(NOBODY))
+
+    async def test_a_member_with_earlier_data_gains_nothing_new(self):
+        """Their earlier posts stay until they delete them, but nothing is added to them."""
+        before = self.mentions(DELETED)
+        await self.every_write_the_bot_makes(DELETED)
+        after = self.mentions(DELETED)
+
+        self.assertEqual(set(before), set(after))
+        for table in before:
+            with self.subTest(table=table):
+                self.assertEqual(len(before[table]), len(after[table]))
+        self.assertEqual([row["message_id"] for row in before["hall_of_fame_message"]],
+                         [row["message_id"] for row in after["hall_of_fame_message"]])
+
+    async def test_the_new_post_still_reaches_the_board(self):
+        await StopFeaturingTests.post(self, NOBODY, message_id=972)
+
+        self.assertEqual([], self.sent)
+
+    async def test_someone_elses_wrapped_leaves_them_out_of_the_fan_lists(self):
+        fans = json.dumps({str(NOBODY): 3, str(FAN): 1})
+        hof_wrapped_repo.insert_hof_wrapped(self.connection, SHARED, OTHER, 2030, 1, 1, "{}", "{}", None, None, 0,
+                                            fans, fans, "{}")
+
+        [(fan_of_users, users_fans)] = self.rows(
+            "SELECT fan_of_users, users_fans FROM hof_wrapped WHERE user_id = %s AND year = 2030", (OTHER,))
+        self.assertEqual({str(FAN): 1}, json.loads(fan_of_users))
+        self.assertEqual({str(FAN): 1}, json.loads(users_fans))
+
+    async def test_featuring_again_lets_new_data_in(self):
+        """The guard is the opt-out, not the member: once it is gone, they are stored as usual."""
+        opt_out_repo.set_opted_out(self.connection, NOBODY, False)
+        hall_of_fame_message_repo.insert_hall_of_fame_message(
+            self.connection, 973, 501, SHARED, 5973, 9, NOBODY, NOW - datetime.timedelta(days=1))
+
+        self.assertEqual([(973,)], self.posts_by(NOBODY))
 
 
 class CoverageGuardTests(MemberDataDeletionTestCase):

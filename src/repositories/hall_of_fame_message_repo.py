@@ -35,11 +35,18 @@ def check_if_message_id_exists(cursor, message_id):
 
 def insert_hall_of_fame_message(connection, message_id, channel_id, guild_id, hall_of_fame_message_id, reaction_count, author_id,
                                 created_at, video_link_message_id=None):
+    """
+    Store a post, or update it when the message is stored already. A member who asked not to be featured
+    is stored as no author whoever calls this, so the opt-out does not rest on every caller checking it
+    """
     cursor = connection.cursor()
     cursor.execute("""
         INSERT INTO hall_of_fame_message 
         (message_id, channel_id, guild_id, hall_of_fame_message_id, reaction_count, author_id, created_at, video_link_message_id)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+        SELECT %(message_id)s, %(channel_id)s, %(guild_id)s, %(hall_of_fame_message_id)s, %(reaction_count)s,
+               CASE WHEN EXISTS (SELECT 1 FROM opted_out_member WHERE user_id = %(author_id)s)
+                    THEN 0 ELSE %(author_id)s END,
+               %(created_at)s, %(video_link_message_id)s
         ON CONFLICT (message_id) DO UPDATE SET
             channel_id=EXCLUDED.channel_id,
             guild_id=EXCLUDED.guild_id,
@@ -50,7 +57,9 @@ def insert_hall_of_fame_message(connection, message_id, channel_id, guild_id, ha
             author_id=CASE WHEN hall_of_fame_message.author_id = 0 THEN 0 ELSE EXCLUDED.author_id END,
             created_at=EXCLUDED.created_at,
             video_link_message_id=EXCLUDED.video_link_message_id
-    """, (message_id, channel_id, guild_id, hall_of_fame_message_id, reaction_count, author_id, created_at, video_link_message_id))
+    """, {"message_id": message_id, "channel_id": channel_id, "guild_id": guild_id,
+          "hall_of_fame_message_id": hall_of_fame_message_id, "reaction_count": reaction_count,
+          "author_id": author_id, "created_at": created_at, "video_link_message_id": video_link_message_id})
     connection.commit()
     cursor.close()
 
@@ -96,11 +105,12 @@ def guild_message_count_today(connection, guild_id):
     cursor.close()
     return result[0] if result else 0
 
+# author_id is left out on purpose: a post's author is only ever set when it is stored, where a member who
+# asked not to be featured is left out, and an update could otherwise credit a detached post again
 ALLOWED_UPDATE_FIELDS = {
     "hall_of_fame_message_id",
     "reaction_count",
     "video_link_message_id",
-    "author_id",
     "created_at",
     "channel_id",
     "guild_id",

@@ -459,10 +459,44 @@ def global_profile_column_value(profile: dict) -> str:
     return f"**{profile['posts']:,}** posts\n**{profile['reactions']:,}** reactions\n{servers_line}"
 
 
-def build_my_data_export(user_id: int, posts: list, standings: list, wrapped: list, profile_hidden: bool,
-                         not_counted: bool = False) -> bytes:
+# The sections of the export that hold rows, and so can be split across files
+EXPORT_SECTIONS = ("featured_posts", "server_statistics", "wrapped")
+# The most the export puts in one Discord message once it has to be split. The whole file is always tried
+# first, so Discord's own limit decides, which is higher in boosted servers. Only when Discord refuses it
+# for its size is it split, into parts within this. Discord allows 10 MiB per upload without boosts, and
+# has changed that before, so this leaves room. It is kept for all the files of a message together, which
+# is safe whether Discord counts the limit per file or per message
+EXPORT_MESSAGE_BYTES = 8 * 1024 * 1024
+# Discord's error code for an upload over its size limit, sent with HTTP status 413
+DISCORD_FILE_TOO_LARGE_CODE = 40005
+# Discord allows 10 attachments per message
+EXPORT_FILES_PER_MESSAGE = 10
+# Followups only work for 15 minutes after the button press, and a member should not get a flood of
+# messages. Past this, the export goes through the support server instead
+EXPORT_MAX_MESSAGES = 10
+
+
+class ExportTooLarge(Exception):
+    """The export cannot be sent through Discord, even split up"""
+
+
+def is_file_too_large(error: discord.HTTPException) -> bool:
+    """Whether Discord refused an upload for its size, rather than for an outage or anything else"""
+    return error.status == 413 or getattr(error, "code", 0) == DISCORD_FILE_TOO_LARGE_CODE
+
+
+def split_budget(refused_bytes: int) -> int:
     """
-    The file the Download button on /my_data sends: every row stored about a member, as JSON.
+    How big each part may be once Discord refused the whole file: half of what it refused, so its limit
+    is under the parts even when it is far below what was expected, and never more than EXPORT_MESSAGE_BYTES
+    """
+    return min(EXPORT_MESSAGE_BYTES, refused_bytes // 2)
+
+
+def build_my_data_document(user_id: int, posts: list, standings: list, wrapped: list, profile_hidden: bool,
+                           not_counted: bool = False) -> dict:
+    """
+    Every row stored about a member, ready to be written as JSON.
 
     Only ever sent privately to the member it describes, so unlike the totals on a profile it does include
     the server and message IDs, which are the member's own data.
@@ -472,7 +506,7 @@ def build_my_data_export(user_id: int, posts: list, standings: list, wrapped: li
     :param wrapped: Their Wrapped rows, from hof_wrapped
     :param profile_hidden: Whether they hid their totals across servers
     :param not_counted: Whether they asked not to be featured from now on
-    :return: The file's contents
+    :return: The document
     """
     export = {
         "user_id": str(user_id),
@@ -490,10 +524,96 @@ def build_my_data_export(user_id: int, posts: list, standings: list, wrapped: li
         return [{key: str(value) if key.endswith("_id") and value is not None else value
                  for key, value in row.items()} for row in rows]
 
-    for key in ("featured_posts", "server_statistics", "wrapped"):
+    for key in EXPORT_SECTIONS:
         export[key] = stringify_ids(export[key])
+    return export
+
+
+def encode_export(document: dict) -> bytes:
     # Datetimes, and anything else JSON has no type for, are written as text
-    return json.dumps(export, indent=2, default=str, ensure_ascii=False).encode("utf-8")
+    return json.dumps(document, indent=2, default=str, ensure_ascii=False).encode("utf-8")
+
+
+def build_my_data_export(user_id: int, posts: list, standings: list, wrapped: list, profile_hidden: bool,
+                         not_counted: bool = False) -> bytes:
+    """The export as one file, the way it is sent whenever it fits"""
+    return encode_export(build_my_data_document(user_id, posts, standings, wrapped, profile_hidden, not_counted))
+
+
+def split_my_data_export(document: dict, max_bytes: int = None) -> list[bytes]:
+    """
+    The export as files no bigger than max_bytes. One file whenever it fits. Otherwise the rows are
+    spread over parts that are each a complete JSON file with the same header and a slice of every
+    section, so each part can be read on its own and together they hold every row exactly once.
+    :param document: From build_my_data_document
+    :param max_bytes: The most a single file may hold, EXPORT_MESSAGE_BYTES when not given
+    :return: The files, in order
+    :raises ExportTooLarge: When a single row is bigger than a file may be
+    """
+    max_bytes = max_bytes or EXPORT_MESSAGE_BYTES
+    whole = encode_export(document)
+    if len(whole) <= max_bytes:
+        return [whole]
+
+    header = {key: value for key, value in document.items() if key not in EXPORT_SECTIONS}
+    # Room for the header and the part label, measured on an empty part with the longest label it can get
+    empty = encode_export(dict(header, part="99999 of 99999", **{section: [] for section in EXPORT_SECTIONS}))
+    budget = max_bytes - len(empty)
+
+    def row_size(row):
+        # Inside the file a row sits two levels deep, which indents each of its lines by four more spaces,
+        # and it is followed by a comma and a line break
+        encoded = encode_export(row)
+        return len(encoded) + 4 * (encoded.count(b"\n") + 1) + 2
+
+    slices = []
+    current = {section: [] for section in EXPORT_SECTIONS}
+    used = 0
+    for section in EXPORT_SECTIONS:
+        for row in document[section]:
+            size = row_size(row)
+            if size > budget:
+                raise ExportTooLarge(f"one {section} row is {size} bytes")
+            if used + size > budget:
+                slices.append(current)
+                current = {name: [] for name in EXPORT_SECTIONS}
+                used = 0
+            current[section].append(row)
+            used += size
+    slices.append(current)
+
+    parts = []
+    for number, rows in enumerate(slices, start=1):
+        part = dict(header, part=f"{number} of {len(slices)}", **rows)
+        encoded = encode_export(part)
+        # The sizes above are worked out rather than measured, so each part is checked before it is sent
+        if len(encoded) > max_bytes:
+            raise ExportTooLarge(f"part {number} came out at {len(encoded)} bytes")
+        parts.append(encoded)
+    return parts
+
+
+def batch_export_files(files: list[bytes], max_bytes: int = None, per_message: int = None) -> list[list[int]]:
+    """
+    Group the export's files into messages, each within Discord's attachment count and the size budget
+    :param files: The files, each no bigger than max_bytes
+    :param max_bytes: The most the files of one message may hold together, EXPORT_MESSAGE_BYTES when not given
+    :param per_message: The most files one message may carry, EXPORT_FILES_PER_MESSAGE when not given
+    :return: The indexes of the files in each message, in order
+    """
+    max_bytes = max_bytes or EXPORT_MESSAGE_BYTES
+    per_message = per_message or EXPORT_FILES_PER_MESSAGE
+    batches = []
+    current, used = [], 0
+    for index, data in enumerate(files):
+        if current and (len(current) == per_message or used + len(data) > max_bytes):
+            batches.append(current)
+            current, used = [], 0
+        current.append(index)
+        used += len(data)
+    if current:
+        batches.append(current)
+    return batches
 
 
 class ConfirmDeleteView(discord.ui.View):
@@ -594,11 +714,13 @@ class StopFeaturingView(discord.ui.View):
 
 
 def has_stored_rows(summary: dict) -> bool:
-    """
-    Whether posts, standings or Wrapped entries are stored about a member. Their two choices are not
-    counted: the summary already shows everything stored for those, so a file would only repeat it
-    """
+    """Whether posts, standings or Wrapped entries are stored about a member, leaving out their two choices"""
     return bool(summary["posts"] or summary["servers"] or summary["wrapped"])
+
+
+def has_anything_stored(summary: dict) -> bool:
+    """Whether anything at all is stored about a member, their choice to hide totals or not be featured included"""
+    return bool(has_stored_rows(summary) or summary["hidden_since"] or summary["opted_out_since"])
 
 
 def has_totals(summary: dict) -> bool:
@@ -625,9 +747,9 @@ def my_data_summary(summary: dict, note: str = None) -> str:
     lines = [note] if note else []
     if has_stored_rows(summary):
         lines.append(messages.MY_DATA_STORED.format(
-            posts=summary["posts"], posts_plural="" if summary["posts"] == 1 else "s",
-            servers=summary["servers"], servers_plural="" if summary["servers"] == 1 else "s",
-            wrapped=summary["wrapped"], wrapped_plural="y" if summary["wrapped"] == 1 else "ies"))
+            posts=f"{summary['posts']:,}", posts_plural="" if summary["posts"] == 1 else "s",
+            servers=f"{summary['servers']:,}", servers_plural="" if summary["servers"] == 1 else "s",
+            wrapped=f"{summary['wrapped']:,}", wrapped_plural="y" if summary["wrapped"] == 1 else "ies"))
     elif summary["hidden_since"] or summary["opted_out_since"]:
         lines.append(messages.MY_DATA_NOTHING_STORED)
     else:
@@ -694,17 +816,16 @@ class MyDataView(discord.ui.View):
         self.featuring_button.label = (messages.FEATURE_ME_AGAIN_BUTTON if self.summary["opted_out_since"]
                                        else messages.STOP_FEATURING_BUTTON)
         # Download and Delete are always shown, so the panel looks the same for everyone, and greyed out
-        # when there is nothing for them to act on. The summary above says why. A file is only worth it
-        # for rows: the summary already shows everything stored for a choice
-        self.download_button.disabled = not has_stored_rows(self.summary)
+        # when nothing at all is stored. A choice is data about the member too, so a member whose only
+        # stored data is the choice not to be featured can still download and delete it
+        self.download_button.disabled = not has_anything_stored(self.summary)
         self.add_item(self.download_button)
         # Hiding totals a member cannot have would store a choice about them for nothing
         if has_totals(self.summary):
             self.add_item(self.totals_button)
         self.add_item(self.featuring_button)
         # Deleting removes everything stored, the member's two choices included
-        self.delete_button.disabled = not (has_stored_rows(self.summary) or self.summary["hidden_since"]
-                                           or self.summary["opted_out_since"])
+        self.delete_button.disabled = not has_anything_stored(self.summary)
         self.add_item(self.delete_button)
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:

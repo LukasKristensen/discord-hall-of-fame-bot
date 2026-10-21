@@ -829,5 +829,33 @@ class DepartedGuildCleanupTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual([True], cleanups)
 
 
+
+class StartupJoinRecordingTests(unittest.IsolatedAsyncioTestCase):
+    async def test_a_join_that_cannot_be_recorded_does_not_stop_the_startup(self):
+        """A server added while the bot was offline is still set up when recording its join fails."""
+        logged = []
+
+        async def record_log(_bot, message, *args, **kwargs):
+            logged.append(str(message))
+
+        def fail(*_args):
+            raise RuntimeError("database went away")
+
+        guild = mock.Mock(id=4242)
+        guild.name = "Offline Server"
+        guild.me.guild_permissions.manage_channels = False
+        bot = mock.Mock(guilds=[guild])
+        connection = FakeConnection()
+        with mock.patch.object(events.server_config_repo, "check_if_guild_exists", lambda *_args: False), \
+                mock.patch.object(events, "record_guild_join", fail), \
+                mock.patch.object(events.utils, "logging", record_log):
+            found = await events.check_for_new_server_classes(bot, connection)
+
+        self.assertEqual({}, found)
+        self.assertEqual(1, connection.rollbacks)
+        self.assertTrue(any("Could not record the join" in entry for entry in logged))
+
+
+
 if __name__ == "__main__":
     unittest.main()

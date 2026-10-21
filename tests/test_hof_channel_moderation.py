@@ -231,12 +231,13 @@ class DailyPermissionCheckTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("Send Messages", content)
         self.assertIn("View Channel", content)
 
-    async def test_reports_a_missing_hall_of_fame_channel_with_the_server_name(self):
+    async def test_reports_a_missing_hall_of_fame_channel_without_the_server_name(self):
+        """The server ID goes with the log on its own, and a server's name can be a person's name."""
         await self.sweep(FakePermissions(), channel_missing=True)
 
         self.assertEqual(1, len(self.logged))
         self.assertIn("Could not find the Hall of Fame channel", self.logged[0])
-        self.assertIn("Test Server", self.logged[0])
+        self.assertNotIn("Test Server", self.logged[0])
 
     async def test_skips_a_missing_channel_the_reactions_already_reported(self):
         """One line per server for the whole boot, whichever of the two noticed it first."""

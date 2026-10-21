@@ -151,6 +151,14 @@ MY_DATA_DOWNLOAD_BUTTON = "Download my data"
 HIDE_TOTALS_BUTTON = "Hide my totals across servers"
 SHOW_TOTALS_BUTTON = "Show my totals across servers"
 MY_DATA_EXPORT = "Everything Hall of Fame stores about you is in the attached file."
+MY_DATA_EXPORT_PARTS = ("Everything Hall of Fame stores about you is in the attached files. It was too big for one "
+                        "file, so it is split into {parts} parts. Each part is a complete JSON file, and together "
+                        "they hold every row once.")
+MY_DATA_EXPORT_TOO_LARGE = ("Your data is too big to send through Discord. Ask for it in the support server and we "
+                            "will send it another way: <https://discord.gg/r98WC5GHcn>")
+MY_DATA_EXPORT_SEND_FAILED = ("Discord did not accept the file with your data, so it was not fully sent. Please try "
+                              "again in a moment. If it keeps happening, ask in the support server: "
+                              "<https://discord.gg/r98WC5GHcn>")
 MY_DATA_DOWNLOAD_ON_COOLDOWN = "You already downloaded your data today. You can download it again tomorrow."
 MY_DATA_DELETE_ON_COOLDOWN = "You already deleted your data today. You can delete it again tomorrow."
 MY_DATA_NOT_YOURS = "Only the member who ran this command can use these buttons."
