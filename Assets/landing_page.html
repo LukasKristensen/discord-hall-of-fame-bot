@@ -46,6 +46,25 @@
     margin: 20px 0;
   }
 
+  #hof-description-block .new-box {
+    background: #fdf8e9;
+    border: 1px solid #ecd9a0;
+    padding: 16px 20px;
+    border-radius: 10px;
+    margin: 20px 0;
+  }
+
+  #hof-description-block .new-box ul,
+  #hof-description-block .privacy-list {
+    margin: 8px 0 0 0;
+    padding-left: 20px;
+  }
+
+  #hof-description-block .new-box li,
+  #hof-description-block .privacy-list li {
+    margin-bottom: 6px;
+  }
+
   #hof-description-block h2 {
     margin-top: 35px;
     margin-bottom: 15px;
@@ -101,7 +120,8 @@
   <p style="font-size: 1.15em; margin-bottom: 20px; color: #444;">
     <strong>Turn your server's best moments into legends, and give the credit to the members who made
     them.</strong> Hall of Fame reposts your most reacted messages to a hall of fame channel with their
-    images, videos and reply context, then ranks the people who keep landing there.
+    images, videos and reply context, then ranks the people who keep landing there. Free, and running in
+    600+ servers.
   </p>
 
   <div class="video-wrapper">
@@ -112,23 +132,38 @@
   <p>
     Any emoji your community actually reacts with can immortalise a message, not just ⭐. The board is
     only half of it: every featured message is credited to its author, so the server gets leaderboards,
-    member profiles with monthly and all time ranks, and a yearly Hall of Fame Wrapped. Getting featured
-    is meant to be worth something.
+    member profiles with badges, and a yearly Hall of Fame Wrapped. Getting featured is meant to be worth
+    something.
   </p>
 
   <img class="promo-image"
        src="https://raw.githubusercontent.com/LukasKristensen/discord-hall-of-fame-bot/refs/heads/main/Assets/main_context_2.png"
        alt="Hall of Fame post in Discord, showing a reacted message together with the reply it answered" />
 
+  <div class="new-box">
+    <strong>✨ New in 2.2</strong>
+    <ul>
+      <li><strong>Profiles with badges.</strong> <code>/user_profile</code> shows this month, all time and every server side by side, the member's best post, the gap to the next rank, and badges such as monthly champion, months in a row or a 100-reaction post.</li>
+      <li><strong>Totals across servers.</strong> Members featured in several servers see their posts added up, without any server being named.</li>
+      <li><strong>Setup check.</strong> <code>/check_setup</code> finds what stops a board from posting, from missing permissions to channels the bot cannot read, and names the role that would fix it.</li>
+      <li><strong>Members control their data.</strong> <code>/my_data</code> shows, downloads or deletes everything stored about a member.</li>
+    </ul>
+  </div>
+
   <h2>🌟 What you get</h2>
   <div style="font-size: 1.05em;">
-    <p>🔹 <strong>Multi-Emoji Magic:</strong> Any emoji can trigger immortality, custom server emojis included.</p>
-    <p>🔹 <strong>Media Support:</strong> Images and videos travel with the post, still playable.</p>
-    <p>🔹 <strong>Context Preservation:</strong> Keeps replies visible for the full story.</p>
-    <p>🔹 <strong>Leaderboards and Profiles:</strong> See who gets featured most, this month and all time.</p>
+    <p>🔹 <strong>Every emoji counts:</strong> Any reaction can feature a message, custom server emojis included, or narrow it to a whitelist.</p>
+    <p>🔹 <strong>Three ways to count:</strong> The top emoji, all reactions together, or unique people.</p>
+    <p>🔹 <strong>Media support:</strong> Images and videos travel with the post, still playable.</p>
+    <p>🔹 <strong>Reply context:</strong> The message being replied to is included, so the punchline still lands.</p>
+    <p>🔹 <strong>Leaderboards and profiles:</strong> See who gets featured most, this month and all time, with badges for the members who keep landing there.</p>
     <p>🔹 <strong>Hall of Fame Wrapped:</strong> A year in review for every member and for the server.</p>
-    <p>🔹 <strong>Sensible Default:</strong> The starting threshold is picked from your member count on join, then it is yours to set.</p>
+    <p>🔹 <strong>Works out of the box:</strong> The starting threshold is picked from your member count on join, and <code>/check_setup</code> tells you if anything is in the way.</p>
   </div>
+
+  <img class="promo-image"
+       src="https://raw.githubusercontent.com/LukasKristensen/discord-hall-of-fame-bot/refs/heads/main/Assets/leaderboard_example.png"
+       alt="The /leaderboard reply in Discord, ranking the top five members by Hall of Fame posts and reactions, this month and all time" />
 
   <h2>🤔 Looking for a starboard?</h2>
   <p>
@@ -152,8 +187,23 @@
       <td>The one star emoji it was configured with</td>
     </tr>
     <tr>
-      <th scope="row">Credit for members</th>
-      <td>Leaderboards, profiles, monthly and all time ranks</td>
+      <th scope="row">Counting</th>
+      <td>Top emoji, total reactions, or unique people</td>
+      <td>A single fixed count</td>
+    </tr>
+    <tr>
+      <th scope="row">Media</th>
+      <td>Images and videos are reposted with the message</td>
+      <td>Frequently links only</td>
+    </tr>
+    <tr>
+      <th scope="row">Reply context</th>
+      <td>The message being replied to is included</td>
+      <td>Usually dropped</td>
+    </tr>
+    <tr>
+      <th scope="row">Credit</th>
+      <td>Leaderboards, member profiles, badges, monthly and all time ranks</td>
       <td>None</td>
     </tr>
     <tr>
@@ -162,35 +212,62 @@
       <td>None</td>
     </tr>
     <tr>
-      <th scope="row">Price</th>
-      <td>Free, with public source code</td>
-      <td>Best features often paywalled</td>
+      <th scope="row">Threshold</th>
+      <td>Starting value picked from your member count, then yours to set</td>
+      <td>Fixed default you tune yourself</td>
     </tr>
   </table>
+  <p>If all you want is a star archive, a starboard bot will do. If you want your server to compete over who gets immortalised, that is what this is for.</p>
+
+  <h2>🔐 What it keeps about your members</h2>
+  <ul class="privacy-list">
+    <li><strong>No message text.</strong> The bot stores IDs, reaction counts and statistics. The repost lives in your own Hall of Fame channel on Discord, not in the bot's database.</li>
+    <li><strong>Members are in control.</strong> Anyone can see, download or delete what is stored about them with <code>/my_data</code>, or ask not to be featured at all.</li>
+    <li><strong>Removing the bot removes your server's data.</strong> Settings, featured posts and statistics are deleted when the bot leaves.</li>
+    <li><strong>Written down.</strong> The <a href="https://github.com/LukasKristensen/discord-hall-of-fame-bot/blob/main/PRIVACY.md">Privacy Policy</a> lists exactly what is kept, and the source code is public.</li>
+  </ul>
 
   <h2>🚀 Quick Start Guide</h2>
   <div class="quick-start-card">
     <p><strong>1. Invite:</strong> Add the bot and accept the permissions it asks for up front, granting them later does not work.</p>
     <p><strong>2. Channel:</strong> It creates a <code>#hall-of-fame</code> channel for you, or point it at your own with <code>/set_hall_of_fame_channel</code>.</p>
     <p><strong>3. Relax:</strong> A starting threshold is picked from your member count so the board works out of the box. Change it whenever you like with <code>/set_reaction_threshold</code>.</p>
+    <p><strong>4. Nothing posting?</strong> Run <code>/check_setup</code>. If most of your channels are behind a role, it names the role the bot needs.</p>
   </div>
 
-  <h2>⚙️ Advanced Configuration</h2>
+  <h2>⚙️ Configuration</h2>
+  <p>These need the <strong>Manage Server</strong> permission.</p>
   <div class="config-box">
     <span class="command-line">🔸 <code>/set_reaction_threshold</code> — How many reactions a message needs.</span>
+    <span class="command-line">🔸 <code>/set_hall_of_fame_channel</code> — The channel the board posts to.</span>
     <span class="command-line">🔸 <code>/calculation_method</code> — Count the top emoji, all reactions, or unique people.</span>
+    <span class="command-line">🔸 <code>/include_authors_reaction</code> — Whether reacting to your own message counts.</span>
     <span class="command-line">🔸 <code>/hide_hof_post_below_threshold</code> — Hide posts again when reactions are removed.</span>
     <span class="command-line">🔸 <code>/require_image_or_video</code> — Only feature messages with media.</span>
-    <span class="command-line">🔸 <code>/leaderboard</code> — Rank the members who get featured most.</span>
-    <span class="command-line">🔸 <code>/get_server_config</code> — See everything at a glance.</span>
+    <span class="command-line">🔸 <code>/set_post_due_date</code> — How old a message can be and still qualify.</span>
+    <span class="command-line">🔸 <code>/ignore_bot_messages</code> — Whether other bots' messages can be featured.</span>
+    <span class="command-line">🔸 <code>/allow_messages_in_hof_channel</code> — Let members chat in the board channel.</span>
+    <span class="command-line">🔸 <code>/count_in_global_profiles</code> — Whether this server counts toward members' totals across servers.</span>
+    <span class="command-line">🔸 <code>/check_setup</code> — Find anything that stops messages reaching the board.</span>
+    <span class="command-line">🔸 <code>/get_server_config</code> — See every setting at a glance.</span>
   </div>
 
   <h3>🔒 Emoji Whitelisting</h3>
   <p>Control exactly which reactions count toward the Hall of Fame:</p>
   <div class="config-box" style="border-left-color: #7f8c8d;">
     <span class="command-line">🔸 <code>/custom_emoji_check_logic</code> — Toggle whitelist mode.</span>
-    <span class="command-line">🔸 <code>/whitelist_emoji</code> — Add approved reactions.</span>
-    <span class="command-line">🔸 <code>/unwhitelist_emoji</code> — Remove reactions.</span>
+    <span class="command-line">🔸 <code>/whitelist_emoji</code> — Add approved reactions, up to 100.</span>
+    <span class="command-line">🔸 <code>/unwhitelist_emoji</code> — Remove a reaction.</span>
+    <span class="command-line">🔸 <code>/clear_whitelist</code> — Empty the whitelist.</span>
+  </div>
+
+  <h3>🏅 For every member</h3>
+  <div class="config-box" style="border-left-color: #3b82c4;">
+    <span class="command-line">🔸 <code>/leaderboard</code> — Rank the members who get featured most.</span>
+    <span class="command-line">🔸 <code>/user_profile</code> — A member's ranks, best post, badges and totals across servers.</span>
+    <span class="command-line">🔸 <code>/hof_wrapped</code> and <code>/server_hof_wrapped</code> — The year in review, for you or the whole server.</span>
+    <span class="command-line">🔸 <code>/my_data</code> — See, download or delete what is stored about you.</span>
+    <span class="command-line">🔸 <code>/help</code>, <code>/invite</code>, <code>/vote</code>, <code>/feedback</code> — Help, links and a way to reach the developer.</span>
   </div>
 
   <h2>❓ Frequently asked questions</h2>
@@ -201,6 +278,9 @@
     <h3>How many reactions does a message need?</h3>
     <p>Whatever you set with <code>/set_reaction_threshold</code>. When the bot joins it picks a starting value from your member count, once, so that the board works before you configure anything. It stays on that value until you change it.</p>
 
+    <h3>Nothing is being posted. What is wrong?</h3>
+    <p>Run <code>/check_setup</code>. It checks the board's permissions, which channels the bot can read, the emoji whitelist and the threshold, and tells you what to change. The most common cause is channels hidden behind a role the bot does not have.</p>
+
     <h3>Does it repost images and videos?</h3>
     <p>Yes. Images, videos and stickers travel with the post, and videos stay playable instead of becoming a bare link.</p>
 
@@ -208,7 +288,13 @@
     <p>The count updates live. By default a post that falls back under the threshold is hidden until it climbs over again, and <code>/hide_hof_post_below_threshold</code> turns that off so featured posts stay up.</p>
 
     <h3>Can I see who gets featured most?</h3>
-    <p>Yes, that is the point of it. <code>/leaderboard</code> ranks the server and <code>/user_profile</code> shows a member's standing.</p>
+    <p>Yes, that is the point of it. <code>/leaderboard</code> ranks the server and <code>/user_profile</code> shows a member's standing and badges.</p>
+
+    <h3>Can I use it outside a server?</h3>
+    <p>Yes. Add it to your account with the button under <code>/invite</code>, and you can look up your own profile and manage your data from DMs or any server.</p>
+
+    <h3>Does it store our messages?</h3>
+    <p>No. It keeps IDs, reaction counts and statistics, never message text. Members can see or delete their data with <code>/my_data</code>, and removing the bot deletes the server's data.</p>
 
     <h3>Is it free?</h3>
     <p>Yes, free with public source code, no paid tier and nothing locked behind voting.</p>
