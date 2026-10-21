@@ -13,7 +13,7 @@ Last checked against the bot: 2.2.0.
 Developer Portal > App Directory > Summary. Shown in directory search results. Limit 200 characters.
 
 ```
-Turn your server's best messages into a Hall of Fame. Any emoji can feature a message, and members compete on leaderboards, profiles and a yearly Wrapped.
+Turn your server's best messages into a Hall of Fame. Any emoji can feature a message, members compete on leaderboards and a yearly Wrapped, and no message text is ever stored.
 ```
 
 <br>
@@ -31,7 +31,7 @@ it in a server. Limit 400 characters. Kept to links only, as it is live.
 
 💻 Contribute to the bot: https://github.com/LukasKristensen/discord-hall-of-fame-bot
 
-Privacy policy: https://gist.github.com/LukasKristensen/275512598501456098f57ae2051379c8
+🔒 No message text stored. Privacy policy: https://github.com/LukasKristensen/discord-hall-of-fame-bot/blob/main/PRIVACY.md
 ```
 
 <br>
@@ -68,8 +68,10 @@ When a message gets enough reactions, Hall of Fame reposts it to your hall of fa
 
 **Your data, your call**
 
+- No message text is stored. The bot keeps IDs, reaction counts and statistics, and the repost lives in your own channel on Discord.
 - /my_data shows a member what is stored about them, privately, with buttons to download it, hide their totals across servers, stop the bot featuring their messages, or delete it, which removes them from every leaderboard, profile and Wrapped.
 - Totals across servers never name a server.
+- Removing the bot deletes your server's settings, posts and statistics. The privacy policy and the source code are public.
 
 **Getting started**
 
@@ -140,7 +142,15 @@ Replace the current screenshot that shows the old "has surpassed 7 reactions" la
 | GitHub | https://github.com/LukasKristensen/discord-hall-of-fame-bot |
 | Vote | https://top.gg/bot/1177041673352663070/vote |
 
-Terms of Service and Privacy Policy are already set and stay as they are.
+Developer Portal > General Information also has a Privacy Policy URL and a Terms of Service URL. They
+still point to the old gists. Once `PRIVACY.md` and `TERMS.md` are on `main`, set them to:
+
+| Field | Link |
+|:---|:---|
+| Privacy Policy URL | https://github.com/LukasKristensen/discord-hall-of-fame-bot/blob/main/PRIVACY.md |
+| Terms of Service URL | https://github.com/LukasKristensen/discord-hall-of-fame-bot/blob/main/TERMS.md |
+
+The same goes for the privacy link in the Description above: the `main` link only works after the merge.
 
 <br>
 

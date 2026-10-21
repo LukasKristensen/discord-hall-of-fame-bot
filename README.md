@@ -14,6 +14,9 @@ the hall of fame, and the members who land there get leaderboards, profiles and 
 It is a recognition bot, not an archive. The board is where the moments live; the leaderboards, member
 profiles and Hall of Fame Wrapped are what make landing on it worth something.
 
+It never stores your messages' text: only IDs, reaction counts and statistics. Every member can see,
+download or delete what is kept about them with `/my_data`, as the [Privacy Policy](PRIVACY.md) explains.
+
 [Add the bot to your server](https://discord.com/oauth2/authorize?client_id=1177041673352663070&permissions=275146730576&integration_type=0&scope=bot+applications.commands) ·
 [Join the support server](https://discord.gg/r98WC5GHcn) ·
 [Vote on top.gg](https://top.gg/bot/1177041673352663070/vote)
