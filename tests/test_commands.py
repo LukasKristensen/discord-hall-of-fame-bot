@@ -15,6 +15,7 @@ import discord
 import commands
 import hof_wrapped
 from constants import version
+from enums import command_refs
 from repositories import server_config_repo, server_user_repo, hall_of_fame_message_repo
 from translations import messages
 
@@ -196,9 +197,14 @@ class LinkButtonTests(unittest.IsolatedAsyncioTestCase):
     async def test_vote_offers_only_the_vote_link(self):
         self.assertEqual([(messages.VOTE_BUTTON, messages.VOTE_URL)], link_buttons(commands.build_vote_view()))
 
+    async def test_server_wrapped_asks_for_an_install_then_a_vote(self):
+        self.assertEqual([(messages.INVITE_BUTTON, messages.INVITE_URL), (messages.VOTE_BUTTON, messages.VOTE_URL)],
+                         link_buttons(commands.build_server_wrapped_view()))
+
     async def test_buttons_are_links_that_never_expire(self):
         """A non-link button would need a callback, and a timeout would grey the buttons out."""
-        for view in (commands.build_invite_view(), commands.build_vote_view(), commands.build_help_view()):
+        for view in (commands.build_invite_view(), commands.build_vote_view(), commands.build_help_view(),
+                     commands.build_server_wrapped_view()):
             with self.subTest(view=link_buttons(view)):
                 self.assertIsNone(view.timeout)
                 for button in view.children:
@@ -564,3 +570,72 @@ class HofWrappedEmbedTests(unittest.IsolatedAsyncioTestCase):
         embed = await hof_wrapped.create_embed(member, self.wrapped_row(), bot=None)
 
         self.assertEqual(messages.INVITE_FOOTER, embed.footer.text)
+
+
+def wrapped_guild(bot_avatar_url=None):
+    avatar = types.SimpleNamespace(url=bot_avatar_url) if bot_avatar_url else None
+    return types.SimpleNamespace(id=1, name="Test server", icon=None, me=types.SimpleNamespace(avatar=avatar))
+
+
+def server_wrapped_row():
+    return {"user_id": 77, "hof_message_posts": 3, "reaction_count": 12, "most_used_channels": '{"5": 3}',
+            "most_used_emojis": '{"😂": 3}', "most_reacted_post_reaction_count": 9,
+            "most_reacted_post_channel_id": 5, "most_reacted_post_message_id": 6}
+
+
+class ServerWrappedEmbedTests(unittest.TestCase):
+    """The card posted on every board in December, and what /server_hof_wrapped answers with."""
+
+    def test_footer_carries_the_brand_and_the_invite_ask(self):
+        embed = hof_wrapped.create_server_embed(wrapped_guild(), [server_wrapped_row()])
+
+        self.assertEqual(messages.SERVER_WRAPPED_FOOTER, embed.footer.text)
+        self.assertIn("/invite", embed.footer.text)
+
+    def test_footer_shows_the_bots_logo(self):
+        embed = hof_wrapped.create_server_embed(wrapped_guild("https://cdn.example/bot.png"), [server_wrapped_row()])
+
+        self.assertEqual("https://cdn.example/bot.png", embed.footer.icon_url)
+
+    def test_footer_leaves_out_the_logo_when_the_bot_has_no_avatar(self):
+        embed = hof_wrapped.create_server_embed(wrapped_guild(), [server_wrapped_row()])
+
+        self.assertIsNone(embed.footer.icon_url)
+
+    def test_still_points_members_to_their_own_wrapped(self):
+        embed = hof_wrapped.create_server_embed(wrapped_guild(), [server_wrapped_row()])
+
+        self.assertTrue(any(command_refs.HOF_WRAPPED in field.value for field in embed.fields))
+
+    def test_footer_fits_on_one_line(self):
+        self.assertLessEqual(len(messages.SERVER_WRAPPED_FOOTER), 60)
+
+
+class PostServerWrappedTests(unittest.IsolatedAsyncioTestCase):
+    """The manual December run that posts the server Wrapped on each board."""
+
+    async def test_posts_the_card_with_the_install_and_vote_buttons(self):
+        sent = []
+
+        class Board(discord.TextChannel):
+            def __init__(self):
+                self.name = "hall-of-fame"
+
+            def permissions_for(self, _member):
+                return types.SimpleNamespace(send_messages=True)
+
+            async def send(self, embed=None, view=None):
+                sent.append((embed, view))
+
+        board = Board()
+        guild = wrapped_guild()
+        guild.get_channel = lambda _channel_id: board
+        with mock.patch.object(hof_wrapped.hof_wrapped_repo, "get_all_hof_wrapped_for_guild",
+                               return_value=[server_wrapped_row()]), \
+                mock.patch.object(hof_wrapped.server_config_repo, "get_parameter_value", return_value=10):
+            await hof_wrapped.post_server_wrapped_embed(guild, connection=None)
+
+        self.assertEqual(1, len(sent))
+        embed, view = sent[0]
+        self.assertEqual(messages.SERVER_WRAPPED_FOOTER, embed.footer.text)
+        self.assertEqual(link_buttons(commands.build_server_wrapped_view()), link_buttons(view))

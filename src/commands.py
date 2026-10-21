@@ -44,6 +44,11 @@ def build_help_view() -> discord.ui.View:
     return build_link_buttons(INVITE_LINK, VOTE_LINK, SUPPORT_SERVER_LINK)
 
 
+def build_server_wrapped_view() -> discord.ui.View:
+    # Wrapped week is when the most members see the bot at once, so the post asks for an install and a vote
+    return build_link_buttons(INVITE_LINK, VOTE_LINK)
+
+
 CHECK_SETUP_CUSTOM_ID = "hof:check_setup"
 # Set by main at startup to the coroutine that answers a press of Check setup
 setup_check_handler = None

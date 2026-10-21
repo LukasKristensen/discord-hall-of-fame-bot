@@ -35,6 +35,9 @@ SUPPORT_SERVER_BUTTON = "Support server"
 POST_FOOTER = "Hall of Fame"
 # Footers render plain text only, so the command is named rather than a clickable command_refs mention
 INVITE_FOOTER = "Run a server? Add Hall of Fame with /invite"
+# The server Wrapped, which lands on every board in the same few days of December. It is the one post a
+# year every member reads, so it carries the brand and the ask together
+SERVER_WRAPPED_FOOTER = "Hall of Fame Wrapped · Run a server? Add it with /invite"
 # /user_profile and /leaderboard, whose figures come from the daily task
 STATS_FOOTER = f"Updated every 24 hours · {INVITE_FOOTER}"
 PATCH_NOTES_URL = "https://discord.gg/GmFtfySetp"

@@ -1621,6 +1621,8 @@ class WrappedCommandTests(CommandTestCase):
         await main.server_hof_wrapped_command.callback(interaction)
 
         self.assertEqual(["server embed"], interaction.response.messages)
+        self.assertEqual([messages.INVITE_URL, messages.VOTE_URL],
+                         [button.url for button in interaction.response.views[0].children])
 
     async def test_says_so_when_the_server_has_no_wrapped(self):
         self.patch(main.hof_wrapped_repo, "check_if_guild_wrapped_data_exists", lambda *_args: False)

@@ -1468,7 +1468,7 @@ async def server_hof_wrapped_command(interaction: discord.Interaction):
         all_users_wrapped = hof_wrapped_repo.get_all_hof_wrapped_for_guild(connection, interaction.guild_id,  version.WRAPPED_YEAR)
     embed = hof_wrapped.create_server_embed(interaction.guild, all_users_wrapped)
     # noinspection PyUnresolvedReferences
-    await interaction.response.send_message(embed=embed)
+    await interaction.response.send_message(embed=embed, view=commands.build_server_wrapped_view())
 
 
 async def check_if_user_has_manage_server_permission(interaction: discord.Interaction, check_server_set_up: bool = True):

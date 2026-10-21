@@ -10,6 +10,8 @@ import environment
 from constants import version
 from enums import command_refs
 from translations import messages
+# Named apart from discord.ext.commands, which this module also uses for the Bot in its manual run
+import commands as commands_module
 
 users = {}
 total_hall_of_fame_posts = 0
@@ -461,6 +463,9 @@ def create_server_embed(guild, users):
         value=f"Use the command {command_refs.HOF_WRAPPED} to get your personal Hall Of Fame Wrapped summary!",
         inline=False
     )
+    # The global avatar rather than a server's custom bot profile, the same logo as on board posts
+    avatar = getattr(getattr(guild, "me", None), "avatar", None)
+    embed.set_footer(text=messages.SERVER_WRAPPED_FOOTER, icon_url=avatar.url if avatar else None)
     return embed
 
 async def post_server_wrapped_embed(guild, connection):
@@ -479,7 +484,7 @@ async def post_server_wrapped_embed(guild, connection):
         print(f"No suitable channel found to post the Hall Of Fame Wrapped in guild {guild.name} (ID: {guild.id}).")
         return
 
-    await post_channel.send(embed=embed)
+    await post_channel.send(embed=embed, view=commands_module.build_server_wrapped_view())
     print(f"Posted Hall Of Fame Wrapped for guild {guild.name} (ID: {guild.id}) in channel {post_channel.name}.")
 
 if __name__ == "__main__":
