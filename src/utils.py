@@ -630,7 +630,7 @@ async def report_setup_problems_on_join(bot, server, hall_of_fame_channel):
         if not setup_check.problems(findings):
             return
         # Only a pointer: the board is public, and the findings name channels and roles that are for admins
-        await hall_of_fame_channel.send(messages.CHECK_JOIN_NUDGE.format(command=command_refs.CHECK_SETUP),
+        await hall_of_fame_channel.send(messages.CHECK_JOIN_NUDGE.format(command=command_refs.TROUBLESHOOT),
                                         view=check_setup_view())
         await logging(bot, f"Setup problems on join: "
                            f"{', '.join(finding.title for finding in setup_check.problems(findings))}",

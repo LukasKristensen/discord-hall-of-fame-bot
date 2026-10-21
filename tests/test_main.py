@@ -758,7 +758,7 @@ class UpdateSettingTests(CommandTestCase):
         self.assertFalse(changed)
         self.assertEqual([messages.ERROR_SERVER_NOT_SETUP], interaction.response.messages)
         self.assertIn(command_refs.SET_HALL_OF_FAME_CHANNEL, messages.ERROR_SERVER_NOT_SETUP)
-        self.assertIn(command_refs.CHECK_SETUP, messages.ERROR_SERVER_NOT_SETUP)
+        self.assertIn(command_refs.TROUBLESHOOT, messages.ERROR_SERVER_NOT_SETUP)
 
 
 class RefusalsAreEphemeralTests(CommandTestCase):
@@ -1484,7 +1484,7 @@ class SetupCheckCommandTests(CommandTestCase):
 
     async def test_answers_the_admin_privately_with_the_findings(self):
         interaction = self.admin()
-        await main.check_setup.callback(interaction)
+        await main.troubleshoot.callback(interaction)
 
         self.assertTrue(interaction.response.deferred_ephemeral)
         self.assertEqual(["embed"], interaction.followup.messages)

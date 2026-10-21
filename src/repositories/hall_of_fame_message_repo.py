@@ -156,7 +156,7 @@ def find_top_messages_by_reaction_count(connection, guild_id, limit=10):
 
 def get_post_activity(connection, guild_id) -> dict:
     """
-    How busy a server's board is, for /check_setup. One query, served from the guild and created_at index
+    How busy a server's board is, for /troubleshoot. One query, served from the guild and created_at index
     :return: total posts, the time of the latest (None without posts) and the posts made today
     """
     cursor = connection.cursor()

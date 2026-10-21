@@ -107,7 +107,7 @@ Watch the developer log channels while going through the steps above.
 
 ## Setup check and joining
 
-- [ ] `/check_setup` answers the admin privately with the findings
+- [ ] `/troubleshoot` answers the admin privately with the findings
 - [ ] A member without Manage Server is refused
 - [ ] Add the dev bot to a new server: if something is wrong, a short note with a Check setup button
       appears on the board, and the button opens the full findings for an admin
@@ -125,7 +125,7 @@ Only if Wrapped can be generated on the development bot.
 
 ## Before deploying
 
-- [ ] Replace the plain-text `MY_DATA`, `COUNT_IN_GLOBAL_PROFILES` and `CHECK_SETUP` in
+- [ ] Replace the plain-text `MY_DATA`, `COUNT_IN_GLOBAL_PROFILES` and `TROUBLESHOOT` in
       `src/enums/command_refs.py` with their `</name:id>` mentions once the live bot has synced them
 - [ ] `PRIVACY.md` and `TERMS.md` carry the effective date you mean to publish (`PRIVACY.md` currently
       says 10 November 2026)

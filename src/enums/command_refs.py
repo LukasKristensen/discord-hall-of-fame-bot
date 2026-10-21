@@ -24,4 +24,4 @@ SERVER_HOF_WRAPPED = "</server_hof_wrapped:1455717613056299029>"
 # Plain text until then, since a mention with a made-up ID links nowhere
 MY_DATA = "`/my_data`"
 COUNT_IN_GLOBAL_PROFILES = "`/count_in_global_profiles`"
-CHECK_SETUP = "`/check_setup`"
+TROUBLESHOOT = "`/troubleshoot`"

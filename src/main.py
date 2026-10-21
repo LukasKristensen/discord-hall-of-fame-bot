@@ -811,7 +811,7 @@ async def get_server_config(interaction: discord.Interaction):
 async def run_setup_check(interaction: discord.Interaction):
     """
     Check everything that can stop messages from reaching the board, and tell the admin how to fix it.
-    Shared by /check_setup and the Check setup button on the welcome message. Only the admin sees the
+    Shared by /troubleshoot and the Check setup button on the welcome message. Only the admin sees the
     answer, as it names channels members may not be able to see
     :param interaction: The command or button press to answer
     """
@@ -850,8 +850,8 @@ async def run_setup_check(interaction: discord.Interaction):
                              f"{', '.join(finding.title for finding in found) or 'no problems'}",
                         interaction.guild.id, log_level=log_type.COMMAND)
 
-@tree.command(name="check_setup", description="Check that everything the bot needs to post is in place")
-async def check_setup(interaction: discord.Interaction):
+@tree.command(name="troubleshoot", description="Find out what stops messages from reaching the Hall of Fame, and how to fix it")
+async def troubleshoot(interaction: discord.Interaction):
     await run_setup_check(interaction)
 
 @tree.command(

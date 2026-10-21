@@ -92,7 +92,7 @@ gets immortalised, that is what this is for.
 
 If most of your channels are hidden behind a role, give the bot that role, otherwise it cannot see the
 messages being reacted to. The bot checks this when it joins and posts what to fix on the board, and
-`/check_setup` (or the **Check setup** button on the welcome message) runs the same check any time.
+`/troubleshoot` (or the **Check setup** button on the welcome message) runs the same check any time.
 
 <br>
 
@@ -116,7 +116,7 @@ Requires **Manage Server**.
 | `/set_hall_of_fame_channel` | `channel` | Point the bot at the channel it should post to. Checks its own permissions first (View Channel, Send Messages, Read Message History and Embed Links) and tells you what is missing. |
 | `/set_reaction_threshold` | `reaction_threshold` (1 to 1000) | How many reactions a message needs. Seeded once on join from your member count, and fixed at that value until you change it here. |
 | `/allow_messages_in_hof_channel` | `allow` (true/false) | Let members chat in the hall of fame channel. Off by default, so the board stays clean: chat is removed, and `/user_profile`, `/leaderboard` and the Wrapped commands are turned away there with a private note to use another channel. Removing chat needs the bot to have **Manage Messages** in that channel. |
-| `/check_setup` | | Check everything that can stop messages reaching the board: the board's permissions, how many channels the bot can read and which ones members see but the bot does not (with the role that would open them), an empty emoji whitelist, a threshold above the member count, the daily post limit and when the last post was. Only you see the answer. |
+| `/troubleshoot` | | Check everything that can stop messages reaching the board: the board's permissions, how many channels the bot can read and which ones members see but the bot does not (with the role that would open them), an empty emoji whitelist, a threshold above the member count, the daily post limit and when the last post was. Only you see the answer. |
 | `/count_in_global_profiles` | `count` (true/false) | Whether members' totals across servers include their posts from this server. On by default. The server is never named either way. |
 
 ### Choosing what qualifies
@@ -289,7 +289,7 @@ anyone to read and contribute to, see [License](#license).
 ### Which channels does it watch?
 
 Every channel it has permission to read. Channels restricted to a role stay invisible to the bot unless
-it is given that role. `/check_setup` shows how many channels it reads, lists the ones members can see
+it is given that role. `/troubleshoot` shows how many channels it reads, lists the ones members can see
 but the bot cannot, and names the role that would open most of them. Staff-only channels are counted
 apart, since leaving the bot out of those is usually on purpose.
 
@@ -361,7 +361,7 @@ from a server deletes that server's data, and any member can see, download or de
 ## Development Log
 
 ### 2.2
-- [x] Added /check_setup and a Check setup button on the welcome message, which check the board's permissions, how many channels the bot can read and which ones members see but the bot cannot (with the role that would open most of them), an empty emoji whitelist, a threshold above the member count, the daily post limit and the last post.
+- [x] Added /troubleshoot and a Check setup button on the welcome message, which check the board's permissions, how many channels the bot can read and which ones members see but the bot cannot (with the role that would open most of them), an empty emoji whitelist, a threshold above the member count, the daily post limit and the last post.
 - [x] When the bot joins, it runs the board and channel checks and, if something is wrong, posts a short note with a Check setup button on the board instead of the full report, since the board is public.
 - [x] Added /my_data, where a member sees what is stored about them and manages it with buttons: download it as a file, hide their totals across servers, stop the bot featuring their new messages, and delete it, which removes them from every leaderboard, profile and Wrapped. It works in DMs through a user install.
 - [x] Added /count_in_global_profiles for admins to leave their server out of members' totals across servers.

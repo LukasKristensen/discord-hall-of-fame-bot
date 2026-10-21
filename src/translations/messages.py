@@ -75,7 +75,7 @@ FAILED_SETUP_HOF = ("Failed to setup Hall Of Fame for server {serverName}.\n"
                     f"Want to setup the Hall Of Fame manually? Use the {command_refs.SET_HALL_OF_FAME_CHANNEL} command.")
 ERROR_SERVER_NOT_SETUP = ("The bot is not set up yet because the installation failed, often due to missing "
                           f"permissions. Use {command_refs.SET_HALL_OF_FAME_CHANNEL} to complete the installation "
-                          f"manually, then run {command_refs.CHECK_SETUP} to confirm everything is in place.")
+                          f"manually, then run {command_refs.TROUBLESHOOT} to confirm everything is in place.")
 BOT_LOADING = "Please wait while the bot is loading..."
 COMMAND_ON_COOLDOWN = "This command is on a daily cooldown. Please try again later."
 FEEDBACK_ON_COOLDOWN = ("You have sent {limit} pieces of feedback today, the most allowed in a day. Try again "
@@ -232,7 +232,7 @@ PRESENCE_STATUSES = [
 # Joins the statuses only in Wrapped season, December and January
 PRESENCE_WRAPPED = "✨ /hof_wrapped - your year on the board"
 
-# /check_setup, the Check setup button on the welcome message, and the report sent when the bot joins
+# /troubleshoot, the Check setup button on the welcome message, and the report sent when the bot joins
 CHECK_SETUP_BUTTON = "Check setup"
 CHECK_TITLE = "🩺 Hall of Fame setup check"
 # Posted in the board on join instead of the findings themselves, as everyone can read the board
@@ -241,7 +241,7 @@ CHECK_JOIN_NUDGE = ("⚠️ **Something may stop messages from reaching the Hall
                     "what it is and how to fix it.")
 CHECK_SUMMARY_OK = "Everything the bot needs is in place."
 CHECK_SUMMARY_PROBLEMS = "Found {count} thing{plural} that can stop messages from reaching the board."
-CHECK_FOOTER = "Fixed something? Press Check setup or run /check_setup again."
+CHECK_FOOTER = "Fixed something? Press Check setup or run /troubleshoot again."
 CHECK_AND_MORE = " and {count} more"
 CHECK_BOARD_MISSING_TITLE = "No board channel"
 CHECK_BOARD_MISSING = ("The channel posts go to was deleted, or the bot can no longer see it. "

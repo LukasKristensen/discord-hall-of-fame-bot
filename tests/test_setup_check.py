@@ -1,4 +1,4 @@
-"""Tests for the setup check behind /check_setup, the welcome message button and the report on join.
+"""Tests for the setup check behind /troubleshoot, the welcome message button and the report on join.
 
 The check exists because a board that never posts looks the same as a server where nobody reacts. So
 the tests are about telling apart the channels the bot is wrongly locked out of from the staff channels

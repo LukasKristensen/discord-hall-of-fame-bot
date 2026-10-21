@@ -1,5 +1,5 @@
 """
-The setup check behind /check_setup, the button on the welcome message and the report on join.
+The setup check behind /troubleshoot, the button on the welcome message and the report on join.
 
 A board that never posts looks the same as a server where nobody reacts enough, so the admin rarely
 finds out what is wrong. Each check here names one thing that stops posts, and how to fix it.

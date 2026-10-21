@@ -127,7 +127,7 @@ def build_help_embed() -> discord.Embed:
               f"{command_refs.SET_REACTION_THRESHOLD} reactions needed\n"
               f"{command_refs.CALCULATION_METHOD} how reactions are counted\n"
               f"{command_refs.GET_SERVER_CONFIG} every current setting\n"
-              f"{command_refs.CHECK_SETUP} find what stops posts, and how to fix it",
+              f"{command_refs.TROUBLESHOOT} find what stops posts, and how to fix it",
         inline=False)
 
     embed.add_field(
@@ -160,7 +160,7 @@ def build_help_embed() -> discord.Embed:
               f"[Vote]({messages.VOTE_URL}) · "
               f"[Source]({messages.SOURCE_URL})\n"
               f"Found a bug or have an idea? {command_refs.FEEDBACK}\n"
-              f"Not working? Run {command_refs.CHECK_SETUP}.",
+              f"Not working? Run {command_refs.TROUBLESHOOT}.",
         inline=False)
 
     embed.set_footer(text=f"Hall of Fame {version.VERSION} · {version.DATE}")

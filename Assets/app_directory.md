@@ -77,7 +77,7 @@ When a message gets enough reactions, Hall of Fame reposts it to your hall of fa
 
 1. Add the app and accept the permissions it asks for.
 2. It creates a #hall-of-fame channel and picks a starting threshold from your member count.
-3. Press Check setup on the welcome message, or run /check_setup, to see whether the bot can read your channels and post to the board.
+3. Press Check setup on the welcome message, or run /troubleshoot, to see whether the bot can read your channels and post to the board.
 4. React as normal. Change the threshold with /set_reaction_threshold, or use an existing channel with /set_hall_of_fame_channel.
 
 **Looking for a starboard?**
@@ -185,5 +185,5 @@ The current listing also asks for Manage Threads, Create Public Threads and Pin 
 ## Popular commands
 
 The directory lists a handful of commands with their descriptions. If the portal lets you choose them,
-show the ones members use: `/leaderboard`, `/user_profile`, `/hof_wrapped`, `/check_setup` and
+show the ones members use: `/leaderboard`, `/user_profile`, `/hof_wrapped`, `/troubleshoot` and
 `/set_reaction_threshold`.
