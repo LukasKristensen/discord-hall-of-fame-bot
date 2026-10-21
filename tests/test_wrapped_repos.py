@@ -194,5 +194,22 @@ class WrappedProgressTests(unittest.TestCase):
         self.assertEqual(1, connection.commits)
 
 
+
+class RemoveFromFanListsTests(unittest.TestCase):
+    def test_commits_when_used_on_its_own(self):
+        connection = FakeConnection()
+        hof_wrapped_repo.remove_from_fan_lists(connection, 77)
+
+        self.assertEqual(1, connection.commits)
+        self.assertEqual(2, len(connection.queries))
+
+    def test_leaves_the_commit_to_a_larger_transaction(self):
+        connection = FakeConnection()
+        hof_wrapped_repo.remove_from_fan_lists(connection, 77, commit=False)
+
+        self.assertEqual(0, connection.commits)
+
+
+
 if __name__ == "__main__":
     unittest.main()

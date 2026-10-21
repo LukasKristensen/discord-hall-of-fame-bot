@@ -68,7 +68,7 @@ When a message gets enough reactions, Hall of Fame reposts it to your hall of fa
 
 **Your data, your call**
 
-- /my_data shows a member what is stored about them, privately, with buttons to download it, hide their totals across servers, or delete it, which removes them from every leaderboard, profile and Wrapped.
+- /my_data shows a member what is stored about them, privately, with buttons to download it, hide their totals across servers, stop the bot featuring their messages, or delete it, which removes them from every leaderboard, profile and Wrapped.
 - Totals across servers never name a server.
 
 **Getting started**

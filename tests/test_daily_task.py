@@ -857,5 +857,29 @@ class StartupJoinRecordingTests(unittest.IsolatedAsyncioTestCase):
 
 
 
+
+class StartupSetupFailureTests(unittest.IsolatedAsyncioTestCase):
+    async def test_a_server_that_cannot_be_set_up_is_logged_and_skipped(self):
+        logged = []
+
+        async def record_log(_bot, message, *args, **kwargs):
+            logged.append(str(message))
+
+        async def fail(*_args):
+            raise RuntimeError("Missing Permissions")
+
+        guild = mock.Mock(id=4242)
+        guild.me.guild_permissions.manage_channels = True
+        with mock.patch.object(events.server_config_repo, "check_if_guild_exists", lambda *_args: False), \
+                mock.patch.object(events, "record_guild_join", lambda *_args: None), \
+                mock.patch.object(events.utils, "create_database_context", fail), \
+                mock.patch.object(events.utils, "logging", record_log):
+            found = await events.check_for_new_server_classes(mock.Mock(guilds=[guild]), FakeConnection())
+
+        self.assertEqual({}, found)
+        self.assertTrue(any("Failed to create the database context" in entry for entry in logged))
+
+
+
 if __name__ == "__main__":
     unittest.main()

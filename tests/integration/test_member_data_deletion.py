@@ -625,6 +625,212 @@ class OptedOutMemberTests(MemberDataDeletionTestCase):
         self.assertEqual([(973,)], self.posts_by(NOBODY))
 
 
+class OptOutGuardPerMethodTests(MemberDataDeletionTestCase):
+    """
+    One set of tests for each repository function in OptOutWriteGuardTests.REVIEWED, against real rows,
+    plus the read that keeps opted-out members out of the server's Wrapped. NOBODY has never been
+    featured and DELETED has earlier posts and Wrapped; both have asked not to be featured
+    """
+
+    # Every reviewed write has tests here. Adding a write to REVIEWED without them fails the check below
+    COVERS = {
+        ("hall_of_fame_message_repo", "insert_hall_of_fame_message"),
+        ("hall_of_fame_message_repo", "remove_author"),
+        ("hof_wrapped_repo", "insert_hof_wrapped"),
+        ("hof_wrapped_repo", "remove_from_fan_lists"),
+        ("server_user_repo", "rebuild_user_stats_for_guild"),
+        ("global_profile_repo", "set_hidden"),
+        ("opt_out_repo", "set_opted_out"),
+    }
+
+    def setUp(self):
+        super().setUp()
+        for user_id in (NOBODY, DELETED):
+            opt_out_repo.set_opted_out(self.connection, user_id, True)
+
+    def test_every_reviewed_write_has_database_tests(self):
+        from tests.test_member_data import OptOutWriteGuardTests
+
+        self.assertEqual(OptOutWriteGuardTests.REVIEWED, self.COVERS)
+
+    def store(self, message_id, author):
+        hall_of_fame_message_repo.insert_hall_of_fame_message(
+            self.connection, message_id, 501, SHARED, message_id + 5000, 9, author, NOW - datetime.timedelta(days=1))
+        return self.rows("SELECT author_id FROM hall_of_fame_message WHERE message_id = %s", (message_id,))[0][0]
+
+    def wrapped_row(self, guild, user_id, year=2025):
+        rows = self.rows("SELECT reaction_count, fan_of_users, users_fans FROM hof_wrapped "
+                         "WHERE guild_id = %s AND user_id = %s AND year = %s", (guild, user_id, year))
+        return rows[0] if rows else None
+
+    def save_wrapped(self, guild, user_id, fans, year=2025, reactions=99):
+        hof_wrapped_repo.insert_hof_wrapped(self.connection, guild, user_id, year, reactions, 1, "{}", "{}", None,
+                                            None, 0, json.dumps(fans), json.dumps(fans), "{}")
+
+    # insert_hall_of_fame_message
+
+    def test_storing_a_post_by_an_opted_out_member_credits_nobody(self):
+        self.assertEqual(hall_of_fame_message_repo.NO_AUTHOR_ID, self.store(980, NOBODY))
+
+    def test_storing_an_earlier_post_of_theirs_again_credits_nobody(self):
+        """Their earlier posts only stay credited while nothing writes them again."""
+        self.assertEqual(hall_of_fame_message_repo.NO_AUTHOR_ID, self.store(1, DELETED))
+
+    def test_storing_a_post_by_anyone_else_credits_them(self):
+        self.assertEqual(OTHER, self.store(981, OTHER))
+
+    # insert_hof_wrapped
+
+    def test_saving_a_wrapped_for_an_opted_out_member_saves_nothing(self):
+        self.save_wrapped(SHARED, NOBODY, {})
+
+        self.assertIsNone(self.wrapped_row(SHARED, NOBODY))
+
+    def test_saving_their_wrapped_again_leaves_the_earlier_one_as_it_was(self):
+        before = self.wrapped_row(SHARED, DELETED)
+        self.save_wrapped(SHARED, DELETED, {str(OTHER): 50}, reactions=500)
+
+        self.assertEqual(before, self.wrapped_row(SHARED, DELETED))
+
+    def test_saving_someone_elses_wrapped_strips_them_from_both_fan_lists(self):
+        self.save_wrapped(SHARED, OTHER, {str(NOBODY): 3, str(DELETED): 2, str(FAN): 1}, year=2026)
+        _reactions, fan_of_users, users_fans = self.wrapped_row(SHARED, OTHER, year=2026)
+
+        self.assertEqual({str(FAN): 1}, json.loads(fan_of_users))
+        self.assertEqual({str(FAN): 1}, json.loads(users_fans))
+
+    def test_saving_a_wrapped_for_anyone_else_saves_it(self):
+        self.save_wrapped(SHARED, FAN, {str(OTHER): 1}, year=2026)
+
+        self.assertIsNotNone(self.wrapped_row(SHARED, FAN, year=2026))
+
+    # remove_from_fan_lists
+
+    def test_removing_them_from_fan_lists_takes_them_out_of_every_list(self):
+        hof_wrapped_repo.remove_from_fan_lists(self.connection, DELETED)
+
+        for guild, user_id in ((SHARED, OTHER), (SECOND, OTHER), (SHARED, THIRD), (SHARED, FAN)):
+            with self.subTest(guild=guild, user_id=user_id):
+                _reactions, fan_of_users, users_fans = self.wrapped_row(guild, user_id)
+                self.assertNotIn(str(DELETED), json.loads(fan_of_users))
+                self.assertNotIn(str(DELETED), json.loads(users_fans))
+
+    def test_removing_them_from_fan_lists_keeps_everyone_else(self):
+        """FAN's ID starts with DELETED's, so a match on the text alone would remove them too."""
+        hof_wrapped_repo.remove_from_fan_lists(self.connection, DELETED)
+        _reactions, fan_of_users, _users_fans = self.wrapped_row(SHARED, OTHER)
+
+        self.assertEqual({str(FAN): 4, str(THIRD): 2}, json.loads(fan_of_users))
+
+    def test_removing_them_from_fan_lists_keeps_their_own_wrapped(self):
+        hof_wrapped_repo.remove_from_fan_lists(self.connection, DELETED)
+
+        self.assertIsNotNone(self.wrapped_row(SHARED, DELETED))
+
+    # remove_author
+
+    def test_removing_an_author_leaves_no_post_with_their_id(self):
+        detached = hall_of_fame_message_repo.remove_author(self.connection, DELETED)
+
+        self.assertEqual(6, detached)
+        self.assertEqual([], self.posts_by(DELETED))
+
+    def test_removing_an_author_leaves_everyone_elses_posts(self):
+        before = self.posts_by(OTHER)
+        hall_of_fame_message_repo.remove_author(self.connection, DELETED)
+
+        self.assertEqual(before, self.posts_by(OTHER))
+
+    # rebuild_user_stats_for_guild
+
+    def test_the_rebuild_gives_a_member_never_featured_no_standing(self):
+        self.store(982, NOBODY)
+        self.rebuild_all()
+
+        self.assertEqual([], server_user_repo.get_server_users_for_user(self.connection, NOBODY))
+
+    def test_the_rebuild_counts_only_posts_stored_before_they_opted_out(self):
+        before = {row["guild_id"]: row["total_hall_of_fame_messages"]
+                  for row in server_user_repo.get_server_users_for_user(self.connection, DELETED)}
+        self.store(983, DELETED)
+        self.rebuild_all()
+        after = {row["guild_id"]: row["total_hall_of_fame_messages"]
+                 for row in server_user_repo.get_server_users_for_user(self.connection, DELETED)}
+
+        self.assertEqual(before, after)
+
+    # set_hidden
+
+    def test_hiding_totals_is_stored_only_as_the_members_own_choice(self):
+        """The repository stores what the member chose. /my_data only offers it while they have totals."""
+        global_profile_repo.set_hidden(self.connection, NOBODY, True)
+
+        self.assertTrue(global_profile_repo.is_hidden(self.connection, NOBODY))
+        global_profile_repo.set_hidden(self.connection, NOBODY, False)
+        self.assertFalse(global_profile_repo.is_hidden(self.connection, NOBODY))
+
+    async def test_my_data_stores_no_hidden_totals_for_a_member_with_none(self):
+        """NOBODY is opted out with nothing credited, so a hide pressed on an older panel stores nothing."""
+        sent = []
+
+        async def send(content=None, ephemeral=False, view=None, **_kwargs):
+            sent.append(view)
+
+        async def nothing(*_args, **_kwargs):
+            return None
+
+        command = types.SimpleNamespace(
+            user=types.SimpleNamespace(id=NOBODY), guild_id=SHARED, guild=types.SimpleNamespace(id=SHARED),
+            response=types.SimpleNamespace(defer=nothing), followup=types.SimpleNamespace(send=send))
+        main.bot_loaded, loaded = True, main.bot_loaded
+        try:
+            await main.my_data.callback(command)
+        finally:
+            main.bot_loaded = loaded
+        panel = sent[0]
+        panel.summary["opted_out_since"] = None
+        panel.refresh()
+        edits = []
+
+        async def edit_message(content=None, view=None):
+            edits.append(content)
+
+        await panel.totals_button.callback(types.SimpleNamespace(
+            user=types.SimpleNamespace(id=NOBODY), response=types.SimpleNamespace(edit_message=edit_message)))
+
+        self.assertFalse(global_profile_repo.is_hidden(self.connection, NOBODY))
+
+    # set_opted_out
+
+    def test_opting_out_stores_only_the_member_and_the_date(self):
+        [(user_id, opted_out_at)] = self.rows(
+            "SELECT user_id, opted_out_at FROM opted_out_member WHERE user_id = %s", (NOBODY,))
+
+        self.assertEqual(NOBODY, user_id)
+        self.assertIsNotNone(opted_out_at)
+        self.assertEqual({"user_id", "opted_out_at"}, self.columns("opted_out_member"))
+
+    def test_opting_out_twice_keeps_one_record_and_its_first_date(self):
+        [(first,)] = self.rows("SELECT opted_out_at FROM opted_out_member WHERE user_id = %s", (NOBODY,))
+        opt_out_repo.set_opted_out(self.connection, NOBODY, True)
+
+        self.assertEqual([(first,)], self.rows("SELECT opted_out_at FROM opted_out_member WHERE user_id = %s",
+                                               (NOBODY,)))
+
+    def test_featuring_again_deletes_the_record(self):
+        opt_out_repo.set_opted_out(self.connection, NOBODY, False)
+
+        self.assertEqual([], self.rows("SELECT * FROM opted_out_member WHERE user_id = %s", (NOBODY,)))
+
+    # get_all_hof_wrapped_for_guild, the read behind the server's Wrapped
+
+    def test_the_servers_wrapped_leaves_out_every_opted_out_member(self):
+        """DELETED and THIRD both have a Wrapped here from before they asked."""
+        rows = hof_wrapped_repo.get_all_hof_wrapped_for_guild(self.connection, SHARED, 2025)
+
+        self.assertEqual({OTHER, FAN}, {row["user_id"] for row in rows})
+
+
 class CoverageGuardTests(MemberDataDeletionTestCase):
     def test_every_table_holding_member_ids_is_handled_by_the_deletion(self):
         """

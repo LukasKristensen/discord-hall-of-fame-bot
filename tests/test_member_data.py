@@ -1618,5 +1618,44 @@ class RepositoryEmptyResultTests(unittest.TestCase):
 
 
 
+
+class FeaturingFailureTests(MyDataPanelTestCase):
+    """Stopping searches every stored Wrapped, so a timeout there is answered rather than left hanging."""
+
+    def failing(self):
+        async def fail(_user_id):
+            raise RuntimeError("canceling statement due to statement timeout")
+
+        self.patch(main, "stop_featuring_member", fail)
+
+    async def test_a_failure_on_the_panel_is_reported(self):
+        self.failing()
+        _interaction, view = await self.open_panel()
+        pressed = await self.press(view.featuring_button)
+
+        self.assertEqual([(messages.COMMAND_FAILED, None)], pressed.original_edits)
+        self.assertTrue(any("Error changing whether a member is featured" in entry for entry in self.logged))
+
+    async def test_a_failure_after_deleting_is_reported(self):
+        view = await self.ask_to_delete()
+        button = FakeInteraction()
+        await view.confirm(button)
+        self.failing()
+        pressed = await self.press(button.original_edits[0][1].children[0])
+
+        self.assertEqual([(messages.COMMAND_FAILED, None)], pressed.original_edits)
+
+    async def test_stopping_records_the_opt_out_and_clears_the_fan_lists_together(self):
+        cleared = []
+        self.patch(hof_wrapped_repo, "remove_from_fan_lists",
+                   lambda _c, user_id, commit=True: cleared.append((user_id, commit)))
+        await main.stop_featuring_member(77)
+
+        self.assertEqual({77}, self.opted_out)
+        self.assertEqual([(77, False)], cleared)
+        self.assertTrue(any("statement_timeout" in query for query in self.pool.connection.queries))
+
+
+
 if __name__ == "__main__":
     unittest.main()

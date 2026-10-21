@@ -1560,5 +1560,74 @@ class LogPrivacyTests(unittest.TestCase):
         self.assertEqual("a DM or a server without the bot", main.where_used(types.SimpleNamespace(guild=None)))
 
 
+
+class SettingCommandTests(CommandTestCase):
+    """The simple on/off settings: stored for the server and logged without naming anyone."""
+
+    async def test_each_setting_is_stored_and_logged(self):
+        method = discord.app_commands.Choice(name="Unique users", value="unique_users")
+        for command, value, parameter, stored in (
+                (main.include_author_own_reaction_in_threshold, False, "include_author_in_reaction_calculation", False),
+                (main.allow_messages_in_hof_channel, True, "allow_messages_in_hof_channel", True),
+                (main.require_image_or_video, True, "require_image_or_video", True),
+                (main.ignore_bot_messages, True, "ignore_bot_messages", True),
+                (main.calculation_method, method, "reaction_count_calculation_method", "unique_users")):
+            with self.subTest(command=command.name):
+                self.writes.clear()
+                self.logged.clear()
+                await command.callback(FakeInteraction(), value)
+
+                self.assertEqual([(GUILD_ID, parameter, stored)], self.writes)
+                self.assertEqual(1, len([entry for entry in self.logged if "used in a server" in entry]))
+
+    async def test_clearing_the_whitelist(self):
+        self.server.whitelisted_emojis = ["🔥"]
+        self.server.custom_emoji_check_logic = True
+        interaction = FakeInteraction()
+        await main.clear_whitelist.callback(interaction)
+
+        self.assertEqual([(GUILD_ID, "whitelisted_emojis", [])], self.writes)
+        self.assertEqual([], self.server.whitelisted_emojis)
+        self.assertTrue(any("Clear whitelist command used in a server" in entry for entry in self.logged))
+
+
+class WrappedCommandTests(CommandTestCase):
+    async def test_shows_the_members_wrapped(self):
+        async def embed(*_args):
+            return "member embed"
+
+        self.patch(main.hof_wrapped_repo, "get_hof_wrapped", lambda *_args: {"user_id": 77})
+        self.patch(main.hof_wrapped, "create_embed", embed)
+        interaction = FakeInteraction()
+        await main.hof_wrapped_command.callback(interaction)
+
+        self.assertEqual(["member embed"], interaction.response.messages)
+        self.assertTrue(any("HOF Wrapped command used in a server" in entry for entry in self.logged))
+
+    async def test_says_so_when_the_member_has_no_wrapped(self):
+        self.patch(main.hof_wrapped_repo, "get_hof_wrapped", lambda *_args: None)
+        interaction = FakeInteraction()
+        await main.hof_wrapped_command.callback(interaction)
+
+        self.assertIn("No Hall of Fame Wrapped data available for you", interaction.response.messages[0])
+
+    async def test_shows_the_servers_wrapped(self):
+        self.patch(main.hof_wrapped_repo, "check_if_guild_wrapped_data_exists", lambda *_args: True)
+        self.patch(main.hof_wrapped_repo, "get_all_hof_wrapped_for_guild", lambda *_args: [])
+        self.patch(main.hof_wrapped, "create_server_embed", lambda guild, rows: "server embed")
+        interaction = FakeInteraction()
+        await main.server_hof_wrapped_command.callback(interaction)
+
+        self.assertEqual(["server embed"], interaction.response.messages)
+
+    async def test_says_so_when_the_server_has_no_wrapped(self):
+        self.patch(main.hof_wrapped_repo, "check_if_guild_wrapped_data_exists", lambda *_args: False)
+        interaction = FakeInteraction()
+        await main.server_hof_wrapped_command.callback(interaction)
+
+        self.assertIn("No Hall of Fame Wrapped data available", interaction.response.messages[0])
+
+
+
 if __name__ == "__main__":
     unittest.main()

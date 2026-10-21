@@ -309,8 +309,15 @@ Wrapped, data deletion and schema upgrades. It is skipped unless `HOF_TEST_DATAB
 throwaway database, see [tests/integration/database.py](tests/integration/database.py). The
 ``Tests`` workflow starts one for it.
 
+Two guard tests protect members' privacy: `OptOutWriteGuardTests` lists every repository function that
+writes a member's ID and fails on a new one until it is reviewed, and `LogPrivacyTests` fails on a log
+that names a member or a server.
+
 For behaviour under load, `tests/stress/reaction_storm.py` drives the real reaction handler with
 hundreds of concurrent reactions. It is run by hand, see [tests/stress/README.md](tests/stress/README.md).
+What Discord itself accepts is checked by hand on a development bot: the results are in
+[tests/MANUAL_TESTS.md](tests/MANUAL_TESTS.md), and [tests/RELEASE_TEST_PLAN.md](tests/RELEASE_TEST_PLAN.md)
+lists the flows to check before a release.
 
 <br>
 
@@ -355,6 +362,9 @@ from a server deletes that server's data, and any member can see, download or de
 - [x] When the bot joins, it runs the board and channel checks and, if something is wrong, posts a short note with a Check setup button on the board instead of the full report, since the board is public.
 - [x] Added /my_data, where a member sees what is stored about them and manages it with buttons: download it as a file, hide their totals across servers, stop the bot featuring their new messages, and delete it, which removes them from every leaderboard, profile and Wrapped. It works in DMs through a user install.
 - [x] Added /count_in_global_profiles for admins to leave their server out of members' totals across servers.
+- [x] Members can add Hall of Fame to their own account with the Add to your account button under /invite, and use /help, /invite, /vote, /feedback, /user_profile and /my_data in DMs and in servers without the bot. Outside a server with the bot, /user_profile only looks up the member who asked. Every other command stays install-to-server only.
+- [x] /feedback is limited to three sends per member a day, counted across DMs and servers.
+- [x] A member who asks not to be featured gets nothing new stored: no new posts, no Wrapped, and no place in other members' Wrapped or the server's, including a Wrapped generated before they asked. The repositories enforce this themselves, so no caller can skip it.
 - [x] A member's posts count toward leaderboards, profiles and Wrapped up to 10,000 across every server. This keeps what is stored about any one member small enough that /my_data can always export all of it. Posts past that still reach the board but are not credited, and the developer is alerted.
 - [x] A /my_data download too big for one file is sent as several complete JSON files instead of failing.
 - [x] /user_profile is laid out in columns (this month, all time, every server) with highlights: the best post with a jump link, when the member was last featured and the gap to the next rank. The totals across servers never name a server.
@@ -375,6 +385,7 @@ from a server deletes that server's data, and any member can see, download or de
 - [x] Fixed the monthly snapshot timestamp shifting on every startup on servers not running in UTC.
 - [x] Added indexes for the per-server and per-member queries, and run the daily stats rebuild and the data commands under a statement timeout.
 - [x] Quieted recurring log lines from servers with a deleted board, top.gg stats posts and chat that was already deleted.
+- [x] Logs in the developer channels carry the command and the server ID, never a member's or a server's name.
 - [x] Production credentials and the production database are only loaded in production, so a development run cannot reach them.
 - [x] Message locks are recreated on each run, so none stays bound to a closed event loop.
 - [x] Removed the MongoDB-era tooling, the unused manual sweep and the Google Drive backup script.

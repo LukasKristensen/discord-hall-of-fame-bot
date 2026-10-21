@@ -52,6 +52,11 @@ Hall of Fame is source-available, not open source. See [LICENSE](LICENSE) for th
   ```
 
 - Add or update tests for the behaviour you changed.
+- Members can ask not to be featured, and from then on nothing new may be stored about them. A change
+  that writes a member's user ID to the database must leave those members out in the same SQL statement,
+  and be added to `OptOutWriteGuardTests` with the reason it is safe.
+- Logs are kept in private developer channels, so they say what happened with the server's ID, never a
+  member's or a server's name. `LogPrivacyTests` checks this.
 - Keep pull requests focused on one change, and describe what it does and why.
 - Never include tokens, passwords or other credentials in code, commits or pull request descriptions.
 
