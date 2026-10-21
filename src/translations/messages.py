@@ -1,4 +1,6 @@
 # Strings for bot responses
+from enums import command_refs
+
 BOT_PERMISSIONS_ERROR = "The bot does not have the required permissions to setup the server"
 SERVER_ALREADY_SETUP = "The server is already set up"
 CUSTOM_EMOJI_CHECK_DISABLED = (
@@ -67,9 +69,9 @@ FAILED_SETUP_HOF = ("Failed to setup Hall Of Fame for server {serverName}.\n"
                     "This may be due to missing permissions, try re-inviting the bot with the correct permissions.\n"
                     "If the problem persists, please contact support. https://discord.gg/r98WC5GHcn\n"
                     "Want to setup the Hall Of Fame manually? Use the </set_hall_of_fame_channel:1393576242237804768> command.")
-ERROR_SERVER_NOT_SETUP = ("The server is not set up yet. Try re-inviting the bot with the correct permissions it is "
-                          "asking for in the server join message. Giving the permissions after the bot has joined will "
-                          "not work.")
+ERROR_SERVER_NOT_SETUP = ("The bot is not set up yet because the installation failed, often due to missing "
+                          f"permissions. Use {command_refs.SET_HALL_OF_FAME_CHANNEL} to complete the installation "
+                          "manually.")
 BOT_LOADING = "Please wait while the bot is loading..."
 COMMAND_ON_COOLDOWN = "This command is on a daily cooldown. Please try again later."
 FEEDBACK_ON_COOLDOWN = ("You have sent {limit} pieces of feedback today, the most allowed in a day. Try again "

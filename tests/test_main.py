@@ -16,7 +16,7 @@ import discord
 
 import main
 import utils
-from enums import log_type
+from enums import command_refs, log_type
 from caches import ExpiringSet
 from translations import messages
 
@@ -752,6 +752,7 @@ class UpdateSettingTests(CommandTestCase):
 
         self.assertFalse(changed)
         self.assertEqual([messages.ERROR_SERVER_NOT_SETUP], interaction.response.messages)
+        self.assertIn(command_refs.SET_HALL_OF_FAME_CHANNEL, messages.ERROR_SERVER_NOT_SETUP)
 
 
 class RefusalsAreEphemeralTests(CommandTestCase):
