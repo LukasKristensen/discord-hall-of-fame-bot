@@ -153,7 +153,7 @@ def build_help_embed() -> discord.Embed:
               f"[Add to a server]({messages.INVITE_URL}) · "
               f"[Add to your account]({messages.USER_INSTALL_URL}) · "
               f"[Vote]({messages.VOTE_URL}) · "
-              f"[Source](https://github.com/LukasKristensen/discord-hall-of-fame-bot)\n"
+              f"[Source]({messages.SOURCE_URL})\n"
               f"Found a bug or have an idea? {command_refs.FEEDBACK}\n"
               f"Not working? Run {command_refs.CHECK_SETUP}.",
         inline=False)
@@ -988,7 +988,7 @@ def build_bot_info_embed(guild, bot_user, server_config) -> discord.Embed:
         value=f"[Add to a server]({messages.INVITE_URL})\n"
               f"[Support server]({messages.SUPPORT_SERVER_URL})\n"
               f"[Vote]({messages.VOTE_URL})\n"
-              "[Source](https://github.com/LukasKristensen/discord-hall-of-fame-bot)",
+              f"[Source]({messages.SOURCE_URL})",
         inline=True)
 
     if bot_user is not None and getattr(bot_user, "display_avatar", None) is not None:

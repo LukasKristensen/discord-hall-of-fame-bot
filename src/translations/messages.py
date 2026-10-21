@@ -5,7 +5,7 @@ BOT_PERMISSIONS_ERROR = "The bot does not have the required permissions to setup
 SERVER_ALREADY_SETUP = "The server is already set up"
 CUSTOM_EMOJI_CHECK_DISABLED = (
     "Custom emoji check logic is not enabled for this server. "
-    "Use </custom_emoji_check_logic:1358208382473076848> to enable it."
+    f"Use {command_refs.CUSTOM_EMOJI_CHECK_LOGIC} to enable it."
 )
 # /invite and /vote answer with link buttons, so the text says why to click and leaves the URL to the button
 VOTE_MESSAGE = "Votes on top.gg help more servers find Hall of Fame. You can vote every 12 hours."
@@ -25,6 +25,7 @@ USER_INSTALL_URL = ("https://discord.com/oauth2/authorize?client_id=117704167335
                     "&integration_type=1&scope=applications.commands")
 VOTE_URL = "https://top.gg/bot/1177041673352663070/vote"
 SUPPORT_SERVER_URL = "https://discord.gg/r98WC5GHcn"
+SOURCE_URL = "https://github.com/LukasKristensen/discord-hall-of-fame-bot"
 INVITE_BUTTON = "Add to a server"
 USER_INSTALL_BUTTON = "Add to your account"
 VOTE_BUTTON = "Vote on top.gg"
@@ -67,15 +68,15 @@ WHITELIST_FULL = "The whitelist is full at {limit} emojis. Remove one with {comm
 WHITELIST_EMPTY_NOTE = "\nThe whitelist is empty, so every emoji counts until one is added with {command}."
 FAILED_SETUP_HOF = ("Failed to setup Hall Of Fame for server {serverName}.\n"
                     "This may be due to missing permissions, try re-inviting the bot with the correct permissions.\n"
-                    "If the problem persists, please contact support. https://discord.gg/r98WC5GHcn\n"
-                    "Want to setup the Hall Of Fame manually? Use the </set_hall_of_fame_channel:1393576242237804768> command.")
+                    f"If the problem persists, please contact support. {SUPPORT_SERVER_URL}\n"
+                    f"Want to setup the Hall Of Fame manually? Use the {command_refs.SET_HALL_OF_FAME_CHANNEL} command.")
 ERROR_SERVER_NOT_SETUP = ("The bot is not set up yet because the installation failed, often due to missing "
                           f"permissions. Use {command_refs.SET_HALL_OF_FAME_CHANNEL} to complete the installation "
-                          "manually.")
+                          f"manually, then run {command_refs.CHECK_SETUP} to confirm everything is in place.")
 BOT_LOADING = "Please wait while the bot is loading..."
 COMMAND_ON_COOLDOWN = "This command is on a daily cooldown. Please try again later."
 FEEDBACK_ON_COOLDOWN = ("You have sent {limit} pieces of feedback today, the most allowed in a day. Try again "
-                        "tomorrow, or ask in the support server: <https://discord.gg/r98WC5GHcn>")
+                        f"tomorrow, or ask in the support server: <{SUPPORT_SERVER_URL}>")
 SETTING_CHANGED = "✅ {label}: **{value}**"
 SETTING_UNCHANGED = "ℹ️ {label} is already **{value}**, so nothing changed."
 REACTION_THRESHOLD_NOTE = ("A message reaches the Hall of Fame once it has {threshold} reaction{plural}, "
@@ -96,7 +97,7 @@ HOF_CHANNEL_MISSING_PERMISSIONS = ("Could not use {channel} as the Hall of Fame 
                                    "Grant them in the channel settings and run the command again.")
 HOF_CHANNEL_SETUP_FAILED = ("Could not set up the Hall of Fame in {channel}. Check that the bot can see and post "
                             "in it, then try again. If it keeps failing, ask in the support server: "
-                            "<https://discord.gg/r98WC5GHcn>")
+                            f"<{SUPPORT_SERVER_URL}>")
 PROFILE_BOT_USER = "Bots do not have a Hall of Fame profile."
 COMMAND_NOT_IN_CLOSED_BOARD = "{channel} is kept for Hall of Fame posts only, so use this command in another channel."
 
@@ -129,7 +130,7 @@ GLOBAL_PROFILE_COUNTING_OFF_NOTE = ("Posts from this server no longer count towa
                                     "inside this server are unchanged.")
 
 # /my_data and its buttons, answered privately to the member who asked
-PRIVACY_POLICY_URL = "https://github.com/LukasKristensen/discord-hall-of-fame-bot/blob/main/PRIVACY.md"
+PRIVACY_POLICY_URL = f"{SOURCE_URL}/blob/main/PRIVACY.md"
 MY_DATA_STORED = ("📦 Hall of Fame stores {posts} featured post{posts_plural}, your standing in {servers} "
                   "server{servers_plural} and {wrapped} Wrapped entr{wrapped_plural} about you.")
 # Also shown right after a deletion, when posts of the member's are still on boards, so it must not say
@@ -157,10 +158,10 @@ MY_DATA_EXPORT_PARTS = ("Everything Hall of Fame stores about you is in the atta
                         "file, so it is split into {parts} parts. Each part is a complete JSON file, and together "
                         "they hold every row once.")
 MY_DATA_EXPORT_TOO_LARGE = ("Your data is too big to send through Discord. Ask for it in the support server and we "
-                            "will send it another way: <https://discord.gg/r98WC5GHcn>")
+                            f"will send it another way: <{SUPPORT_SERVER_URL}>")
 MY_DATA_EXPORT_SEND_FAILED = ("Discord did not accept the file with your data, so it was not fully sent. Please try "
                               "again in a moment. If it keeps happening, ask in the support server: "
-                              "<https://discord.gg/r98WC5GHcn>")
+                              f"<{SUPPORT_SERVER_URL}>")
 MY_DATA_DOWNLOAD_ON_COOLDOWN = "You already downloaded your data today. You can download it again tomorrow."
 MY_DATA_DELETE_ON_COOLDOWN = "You already deleted your data today. You can delete it again tomorrow."
 MY_DATA_NOT_YOURS = "Only the member who ran this command can use these buttons."
@@ -193,7 +194,7 @@ DELETE_MY_DATA_EXPIRED = "This confirmation expired and nothing was deleted. Run
 # Sent for any command that fails in a way nothing more specific covers, so it must not assume the
 # command was changing a setting
 COMMAND_FAILED = ("Something went wrong while running this command. Please try again in a moment. If it keeps "
-                  "happening, let us know in the support server: <https://discord.gg/r98WC5GHcn>")
+                  f"happening, let us know in the support server: <{SUPPORT_SERVER_URL}>")
 GUILD_ONLY = "This command only works inside a server."
 LEADERBOARD_NO_DATA = "The leaderboard is currently empty. Data updates every 24 hours, so please check back later."
 PROFILE_NO_DATA = "No profile data is available for this user yet. Data is refreshed every 24 hours."
@@ -209,13 +210,13 @@ PROFILE_HIDDEN_OUTSIDE_SERVER_SELF = ("Your totals across servers are hidden, so
                                       "a server with Hall of Fame. Show them again from {command}.")
 MISSING_HOF_CHANNEL_PERMISSIONS = ("The bot is missing the required permissions to post in {channel}.\n"
                                    "Update the channel permission for the bot to have: ``{missing_permissions}``\n"
-                                   f"If the hall of channel does not exist, set it up using </set_hall_of_fame_channel:1393576242237804768> "
+                                   f"If the hall of channel does not exist, set it up using {command_refs.SET_HALL_OF_FAME_CHANNEL} "
                                    "and ensure the bot has the required permissions.")
 FAILED_TO_FIND_HOF_CHANNEL = (
     "Failed to find the Hall of Fame channel - Ensure the bot has access with "
     "``View Channel, Send Messages, and Read Message History`` permissions.\n"
-    f"Set it up using </set_hall_of_fame_channel:1393576242237804768> if it doesn't exist.\n"
-    "For further assistance, contact support: <https://discord.gg/r98WC5GHcn>"
+    f"Set it up using {command_refs.SET_HALL_OF_FAME_CHANNEL} if it doesn't exist.\n"
+    f"For further assistance, contact support: <{SUPPORT_SERVER_URL}>"
 )
 
 # The bot's status, shown in turn. Command mentions do not render in a status, so commands are plain

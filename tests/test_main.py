@@ -753,6 +753,7 @@ class UpdateSettingTests(CommandTestCase):
         self.assertFalse(changed)
         self.assertEqual([messages.ERROR_SERVER_NOT_SETUP], interaction.response.messages)
         self.assertIn(command_refs.SET_HALL_OF_FAME_CHANNEL, messages.ERROR_SERVER_NOT_SETUP)
+        self.assertIn(command_refs.CHECK_SETUP, messages.ERROR_SERVER_NOT_SETUP)
 
 
 class RefusalsAreEphemeralTests(CommandTestCase):
