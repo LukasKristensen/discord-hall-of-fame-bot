@@ -166,6 +166,39 @@ class WrappedGenerationTests(WrappedTestCase):
         self.assertEqual({}, alice["users_fans"])
         self.assertEqual({}, alice["fan_of_users"])
 
+    async def delete_while_saving(self, member):
+        """
+        Run Wrapped with the member deleting their data right after the first row is saved. Whichever row
+        that is, the row saved after the deletion would bring them back: their own, or Alice's with them in
+        its fan lists
+        """
+        save = hof_wrapped.save_user_wrapped_to_db
+        saved = []
+
+        def save_then_delete(guild_id, user, year):
+            save(guild_id, user, year)
+            saved.append(user.id)
+            if len(saved) == 1:
+                # What deleting their data on /my_data does to posts and Wrapped
+                hall_of_fame_message_repo.remove_author(self.connection, member.id)
+                hof_wrapped_repo.delete_hof_wrapped_for_user(self.connection, member.id)
+
+        with mock.patch.object(hof_wrapped, "save_user_wrapped_to_db", save_then_delete):
+            await self.generate(FIRST)
+        self.assertEqual(2, len(saved))
+
+    async def test_a_member_who_deletes_while_rows_are_saved_keeps_no_row(self):
+        await self.delete_while_saving(BOB)
+
+        self.assertIsNone(self.wrapped(FIRST, BOB.id))
+
+    async def test_a_member_who_deletes_while_rows_are_saved_leaves_every_fan_list(self):
+        await self.delete_while_saving(BOB)
+
+        alice = self.wrapped(FIRST, ALICE.id)
+        self.assertEqual({}, alice["users_fans"])
+        self.assertEqual({}, alice["fan_of_users"])
+
     async def test_a_member_who_deletes_is_not_ranked(self):
         """Bob is first with Alice gone, rather than ranked against a member who is not saved."""
         await self.delete_while_reading(ALICE)

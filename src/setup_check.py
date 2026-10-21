@@ -195,11 +195,15 @@ def rule_findings(server_config, member_count: int | None) -> list[Finding]:
                                                                       logic=command_refs.CUSTOM_EMOJI_CHECK_LOGIC)))
     # Total reactions can pass the member count, as one member can add several emojis
     counts_people = server_config.reaction_count_calculation_method != calculation_method_type.TOTAL_REACTIONS
-    if counts_people and member_count and server_config.reaction_threshold > member_count:
-        findings.append(Finding(WARN, messages.CHECK_THRESHOLD_UNREACHABLE_TITLE,
-                                messages.CHECK_THRESHOLD_UNREACHABLE.format(
-                                    threshold=server_config.reaction_threshold, members=member_count,
-                                    command=command_refs.SET_REACTION_THRESHOLD)))
+    # Without the author's own reaction, every member but the author is the most a message can get
+    counts_author = server_config.include_author_in_reaction_calculation
+    reachable = member_count if counts_author else (member_count or 0) - 1
+    if counts_people and member_count and server_config.reaction_threshold > reachable:
+        template = (messages.CHECK_THRESHOLD_UNREACHABLE if counts_author
+                    else messages.CHECK_THRESHOLD_UNREACHABLE_WITHOUT_AUTHOR)
+        findings.append(Finding(WARN, messages.CHECK_THRESHOLD_UNREACHABLE_TITLE, template.format(
+            threshold=server_config.reaction_threshold, members=member_count,
+            command=command_refs.SET_REACTION_THRESHOLD, include=command_refs.INCLUDE_AUTHORS_REACTION)))
     return findings
 
 

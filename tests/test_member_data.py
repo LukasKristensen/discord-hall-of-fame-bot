@@ -32,40 +32,48 @@ from tests.fakes import FakeConnection
 from tests.test_main import CommandTestCase, FakeInteraction, FakeUser, GUILD_ID
 from tests.test_server_config_repo import config_row
 
-PROFILE = {"posts": 47, "reactions": 1382, "servers": 3, "biggest_post": 120, "best_month": 11, "top_of_board": 2}
+PROFILE = {"posts": 47, "reactions": 1382, "servers": 3, "biggest_post": 120, "best_month": 11, "top_of_board": 2,
+           "other_servers": 2}
 
 
 class GlobalProfileRepoTests(unittest.TestCase):
     def test_maps_the_totals_by_name(self):
-        connection = FakeConnection(row=(47, 1382, 3, 120, 11, 2))
+        connection = FakeConnection(row=(47, 1382, 3, 120, 11, 2, 2))
 
         self.assertEqual(PROFILE, global_profile_repo.get_global_profile(connection, 77))
 
     def test_a_member_with_nothing_gets_zeros(self):
-        connection = FakeConnection(row=(0, None, 0, None, None, 0))
+        connection = FakeConnection(row=(0, None, 0, None, None, 0, 0))
 
         self.assertEqual({field: 0 for field in global_profile_repo.PROFILE_FIELDS},
                          global_profile_repo.get_global_profile(connection, 77))
 
     def test_returns_totals_only(self):
         """Nothing that could name or point to a server may leave the query."""
-        connection = FakeConnection(row=(1, 5, 1, 5, 1, 0))
+        connection = FakeConnection(row=(1, 5, 1, 5, 1, 0, 1))
         profile = global_profile_repo.get_global_profile(connection, 77)
 
         self.assertEqual(set(global_profile_repo.PROFILE_FIELDS), set(profile))
         self.assertNotIn("guild", " ".join(profile))
 
     def test_leaves_out_servers_that_opted_out(self):
-        connection = FakeConnection(row=(0, 0, 0, 0, 0, 0))
+        connection = FakeConnection(row=(0, 0, 0, 0, 0, 0, 0))
         global_profile_repo.get_global_profile(connection, 77)
 
         query = " ".join(connection.queries[0].split())
         self.assertIn("count_in_global_profiles", query)
-        self.assertEqual({"user_id": 77}, connection.parameters[0])
+        self.assertEqual({"user_id": 77, "guild_id": None}, connection.parameters[0])
+
+    def test_other_servers_leaves_out_the_server_it_is_looked_up_in(self):
+        connection = FakeConnection(row=(0, 0, 0, 0, 0, 0, 0))
+        global_profile_repo.get_global_profile(connection, 77, 200)
+
+        self.assertEqual({"user_id": 77, "guild_id": 200}, connection.parameters[0])
+        self.assertIn("IS DISTINCT FROM %(guild_id)s", connection.queries[0])
 
     def test_counts_every_post_so_the_totals_match_the_server_profiles(self):
         """No size or reaction filter, or a member's servers would not add up to their global card."""
-        connection = FakeConnection(row=(0, 0, 0, 0, 0, 0))
+        connection = FakeConnection(row=(0, 0, 0, 0, 0, 0, 0))
         global_profile_repo.get_global_profile(connection, 77)
 
         query = " ".join(connection.queries[0].split())
@@ -101,9 +109,13 @@ class OptOutWriteGuardTests(unittest.TestCase):
         ("hof_wrapped_repo", "insert_hof_wrapped"),
         # Only ever removes a member's ID from fan lists
         ("hof_wrapped_repo", "remove_from_fan_lists"),
-        # Rebuilt from stored posts alone, which an opted-out member gains none of
+        # Worked out from stored posts alone, and every post credited to an opted-out member was stored
+        # before they asked. Those earlier posts keep counting until the member deletes them, as /my_data
+        # tells them, so their standing can still be written or move as reactions come in, but no new post
+        # adds to it
         ("server_user_repo", "rebuild_user_stats_for_guild"),
-        # A choice the member makes themselves. /my_data offers it only while they have totals to hide
+        # A choice the member makes about themselves, which limits what is shown of them, so an opted-out
+        # member must be able to make it too. /my_data offers it only while they have totals to hide
         ("global_profile_repo", "set_hidden"),
         # The opt-out itself, the one record the bot keeps to honour it
         ("opt_out_repo", "set_opted_out"),
@@ -246,12 +258,16 @@ class GlobalProfileSectionTests(unittest.TestCase):
 
     def test_only_shown_when_it_says_more_than_the_server_profile(self):
         """When every post is from this server, the section would only repeat the card."""
-        self.assertFalse(commands.global_profile_adds_something(PROFILE, {"total_hall_of_fame_messages": 47}))
-        self.assertTrue(commands.global_profile_adds_something(PROFILE, {"total_hall_of_fame_messages": 40}))
+        self.assertFalse(commands.global_profile_adds_something(dict(PROFILE, servers=1, other_servers=0)))
+        self.assertTrue(commands.global_profile_adds_something(PROFILE))
+
+    def test_shown_when_the_counts_match_but_the_posts_are_from_elsewhere(self):
+        """Five posts here and five in a server that counts: equal numbers, but not the same posts."""
+        self.assertTrue(commands.global_profile_adds_something(dict(PROFILE, posts=5, servers=1, other_servers=1)))
 
     def test_not_shown_without_totals(self):
-        self.assertFalse(commands.global_profile_adds_something(None, {"total_hall_of_fame_messages": 40}))
-        self.assertFalse(commands.global_profile_adds_something(dict(PROFILE, posts=0), {}))
+        self.assertFalse(commands.global_profile_adds_something(None))
+        self.assertFalse(commands.global_profile_adds_something(dict(PROFILE, posts=0)))
 
 
 class MyDataExportTests(unittest.TestCase):
@@ -448,7 +464,7 @@ class UserProfileTotalsTests(CommandTestCase):
                    lambda *_args: {"total_hall_of_fame_messages": 40})
         self.patch(global_profile_repo, "is_hidden", lambda _connection, user_id: user_id in self.hidden)
 
-        def read_profile(_connection, user_id):
+        def read_profile(_connection, user_id, guild_id=None):
             self.profile_reads.append(user_id)
             return dict(PROFILE)
 
@@ -471,6 +487,26 @@ class UserProfileTotalsTests(CommandTestCase):
         timeouts = [query for query in self.pool.connection.queries if query.startswith("SET statement_timeout")]
         self.assertEqual(2, len(timeouts))
 
+    async def test_answers_before_reading_the_database(self):
+        """The queries can outlast the three seconds Discord waits for an answer."""
+        interaction = FakeInteraction()
+        deferred_first = []
+        self.patch(main.server_user_repo, "get_server_user",
+                   lambda *_args: deferred_first.append(interaction.response.deferred) or None)
+        await main.user_server_profile.callback(interaction, FakeUser(user_id=88))
+
+        self.assertEqual([True], deferred_first)
+        self.assertFalse(interaction.response.deferred_ephemeral)
+
+    async def test_reads_the_totals_for_the_server_it_is_used_in(self):
+        """So the totals can tell posts from other servers apart from this one's."""
+        servers = []
+        self.patch(global_profile_repo, "get_global_profile",
+                   lambda _connection, _user_id, guild_id=None: servers.append(guild_id) or dict(PROFILE))
+        await main.user_server_profile.callback(FakeInteraction(), FakeUser(user_id=88))
+
+        self.assertEqual([GUILD_ID], servers)
+
     async def test_leaves_hidden_totals_out_without_reading_them(self):
         self.hidden.add(88)
         await main.user_server_profile.callback(FakeInteraction(), FakeUser(user_id=88))
@@ -491,7 +527,7 @@ class UserProfileTotalsTests(CommandTestCase):
         await main.user_server_profile.callback(interaction, FakeUser(user_id=88))
 
         self.assertEqual([PROFILE], self.given)
-        self.assertEqual([], interaction.response.messages)
+        self.assertEqual([], interaction.followup.messages)
 
     async def test_no_data_anywhere_still_says_so(self):
         self.patch(main.server_user_repo, "get_server_user", lambda *_args: None)
@@ -500,7 +536,7 @@ class UserProfileTotalsTests(CommandTestCase):
         interaction = FakeInteraction()
         await main.user_server_profile.callback(interaction, FakeUser(user_id=88))
 
-        self.assertEqual([messages.PROFILE_NO_DATA], interaction.response.messages)
+        self.assertEqual([messages.PROFILE_NO_DATA], interaction.followup.messages)
         self.assertEqual([], self.given)
 
     async def test_hidden_totals_do_not_make_a_card_for_a_member_with_no_data_here(self):
@@ -510,7 +546,7 @@ class UserProfileTotalsTests(CommandTestCase):
         interaction = FakeInteraction()
         await main.user_server_profile.callback(interaction, FakeUser(user_id=88))
 
-        self.assertEqual([messages.PROFILE_NO_DATA], interaction.response.messages)
+        self.assertEqual([messages.PROFILE_NO_DATA], interaction.followup.messages)
 
     async def test_has_no_scope_option(self):
         names = [parameter.name for parameter in main.user_server_profile.parameters]
@@ -526,7 +562,7 @@ class UserProfileEmbedTests(unittest.IsolatedAsyncioTestCase):
         user.display_avatar = types.SimpleNamespace(url="https://example.com/a.png")
         await commands.user_server_profile(interaction, user, {"total_hall_of_fame_messages": total},
                                            connection, ":m:", ":a:", global_profile)
-        return interaction.response.messages[0]
+        return interaction.followup.messages[0]
 
     async def test_shows_three_columns_side_by_side(self):
         embed = await self.build(PROFILE)
@@ -570,7 +606,7 @@ class UserProfileEmbedTests(unittest.IsolatedAsyncioTestCase):
         await commands.user_server_profile(interaction, user, {"total_hall_of_fame_messages": 7,
                                                                "total_message_rank": 2},
                                            FakeConnection(row=None), ":m:", ":a:", None)
-        fields = {field.name: field.value for field in interaction.response.messages[0].fields}
+        fields = {field.name: field.value for field in interaction.followup.messages[0].fields}
 
         self.assertIn("**0** posts · -", fields["🏆 This month"])
         self.assertIn("**7** posts · #2", fields["🌟 All time"])
@@ -710,7 +746,7 @@ class MyDataPanelTestCase(CommandTestCase):
         """Open /my_data and press Delete, which swaps the summary for the confirmation"""
         _interaction, panel = await self.open_panel()
         pressed = await self.press(panel.delete_button)
-        return pressed.response.edits[0][1]
+        return pressed.original_edits[0][1]
 
 
 class MyDataPanelTests(MyDataPanelTestCase):
@@ -917,6 +953,37 @@ class DownloadMyDataTests(MyDataPanelTestCase):
 
         self.assertEqual([messages.MY_DATA_EXPORT_TOO_LARGE], sent)
 
+    async def test_a_user_install_outside_a_server_with_the_bot_takes_fewer_messages(self):
+        """Discord allows only 5 followups there, which the whole file and a failure notice share."""
+        self.posts = [dict(SAMPLE_POST, message_id=number) for number in range(400)]
+        self.patch(commands, "EXPORT_FILES_PER_MESSAGE", 1)
+        _interaction, view = await self.open_panel()
+        pressed, accepted = self.refusing_over(40_000)
+        pressed.guild_install = False
+        sent = []
+        refuse = pressed.followup.send
+
+        async def send(content=None, ephemeral=False, file=None, files=None, **kwargs):
+            if not files and file is None:
+                sent.append(content)
+                return
+            await refuse(content, ephemeral, file, files, **kwargs)
+
+        pressed.followup.send = send
+        await view.download_button.callback(pressed)
+
+        self.assertEqual([messages.MY_DATA_EXPORT_TOO_LARGE], sent)
+        self.assertEqual([], accepted)
+
+    def test_the_message_limit_follows_the_install(self):
+        server = FakeInteraction()
+        user_install = FakeInteraction()
+        user_install.guild_install = False
+
+        self.assertEqual(commands.EXPORT_MAX_MESSAGES, commands.export_max_messages(server))
+        self.assertEqual(commands.EXPORT_MAX_MESSAGES_USER_INSTALL, commands.export_max_messages(user_install))
+        self.assertLessEqual(commands.EXPORT_MAX_MESSAGES_USER_INSTALL + 2, 5)
+
     async def test_parts_are_not_sent_twice_when_a_later_message_is_refused(self):
         """Resending after some parts went out would leave the member with two sets that do not match."""
         self.posts = [dict(SAMPLE_POST, message_id=number) for number in range(400)]
@@ -989,7 +1056,7 @@ class TotalsAcrossServersButtonTests(MyDataPanelTestCase):
         pressed = await self.press(view.totals_button)
 
         self.assertEqual({77}, self.hidden)
-        content, new_view = pressed.response.edits[0]
+        content, new_view = pressed.original_edits[0]
         self.assertIn("Your totals across servers are hidden", content)
         self.assertIn("<t:", content)
         self.assertEqual(messages.SHOW_TOTALS_BUTTON, new_view.totals_button.label)
@@ -1001,7 +1068,7 @@ class TotalsAcrossServersButtonTests(MyDataPanelTestCase):
         pressed = await self.press(view.totals_button)
 
         self.assertEqual(set(), self.hidden)
-        self.assertIn(messages.MY_DATA_TOTALS_SHOWN, pressed.response.edits[0][0])
+        self.assertIn(messages.MY_DATA_TOTALS_SHOWN, pressed.original_edits[0][0])
 
     async def test_is_not_held_back_by_the_download_limit(self):
         main.start_daily_cooldown(77, "my_data")
@@ -1018,9 +1085,32 @@ class TotalsAcrossServersButtonTests(MyDataPanelTestCase):
         pressed = await self.press(view.totals_button)
 
         self.assertEqual(set(), self.hidden)
-        content, new_view = pressed.response.edits[0]
+        content, new_view = pressed.original_edits[0]
         self.assertIn("New messages of yours are not featured", content)
         self.assertNotIn(new_view.totals_button, new_view.children)
+
+    async def test_answers_the_button_before_reading_the_database(self):
+        """The summary is read twice around the change, which can outlast the three seconds Discord waits."""
+        _interaction, view = await self.open_panel()
+        button = FakeInteraction()
+        deferred_first = []
+        self.patch(hall_of_fame_message_repo, "count_messages_by_author",
+                   lambda *_args: deferred_first.append(button.response.deferred) or len(self.posts))
+        await view.totals_button.callback(button)
+
+        self.assertEqual([True, True], deferred_first)
+
+    async def test_a_failure_is_reported(self):
+        _interaction, view = await self.open_panel()
+
+        def fail(*_args, **_kwargs):
+            raise RuntimeError("canceling statement due to statement timeout")
+
+        self.patch(global_profile_repo, "set_hidden", fail)
+        pressed = await self.press(view.totals_button)
+
+        self.assertEqual([(messages.COMMAND_FAILED, None)], pressed.original_edits)
+        self.assertTrue(any("Error changing whether a member's totals are hidden" in entry for entry in self.logged))
 
 
 class DeleteMyDataTests(MyDataPanelTestCase):
@@ -1028,7 +1118,7 @@ class DeleteMyDataTests(MyDataPanelTestCase):
         _interaction, panel = await self.open_panel()
         pressed = await self.press(panel.delete_button)
 
-        content, view = pressed.response.edits[0]
+        content, view = pressed.original_edits[0]
         self.assertEqual(messages.DELETE_MY_DATA_CONFIRM, content)
         self.assertIsInstance(view, ConfirmDeleteView)
         self.assertEqual([], self.calls)
@@ -1096,8 +1186,9 @@ class DeleteMyDataTests(MyDataPanelTestCase):
         _interaction, panel = await self.open_panel()
         pressed = await self.press(panel.delete_button)
 
-        self.assertEqual([messages.MY_DATA_DELETE_ON_COOLDOWN], pressed.response.messages)
-        self.assertEqual([], pressed.response.edits)
+        self.assertEqual([messages.MY_DATA_DELETE_ON_COOLDOWN], pressed.followup.messages)
+        self.assertEqual([True], pressed.followup.ephemeral)
+        self.assertEqual([], pressed.original_edits)
 
     async def test_is_not_held_back_by_the_download_limit(self):
         main.start_daily_cooldown(77, "my_data")
@@ -1116,15 +1207,36 @@ class DeleteMyDataTests(MyDataPanelTestCase):
     async def test_the_confirmation_warns_that_the_choice_not_to_be_featured_goes_too(self):
         self.opted_out.add(77)
         _interaction, panel = await self.open_panel()
-        content = (await self.press(panel.delete_button)).response.edits[0][0]
+        content = (await self.press(panel.delete_button)).original_edits[0][0]
 
         self.assertTrue(content.endswith(messages.DELETE_MY_DATA_CONFIRM_OPT_OUT))
 
     async def test_the_confirmation_says_nothing_about_featuring_to_a_featured_member(self):
         _interaction, panel = await self.open_panel()
-        content = (await self.press(panel.delete_button)).response.edits[0][0]
+        content = (await self.press(panel.delete_button)).original_edits[0][0]
 
         self.assertEqual(messages.DELETE_MY_DATA_CONFIRM, content)
+
+    async def test_the_warning_follows_an_opt_out_made_since_the_panel_opened(self):
+        """A panel opened before the member opted out from another /my_data must still warn."""
+        _interaction, panel = await self.open_panel()
+        self.opted_out.add(77)
+        content = (await self.press(panel.delete_button)).original_edits[0][0]
+
+        self.assertTrue(content.endswith(messages.DELETE_MY_DATA_CONFIRM_OPT_OUT))
+
+    async def test_a_failure_reading_the_summary_is_reported(self):
+        _interaction, panel = await self.open_panel()
+
+        def fail(*_args):
+            raise RuntimeError("database went away")
+
+        self.patch(hall_of_fame_message_repo, "count_messages_by_author", fail)
+        pressed = await self.press(panel.delete_button)
+
+        self.assertEqual([(messages.COMMAND_FAILED, None)], pressed.original_edits)
+        self.assertEqual([], self.calls)
+        self.assertTrue(panel.is_finished())
 
 
 class StopFeaturingTests(MyDataPanelTestCase):
@@ -1207,7 +1319,7 @@ class StopFeaturingTests(MyDataPanelTestCase):
         _interaction, view = await self.open_panel()
         pressed = await self.press(view.totals_button)
 
-        self.assertFalse(pressed.response.edits[0][1].delete_button.disabled)
+        self.assertFalse(pressed.original_edits[0][1].delete_button.disabled)
 
     async def test_is_not_held_back_by_the_cooldowns(self):
         main.start_daily_cooldown(77, "delete_my_data")
@@ -1297,6 +1409,19 @@ class WrappedWithoutTheAuthorTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual([], fetched)
 
+    def test_a_member_who_deleted_while_rows_were_saved_is_deleted_again(self):
+        """Saving takes a while, so a deletion in the middle would otherwise be undone by the rows after it."""
+        import hof_wrapped
+        deleted = []
+        with unittest.mock.patch.object(hof_wrapped, "users", {77: object(), 88: object()}), \
+                unittest.mock.patch.object(hof_wrapped.hall_of_fame_message_repo, "find_members_for_guild",
+                                           lambda *_args: [88]), \
+                unittest.mock.patch.object(hof_wrapped.hof_wrapped_repo, "delete_hof_wrapped_for_user",
+                                           lambda _connection, user_id: deleted.append(user_id)):
+            hof_wrapped.forget_members_who_deleted_meanwhile(FakeConnection(), 200)
+
+        self.assertEqual([77], deleted)
+
 
 class NotFeaturedPostingTests(unittest.IsolatedAsyncioTestCase):
     async def test_a_message_by_a_member_who_is_not_featured_is_neither_posted_nor_stored(self):
@@ -1376,7 +1501,7 @@ class UserProfileOutsideServerTests(CommandTestCase):
         self.profile_reads = []
         self.patch(global_profile_repo, "is_hidden", lambda _connection, user_id: user_id in self.hidden)
 
-        def read_profile(_connection, user_id):
+        def read_profile(_connection, user_id, guild_id=None):
             self.profile_reads.append(user_id)
             return self.profile
 
@@ -1644,6 +1769,23 @@ class FeaturingFailureTests(MyDataPanelTestCase):
         pressed = await self.press(button.original_edits[0][1].children[0])
 
         self.assertEqual([(messages.COMMAND_FAILED, None)], pressed.original_edits)
+
+    async def test_a_failure_reading_the_panel_again_still_says_the_change_worked(self):
+        """The opt-out is stored by then, so the member hears that, rather than a stale panel or nothing."""
+        _interaction, view = await self.open_panel()
+
+        def fail_after_the_change(*_args):
+            if self.opted_out:
+                raise RuntimeError("canceling statement due to statement timeout")
+            return len(self.posts)
+
+        self.patch(hall_of_fame_message_repo, "count_messages_by_author", fail_after_the_change)
+        pressed = await self.press(view.featuring_button)
+
+        self.assertEqual({77}, self.opted_out)
+        self.assertEqual([(messages.STOPPED_FEATURING, None)], pressed.original_edits)
+        self.assertTrue(view.is_finished())
+        self.assertTrue(any("after changing whether they are featured" in entry for entry in self.logged))
 
     async def test_stopping_records_the_opt_out_and_clears_the_fan_lists_together(self):
         cleared = []

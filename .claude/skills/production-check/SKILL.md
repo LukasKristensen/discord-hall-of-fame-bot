@@ -78,7 +78,9 @@ This is a review. Report findings first and fix only what the user agrees to, as
   repositories, so no caller can skip it: `insert_hall_of_fame_message` stores author 0 for them and
   `insert_hof_wrapped` stores nothing and strips them from fan lists, both in the same SQL statement as
   the write. Any new or changed write of `user_id` or `author_id` must do the same, or only ever remove a
-  member's ID. A caller-side check is not enough on its own.
+  member's ID. A caller-side check is not enough on its own. The one exception is a choice the member
+  makes about themselves (the opt-out itself, hiding their totals), which an opted-out member must be
+  able to make too.
 - Data worked out from stored rows, such as the daily stats rebuild, may only use rows stored before
   the member opted out. Anything read live from Discord, such as Wrapped counting reactions, must leave
   them out.

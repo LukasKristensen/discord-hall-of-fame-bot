@@ -90,7 +90,7 @@ class BotMember(str):
 
 def server_config(**overrides):
     values = dict(allow_messages_in_hof_channel=False, custom_emoji_check_logic=False, whitelisted_emojis=[],
-                  reaction_threshold=5,
+                  reaction_threshold=5, include_author_in_reaction_calculation=True,
                   reaction_count_calculation_method=calculation_method_type.MOST_REACTIONS_ON_EMOJI)
     values.update(overrides)
     return types.SimpleNamespace(**values)
@@ -270,6 +270,22 @@ class RuleFindingTests(unittest.TestCase):
 
     def test_an_unknown_member_count_is_not_flagged(self):
         self.assertEqual([], setup_check.rule_findings(server_config(reaction_threshold=12), None))
+
+    def test_a_threshold_of_every_member_can_be_reached_when_the_author_counts(self):
+        self.assertEqual([], setup_check.rule_findings(server_config(reaction_threshold=8), 8))
+
+    def test_without_the_authors_reaction_every_member_is_one_too_many(self):
+        """The author's own reaction does not count, so the other members are the most a message can get."""
+        config = server_config(reaction_threshold=8, include_author_in_reaction_calculation=False)
+        [finding] = setup_check.rule_findings(config, 8)
+
+        self.assertEqual(setup_check.WARN, finding.level)
+        self.assertIn(command_refs.INCLUDE_AUTHORS_REACTION, finding.detail)
+
+    def test_without_the_authors_reaction_one_below_the_member_count_is_fine(self):
+        config = server_config(reaction_threshold=7, include_author_in_reaction_calculation=False)
+
+        self.assertEqual([], setup_check.rule_findings(config, 8))
 
 
 class ActivityFindingTests(unittest.TestCase):

@@ -792,11 +792,12 @@ class OptOutGuardPerMethodTests(MemberDataDeletionTestCase):
         panel.refresh()
         edits = []
 
-        async def edit_message(content=None, view=None):
+        async def edit_original_response(content=None, view=None):
             edits.append(content)
 
         await panel.totals_button.callback(types.SimpleNamespace(
-            user=types.SimpleNamespace(id=NOBODY), response=types.SimpleNamespace(edit_message=edit_message)))
+            user=types.SimpleNamespace(id=NOBODY), response=types.SimpleNamespace(defer=nothing),
+            edit_original_response=edit_original_response))
 
         self.assertFalse(global_profile_repo.is_hidden(self.connection, NOBODY))
 

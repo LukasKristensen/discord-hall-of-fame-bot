@@ -268,9 +268,13 @@ CHECK_CHANNELS_MOSTLY_CLOSED = ("The bot cannot read {channels}\n"
 CHECK_EMPTY_WHITELIST_TITLE = "No emoji can count"
 CHECK_EMPTY_WHITELIST = ("Only whitelisted emojis count, and the whitelist is empty. Add one with {whitelist}, "
                          "or count every emoji with {logic}.")
-CHECK_THRESHOLD_UNREACHABLE_TITLE = "The threshold is higher than the member count"
+CHECK_THRESHOLD_UNREACHABLE_TITLE = "No message can reach the threshold"
 CHECK_THRESHOLD_UNREACHABLE = ("A message needs {threshold} reactions, but the server has {members} members, so "
                                "none can reach it. Lower it with {command}.")
+CHECK_THRESHOLD_UNREACHABLE_WITHOUT_AUTHOR = ("A message needs {threshold} reactions, but the server has {members} "
+                                              "members and the author's own reaction does not count, so none can "
+                                              "reach it. Lower it with {command}, or count the author's reaction "
+                                              "with {include}.")
 CHECK_DAILY_LIMIT_TITLE = "Daily post limit reached"
 CHECK_DAILY_LIMIT = "The board has had {limit} posts today, the most allowed in a day. Posting resumes at midnight UTC."
 CHECK_NO_POSTS_TITLE = "No posts yet"

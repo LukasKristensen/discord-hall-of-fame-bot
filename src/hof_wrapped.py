@@ -354,6 +354,21 @@ async def main(guild_id: int, bot: commands.Bot, get_reaction_threshold: int, co
 
     for user in users.values():
         save_user_wrapped_to_db(guild.id, user, version.WRAPPED_YEAR)
+    forget_members_who_deleted_meanwhile(connection, guild_id)
+
+
+def forget_members_who_deleted_meanwhile(connection, guild_id: int):
+    """
+    Delete the Wrapped of members who deleted their data while the rows above were being saved, which
+    would otherwise give them their own row and their place in other members' fan lists back. Checked
+    once every row is saved: a deletion before this check is finished here, and one after it removes the
+    saved rows itself. Members who asked not to be featured were left out of users before saving
+    :param connection: The database connection
+    :param guild_id: The server whose Wrapped was just saved
+    """
+    still_authors = set(hall_of_fame_message_repo.find_members_for_guild(connection, guild_id))
+    for user_id in set(users) - still_authors:
+        hof_wrapped_repo.delete_hof_wrapped_for_user(connection, user_id)
 
 def create_server_embed(guild, users):
     user_list = list(users)

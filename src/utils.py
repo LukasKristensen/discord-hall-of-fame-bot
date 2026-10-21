@@ -432,6 +432,10 @@ async def build_post_embed(message: discord.Message, connection, config: dict = 
         except discord.HTTPException:
             # The message that was replied to is gone, so the reply is embedded on its own
             reference_message = None
+    # A member who asked not to be featured is left off the board in replies too: their name, words and
+    # image would otherwise go up with the reply. The reply is embedded on its own instead
+    if reference_message is not None and opt_out_repo.is_opted_out(connection, reference_message.author.id):
+        reference_message = None
     reference_content = truncate_content(reference_message.content) if reference_message else ""
     corrected_reactions = await reaction_count(message, connection, config)
     top_reaction = most_reacted_emoji(message.reactions, message.guild.id, connection, config)
@@ -779,13 +783,15 @@ async def logging(bot: discord.Client, message, server_id=None, new_value=None, 
 
 
 # noinspection PyTypeChecker
-async def create_feedback_form(interaction: discord.Interaction, bot, on_sent=None):
+async def create_feedback_form(interaction: discord.Interaction, bot, on_sent=None, refusal=None):
     """
     Create a feedback form for the user and send the feedback to the feedback channel
     :param interaction:
     :param bot:
     :param on_sent: Called with the member's user ID once the feedback reached the channel, so a form
         that is closed or fails does not count toward the member's daily limit
+    :param refusal: Called with the member's user ID when the form is submitted. Returns what to answer
+        instead of sending it, such as the daily limit being reached while other forms were open, or None
     :return:
     """
     class FeedbackModal(discord.ui.Modal, title="Feedback Form"):
@@ -804,6 +810,10 @@ async def create_feedback_form(interaction: discord.Interaction, bot, on_sent=No
         )
 
         async def on_submit(self, feedback_interaction) -> None:
+            refused = refusal(feedback_interaction.user.id) if refusal is not None else None
+            if refused:
+                await feedback_interaction.response.send_message(refused, ephemeral=True)
+                return
             target_guild = bot.get_guild(1180006529575960616)
             target_channel = target_guild.get_channel(1345558910836412456)
             embed = discord.Embed(

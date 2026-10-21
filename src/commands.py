@@ -212,14 +212,14 @@ async def user_server_profile(interaction, user, user_stats, connection, month_e
     :param month_emoji:
     :param all_time_emoji:
     :param global_profile: The member's totals across every server, or None when hidden or not wanted
-    :return:
+    :return: None. The command was deferred, so the card goes out as its followup
     """
     user_has_most_this_month_hall_of_fame_messages = server_user_repo.check_if_user_is_top_of_stat(
         connection, user.id, interaction.guild.id, "this_month_hall_of_fame_messages")
     user_with_most_all_time_hall_of_fame_messages = server_user_repo.check_if_user_is_top_of_stat(
         connection, user.id, interaction.guild.id, "total_hall_of_fame_messages")
 
-    show_global = global_profile_adds_something(global_profile, user_stats)
+    show_global = global_profile_adds_something(global_profile)
     embed = discord.Embed(
         title=f"📊 {user.name}'s Hall of Fame Profile",
         description=f"Stats for **{interaction.guild.name}**"
@@ -262,7 +262,7 @@ async def user_server_profile(interaction, user, user_stats, connection, month_e
             embed.add_field(name=messages.HIGHLIGHTS_HEADING, value=value, inline=False)
     embed.set_thumbnail(url=user.display_avatar.url)
     embed.set_footer(text=messages.GLOBAL_STATS_FOOTER if show_global else messages.STATS_FOOTER)
-    await interaction.response.send_message(embed=embed)
+    await interaction.followup.send(embed=embed)
 
 
 def build_global_profile_embed(user, global_profile: dict) -> discord.Embed:
@@ -435,16 +435,15 @@ def _stat_column(posts: int, posts_rank, reactions: int, reactions_rank) -> str:
     return f"{ranked(posts, 'posts', posts_rank)}\n{ranked(reactions, 'reactions', reactions_rank)}"
 
 
-def global_profile_adds_something(global_profile: dict, user_stats: dict) -> bool:
+def global_profile_adds_something(global_profile: dict) -> bool:
     """
-    Whether the totals across servers say more than the server profile above them. When every
-    counted post is from this server the two match, and the section would only repeat the card
-    :param global_profile: The totals from global_profile_repo.get_global_profile, or None
-    :param user_stats: The member's row in this server
+    Whether the totals across servers say more than the server profile above them: only when the
+    member has counted posts in another server. With every counted post from this server, the section
+    would only repeat the card
+    :param global_profile: The totals from global_profile_repo.get_global_profile, read with this
+        server's ID so other_servers leaves it out, or None when hidden
     """
-    if not global_profile or not global_profile["posts"]:
-        return False
-    return global_profile["posts"] != (user_stats or {}).get("total_hall_of_fame_messages", 0)
+    return bool(global_profile and global_profile["posts"] and global_profile["other_servers"])
 
 
 def global_profile_column_value(profile: dict) -> str:
@@ -479,6 +478,15 @@ EXPORT_FILES_PER_MESSAGE = 10
 # Followups only work for 15 minutes after the button press, and a member should not get a flood of
 # messages. Past this, the export goes through the support server instead
 EXPORT_MAX_MESSAGES = 10
+# Discord allows only 5 followups per interaction when the bot is reached through a user install where it
+# is not installed: a DM, or a server without Hall of Fame. One goes to the whole file tried first and one
+# is kept for saying that sending failed, which leaves 3 for the parts
+EXPORT_MAX_MESSAGES_USER_INSTALL = 3
+
+
+def export_max_messages(interaction: discord.Interaction) -> int:
+    """How many messages a split export may take on this button press"""
+    return EXPORT_MAX_MESSAGES if interaction.is_guild_integration() else EXPORT_MAX_MESSAGES_USER_INSTALL
 
 
 class ExportTooLarge(Exception):

@@ -97,7 +97,18 @@ class CheckVideoExtensionTests(unittest.TestCase):
         self.assertEqual("https://cdn.discordapp.com/a/clip.mp4", utils.check_video_extension(message))
 
 
-class CreateEmbedTests(unittest.IsolatedAsyncioTestCase):
+class EmbedTestCase(unittest.IsolatedAsyncioTestCase):
+    """Building posts without a database: the replied-to author is checked against self.opted_out"""
+
+    def setUp(self):
+        self.opted_out = set()
+        patcher = mock.patch.object(utils.opt_out_repo, "is_opted_out",
+                                    lambda _connection, user_id: user_id in self.opted_out)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+
+class CreateEmbedTests(EmbedTestCase):
     @staticmethod
     def field_names(embed):
         return [field.name for field in embed.fields]
@@ -127,7 +138,7 @@ class CreateEmbedTests(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(field.value, f"Field {field.name} has an empty value")
 
 
-class PostFooterTests(unittest.IsolatedAsyncioTestCase):
+class PostFooterTests(EmbedTestCase):
     async def test_every_post_layout_carries_the_footer(self):
         referenced_message = FakeEmbedMessage(content="original text", author_name="original")
         sticker_message = FakeEmbedMessage(content="nice")
@@ -190,7 +201,7 @@ def embed_with(type_name=None, url=None, image_url=None, thumbnail_url=None):
     )
 
 
-class CreateEmbedContentTests(unittest.IsolatedAsyncioTestCase):
+class CreateEmbedContentTests(EmbedTestCase):
     @staticmethod
     def field_named(embed, name):
         return next((field for field in embed.fields if field.name == name), None)
@@ -279,6 +290,22 @@ class CreateEmbedContentTests(unittest.IsolatedAsyncioTestCase):
         embed = await utils.create_embed(message, 5, None, REACTION_CONFIG)
 
         self.assertEqual("https://cdn/original.png", embed.image.url)
+
+    async def test_a_reply_to_a_member_who_is_not_featured_leaves_them_out(self):
+        """Their name, words and image would otherwise reach the board with someone else's reply."""
+        referenced_message = FakeEmbedMessage(content="their words", author_name="not featured",
+                                              attachments=[FakeAttachment("https://cdn/theirs.png", "image/png")])
+        referenced_message.author.id = 55
+        self.opted_out.add(55)
+        message = FakeEmbedMessage(content="my reply", reference_message_id=42,
+                                   channel=FakeChannel(referenced_message))
+        embed = await utils.create_embed(message, 5, None, REACTION_CONFIG)
+
+        shown = " ".join([embed.description or ""] + [f"{field.name} {field.value}" for field in embed.fields])
+        self.assertIn("my reply", shown)
+        self.assertNotIn("their words", shown)
+        self.assertNotIn("not featured", shown)
+        self.assertNotEqual("https://cdn/theirs.png", embed.image.url)
 
 
 if __name__ == "__main__":

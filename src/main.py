@@ -598,11 +598,22 @@ async def configure_bot(interaction: discord.Interaction,
 @tree.command(name="feedback", description="Send feedback to the developer")
 @user_install
 async def send_feedback(interaction: discord.Interaction):
-    if daily_uses(interaction.user.id, "feedback") >= feedback_daily_limit:
-        await send_error(interaction, messages.FEEDBACK_ON_COOLDOWN.format(limit=feedback_daily_limit))
+    refused = feedback_refusal(interaction.user.id)
+    if refused:
+        await send_error(interaction, refused)
         return
     await utils.create_feedback_form(interaction, bot,
-                                     on_sent=lambda user_id: start_daily_cooldown(user_id, "feedback"))
+                                     on_sent=lambda user_id: start_daily_cooldown(user_id, "feedback"),
+                                     refusal=feedback_refusal)
+
+def feedback_refusal(user_id: int):
+    """
+    Why a member may not send feedback right now, or None when they may. Asked when the form opens and
+    again when it is sent, since several forms can be open at once and each was allowed when it opened
+    """
+    if daily_uses(user_id, "feedback") >= feedback_daily_limit:
+        return messages.FEEDBACK_ON_COOLDOWN.format(limit=feedback_daily_limit)
+    return None
 
 @tree.command(name="include_authors_reaction", description="Should the author's own reaction be included in the reaction threshold calculation?")
 async def include_author_own_reaction_in_threshold(interaction: discord.Interaction, include: bool):
@@ -818,8 +829,17 @@ async def run_setup_check(interaction: discord.Interaction):
     # The activity query can outlast the three seconds Discord waits for an answer
     # noinspection PyUnresolvedReferences
     await interaction.response.defer(ephemeral=True)
-    async with get_db_connection(connection_pool) as connection:
-        activity = hall_of_fame_message_repo.get_post_activity(connection, interaction.guild_id)
+    try:
+        async with get_db_connection(connection_pool) as connection:
+            # It counts every post in the server, so a huge board is cut off rather than left to stall the bot
+            with utils.statement_timeout(connection, data_command_statement_timeout_ms):
+                activity = hall_of_fame_message_repo.get_post_activity(connection, interaction.guild_id)
+    except Exception as e:
+        # The Check setup button has no command error handler behind it, so the admin is answered here
+        await send_error(interaction, messages.COMMAND_FAILED)
+        await utils.logging(bot, f"Error reading the post activity for the setup check: {e}", interaction.guild_id,
+                            log_level=log_type.ERROR)
+        return
 
     board_channel = guild.get_channel(server_class.hall_of_fame_channel_id)
     findings = setup_check.check_server(guild, board_channel, server_class, activity, utils.daily_post_limit)
@@ -948,19 +968,22 @@ async def user_server_profile(interaction: discord.Interaction, specific_user: d
         await answer_profile_outside_server(interaction, user)
         return
 
+    # Answered first, since the badges and highlights below read every post in the server and can
+    # outlast the three seconds Discord waits for an answer
+    # noinspection PyUnresolvedReferences
+    await interaction.response.defer()
     async with get_db_connection(connection_pool) as connection:
         with utils.statement_timeout(connection, data_command_statement_timeout_ms):
             user_stats = server_user_repo.get_server_user(connection, user.id, interaction.guild_id)
             # The profile is posted in the channel, so a member who hid their totals has them left out
             # even when they look themselves up
             global_profile = (None if global_profile_repo.is_hidden(connection, user.id)
-                              else global_profile_repo.get_global_profile(connection, user.id))
+                              else global_profile_repo.get_global_profile(connection, user.id, interaction.guild_id))
 
     # A member featured only in other servers still has a card worth showing: zeros for this
     # server, and their totals across servers below
-    if user_stats is None and not commands.global_profile_adds_something(global_profile, None):
-        # noinspection PyUnresolvedReferences
-        await interaction.response.send_message(messages.PROFILE_NO_DATA)
+    if user_stats is None and not commands.global_profile_adds_something(global_profile):
+        await interaction.followup.send(messages.PROFILE_NO_DATA)
         await utils.logging(bot, f"User server profile command used in a server but no data available for the member looked up",
                             interaction.guild.id, log_level=log_type.COMMAND)
         return
@@ -1170,7 +1193,7 @@ async def my_data(interaction: discord.Interaction):
             try:
                 files = commands.split_my_data_export(document, max_bytes=budget)
                 batches = commands.batch_export_files(files, max_bytes=budget)
-                if len(batches) > commands.EXPORT_MAX_MESSAGES:
+                if len(batches) > commands.export_max_messages(button_interaction):
                     raise commands.ExportTooLarge(f"{len(files)} files in {len(batches)} messages")
             except commands.ExportTooLarge as e:
                 await button_interaction.followup.send(messages.MY_DATA_EXPORT_TOO_LARGE, ephemeral=True)
@@ -1201,28 +1224,50 @@ async def my_data(interaction: discord.Interaction):
 
     async def toggle_totals(button_interaction: discord.Interaction, view):
         hide = view.summary["hidden_since"] is None
-        # A /my_data opened earlier can still show this button to a member who since has no totals,
-        # and storing the choice then would keep data about them for nothing
-        stored = commands.has_totals(await read_my_data_summary(user_id))
-        if stored:
-            async with get_db_connection(connection_pool) as connection:
-                global_profile_repo.set_hidden(connection, user_id, hide)
-        # Read again rather than patched, so a /my_data opened before the member deleted their data or
-        # opted out shows what is stored now
-        view.summary = await read_my_data_summary(user_id)
-        view.refresh()
+        # Answered first, since the summary is read twice around the change, which can outlast the three
+        # seconds Discord waits for a button to be answered
         # noinspection PyUnresolvedReferences
-        await button_interaction.response.edit_message(content=commands.my_data_summary(view.summary), view=view)
+        await button_interaction.response.defer()
+        try:
+            # A /my_data opened earlier can still show this button to a member who since has no totals,
+            # and storing the choice then would keep data about them for nothing
+            stored = commands.has_totals(await read_my_data_summary(user_id))
+            if stored:
+                async with get_db_connection(connection_pool) as connection:
+                    global_profile_repo.set_hidden(connection, user_id, hide)
+            # Read again rather than patched, so a /my_data opened before the member deleted their data or
+            # opted out shows what is stored now
+            view.summary = await read_my_data_summary(user_id)
+        except Exception as e:
+            await button_interaction.edit_original_response(content=messages.COMMAND_FAILED, view=None)
+            await utils.logging(bot, f"Error changing whether a member's totals are hidden: {e}",
+                                interaction.guild_id, log_level=log_type.ERROR)
+            return
+        view.refresh()
+        await button_interaction.edit_original_response(content=commands.my_data_summary(view.summary), view=view)
         if stored:
             await utils.logging(bot, f"A member {'hid' if hide else 'showed'} their totals across servers",
                                 interaction.guild_id, log_level=log_type.COMMAND)
 
     async def delete(button_interaction: discord.Interaction, view):
+        # Answered first, since the summary is read again below
+        # noinspection PyUnresolvedReferences
+        await button_interaction.response.defer()
+        try:
+            # Read again rather than taken from the panel, which may have been opened before the member
+            # opted out from another /my_data, so the confirmation always warns when that choice goes too
+            summary = await read_my_data_summary(user_id)
+        except Exception as e:
+            view.finished = True
+            view.stop()
+            await button_interaction.edit_original_response(content=messages.COMMAND_FAILED, view=None)
+            await utils.logging(bot, f"Error reading a member's data before deleting it: {e}", interaction.guild_id,
+                                log_level=log_type.ERROR)
+            return
         # Limited because a deletion scans every table for the member. With no rows stored there is
         # nothing to scan, so a member who just deleted can still come back and stop being featured
-        if commands.has_stored_rows(view.summary) and on_daily_cooldown(user_id, "delete_my_data"):
-            # noinspection PyUnresolvedReferences
-            await button_interaction.response.send_message(messages.MY_DATA_DELETE_ON_COOLDOWN, ephemeral=True)
+        if commands.has_stored_rows(summary) and on_daily_cooldown(user_id, "delete_my_data"):
+            await button_interaction.followup.send(messages.MY_DATA_DELETE_ON_COOLDOWN, ephemeral=True)
             return
         # The summary gives way to the confirmation, so its own buttons stop here
         view.finished = True
@@ -1230,11 +1275,10 @@ async def my_data(interaction: discord.Interaction):
         confirm_view = commands.ConfirmDeleteView(user_id, confirmed)
         confirm_view.original_interaction = interaction
         content = messages.DELETE_MY_DATA_CONFIRM
-        if view.summary["opted_out_since"]:
+        if summary["opted_out_since"]:
             # Deleting everything includes the record that keeps their messages off the boards
             content += " " + messages.DELETE_MY_DATA_CONFIRM_OPT_OUT
-        # noinspection PyUnresolvedReferences
-        await button_interaction.response.edit_message(content=content, view=confirm_view)
+        await button_interaction.edit_original_response(content=content, view=confirm_view)
 
     async def toggle_featuring(button_interaction: discord.Interaction, view):
         stop = view.summary["opted_out_since"] is None
@@ -1253,9 +1297,19 @@ async def my_data(interaction: discord.Interaction):
             await utils.logging(bot, f"Error changing whether a member is featured: {e}", interaction.guild_id,
                                 log_level=log_type.ERROR)
             return
-        view.summary = await read_my_data_summary(user_id)
-        view.refresh()
         note = messages.STOPPED_FEATURING if stop else messages.COUNTED_AGAIN
+        try:
+            view.summary = await read_my_data_summary(user_id)
+        except Exception as e:
+            # The change is stored, so the member hears that it worked, and the panel goes rather than
+            # being left showing the old choice
+            view.finished = True
+            view.stop()
+            await button_interaction.edit_original_response(content=note, view=None)
+            await utils.logging(bot, f"Error reading a member's data after changing whether they are featured: {e}",
+                                interaction.guild_id, log_level=log_type.ERROR)
+            return
+        view.refresh()
         await button_interaction.edit_original_response(
             content=commands.my_data_summary(view.summary, note=note), view=view)
         await utils.logging(bot, "A member asked not to be featured" if stop else "A member asked to be featured again",
@@ -1323,7 +1377,7 @@ async def leaderboard(interaction: discord.Interaction):
         await send_error(interaction, messages.ERROR_SERVER_NOT_SETUP)
         return
 
-    if "leaderboard" in daily_command_cooldowns.get(interaction.user.id, []):
+    if on_daily_cooldown(interaction.user.id, "leaderboard"):
         await send_error(interaction, messages.COMMAND_ON_COOLDOWN)
         await utils.logging(bot, f"Leaderboard command on cooldown in a server",
                             interaction.guild.id, log_level=log_type.COMMAND)
@@ -1339,7 +1393,7 @@ async def leaderboard(interaction: discord.Interaction):
             return
 
     # Only put the command on cooldown once it actually produced a leaderboard
-    daily_command_cooldowns.setdefault(interaction.user.id, []).append("leaderboard")
+    start_daily_cooldown(interaction.user.id, "leaderboard")
 
     await utils.logging(bot, f"Leaderboard command used in a server",
                         interaction.guild.id, log_level=log_type.COMMAND)

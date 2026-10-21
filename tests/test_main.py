@@ -96,9 +96,14 @@ class FakeInteraction:
         self.followup = FakeFollowup()
         self.command = types.SimpleNamespace(name="test_command")
         self.original_edits = []
+        # Reached through the server's own install of the bot, rather than a member's user install
+        self.guild_install = True
 
     async def edit_original_response(self, content=None, view=None):
         self.original_edits.append((content, view))
+
+    def is_guild_integration(self):
+        return self.guild_install
 
     @property
     def replies(self):
@@ -1162,6 +1167,7 @@ def outside_a_server(interaction, guild_id=None):
     """A user install answers in a DM (no guild) or in a server the bot is not in."""
     interaction.guild_id = guild_id
     interaction.guild = None
+    interaction.guild_install = False
     return interaction
 
 
@@ -1186,9 +1192,11 @@ class FeedbackCooldownTests(MainTestCase):
         super().setUp()
         self.patch(main, "daily_command_cooldowns", {})
         self.forms = []
+        self.refusals = []
 
-        async def open_form(interaction, _bot, on_sent=None):
+        async def open_form(interaction, _bot, on_sent=None, refusal=None):
             self.forms.append(on_sent)
+            self.refusals.append(refusal)
 
         self.patch(utils, "create_feedback_form", open_form)
 
@@ -1240,11 +1248,22 @@ class FeedbackCooldownTests(MainTestCase):
         self.assertEqual(main.feedback_daily_limit + 1, len(self.forms))
         self.assertEqual([], other.response.messages)
 
+    async def test_forms_opened_together_are_checked_again_when_sent(self):
+        """Every form passes the check when it opens, so the limit is asked again on submit."""
+        for _ in range(main.feedback_daily_limit + 1):
+            await main.send_feedback.callback(FakeInteraction())
+        for on_sent, refusal in list(zip(self.forms, self.refusals))[:main.feedback_daily_limit]:
+            self.assertIsNone(refusal(77))
+            on_sent(77)
+
+        self.assertEqual(messages.FEEDBACK_ON_COOLDOWN.format(limit=main.feedback_daily_limit),
+                         self.refusals[-1](77))
+
 
 class FeedbackFormTests(unittest.IsolatedAsyncioTestCase):
     """The form reports the send back only once the feedback reached the developer channel."""
 
-    async def open_form(self, on_sent):
+    async def open_form(self, on_sent, refusal=None):
         modals = []
         interaction = types.SimpleNamespace(response=types.SimpleNamespace())
 
@@ -1252,7 +1271,7 @@ class FeedbackFormTests(unittest.IsolatedAsyncioTestCase):
             modals.append(modal)
 
         interaction.response.send_modal = send_modal
-        await utils.create_feedback_form(interaction, self.bot, on_sent=on_sent)
+        await utils.create_feedback_form(interaction, self.bot, on_sent=on_sent, refusal=refusal)
         return modals[0]
 
     def setUp(self):
@@ -1289,6 +1308,24 @@ class FeedbackFormTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual([77], sent)
         self.assertEqual(1, len(self.posted))
         self.assertIn("user install", [field.value for field in self.posted[0].fields][2])
+
+    async def test_a_form_refused_on_submit_sends_nothing(self):
+        sent = []
+        modal = await self.open_form(sent.append, refusal=lambda _user_id: "Limit reached")
+        modal.fb_title._value = "Title"
+        modal.message._value = "Body"
+        answers = []
+        submitter = self.submitter()
+
+        async def answer(content, ephemeral=False):
+            answers.append((content, ephemeral))
+
+        submitter.response.send_message = answer
+        await modal.on_submit(submitter)
+
+        self.assertEqual([], self.posted)
+        self.assertEqual([], sent)
+        self.assertEqual([("Limit reached", True)], answers)
 
 
 
@@ -1474,6 +1511,26 @@ class SetupCheckCommandTests(CommandTestCase):
         await main.run_setup_check(self.admin())
 
         self.assertEqual([], self.checked)
+
+    async def test_counts_the_posts_under_a_statement_timeout(self):
+        """The count reads every post in the server, so a huge board is cut off rather than stalling the bot."""
+        await main.run_setup_check(self.admin())
+
+        self.assertTrue(any(query.startswith("SET statement_timeout") for query in self.pool.connection.queries))
+
+    async def test_a_failure_is_answered_even_from_the_button(self):
+        """The Check setup button has no command error handler behind it, so the admin would wait forever."""
+        def fail(*_args):
+            raise RuntimeError("canceling statement due to statement timeout")
+
+        self.patch(main.hall_of_fame_message_repo, "get_post_activity", fail)
+        interaction = self.admin()
+        await main.run_setup_check(interaction)
+
+        self.assertEqual([messages.COMMAND_FAILED], interaction.followup.messages)
+        self.assertEqual([True], interaction.followup.ephemeral)
+        self.assertEqual([], self.checked)
+        self.assertTrue(any("Error reading the post activity" in entry for entry in self.logged))
 
 
 class NotLoadedYetTests(CommandTestCase):

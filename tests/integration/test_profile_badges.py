@@ -94,12 +94,13 @@ class BadgesOnTheProfileTests(ProfileBadgesTestCase):
     async def badges_field(self, hidden: bool):
         sent = []
 
-        async def send_message(embed=None, **_kwargs):
+        async def send(embed=None, **_kwargs):
             sent.append(embed)
 
+        # The command defers first, so the card goes out as its followup
         interaction = types.SimpleNamespace(
             guild=types.SimpleNamespace(id=HOME, name="Home"),
-            response=types.SimpleNamespace(send_message=send_message))
+            followup=types.SimpleNamespace(send=send))
         user = types.SimpleNamespace(id=MAYA, name="maya",
                                      display_avatar=types.SimpleNamespace(url="https://example.com/a.png"))
         if hidden:

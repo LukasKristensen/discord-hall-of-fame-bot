@@ -378,7 +378,8 @@ class UserServerProfileTests(unittest.IsolatedAsyncioTestCase):
     async def run_command(self, stats):
         await commands.user_server_profile(self.interaction, self.user, stats, object(),
                                            MONTH_EMOJI, ALL_TIME_EMOJI)
-        return self.interaction.response.messages[0]
+        # The command defers first, so the card goes out as its followup
+        return self.interaction.followup.messages[0]
 
     async def test_shows_the_totals_and_the_ranks(self):
         self.patch_top_of_stat()

@@ -161,7 +161,7 @@ Open to everyone, answered only to you, and usable in DMs as well as servers.
 
 | Command | Parameters | What it does |
 |:---|:---|:---|
-| `/my_data` | | What the bot stores about you, privately, with buttons to manage it. **Download my data** sends a file with every row (once a day). **Hide my totals across servers** leaves them off your profile, which then shows only the server it is looked up in. **Stop featuring me** stops the bot reposting or storing new messages of yours, keeping only your user ID and the date to remember it; **Feature me again** undoes it. **Delete my data** removes everything stored about you after you confirm, including a choice not to be featured; your posts stay on the boards but are no longer credited to you, and the done message offers **Stop featuring me** again. |
+| `/my_data` | | What the bot stores about you, privately, with buttons to manage it. **Download my data** sends a file with every row (once a day). **Hide my totals across servers** leaves them off your profile, which then shows only the server it is looked up in. **Stop featuring me** stops the bot reposting or storing new messages of yours, keeping only your user ID and the date to remember it, and a reply to one of your messages is reposted without your message; **Feature me again** undoes it. **Delete my data** removes everything stored about you after you confirm, including a choice not to be featured; your posts stay on the boards but are no longer credited to you, and the done message offers **Stop featuring me** again. |
 
 ### Bot and help
 

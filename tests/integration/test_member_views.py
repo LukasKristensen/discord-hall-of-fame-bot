@@ -184,11 +184,23 @@ class TotalsAcrossServersTests(MemberViewsTestCase):
     def test_adds_up_every_server_that_counts(self):
         """Alice: three posts in FIRST and two in SECOND; her four in OPTED_OUT do not count."""
         self.assertEqual({"posts": 5, "reactions": 29, "servers": 2, "biggest_post": 10, "best_month": 3,
-                          "top_of_board": 1}, self.profile(ALICE))
+                          "top_of_board": 1, "other_servers": 2}, self.profile(ALICE))
 
     def test_a_member_in_one_server(self):
         self.assertEqual({"posts": 4, "reactions": 8, "servers": 1, "biggest_post": 2, "best_month": 3,
-                          "top_of_board": 1}, self.profile(BOB))
+                          "top_of_board": 1, "other_servers": 1}, self.profile(BOB))
+
+    def test_other_servers_leaves_out_the_server_it_is_looked_up_in(self):
+        """Alice is in FIRST and SECOND; Bob only in FIRST, so looked up there he has nothing elsewhere."""
+        self.assertEqual(1, global_profile_repo.get_global_profile(self.connection, ALICE, FIRST)["other_servers"])
+        self.assertEqual(0, global_profile_repo.get_global_profile(self.connection, BOB, FIRST)["other_servers"])
+        self.assertEqual(1, global_profile_repo.get_global_profile(self.connection, BOB, SECOND)["other_servers"])
+
+    def test_other_servers_only_counts_servers_that_count(self):
+        """Alice's posts in OPTED_OUT are not in her totals, so they are not another server there either."""
+        server_config_repo.update_server_config_param(SECOND, "count_in_global_profiles", False, self.connection)
+
+        self.assertEqual(0, global_profile_repo.get_global_profile(self.connection, ALICE, FIRST)["other_servers"])
 
     def test_a_member_never_featured(self):
         self.assertEqual({field: 0 for field in global_profile_repo.PROFILE_FIELDS}, self.profile(999))

@@ -67,14 +67,18 @@ def set_hidden(connection, user_id, hidden: bool, commit: bool = True):
     cursor.close()
 
 
-PROFILE_FIELDS = ("posts", "reactions", "servers", "biggest_post", "best_month", "top_of_board")
+# other_servers is never shown. It only tells whether the totals reach beyond the server the profile is
+# looked up in, so the card can leave out a column that would repeat it
+PROFILE_FIELDS = ("posts", "reactions", "servers", "biggest_post", "best_month", "top_of_board", "other_servers")
 
 
-def get_global_profile(connection, user_id) -> dict:
+def get_global_profile(connection, user_id, guild_id=None) -> dict:
     """
     A member's totals across every server whose admins have not opted out of global profiles
     :param connection: The database connection
     :param user_id: The member's user ID
+    :param guild_id: The server the profile is looked up in, which other_servers leaves out. None
+        outside a server with Hall of Fame, where other_servers is every server
     :return: The totals named in PROFILE_FIELDS, all zero for a member with nothing that counts
     """
     cursor = connection.cursor()
@@ -99,8 +103,9 @@ def get_global_profile(connection, user_id) -> dict:
             (SELECT COUNT(*) FROM server_user standing
              JOIN counted ON counted.guild_id = standing.guild_id
              WHERE standing.user_id = %(user_id)s AND standing.total_message_rank = 1
-               AND standing.total_hall_of_fame_messages > 0)
-    """, {"user_id": user_id})
+               AND standing.total_hall_of_fame_messages > 0),
+            (SELECT COUNT(DISTINCT guild_id) FROM posts WHERE guild_id IS DISTINCT FROM %(guild_id)s)
+    """, {"user_id": user_id, "guild_id": guild_id})
     row = cursor.fetchone()
     cursor.close()
     if row is None:

@@ -186,9 +186,16 @@ class FakeFollowup:
 def interaction(user_id=101, manage_guild=True):
     user = types.SimpleNamespace(id=user_id, name="Member", bot=False,
                                  guild_permissions=types.SimpleNamespace(manage_guild=manage_guild))
+    edits = []
+
+    async def edit_original_response(content=None, view=None):
+        edits.append((content, view))
+
     return types.SimpleNamespace(user=user, guild=types.SimpleNamespace(id=GUILD, name="Server"), guild_id=GUILD,
                                  channel_id=555, response=FakeResponse(), followup=FakeFollowup(),
-                                 command=types.SimpleNamespace(name="test"))
+                                 command=types.SimpleNamespace(name="test"), original_edits=edits,
+                                 edit_original_response=edit_original_response,
+                                 is_guild_integration=lambda: True)
 
 
 @skip_without_database
