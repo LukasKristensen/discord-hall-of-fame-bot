@@ -48,6 +48,11 @@ When the bot joins a server, and whenever an admin runs `/troubleshoot`, it also
 channels, roles, channel permissions and member count, to find setup problems such as channels it
 cannot see. The result is posted in that server and is not saved.
 
+When a member uses **Why isn't this on the board?** on a message, the bot reads that message, its
+reactions and the server's settings to explain whether it reached the board. Only that member sees the
+answer, and it is not saved. If the author asked not to be featured, only the author is told that this
+is the reason.
+
 ## 3. How the data is used
 
 Only to provide the bot's features: posting to the Hall of Fame, leaderboards, profiles and Wrapped,

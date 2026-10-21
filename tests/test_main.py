@@ -305,10 +305,22 @@ class CommandTreeTests(unittest.TestCase):
                 self.assertIn(expected, names)
 
     def test_every_command_describes_itself(self):
-        """Discord shows the description in the command picker and rejects an empty one."""
-        for command in main.tree.get_commands():
+        """Discord shows the description in the command picker and rejects an empty one. Message commands
+        have none, since Discord shows only their name"""
+        for command in main.tree.get_commands(type=discord.AppCommandType.chat_input):
             with self.subTest(command=command.name):
                 self.assertTrue(command.description)
+
+    def test_every_description_fits_discords_limit(self):
+        """Discord refuses the whole command sync when one description is over 100 characters."""
+        for command in main.tree.get_commands(type=discord.AppCommandType.chat_input):
+            with self.subTest(command=command.name):
+                self.assertLessEqual(len(command.description), 100)
+
+    def test_registers_the_message_command(self):
+        names = {command.name for command in main.tree.get_commands(type=discord.AppCommandType.message)}
+
+        self.assertEqual({messages.WHY_MENU_NAME}, names)
 
     def test_no_command_is_registered_twice(self):
         names = [command.name for command in main.tree.get_commands()]
@@ -407,6 +419,16 @@ class GetServerConfigCommandTests(MainTestCase):
         embed = interaction.response.messages[0]
         self.assertIsInstance(embed, discord.Embed)
         self.assertIn("Reactions needed", " ".join(field.value for field in embed.fields))
+
+    async def test_offers_the_troubleshoot_button(self):
+        """The settings are most often looked up because something is not working."""
+        self.set_server_classes([GUILD_ID])
+        interaction = FakeInteraction()
+        await main.get_server_config.callback(interaction)
+
+        [button] = interaction.response.views[0].children
+        self.assertEqual(messages.TROUBLESHOOT_BUTTON, button.label)
+        self.assertEqual(main.commands.CHECK_SETUP_CUSTOM_ID, button.custom_id)
 
     async def test_says_a_server_is_not_set_up_rather_than_failing(self):
         """Answering a command with an error is worse than answering it with the reason."""
@@ -972,6 +994,7 @@ class SetHallOfFameChannelCommandTests(CommandTestCase):
         self.assertEqual(1, len(channel.sent))
         self.assertIn(interaction.user.mention, channel.sent[0])
         self.assertIn("**5**", channel.sent[0])
+        self.assertIn(messages.WHY_HINT, channel.sent[0])
 
     async def test_still_confirms_the_move_when_the_announcement_cannot_be_posted(self):
         """The board has moved by then, so failing the command would tell the member the opposite."""
@@ -1519,7 +1542,7 @@ class SetupCheckCommandTests(CommandTestCase):
         self.assertTrue(any(query.startswith("SET statement_timeout") for query in self.pool.connection.queries))
 
     async def test_a_failure_is_answered_even_from_the_button(self):
-        """The Check setup button has no command error handler behind it, so the admin would wait forever."""
+        """The Troubleshoot button has no command error handler behind it, so the admin would wait forever."""
         def fail(*_args):
             raise RuntimeError("canceling statement due to statement timeout")
 
@@ -1692,3 +1715,55 @@ class WrappedCommandTests(CommandTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class WhyNotOnBoardCommandTests(CommandTestCase):
+    def setUp(self):
+        super().setUp()
+        self.patch(main, "why_cooldown", main.ExpiringSet(ttl_seconds=main.why_cooldown_seconds))
+        self.explained = []
+
+        async def explain(message, asked_by_id, _bot, _connection, server):
+            self.explained.append((message, asked_by_id, server))
+            return main.message_check.Verdict("below_threshold", "the answer")
+
+        self.patch(main.message_check, "explain", explain)
+        self.message = types.SimpleNamespace(id=4242)
+
+    async def test_answers_privately_with_the_explanation(self):
+        interaction = FakeInteraction(manage_guild=False)
+        await main.why_not_on_board.callback(interaction, self.message)
+
+        self.assertTrue(interaction.response.deferred_ephemeral)
+        self.assertEqual(["the answer"], interaction.followup.messages)
+        self.assertEqual([True], interaction.followup.ephemeral)
+        self.assertEqual([(self.message, interaction.user.id, self.server)], self.explained)
+
+    async def test_logs_the_reason_but_not_who_asked(self):
+        interaction = FakeInteraction(manage_guild=False)
+        await main.why_not_on_board.callback(interaction, self.message)
+
+        [entry] = [entry for entry in self.logged if "Why isn't this on the board" in entry]
+        self.assertIn("below_threshold", entry)
+        self.assertNotIn(str(interaction.user.id), entry)
+
+    async def test_refuses_a_server_that_is_not_set_up(self):
+        interaction = FakeInteraction(guild_id=999)
+        await main.why_not_on_board.callback(interaction, self.message)
+
+        self.assertEqual([messages.ERROR_SERVER_NOT_SETUP], interaction.response.messages)
+        self.assertEqual([], self.explained)
+
+    async def test_a_member_asking_again_straight_away_waits(self):
+        await main.why_not_on_board.callback(FakeInteraction(), self.message)
+        interaction = FakeInteraction()
+        await main.why_not_on_board.callback(interaction, self.message)
+
+        self.assertEqual([messages.WHY_ON_COOLDOWN], interaction.response.messages)
+        self.assertEqual(1, len(self.explained))
+
+    async def test_does_nothing_before_the_bot_has_loaded(self):
+        self.patch(main, "bot_loaded", False)
+        await main.why_not_on_board.callback(FakeInteraction(), self.message)
+
+        self.assertEqual([], self.explained)

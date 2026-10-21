@@ -238,6 +238,13 @@ def server_config(**overrides):
 
 
 class BuildServerConfigEmbedTests(unittest.TestCase):
+    def test_points_to_troubleshooting_and_the_message_command(self):
+        embed = commands.build_server_config_embed(FakeGuild(), server_config())
+        last = embed.fields[-1].value
+
+        self.assertIn(messages.TROUBLESHOOT_BUTTON, last)
+        self.assertIn(messages.WHY_MENU_NAME, last)
+
     def test_shows_the_board_channel_threshold_and_counting_method(self):
         embed = commands.build_server_config_embed(FakeGuild(), server_config())
         board = field_named(embed, "Board").value

@@ -145,7 +145,7 @@
     <ul>
       <li><strong>Profiles with badges.</strong> <code>/user_profile</code> shows this month, all time and every server side by side, the member's best post, the gap to the next rank, and badges such as monthly champion, months in a row or a 100-reaction post.</li>
       <li><strong>Totals across servers.</strong> Members featured in several servers see their posts added up, without any server being named.</li>
-      <li><strong>Setup check.</strong> <code>/troubleshoot</code> finds what stops a board from posting, from missing permissions to channels the bot cannot read, and names the role that would fix it.</li>
+      <li><strong>Setup health check.</strong> <code>/troubleshoot</code> debugs your setup: it finds what stops a board from posting, from missing permissions to channels the bot cannot read, and names the role that would fix it.</li>
       <li><strong>Members control their data.</strong> <code>/my_data</code> shows, downloads or deletes everything stored about a member.</li>
     </ul>
   </div>
@@ -248,7 +248,7 @@
     <span class="command-line">🔸 <code>/ignore_bot_messages</code> — Whether other bots' messages can be featured.</span>
     <span class="command-line">🔸 <code>/allow_messages_in_hof_channel</code> — Let members chat in the board channel.</span>
     <span class="command-line">🔸 <code>/count_in_global_profiles</code> — Whether this server counts toward members' totals across servers.</span>
-    <span class="command-line">🔸 <code>/troubleshoot</code> — Find anything that stops messages reaching the board.</span>
+    <span class="command-line">🔸 <code>/troubleshoot</code> — Health check: find anything that stops messages reaching the board.</span>
     <span class="command-line">🔸 <code>/get_server_config</code> — See every setting at a glance.</span>
   </div>
 
@@ -279,7 +279,7 @@
     <p>Whatever you set with <code>/set_reaction_threshold</code>. When the bot joins it picks a starting value from your member count, once, so that the board works before you configure anything. It stays on that value until you change it.</p>
 
     <h3>Nothing is being posted. What is wrong?</h3>
-    <p>Run <code>/troubleshoot</code>. It checks the board's permissions, which channels the bot can read, the emoji whitelist and the threshold, and tells you what to change. The most common cause is channels hidden behind a role the bot does not have.</p>
+    <p>Run <code>/troubleshoot</code>, a health check for debugging the board. It checks the board's permissions, which channels the bot can read, the emoji whitelist and the threshold, and tells you what to change. The most common cause is channels hidden behind a role the bot does not have.</p>
 
     <h3>Does it repost images and videos?</h3>
     <p>Yes. Images, videos and stickers travel with the post, and videos stay playable instead of becoming a bare link.</p>

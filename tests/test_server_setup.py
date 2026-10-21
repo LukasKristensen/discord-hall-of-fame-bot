@@ -189,11 +189,18 @@ class CreateDatabaseContextTests(SetupTestCase):
         self.assertEqual(1, len(guild.created_channels[0].sent))
         self.assertIn("Welcome to the Hall of Fame", guild.created_channels[0].sent[0])
 
+    async def test_welcome_message_tells_members_how_to_ask_about_a_message(self):
+        """Members read the board, and they are the ones who wonder why their message is not on it."""
+        guild, _ = await self.join()
+
+        self.assertIn(messages.WHY_HINT, guild.created_channels[0].sent[0])
+        self.assertIn(messages.WHY_MENU_NAME, messages.WHY_HINT)
+
     async def test_welcome_message_links_to_support_and_voting(self):
         guild, _ = await self.join()
 
         view = guild.created_channels[0].views[0]
-        self.assertEqual([(messages.CHECK_SETUP_BUTTON, None),
+        self.assertEqual([(messages.TROUBLESHOOT_BUTTON, None),
                           (messages.SUPPORT_SERVER_BUTTON, messages.SUPPORT_SERVER_URL),
                           (messages.VOTE_BUTTON, messages.VOTE_URL)],
                          [(button.label, button.url) for button in view.children])
@@ -210,8 +217,8 @@ class CreateDatabaseContextTests(SetupTestCase):
         board = guild.created_channels[0]
         self.assertIsNotNone(created)
         self.assertEqual(2, len(board.sent))
-        self.assertIn("Check setup", board.sent[1])
-        self.assertEqual([messages.CHECK_SETUP_BUTTON], [button.label for button in board.views[1].children])
+        self.assertIn("Troubleshoot", board.sent[1])
+        self.assertEqual([messages.TROUBLESHOOT_BUTTON], [button.label for button in board.views[1].children])
 
     async def test_keeps_the_details_out_of_the_public_board(self):
         """Everyone reads the board, and the findings name channels and roles meant for admins."""

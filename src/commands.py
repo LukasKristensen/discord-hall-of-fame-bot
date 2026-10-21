@@ -50,13 +50,13 @@ def build_server_wrapped_view() -> discord.ui.View:
 
 
 CHECK_SETUP_CUSTOM_ID = "hof:check_setup"
-# Set by main at startup to the coroutine that answers a press of Check setup
+# Set by main at startup to the coroutine that answers a press of Troubleshoot
 setup_check_handler = None
 
 
 class SetupCheckView(discord.ui.View):
     """
-    The welcome message's buttons: Check setup, then the given links.
+    The Troubleshoot button, then the given links, under the welcome message and /get_server_config.
 
     The welcome message stays in the board for good, so the button has a fixed custom_id and main
     registers this view with bot.add_view on startup. That keeps it working after a restart, where a
@@ -66,7 +66,7 @@ class SetupCheckView(discord.ui.View):
 
     def __init__(self, *links: tuple[str, str]):
         super().__init__(timeout=None)
-        button = discord.ui.Button(style=discord.ButtonStyle.secondary, label=messages.CHECK_SETUP_BUTTON,
+        button = discord.ui.Button(style=discord.ButtonStyle.secondary, label=messages.TROUBLESHOOT_BUTTON,
                                    custom_id=CHECK_SETUP_CUSTOM_ID)
         button.callback = self.check_setup
         self.add_item(button)
@@ -112,7 +112,8 @@ def build_help_embed() -> discord.Embed:
         value=f"{command_refs.LEADERBOARD} the server's top members\n"
               f"{command_refs.USER_PROFILE} a member's standing, with totals across every server\n"
               f"{command_refs.HOF_WRAPPED} your year in review\n"
-              f"{command_refs.SERVER_HOF_WRAPPED} the server's year in review",
+              f"{command_refs.SERVER_HOF_WRAPPED} the server's year in review\n"
+              f"**{messages.WHY_MENU_NAME}** right-click or long-press a message, then Apps",
         inline=False)
 
     embed.add_field(
@@ -127,7 +128,7 @@ def build_help_embed() -> discord.Embed:
               f"{command_refs.SET_REACTION_THRESHOLD} reactions needed\n"
               f"{command_refs.CALCULATION_METHOD} how reactions are counted\n"
               f"{command_refs.GET_SERVER_CONFIG} every current setting\n"
-              f"{command_refs.TROUBLESHOOT} find what stops posts, and how to fix it",
+              f"{command_refs.TROUBLESHOOT} health check: find what stops posts, and how to fix it",
         inline=False)
 
     embed.add_field(
@@ -1107,7 +1108,8 @@ def build_server_config_embed(guild, server_config) -> discord.Embed:
     # Discord rejects an empty field name, so a zero-width space keeps the spacer without a heading
     embed.add_field(
         name="​",
-        value=f"Change any setting with its own command · {command_refs.HELP}",
+        value=f"Change any setting with its own command · {command_refs.HELP}\n"
+              f"{messages.CONFIG_TROUBLESHOOT_HINT}",
         inline=False)
     embed.set_footer(text=f"Hall of Fame {version.VERSION}")
     return embed

@@ -10,12 +10,14 @@ import environment
 import commands
 import concurrency
 import events
+import message_check
 import setup_check
 import utils
 import validation
 from constants import version
 from enums import command_refs, log_type, calculation_method_type
 from classes.bot_stats import BotStats
+from caches import ExpiringSet
 from api_services import topgg_api, discordbotlist_api
 import os
 from translations import messages
@@ -78,6 +80,9 @@ daily_command_cooldowns = {}
 # How many times a member may send /feedback a day. A few, since one bug report often needs a follow-up,
 # but capped, since through a user install anyone can open the form from any DM
 feedback_daily_limit = 3
+# Members who asked Why isn't this on the board? in the last few seconds
+why_cooldown_seconds = 10
+why_cooldown = ExpiringSet(ttl_seconds=why_cooldown_seconds)
 
 # The longest a single query behind /my_data or /user_profile may run. psycopg2 holds
 # the event loop while a query runs, so a slow one would stall the bot in every server; the database
@@ -275,7 +280,7 @@ async def on_ready():
         await events.bot_login(bot, tree)
         await utils.logging(bot, f"Logged in as {bot.user}", log_level=log_type.SYSTEM, validate_for_duplicates=False)
 
-        # Answers Check setup on every welcome message ever sent, including those from before this boot.
+        # Answers Troubleshoot on every welcome message ever sent, including those from before this boot.
         # Registering again after a reconnect only replaces the same entry
         commands.setup_check_handler = run_setup_check
         bot.add_view(commands.build_welcome_view())
@@ -803,15 +808,16 @@ async def get_server_config(interaction: discord.Interaction):
         return
 
     embed = commands.build_server_config_embed(interaction.guild, server_classes[interaction.guild_id])
+    # The settings are most often looked up because something is not working, so the check is one press away
     # noinspection PyUnresolvedReferences
-    await interaction.response.send_message(embed=embed)
+    await interaction.response.send_message(embed=embed, view=commands.build_check_setup_view())
     await utils.logging(bot, f"Get server config command used in a server",
                         interaction.guild.id, log_level=log_type.COMMAND)
 
 async def run_setup_check(interaction: discord.Interaction):
     """
     Check everything that can stop messages from reaching the board, and tell the admin how to fix it.
-    Shared by /troubleshoot and the Check setup button on the welcome message. Only the admin sees the
+    Shared by /troubleshoot and the Troubleshoot button on the welcome message and /get_server_config. Only the admin sees the
     answer, as it names channels members may not be able to see
     :param interaction: The command or button press to answer
     """
@@ -835,7 +841,7 @@ async def run_setup_check(interaction: discord.Interaction):
             with utils.statement_timeout(connection, data_command_statement_timeout_ms):
                 activity = hall_of_fame_message_repo.get_post_activity(connection, interaction.guild_id)
     except Exception as e:
-        # The Check setup button has no command error handler behind it, so the admin is answered here
+        # The Troubleshoot button has no command error handler behind it, so the admin is answered here
         await send_error(interaction, messages.COMMAND_FAILED)
         await utils.logging(bot, f"Error reading the post activity for the setup check: {e}", interaction.guild_id,
                             log_level=log_type.ERROR)
@@ -850,9 +856,35 @@ async def run_setup_check(interaction: discord.Interaction):
                              f"{', '.join(finding.title for finding in found) or 'no problems'}",
                         interaction.guild.id, log_level=log_type.COMMAND)
 
-@tree.command(name="troubleshoot", description="Find out what stops messages from reaching the Hall of Fame, and how to fix it")
+@tree.command(name="troubleshoot", description="Health check and debugging: find what stops messages reaching the Hall of Fame, and how to fix it")
 async def troubleshoot(interaction: discord.Interaction):
     await run_setup_check(interaction)
+
+@tree.context_menu(name=messages.WHY_MENU_NAME)
+async def why_not_on_board(interaction: discord.Interaction, message: discord.Message):
+    """
+    Tell whoever asked why one message is or is not on the board. Open to every member, since they are the
+    ones wondering, and answered privately, since the answer is of no use to the rest of the channel
+    """
+    if not await ensure_bot_is_loaded(interaction):
+        return
+    server_class = server_classes.get(interaction.guild_id)
+    if server_class is None:
+        await send_error(interaction, messages.ERROR_SERVER_NOT_SETUP)
+        return
+    # Counting unique members costs a request per emoji, so one member cannot keep the bot busy with it
+    if not why_cooldown.add_if_absent(interaction.user.id):
+        await send_error(interaction, messages.WHY_ON_COOLDOWN)
+        return
+
+    # noinspection PyUnresolvedReferences
+    await interaction.response.defer(ephemeral=True)
+    async with get_db_connection(connection_pool) as connection:
+        verdict = await message_check.explain(message, interaction.user.id, bot, connection, server_class)
+    await interaction.followup.send(verdict.text, ephemeral=True)
+
+    await utils.logging(bot, f"Why isn't this on the board used in a server: {verdict.reason}",
+                        interaction.guild_id, log_level=log_type.COMMAND)
 
 @tree.command(
     name="set_post_due_date",

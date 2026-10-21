@@ -86,7 +86,8 @@ class SourceChannel(discord.TextChannel):
         guild.channels[channel_id] = self
 
     def permissions_for(self, _member):
-        return types.SimpleNamespace(read_messages=self.readable, view_channel=self.readable)
+        return types.SimpleNamespace(read_messages=self.readable, view_channel=self.readable,
+                                     read_message_history=self.readable)
 
     async def fetch_message(self, message_id):
         if message_id not in self.messages:

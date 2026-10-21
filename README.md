@@ -92,13 +92,13 @@ gets immortalised, that is what this is for.
 
 If most of your channels are hidden behind a role, give the bot that role, otherwise it cannot see the
 messages being reacted to. The bot checks this when it joins and posts what to fix on the board, and
-`/troubleshoot` (or the **Check setup** button on the welcome message) runs the same check any time.
+`/troubleshoot` (or the **Troubleshoot** button on the welcome message and under `/get_server_config`) runs the same check any time.
 
 <br>
 
 ## Commands
 
-All commands are slash commands and work inside a server with the bot. Add Hall of Fame to your own
+All commands are slash commands, apart from **Why isn't this on the board?**, which is under Apps when you right-click or long-press a message. They work inside a server with the bot. Add Hall of Fame to your own
 account (the **Add to your account** button under `/invite`) and `/user_profile`, the three under
 [Your data](#your-data), `/help`, `/invite`, `/vote` and `/feedback` also work in DMs and in servers
 without the bot; see [Can I use it outside a server?](#can-i-use-it-outside-a-server). The rest need the
@@ -116,7 +116,7 @@ Requires **Manage Server**.
 | `/set_hall_of_fame_channel` | `channel` | Point the bot at the channel it should post to. Checks its own permissions first (View Channel, Send Messages, Read Message History and Embed Links) and tells you what is missing. |
 | `/set_reaction_threshold` | `reaction_threshold` (1 to 1000) | How many reactions a message needs. Seeded once on join from your member count, and fixed at that value until you change it here. |
 | `/allow_messages_in_hof_channel` | `allow` (true/false) | Let members chat in the hall of fame channel. Off by default, so the board stays clean: chat is removed, and `/user_profile`, `/leaderboard` and the Wrapped commands are turned away there with a private note to use another channel. Removing chat needs the bot to have **Manage Messages** in that channel. |
-| `/troubleshoot` | | Check everything that can stop messages reaching the board: the board's permissions, how many channels the bot can read and which ones members see but the bot does not (with the role that would open them), an empty emoji whitelist, a threshold above the member count, the daily post limit and when the last post was. Only you see the answer. |
+| `/troubleshoot` | | A health check for debugging a board that is not posting. Checks everything that can stop messages reaching the board: the board's permissions, how many channels the bot can read and which ones members see but the bot does not (with the role that would open them), an empty emoji whitelist, a threshold above the member count, the daily post limit and when the last post was. Only you see the answer. |
 | `/count_in_global_profiles` | `count` (true/false) | Whether members' totals across servers include their posts from this server. On by default. The server is never named either way. |
 
 ### Choosing what qualifies
@@ -154,6 +154,7 @@ Open to everyone.
 | `/user_profile` | `specific_user` (optional) | All time and monthly totals and ranks for a member. Defaults to you. When the member has been featured in other servers too, the card ends with their posts, reactions and titles added up across every server with the bot, without naming any server. Earned badges, such as monthly champion or a 100-reaction post, sit under the columns; badges that come from other servers are left out when the member hid their totals. Used in a DM or a server without the bot, it only looks you up, and shows your totals across servers alone. |
 | `/hof_wrapped` | | Your personal Hall of Fame Wrapped for the year. |
 | `/server_hof_wrapped` | | The Hall of Fame Wrapped for the whole server. |
+| **Why isn't this on the board?** | Right-click or long-press a message, then Apps | Says why that message is or is not on the board: already posted (with a link), hidden after dropping below the threshold, how many reactions it has against the threshold and how the server counts them, too old, from a bot, missing an image or video, in a channel the bot cannot read, the board missing or the bot unable to post there, or the daily post limit. Only you see the answer. |
 
 ### Your data
 
@@ -170,7 +171,7 @@ Open to everyone.
 | Command | Parameters | What it does |
 |:---|:---|:---|
 | `/help` | | List every command, grouped by what it changes. Mentioning the bot on its own shows the same overview. |
-| `/get_server_config` | | Show every setting for this server, with the command that changes it. |
+| `/get_server_config` | | Show every setting for this server, with the command that changes it, and a **Troubleshoot** button for when something is not working. |
 | `/invite` | | Buttons for adding the bot to another server or to your own account. |
 | `/vote` | | A button for voting for the bot on top.gg. |
 | `/feedback` | | Send a feature request or bug report to the developer. Up to three a day. |
@@ -361,8 +362,9 @@ from a server deletes that server's data, and any member can see, download or de
 ## Development Log
 
 ### 2.2
-- [x] Added /troubleshoot and a Check setup button on the welcome message, which check the board's permissions, how many channels the bot can read and which ones members see but the bot cannot (with the role that would open most of them), an empty emoji whitelist, a threshold above the member count, the daily post limit and the last post.
-- [x] When the bot joins, it runs the board and channel checks and, if something is wrong, posts a short note with a Check setup button on the board instead of the full report, since the board is public.
+- [x] Added /troubleshoot and a Troubleshoot button on the welcome message and under /get_server_config, which check the board's permissions, how many channels the bot can read and which ones members see but the bot cannot (with the role that would open most of them), an empty emoji whitelist, a threshold above the member count, the daily post limit and the last post.
+- [x] Added the Why isn't this on the board? message command, which tells any member why one message is or is not on the board, using the same checks the bot applies when a message is reacted to.
+- [x] When the bot joins, it runs the board and channel checks and, if something is wrong, posts a short note with a Troubleshoot button on the board instead of the full report, since the board is public.
 - [x] Added /my_data, where a member sees what is stored about them and manages it with buttons: download it as a file, hide their totals across servers, stop the bot featuring their new messages, and delete it, which removes them from every leaderboard, profile and Wrapped. It works in DMs through a user install.
 - [x] Added /count_in_global_profiles for admins to leave their server out of members' totals across servers.
 - [x] Members can add Hall of Fame to their own account with the Add to your account button under /invite, and use /help, /invite, /vote, /feedback, /user_profile and /my_data in DMs and in servers without the bot. Outside a server with the bot, /user_profile only looks up the member who asked. Every other command stays install-to-server only.
@@ -374,7 +376,7 @@ from a server deletes that server's data, and any member can see, download or de
 - [x] /user_profile shows the badges a member has earned: monthly champion, 10 to 500 posts, months in a row, featured for a year, a 100-reaction post, 10 posts in one month and featured in 5 or more servers. Badges are worked out from existing posts, never name a server, and leave out other servers when a member hid their totals.
 - [x] /user_profile, /leaderboard and the Wrapped commands are turned away with a private note in a Hall of Fame channel that is closed to chat.
 - [x] Every Hall of Fame post carries a "Hall of Fame" footer with the bot's logo, and the vote prompt was removed from posts. The invite suggestion moved to the footers of /user_profile, /leaderboard and /hof_wrapped.
-- [x] /invite, /vote and /help answer with link buttons, and the welcome message has Support server, Vote and Check setup buttons with shorter closing lines.
+- [x] /invite, /vote and /help answer with link buttons, and the welcome message has Troubleshoot, Support server and Vote buttons with shorter closing lines.
 - [x] The invite link asks for exactly the permissions the bot uses instead of the Developer Portal defaults, which included thread management. Existing servers keep what they granted.
 - [x] The bot's status rotates every ten minutes between the member count and pointers to /invite, /leaderboard and, in December and January, /hof_wrapped. The member count is kept in memory and adjusted as servers join and leave.
 - [x] The board channel topic links to the App Directory page. Topics the bot set in an earlier version are moved over by the daily check, and a topic an admin wrote is never changed.

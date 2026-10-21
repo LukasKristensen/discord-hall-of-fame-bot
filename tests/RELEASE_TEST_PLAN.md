@@ -109,9 +109,15 @@ Watch the developer log channels while going through the steps above.
 
 - [ ] `/troubleshoot` answers the admin privately with the findings
 - [ ] A member without Manage Server is refused
-- [ ] Add the dev bot to a new server: if something is wrong, a short note with a Check setup button
+- [ ] Add the dev bot to a new server: if something is wrong, a short note with a Troubleshoot button
       appears on the board, and the button opens the full findings for an admin
-- [ ] The welcome message's Check setup, Support server and Vote buttons work, also after the bot restarts
+- [ ] The welcome message's Troubleshoot, Support server and Vote buttons work, also after the bot restarts
+- [ ] `/get_server_config` has a Troubleshoot button: an admin gets the findings privately, a member is refused
+- [ ] Apps > Why isn't this on the board? on a message, as a member without Manage Server: a posted message
+      links to its post, one short of the threshold shows the count, and one in a channel the bot cannot
+      read says so. Only you see the answer, and asking again straight away is refused for a few seconds
+- [ ] A friend who pressed Stop featuring me reaches the threshold: you are told only that it cannot be
+      featured, and they are told it is their choice, with `/my_data`
 
 ## Wrapped
 

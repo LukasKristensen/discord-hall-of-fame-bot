@@ -88,12 +88,41 @@ POST_DUE_DATE_NOTE = "Messages older than {days} day{plural} can no longer reach
 HOF_CHANNEL_SET = "✅ Hall of Fame channel set to {channel}."
 HOF_CHANNEL_SET_ANNOUNCEMENT_FAILED = ("✅ Hall of Fame channel set to {channel}, but the bot could not post its "
                                        "announcement there. Check that it can send messages in the channel.")
+# The Why isn't this on the board? message command. Discord shows it under Apps when a message is
+# right-clicked or long-pressed, and allows at most 32 characters
+WHY_MENU_NAME = "Why isn't this on the board?"
+# Tells members on the board itself how to ask about their own message, since they are the ones who wonder
+WHY_HINT = (f"❓ **Wondering why a message didn't make it?** Right-click or long-press it, then "
+            f"Apps > **{WHY_MENU_NAME}**")
+# The button that runs /troubleshoot, under the welcome message, /get_server_config and the note posted on join
+TROUBLESHOOT_BUTTON = "Troubleshoot"
+# Closes /get_server_config, which is most often looked up because something is not working
+CONFIG_TROUBLESHOOT_HINT = (f"Something not working? Press **{TROUBLESHOOT_BUTTON}** below, or ask about one message "
+                            f"with Apps > **{WHY_MENU_NAME}**")
+# The first message in a board the bot created when it joined
+HOF_WELCOME = ("🎉 **Welcome to the Hall of Fame!** 🎉\n"
+               "When a message receives **{threshold} or more (default threshold) of the same reaction**, it’s "
+               "automatically **reposted here** to celebrate its popularity.\n\n"
+               "🔧 **Customize your setup:**\n"
+               f"   • Change the reaction threshold with {command_refs.SET_REACTION_THRESHOLD}\n"
+               f"   • View your current settings with {command_refs.GET_SERVER_CONFIG}\n\n"
+               "✨ **Want to only track specific emojis?**\n"
+               f"   Enable emoji filtering with {command_refs.CUSTOM_EMOJI_CHECK_LOGIC}\n\n"
+               "🧠 **Want to adjust how reactions are counted? (e.g. all votes on a message, not just the highest "
+               "reaction)**\n"
+               f"   Use {command_refs.CALCULATION_METHOD} to change the reaction count calculation method.\n\n"
+               "🛡️ **Note on channel permissions:**\n"
+               "   If most of your channels are view-blocked behind a certain role, the bot will not be able to see "
+               "messages from these channels unless given that role.\n\n"
+               f"{WHY_HINT}\n\n"
+               "💬 **Questions or ideas?** Ask in the support server.\n")
 # Posted in the channel the board moved to. A brand-new setup posts its own welcome instead
 HOF_CHANNEL_MOVED_ANNOUNCEMENT = ("🏆 **This is now the Hall of Fame channel!** 🏆\n"
                                   "{user} moved the Hall of Fame here. Messages that reach **{threshold}** reactions "
                                   "will be reposted in this channel from now on.\n"
                                   "Change the threshold with {threshold_command} or see every setting with "
-                                  "{config_command}.")
+                                  "{config_command}.\n"
+                                  f"{WHY_HINT}")
 HOF_CHANNEL_UNCHANGED ="ℹ️ {channel} is already the Hall of Fame channel."
 HOF_CHANNEL_MISSING_PERMISSIONS = ("Could not use {channel} as the Hall of Fame channel. The bot is missing these "
                                    "permissions there: ``{missing_permissions}``\n"
@@ -232,16 +261,15 @@ PRESENCE_STATUSES = [
 # Joins the statuses only in Wrapped season, December and January
 PRESENCE_WRAPPED = "✨ /hof_wrapped - your year on the board"
 
-# /troubleshoot, the Check setup button on the welcome message, and the report sent when the bot joins
-CHECK_SETUP_BUTTON = "Check setup"
+# /troubleshoot, the Troubleshoot button (TROUBLESHOOT_BUTTON above), and the report sent when the bot joins
 CHECK_TITLE = "🩺 Hall of Fame setup check"
 # Posted in the board on join instead of the findings themselves, as everyone can read the board
 CHECK_JOIN_NUDGE = ("⚠️ **Something may stop messages from reaching the Hall of Fame**, for example channels "
-                    "the bot cannot read. An admin can press **Check setup** below, or run {command}, to see "
+                    "the bot cannot read. An admin can press **Troubleshoot** below, or run {command}, to see "
                     "what it is and how to fix it.")
 CHECK_SUMMARY_OK = "Everything the bot needs is in place."
 CHECK_SUMMARY_PROBLEMS = "Found {count} thing{plural} that can stop messages from reaching the board."
-CHECK_FOOTER = "Fixed something? Press Check setup or run /troubleshoot again."
+CHECK_FOOTER = "Fixed something? Press Troubleshoot or run /troubleshoot again to check."
 CHECK_AND_MORE = " and {count} more"
 CHECK_BOARD_MISSING_TITLE = "No board channel"
 CHECK_BOARD_MISSING = ("The channel posts go to was deleted, or the bot can no longer see it. "
@@ -285,3 +313,33 @@ CHECK_NO_POSTS_YET = "The bot joined recently. The first post appears once a mes
 CHECK_LAST_POST_TITLE = "Activity"
 CHECK_LAST_POST = "Last post {when}, {total} in total."
 CHECK_LAST_POST_STALE = "Nothing has reached the board in a month. If reactions are still coming in, try a lower threshold with {command}."
+
+# The Why isn't this on the board? message command, named with WHY_MENU_NAME above
+WHY_ON_COOLDOWN = "You just asked about a message. Try again in a few seconds."
+WHY_IS_BOARD = "**This is the Hall of Fame channel.** Messages here are the board itself, so they are not posted again."
+WHY_CANNOT_READ = ("**The bot cannot read {channel}**, so reactions here never count. An admin can give the bot "
+                   "View Channel and Read Message History here, or run {command} to find every channel like this.")
+WHY_ALREADY_POSTED = "**This message is on the board:** {link}"
+WHY_HIDDEN = ("**This message was on the board, but is hidden** because it dropped to {count} of the {threshold} "
+              "reactions needed. It comes back once it passes the threshold again.")
+WHY_TOO_OLD = ("**This message is too old.** Only messages from the last {days} days can reach the board. "
+               "An admin can change that with {command}.")
+WHY_BOT_MESSAGE = ("**Messages from bots are not posted here.** An admin can change that with {command}.")
+WHY_NO_MEDIA = ("**Only messages with an image or video are posted here.** An admin can change that with {command}.")
+WHY_NO_BOARD = ("**The board channel is missing**: it was deleted, or the bot can no longer see it. An admin can "
+                "pick a channel with {command}.")
+WHY_CANNOT_POST = ("**The bot cannot post on the board.** It is missing {missing} in {channel}. An admin can run "
+                   "{command} for the details.")
+WHY_DAILY_LIMIT = ("**The board reached its limit of {limit} posts today.** Posting resumes at midnight UTC, and the "
+                   "next reaction after that posts this message if it still has enough.")
+WHY_BELOW_THRESHOLD = "**Not enough reactions yet:** it has {count} of the {threshold} needed."
+WHY_METHOD = "Counted as: {method}."
+WHY_AUTHOR_NOT_COUNTED = "The author's own reaction does not count."
+WHY_WHITELIST = "Only these emojis count: {emojis}."
+# Says nothing about why, since a member's choice not to be featured is theirs alone to share
+WHY_CANNOT_FEATURE = "**This message cannot be featured on the board.**"
+# Only shown to the author, who made the choice
+WHY_AUTHOR_OPTED_OUT = ("**You asked not to be featured**, so your messages are not posted. You can change that "
+                        "with {command}.")
+WHY_QUALIFIES = ("**This message qualifies** but has not been posted yet. A message is posted when it is reacted "
+                 "to, so the next reaction posts it.")

@@ -46,6 +46,51 @@ def author_to_store(connection, author_id: int) -> tuple[int, bool]:
     return author_id, False
 
 
+# The server's rules about which messages qualify, as rule_blocking_post names them
+RULE_TOO_OLD = "too_old"
+RULE_BOT_MESSAGE = "bot_message"
+RULE_NO_MEDIA = "no_media"
+
+
+def has_image_or_video(message: discord.Message) -> bool:
+    """
+    Whether a message carries an image or a video, as an attachment or in an embed such as a link preview
+    :param message: The message to look at
+    :return: True when it has at least one image or video
+    """
+    for attachment in message.attachments or []:
+        content_type = getattr(attachment, 'content_type', '')
+        if content_type and (content_type.startswith('image/') or content_type.startswith('video/')):
+            return True
+    for embed in message.embeds or []:
+        if embed.type in ['image', 'video'] or embed.image or embed.video:
+            return True
+    return False
+
+
+def rule_blocking_post(source_message: discord.Message, db_message, server_config: server_class.Server,
+                       now: datetime.datetime = None) -> str | None:
+    """
+    The first of the server's rules about which messages qualify that a message breaks. Shared by
+    validate_message and the Why isn't this on the board? command, so the explanation a member gets is
+    the rule the bot actually applies
+    :param source_message: The message that was reacted to
+    :param db_message: Its stored Hall of Fame post, or None when it has none
+    :param server_config: The in memory configuration of the server
+    :param now: The current time, for tests
+    :return: One of the RULE_ names, or None when the message breaks none of them
+    """
+    now = now or datetime.datetime.now(timezone.utc)
+    # A post already on the board keeps being updated however old the message gets
+    if (now - source_message.created_at).days > server_config.post_due_date and not db_message:
+        return RULE_TOO_OLD
+    if source_message.author.bot and server_config.ignore_bot_messages:
+        return RULE_BOT_MESSAGE
+    if server_config.require_image_or_video and not has_image_or_video(source_message):
+        return RULE_NO_MEDIA
+    return None
+
+
 async def validate_message(reaction_event: discord.RawReactionActionEvent, bot: discord.Client, connection,
                            server_config: server_class.Server):
     """
@@ -61,11 +106,8 @@ async def validate_message(reaction_event: discord.RawReactionActionEvent, bot: 
     guild_id: int = reaction_event.guild_id
 
     reaction_threshold = server_config.reaction_threshold
-    post_due_date = server_config.post_due_date
     target_channel_id = server_config.hall_of_fame_channel_id
-    ignore_bot_messages = server_config.ignore_bot_messages
     hide_hof_post_below_threshold = server_config.hide_hof_post_below_threshold
-    require_image_or_video = server_config.require_image_or_video
 
     channel = bot.get_channel(channel_id)
     if channel is None:
@@ -79,32 +121,8 @@ async def validate_message(reaction_event: discord.RawReactionActionEvent, bot: 
     source_message = await channel.fetch_message(message_id)
     db_message = hall_of_fame_message_repo.find_hall_of_fame_message(connection, guild_id, channel_id, message_id)
 
-    # Checks if the post is older than the due date and has not been added to the database
-    if (datetime.datetime.now(timezone.utc) - source_message.created_at).days > post_due_date and not db_message:
+    if rule_blocking_post(source_message, db_message, server_config) is not None:
         return
-
-    # Checks if the message is from a bot
-    if source_message.author.bot and ignore_bot_messages:
-        return
-
-    # Checks if message is required to have an image or video
-    if require_image_or_video:
-        has_media = False
-        if source_message.attachments:
-            for attachment in source_message.attachments:
-                content_type = getattr(attachment, 'content_type', '')
-                if content_type and (content_type.startswith('image/') or content_type.startswith('video/')):
-                    has_media = True
-                    break
-
-        if not has_media and source_message.embeds:
-            for embed in source_message.embeds:
-                if embed.type in ['image', 'video'] or embed.image or embed.video:
-                    has_media = True
-                    break
-
-        if not has_media:
-            return
 
     target_channel = bot.get_channel(target_channel_id)
     if target_channel is None:
@@ -685,18 +703,7 @@ async def create_database_context(bot, server, connection, custom_channel=None) 
                                                 True)
 
     await hall_of_fame_channel.send(
-        f"🎉 **Welcome to the Hall of Fame!** 🎉\n"
-        f"When a message receives **{reaction_threshold_default} or more (default threshold) of the same reaction**, it’s automatically **reposted here** to celebrate its popularity.\n\n"
-        f"🔧 **Customize your setup:**\n"
-        f"   • Change the reaction threshold with {command_refs.SET_REACTION_THRESHOLD}\n"
-        f"   • View your current settings with {command_refs.GET_SERVER_CONFIG}\n\n"
-        f"✨ **Want to only track specific emojis?**\n"
-        f"   Enable emoji filtering with {command_refs.CUSTOM_EMOJI_CHECK_LOGIC}\n\n"
-        f"🧠 **Want to adjust how reactions are counted? (e.g. all votes on a message, not just the highest reaction)**\n"
-        f"   Use {command_refs.CALCULATION_METHOD} to change the reaction count calculation method.\n\n"
-        f"🛡️ **Note on channel permissions:**\n"
-        f"   If most of your channels are view-blocked behind a certain role, the bot will not be able to see messages from these channels unless given that role.\n\n"
-        f"💬 **Questions or ideas?** Ask in the support server.\n",
+        messages.HOF_WELCOME.format(threshold=reaction_threshold_default),
         view=welcome_view()
     )
     await report_setup_problems_on_join(bot, server, hall_of_fame_channel)

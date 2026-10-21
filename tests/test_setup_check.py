@@ -369,7 +369,7 @@ class SetupCheckViewTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertTrue(view.is_persistent())
         self.assertEqual(commands.CHECK_SETUP_CUSTOM_ID, view.children[0].custom_id)
-        self.assertEqual(messages.CHECK_SETUP_BUTTON, view.children[0].label)
+        self.assertEqual(messages.TROUBLESHOOT_BUTTON, view.children[0].label)
 
     async def test_the_join_button_is_answered_by_the_same_registered_view(self):
         view = commands.build_check_setup_view()
