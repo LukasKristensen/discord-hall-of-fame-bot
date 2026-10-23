@@ -14,9 +14,13 @@ the hall of fame, and the members who land there get leaderboards, profiles and 
 It is a recognition bot, not an archive. The board is where the moments live; the leaderboards, member
 profiles and Hall of Fame Wrapped are what make landing on it worth something.
 
-[Add the bot to your server](https://discord.com/oauth2/authorize?client_id=1177041673352663070) ·
+It never stores your messages' text: only IDs, reaction counts and statistics. Every member can see,
+download or delete what is kept about them with `/my_data`, as the [Privacy Policy](PRIVACY.md) explains.
+
+[Add the bot to your server](https://discord.com/oauth2/authorize?client_id=1177041673352663070&permissions=275146730576&integration_type=0&scope=bot+applications.commands) ·
 [Join the support server](https://discord.gg/r98WC5GHcn) ·
-[Vote on top.gg](https://top.gg/bot/1177041673352663070/vote)
+[Vote on top.gg](https://top.gg/bot/1177041673352663070/vote) ·
+[What's new](CHANGELOG.md)
 
 <br>
 
@@ -31,10 +35,10 @@ profiles and Hall of Fame Wrapped are what make landing on it worth something.
 - [How reactions are counted](#how-reactions-are-counted)
 - [Recognition: leaderboards, profiles and Wrapped](#recognition-leaderboards-profiles-and-wrapped)
 - [Frequently asked questions](#frequently-asked-questions)
-- [Tests](#tests)
 - [Contributing](#contributing)
 - [License](#license)
-- [Development Log](#development-log)
+- [Privacy and terms](#privacy-and-terms)
+- [Changelog](#changelog)
 
 <br>
 
@@ -78,7 +82,7 @@ gets immortalised, that is what this is for.
 
 ## Quick start
 
-1. [Invite the bot](https://discord.com/oauth2/authorize?client_id=1177041673352663070) and accept the
+1. [Invite the bot](https://discord.com/oauth2/authorize?client_id=1177041673352663070&permissions=275146730576&integration_type=0&scope=bot+applications.commands) and accept the
    permissions it asks for. Granting them afterwards does not work, so accept them up front.
 2. The bot creates a `#hall-of-fame` channel, and picks a starting reaction threshold once from your
    member count so the board works before you configure anything.
@@ -87,16 +91,22 @@ gets immortalised, that is what this is for.
    `/set_hall_of_fame_channel`.
 
 If most of your channels are hidden behind a role, give the bot that role, otherwise it cannot see the
-messages being reacted to.
+messages being reacted to. The bot checks this when it joins and posts what to fix on the board, and
+`/troubleshoot` (or the **Troubleshoot** button on the welcome message and under `/get_server_config`) runs the same check any time.
 
 <br>
 
 ## Commands
 
-All commands are slash commands and only work inside a server. The configuration ones need the
-**Manage Server** permission, and say so on each group; everything under
-[Recognition](#recognition-commands) and [Bot and help](#bot-and-help) is open to every member. If a
-command is refused, for example because a value is out of range, only you see the reply.
+All commands are slash commands, apart from **Why isn't this on the board?**, which is under Apps when you right-click or long-press a message. They work inside a server with the bot. Add Hall of Fame to your own
+account (the **Add to your account** button under `/invite`) and `/user_profile`, `/my_data` under
+[Your data](#your-data), `/help`, `/invite`, `/vote` and `/feedback` also work in DMs and in servers
+without the bot; see [Can I use it outside a server?](#can-i-use-it-outside-a-server). The rest need the
+server's configuration, so they stay in servers that added the bot. The configuration ones need the **Manage Server**
+permission and say so on each group. Discord only shows them in the command picker to members who have it, see
+[Why can't I see the settings commands?](#why-cant-i-see-the-settings-commands). Everything under
+[Recognition](#recognition-commands), [Your data](#your-data) and [Bot and help](#bot-and-help) is open to every
+member. If a command is refused, for example because a value is out of range, only you see the reply.
 
 ### Setting up the board
 
@@ -106,7 +116,9 @@ Requires **Manage Server**.
 |:---|:---|:---|
 | `/set_hall_of_fame_channel` | `channel` | Point the bot at the channel it should post to. Checks its own permissions first (View Channel, Send Messages, Read Message History and Embed Links) and tells you what is missing. |
 | `/set_reaction_threshold` | `reaction_threshold` (1 to 1000) | How many reactions a message needs. Seeded once on join from your member count, and fixed at that value until you change it here. |
-| `/allow_messages_in_hof_channel` | `allow` (true/false) | Let members chat in the hall of fame channel. Off by default, so the board stays clean. Removing chat needs the bot to have **Manage Messages** in that channel. |
+| `/allow_messages_in_hof_channel` | `allow` (true/false) | Let members chat in the hall of fame channel. Off by default, so the board stays clean: chat is removed, and `/user_profile`, `/leaderboard` and the Wrapped commands are turned away there with a private note to use another channel. Removing chat needs the bot to have **Manage Messages** in that channel. |
+| `/troubleshoot` | | A health check for debugging a board that is not posting. Checks everything that can stop messages reaching the board: the board's permissions, how many channels the bot can read and which ones members see but the bot does not (with the role that would open them), an empty emoji whitelist, a threshold above the member count, the daily post limit and when the last post was. Only you see the answer. |
+| `/count_in_global_profiles` | `count` (true/false) | Whether members' totals across servers include their posts from this server. On by default. The server is never named either way. |
 
 ### Choosing what qualifies
 
@@ -114,7 +126,7 @@ Requires **Manage Server**.
 
 | Command | Parameters | What it does |
 |:---|:---|:---|
-| `/calculation_method` | `most_reactions_on_emoji`, `total_reactions` or `unique_users` | How reactions are counted. See [How reactions are counted](#how-reactions-are-counted). |
+| `/calculation_method` | `most_reactions_on_emoji`, `total_reactions` or `unique_users` | How reactions are counted. The answer shows a picture of the three methods counting the same reactions. See [How reactions are counted](#how-reactions-are-counted). |
 | `/include_authors_reaction` | `include` (true/false) | Whether reacting to your own message counts toward the threshold. |
 | `/set_post_due_date` | `post_due_date` (1 to 3650 days) | How old a message can be and still qualify. |
 | `/require_image_or_video` | `require` (true/false) | Only feature messages that contain an image or a video. |
@@ -140,9 +152,18 @@ Open to everyone.
 | Command | Parameters | What it does |
 |:---|:---|:---|
 | `/leaderboard` | | Rank the server by hall of fame posts and reactions earned. Refreshed daily. |
-| `/user_profile` | `specific_user` (optional) | All time and monthly totals and ranks for a member. Defaults to you. |
+| `/user_profile` | `specific_user` (optional) | All time and monthly totals and ranks for a member. Defaults to you. When the member has been featured in other servers too, the card ends with their posts, reactions and titles added up across every server with the bot, without naming any server. Earned badges, such as monthly champion or a 100-reaction post, sit under the columns; badges that come from other servers are left out when the member hid their totals. Used in a DM or a server without the bot, it only looks you up, and shows your totals across servers alone. |
 | `/hof_wrapped` | | Your personal Hall of Fame Wrapped for the year. |
 | `/server_hof_wrapped` | | The Hall of Fame Wrapped for the whole server. |
+| **Why isn't this on the board?** | Right-click or long-press a message, then Apps | Says why that message is or is not on the board: already posted (with a link), hidden after dropping below the threshold, how many reactions it has against the threshold and how the server counts them, too old, from a bot, missing an image or video, in a channel the bot cannot read, the board missing or the bot unable to post there, or the daily post limit. Only you see the answer. |
+
+### Your data
+
+Open to everyone, answered only to you, and usable in DMs as well as servers.
+
+| Command | Parameters | What it does |
+|:---|:---|:---|
+| `/my_data` | | What the bot stores about you, privately, with buttons to manage it. **Download my data** sends a file with every row (once a day). **Hide my totals across servers** leaves them off your profile, which then shows only the server it is looked up in. **Stop featuring me** stops the bot reposting or storing new messages of yours, keeping only your user ID and the date to remember it, and a reply to one of your messages is reposted without your message; **Feature me again** undoes it. **Delete my data** removes everything stored about you after you confirm, including a choice not to be featured; your posts stay on the boards but are no longer credited to you, and the done message offers **Stop featuring me** again. |
 
 ### Bot and help
 
@@ -151,10 +172,10 @@ Open to everyone.
 | Command | Parameters | What it does |
 |:---|:---|:---|
 | `/help` | | List every command, grouped by what it changes. Mentioning the bot on its own shows the same overview. |
-| `/get_server_config` | | Show every setting for this server, with the command that changes it. |
-| `/invite` | | Invite link for adding the bot elsewhere. |
-| `/vote` | | Vote for the bot on top.gg. |
-| `/feedback` | | Send a feature request or bug report to the developer. |
+| `/get_server_config` | | Show every setting for this server, with the command that changes it, and a **Troubleshoot** button for when something is not working. |
+| `/invite` | | Buttons for adding the bot to another server or to your own account. |
+| `/vote` | | A button for voting for the bot on top.gg. |
+| `/feedback` | `topic` (Bug report, Idea or feature request, Question or Something else) | Send a bug report, an idea or a question to the developer through a short form that asks for what helps with the topic. Only you see the thank-you. Up to three a day. |
 
 <br>
 
@@ -186,6 +207,12 @@ of counting a message:
 | `total_reactions` | Every reaction on the message added together | Servers that react with many different emojis |
 | `unique_users` | How many different people reacted, counted once each | Stopping one person from pushing a message through |
 
+![The three counting methods applied to the same reactions: 13, 17 and 2](Assets/reaction_calculation_methods_wide.jpg)
+
+`/calculation_method` answers with this picture too, whether the method changed or was already set. It is
+attached when the bot may attach files in that channel, shown from GitHub when it may only embed links,
+and left out when it may do neither.
+
 `/include_authors_reaction` decides whether the author reacting to their own message counts, and
 `/hide_hof_post_below_threshold` hides a post again if reactions are later removed.
 
@@ -197,10 +224,17 @@ of counting a message:
 Getting featured is meant to be worth something, so the bot keeps score.
 
 - **`/leaderboard`** ranks the server by hall of fame posts and by reactions earned, refreshed daily.
-- **`/user_profile`** shows one member's all time and monthly totals, and where they sit in the server
-  for each. Call it on someone else to compare.
+- **`/user_profile`** shows one member's monthly, all time and across-server totals, where they sit in
+  the server for each, their best post, when they were last featured, how far they are from the next
+  rank and the badges they have earned, such as monthly champion or 100 posts. Call it on someone else
+  to compare.
 - **`/hof_wrapped`** gives a member their year in review, and **`/server_hof_wrapped`** does the same
   for the whole server.
+
+A member's posts count toward all of this up to 10,000 across every server. The limit keeps what the
+bot stores about any one member small enough that `/my_data` can always give them all of it. Posts past
+it still reach the board but are not credited. Reaching it takes a server's whole daily limit of 100
+posts, every day for 100 days, all by one member.
 
 <br>
 
@@ -246,6 +280,15 @@ and monthly standing, and `/hof_wrapped` gives them a year in review.
 Yes, with `/require_image_or_video`, which suits servers where the board is meant to be a gallery rather
 than a quote wall.
 
+### Can I use it outside a server?
+
+Yes, once you add it to your account with the **Add to your account** button under `/invite`. In DMs
+and in servers without Hall of Fame you can look up your own profile with `/user_profile`, which then
+shows your posts and reactions added up across every server with the bot. Other members can only be
+looked up inside a server with the bot. You can also see, download or delete your data with
+`/my_data`. Leaderboards, Wrapped and settings belong to a server, so
+they only work in servers that added the bot.
+
 ### Is the bot free?
 
 Yes. There is no paid tier and no feature held back behind voting. The source code is public for
@@ -254,32 +297,22 @@ anyone to read and contribute to, see [License](#license).
 ### Which channels does it watch?
 
 Every channel it has permission to read. Channels restricted to a role stay invisible to the bot unless
-it is given that role.
+it is given that role. `/troubleshoot` shows how many channels it reads, lists the ones members can see
+but the bot cannot, and names the role that would open most of them. Staff-only channels are counted
+apart, since leaving the bot out of those is usually on purpose.
+
+### Why can't I see the settings commands?
+
+Discord only shows them to members with the **Manage Server** permission, since everyone else would be
+refused. A server can show them to other roles under Server Settings > Integrations > Hall of Fame, but
+running one still needs Manage Server.
 
 <br>
-
-## Tests
-
-The reaction counting, embed formatting and server config validation are covered by unit tests that use
-lightweight stand-ins for Discord and the database, so no bot token or Postgres instance is needed.
-
-```
-pip install -r requirements.txt
-python -m unittest discover -s tests -t .
-```
-
-The same command runs on every pull request through the ``Tests`` workflow.
-
-For behaviour under load, `tests/stress/reaction_storm.py` drives the real reaction handler with
-hundreds of concurrent reactions. It is run by hand, see [tests/stress/README.md](tests/stress/README.md).
-
-<br>
-
 
 ## Contributing
 
 Bug fixes, features, tests and documentation are all welcome. [CONTRIBUTING.md](CONTRIBUTING.md) covers
-setting up a development bot, running the tests and opening a pull request.
+setting up a development bot, the test suites and opening a pull request.
 
 <br>
 
@@ -294,162 +327,21 @@ what the bot does with their server's messages, and so that anyone can contribut
   permission.
 
 See [LICENSE](LICENSE) for the full terms. To use the bot, [add the official
-one](https://discord.com/oauth2/authorize?client_id=1177041673352663070) to your server.
+one](https://discord.com/oauth2/authorize?client_id=1177041673352663070&permissions=275146730576&integration_type=0&scope=bot+applications.commands) to your server.
 
 <br>
 
 
-## Development Log
+## Privacy and terms
 
-### 2.1
-- [x] Mentioning the bot on its own now answers with a help card listing the commands, with a per-channel cooldown so it cannot be spammed.
-- [x] /get_server_config shows every setting in one card, grouped by what it affects, with the command that changes each setting next to it.
-- [x] /help groups the commands by who uses them and what they change, and links the support server, voting and the source code.
-- [x] Settings commands check their input: the reaction threshold is 1 to 1000, the post due date 1 to 3650 days and the emoji whitelist holds up to 100 emojis. Discord shows the allowed range in the command picker.
-- [x] Settings commands confirm the new value in plain words, and say so when a setting already had that value instead of saving it again.
-- [x] Error replies, such as an invalid value or a missing permission, are only shown to the member who ran the command instead of the whole channel.
-- [x] A command that fails now answers with an error message instead of Discord's "The application did not respond", and commands are only offered inside servers.
-- [x] Commands now answer with a loading notice while the bot is still starting up, instead of timing out silently.
-- [x] /set_hall_of_fame_channel also checks for the Embed Links permission, without which Discord drops every Hall of Fame post silently.
-- [x] The Hall of Fame channel is only kept clear of chat when the bot has Manage Messages there, and the bot explains which permission to grant otherwise.
-- [x] /user_profile shows the monthly rank as N/A for members with nothing featured this month, instead of ranking them.
-- [x] The daily post limit resets at the start of each day instead of covering a rolling 24 hours, and its notice says clearly when posting resumes.
-- [x] The setup message explains that the bot cannot see channels hidden behind a role unless it is given that role.
-- [x] Fixed the emoji whitelist matching on partial emojis, so a reaction only counts when it is whitelisted exactly.
-- [x] Fixed whitelisted custom emojis no longer counting after being renamed; they are now matched by ID, and /unwhitelist_emoji accepts the renamed emoji.
-- [x] Fixed the total reactions calculation method discarding a whole reaction instead of a single vote when the author is excluded.
-- [x] Fixed Hall of Fame posts failing when the message that was replied to had been deleted, or when a reply had no text of its own.
-- [x] Fixed reactions being dropped when several arrived on the same message at once; they now queue so the newest count wins.
-- [x] Fixed the daily post limit allowing one more post than the limit it announced.
-- [x] Fixed /get_server_config failing in servers that are not set up yet.
-- [x] Fixed the clickable /require_image_or_video link in /help and /get_server_config, which pointed at a command ID that does not exist.
-- [x] Fixed the daily leaderboard update failing when a featured message's channel was no longer accessible.
-- [x] Fixed an error in one server's leaderboard update aborting the updates of other servers running at the same time.
-- [x] Fixed developer ping notifications for critical runtime errors, which never triggered.
-- [x] Reactions wait for a free database connection during busy moments instead of being dropped, and the connection pool grew from 10 to 20.
-- [x] Reaction events serve the server configuration from memory, removing the database lookups from the path that runs most often.
-- [x] The daily member statistics are aggregated and ranked by the database in one statement per server, instead of reading every Hall of Fame message into the bot.
-- [x] The daily task updates servers in parallel batches, each under a time limit and a database statement timeout, so one stalled server cannot hold up the rest.
-- [x] The leaderboard updates each post in a single edit instead of three, cutting its daily rate limit cost.
-- [x] Errors while handling a reaction are logged instead of being discarded, with repeats collapsed per server, and the database state is reset cleanly after a restart.
-- [x] Duplicate log messages are filtered in memory instead of re-reading the log channel on every single log line.
-- [x] Switched to a thread safe database connection pool, since the daily snapshot runs on a worker thread.
-- [x] Hall of Fame posts no longer break the Discord message cache when truncating long messages.
-- [x] Rebuilt the internal server statistics report as a modular package with a synthetic data mode, and fixed several of its metrics.
-- [x] Added a unit test suite and a Tests workflow that runs on every pull request, a reaction stress-test harness, and Dependabot.
-- [x] Added psycopg2-binary to requirements.txt, which the bot has always needed in order to start, and pinned Python 3.13.
-- [x] Rewrote the README and the Top.gg description around recognition rather than archiving, and documented /hof_wrapped, /server_hof_wrapped, /require_image_or_video and /set_post_due_date, which were missing.
-- [x] Published the code under a source-available license, and added CONTRIBUTING.md and the Contributing and License sections of the README.
+The bot stores IDs, reaction counts and statistics, not the text or images of your messages. Removing it
+from a server deletes that server's data, and any member can see, download or delete their own with
+`/my_data`. The [Privacy Policy](PRIVACY.md) lists exactly what is kept, and the
+[Terms of Service](TERMS.md) cover using the bot.
 
-### 2.0
-- [x] Added require_image_or_video server option to enforce media presence in embeds.
-- [x] Added welcome message for the support server.
-- [x]  Fixed images not appearing in embeds when using links.
-- [x]  Improved handling of replies with attachments in embeds.
-- [x]  Extended server statistics.
-- [x]  Refactored server stats backend from MongoDB to PostgreSQL for improved performance and reliability.
-- [x]  Resolved primary key issues for user_id and enforced foreign key constraints.
-- [x]  Made timestamps timezone-aware and improved snapshot batching.
+<br>
 
-### 1.17
-- [x] /get_user_profile updated to clarify the 24h calculation window.
-- [x] /set_hall_of_fame_channel command added to manually set the Hall of Fame channel, providing more flexibility for server admins.
-- [x] Adaptive threshold: On server join, the default reaction threshold now scales automatically based on member count for a more balanced experience.
-- [x] Fixed design issues on Hall of Fame posts when replying to messages (caused by a recent Discord library update).
-- [x] Added automatic permission validation for the Hall of Fame channel, ensuring the bot has proper write access, along with better debugging feedback.
-- [x] Fixed the 1024-character limit issue on messages and referenced messages (long text is now truncated to 1021 characters followed by “...”).
-- [x] Reduced the likelihood of voting messages being shown on embeds due to limited interactions.
-- [x] Fixed context reply issues inside embeds for improved clarity.
-- [x] Improved database exception handling with more detailed logging.
-- [x] Added developer ping notifications for critical runtime errors.
-- [x] Split production and testing logging environments for safer debugging.
-- [x] General backend optimizations, code cleanup, and error log decluttering.
 
-### 1.16
-- [x] /user_profile command: You can now view both your own and others' Hall of Fame stats.
-  - Displays all-time and monthly Hall of Fame post counts.
-  - Highlights top users per server – great for competition and recognition.
-  - Automatically updated daily via a recurring job.
-- [x] Per-server user tracking: The bot now tracks individual user stats (e.g., HOF posts, reaction counts) per server.
-- [x] Wide-format calculation method preview: Added to the </help> embed to visually explain the 3 different reaction calculation strategies.
-- [x] Improved message metadata: All message entries now store `author_id` and `created_at` for better historical insight and debugging.
-- [x] Migration system: Implemented automated data migration to ensure smoother updates and future rollouts.
+## Changelog
 
-### 1.15
-- [x] /calculation_method command: Added support for custom calculation methods that determine how reaction counts are evaluated. This allows for more flexible and personalized Hall of Fame behavior per server.
-- [x] Sticker support in HOF: Messages featuring stickers can now be included in Hall of Fame posts, with proper rendering (not supported for all stickers).
-- [x] Improved setup reliability: The bot now handles failed or incomplete setup processes more gracefully, with clearer error messages.
-
-### 1.14
-- [x] Refactored all the external command references to be interactive.
-- [x] Added command option /ignore_bot_messages for whether to ignore bot messages or not.
-- [x] Top.gg API Integration: The bot now supports top.gg API for stats reporting.
-- [x] Server Management: Configuration access now extended to ServerManagers, not just ServerOwners.
-- [x] Introduced singleton-based variable handling for better maintainability.
-- [x] Fixed an issue where it would not post hall of fame messages from users, when they were from the hall of fame channel.
-- [x] Leaderboards disabled by default for new servers: It seems to cause confusion for first-time users.
-- [x] Concurrency issue fixed on startup routine for loading server classes
-
-### 1.13
-- [x] Fixed Intents for Embed Colors
-  - Resolved bug causing inconsistent embed colors.
-  - Embed colors now dynamically match the top role color.
-- [x] Leaderboard 24h Recurring Job
-  - Leaderboard now updates automatically every 24 hours.
-- [x] HOF Wrapped Tweaks
-  - Minor improvements to the Hall of Fame Wrapped (December event).
-
-### 1.12
-- [x] ``/get_server_config`` for viewing the current server settings for the bot
-- [x] Added custom emoji whitelist logic for the reaction threshold
-  - To enable it: ``/custom_emoji_check_logic``
-  - Adding emojis to the whitelist: ``/whitelist_emoji``
-  - Removing emojis from the whitelist: ``/unwhitelist_emoji`` or ``/clear_whitelist``
-
-### 1.11
-- [x] Approved for top.gg - vote here for the bot: https://top.gg/bot/1177041673352663070
-- [x] Slash Commands!
-- [x] Refactored code-base for cloud deployment and for handling multiple servers
-
-### 1.10
-- [x] Threshold increase and general adjustments
-
-### 1.09
-- [x] Hall Of Fame Wrapped
-
-### 1.08
-- [x] Better context vísualization of replied messages
-- [x] Added user's role color to embed color
-
-### 1.07
-- [x] Solved async simultaneous reacting on posts
-
-### 1.06
-- [x] LLM outlier detection of voting-based messages, which should not be classified as a Hall Of Fame message. 
-
-### 1.05
-- [x] Hall-of-fame posts which are replies to previous messages will include the context.
-
-### 1.04
-- [x] Only count non-author reactions towards the total amount for threshold
-- [x] When a post goes below the threshold remove the embed, but keep the message so that it would be able to be reposted again
-
-### 1.03
-- [x] When the reaction counter goes up on an existing hall-of-fame post, it should update the message with the total amount of reactions
-- [x] Remove incoming non-bot posts in the hall-of-fame channel
-
-### 1.02
-- [x] New gifs should be added to the user/server database as they get posted, instead of having to use the fetch command
-- [x] Servers most used gifs
-- [x] Users most used gifs
-
-### 1.01
-- [x] Problem with using discord user profile pictures using Discord<=2.0.0
-- [x] Deploy on a remote server
-- [x] Improve the embed layout of messages
-- [x] Improve media output
-- [x] Improve database structure to mongodb
-- [x] Functionality for checking historical messages (it should run through all the messages and post the ones above the reaction value threshold
-- [x] When posting the message highlight the reaction emoji from the original message
-- [x] Fix message IDs not being saved/loaded correctly when validating if it has already been sent
-- [x] Create a getRandom() function for grabbing a random hall-of-fame post
+What changed in each version is in [CHANGELOG.md](CHANGELOG.md).

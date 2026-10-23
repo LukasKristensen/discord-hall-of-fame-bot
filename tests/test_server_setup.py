@@ -6,14 +6,20 @@ introduced with a welcome message. Leaving has to undo all of it, across every t
 that removes and re-adds the bot inherits its old board.
 """
 
+import types
 import unittest
 from unittest import mock
 
+import discord
+
+import events
+import setup_check
 import utils
 from caches import ExpiringSet
 from enums import calculation_method_type
+from translations import messages
 from repositories import (hall_of_fame_message_repo, hof_wrapped_guild_status_repo, hof_wrapped_repo,
-                          server_config_repo, server_user_repo)
+                          permission_warning_repo, server_config_repo, server_user_repo)
 
 from tests.fakes import FakeConnection, FakePermissions
 
@@ -22,12 +28,17 @@ CHANNEL_ID = 555
 
 
 class FakeCreatedChannel:
-    def __init__(self, channel_id=CHANNEL_ID, name="hall-of-fame"):
+    def __init__(self, channel_id=CHANNEL_ID, name="hall-of-fame", topic=None):
         self.id = channel_id
         self.name = name
+        self.topic = topic
         self.edits = []
         self.permissions = []
         self.sent = []
+        self.views = []
+        self.embeds = []
+        self.mention = f"<#{channel_id}>"
+        self.bot_permissions = FakePermissions()
 
     async def edit(self, **kwargs):
         self.edits.append(kwargs)
@@ -35,8 +46,13 @@ class FakeCreatedChannel:
     async def set_permissions(self, target, **kwargs):
         self.permissions.append((target, kwargs))
 
-    async def send(self, content=None):
+    def permissions_for(self, _member):
+        return self.bot_permissions
+
+    async def send(self, content=None, view=None, embed=None):
         self.sent.append(content)
+        self.views.append(view)
+        self.embeds.append(embed)
 
 
 class FakeBotMember:
@@ -44,13 +60,29 @@ class FakeBotMember:
         self.guild_permissions = FakePermissions(**permissions)
 
 
+class FakeReactChannel:
+    """A channel members react in, which the bot can or cannot read."""
+
+    def __init__(self, channel_id, bot_can_read=True):
+        self.id = channel_id
+        self.type = discord.ChannelType.text
+        self.mention = f"<#{channel_id}>"
+        self.bot_can_read = bot_can_read
+
+    def permissions_for(self, target):
+        can_read = self.bot_can_read if isinstance(target, FakeBotMember) else True
+        return FakePermissions(view_channel=can_read, read_message_history=can_read)
+
+
 class FakeJoinedGuild:
-    def __init__(self, member_count=50, manage_channels=True, guild_id=GUILD_ID):
+    def __init__(self, member_count=50, manage_channels=True, guild_id=GUILD_ID, channels=()):
         self.id = guild_id
         self.name = "Test Server"
         self.member_count = member_count
         self.me = FakeBotMember(manage_channels=manage_channels)
         self.default_role = "@everyone"
+        self.roles = []
+        self.channels = list(channels)
         self.created_channels = []
 
     async def create_text_channel(self, name):
@@ -97,7 +129,12 @@ class CreateDatabaseContextTests(SetupTestCase):
 
     async def join(self, guild=None, custom_channel=None):
         guild = guild if guild is not None else FakeJoinedGuild()
-        created = await utils.create_database_context(object(), guild, FakeConnection(), custom_channel)
+
+        async def fetch_channel(channel_id):
+            return next(channel for channel in [*guild.created_channels, *guild.channels] if channel.id == channel_id)
+
+        bot = types.SimpleNamespace(fetch_channel=fetch_channel)
+        created = await utils.create_database_context(bot, guild, FakeConnection(), custom_channel)
         return guild, created
 
     async def test_creates_a_hall_of_fame_channel(self):
@@ -135,11 +172,79 @@ class CreateDatabaseContextTests(SetupTestCase):
         self.assertEqual([], channel.permissions)
         self.assertEqual([], channel.edits)
 
+    async def test_gives_a_new_board_the_topic_with_the_install_link(self):
+        guild, _ = await self.join()
+
+        self.assertEqual([messages.HOF_CHANNEL_TOPIC], [edit["topic"] for edit in guild.created_channels[0].edits])
+
+    async def test_keeps_the_topic_of_a_channel_it_was_pointed_at(self):
+        custom = FakeCreatedChannel(channel_id=777, topic="Our funniest moments, no spoilers")
+        await self.join(custom_channel=custom)
+
+        self.assertEqual([], custom.edits)
+
+    async def test_replaces_its_own_old_topic_on_a_channel_it_was_pointed_at(self):
+        custom = FakeCreatedChannel(channel_id=777, topic=messages.LEGACY_HOF_CHANNEL_TOPICS[0])
+        await self.join(custom_channel=custom)
+
+        self.assertEqual([messages.HOF_CHANNEL_TOPIC], [edit["topic"] for edit in custom.edits])
+
     async def test_introduces_itself_in_the_new_channel(self):
         guild, _ = await self.join()
 
         self.assertEqual(1, len(guild.created_channels[0].sent))
         self.assertIn("Welcome to the Hall of Fame", guild.created_channels[0].sent[0])
+
+    async def test_welcome_message_tells_members_how_to_ask_about_a_message(self):
+        """Members read the board, and they are the ones who wonder why their message is not on it."""
+        guild, _ = await self.join()
+
+        self.assertIn(messages.WHY_HINT, guild.created_channels[0].sent[0])
+        self.assertIn(messages.WHY_MENU_NAME, messages.WHY_HINT)
+
+    async def test_welcome_message_links_to_support_and_voting(self):
+        guild, _ = await self.join()
+
+        view = guild.created_channels[0].views[0]
+        self.assertEqual([(messages.TROUBLESHOOT_BUTTON, None),
+                          (messages.SUPPORT_SERVER_BUTTON, messages.SUPPORT_SERVER_URL),
+                          (messages.VOTE_BUTTON, messages.VOTE_URL)],
+                         [(button.label, button.url) for button in view.children])
+
+    async def test_says_nothing_more_when_the_setup_is_fine(self):
+        guild, _ = await self.join(FakeJoinedGuild(channels=[FakeReactChannel(1), FakeReactChannel(2)]))
+
+        self.assertEqual(1, len(guild.created_channels[0].sent))
+
+    async def test_reports_channels_members_see_but_the_bot_cannot(self):
+        guild, created = await self.join(FakeJoinedGuild(channels=[FakeReactChannel(1),
+                                                                   FakeReactChannel(2, bot_can_read=False)]))
+
+        board = guild.created_channels[0]
+        self.assertIsNotNone(created)
+        self.assertEqual(2, len(board.sent))
+        self.assertIn("Troubleshoot", board.sent[1])
+        self.assertEqual([messages.TROUBLESHOOT_BUTTON], [button.label for button in board.views[1].children])
+
+    async def test_keeps_the_details_out_of_the_public_board(self):
+        """Everyone reads the board, and the findings name channels and roles meant for admins."""
+        guild, _ = await self.join(FakeJoinedGuild(channels=[FakeReactChannel(2, bot_can_read=False)]))
+
+        board = guild.created_channels[0]
+        self.assertNotIn("<#2>", board.sent[1])
+        self.assertIsNone(board.embeds[1])
+
+    async def test_a_failed_report_does_not_undo_the_join(self):
+        guild = FakeJoinedGuild(channels=[FakeReactChannel(1, bot_can_read=False)])
+
+        def broken(*_args, **_kwargs):
+            raise RuntimeError("boom")
+
+        self.patch(setup_check, "join_findings", broken)
+        _, created = await self.join(guild)
+
+        self.assertIsNotNone(created)
+        self.assertTrue(any("Failed to report setup problems" in line for line in self.logged))
 
     async def test_names_the_starting_threshold_in_the_welcome_message(self):
         guild, created = await self.join(FakeJoinedGuild(member_count=30))
@@ -206,38 +311,27 @@ class DeleteDatabaseContextTests(unittest.TestCase):
              mock.patch.object(hof_wrapped_repo, "delete_hof_wrapped_for_guild",
                                lambda _c, guild_id: calls.append(("wrapped", guild_id))), \
              mock.patch.object(hof_wrapped_guild_status_repo, "delete_progress_for_guild",
-                               lambda _c, guild_id: calls.append(("wrapped progress", guild_id))):
+                               lambda _c, guild_id: calls.append(("wrapped progress", guild_id))), \
+             mock.patch.object(permission_warning_repo, "delete_permission_warnings",
+                               lambda _c, guild_ids: calls.append(("permission warnings", guild_ids))):
             utils.delete_database_context(GUILD_ID, connection)
 
         self.assertEqual([("messages", GUILD_ID), ("users", GUILD_ID), ("config", GUILD_ID),
-                          ("wrapped", GUILD_ID), ("wrapped progress", GUILD_ID)], calls)
-
-
-class FakeHistoryMessage:
-    def __init__(self, content):
-        self.content = content
+                          ("wrapped", GUILD_ID), ("wrapped progress", GUILD_ID),
+                          ("permission warnings", [GUILD_ID])], calls)
 
 
 class FakeGuildChannel:
-    def __init__(self, name, position, permissions=None, history=(), fails=False):
+    def __init__(self, name, position, permissions=None, fails=False):
         self.name = name
+        self.id = 9000 + position
         self.position = position
         self.permissions = permissions if permissions is not None else FakePermissions()
-        self.history_messages = list(history)
         self.fails = fails
         self.sent = []
 
     def permissions_for(self, _member):
         return self.permissions
-
-    def history(self, limit=None):
-        messages = self.history_messages[:limit]
-
-        async def iterator():
-            for message in messages:
-                yield message
-
-        return iterator()
 
     async def send(self, content):
         if self.fails:
@@ -254,8 +348,8 @@ class FakeGuildWithTextChannels:
 
 
 class SendMessageToHighestPrioChannelTests(SetupTestCase):
-    async def send(self, guild, content="The bot is missing a permission", history_limit=100):
-        await utils.send_message_to_highest_prio_channel(object(), guild, content, history_limit)
+    async def send(self, guild, content="The bot is missing a permission"):
+        return await utils.send_message_to_highest_prio_channel(object(), guild, content)
 
     async def test_posts_in_the_first_channel_it_can(self):
         first = FakeGuildChannel("general", position=0)
@@ -272,36 +366,13 @@ class SendMessageToHighestPrioChannelTests(SetupTestCase):
 
         self.assertEqual(1, len(open_channel.sent))
 
-    async def test_skips_a_channel_it_cannot_read_the_history_of(self):
-        unreadable = FakeGuildChannel("archive", position=0,
-                                      permissions=FakePermissions(read_message_history=False))
-        open_channel = FakeGuildChannel("general", position=1)
-        await self.send(FakeGuildWithTextChannels([unreadable, open_channel]))
+    async def test_posts_without_reading_the_channel_history(self):
+        """Callers remember what they already said, so the history is neither read nor needed."""
+        channel = FakeGuildChannel("general", position=0, permissions=FakePermissions(read_message_history=False))
+        posted = await self.send(FakeGuildWithTextChannels([channel]))
 
-        self.assertEqual(1, len(open_channel.sent))
-
-    async def test_says_nothing_twice_in_the_same_channel(self):
-        """This runs daily, and a permission that stays missing would post every day."""
-        content = "The bot is missing a permission"
-        channel = FakeGuildChannel("general", position=0, history=[FakeHistoryMessage(content)])
-        await self.send(FakeGuildWithTextChannels([channel]), content)
-
-        self.assertEqual([], channel.sent)
-
-    async def test_gives_up_rather_than_moving_on_when_it_already_warned(self):
-        content = "The bot is missing a permission"
-        first = FakeGuildChannel("general", position=0, history=[FakeHistoryMessage(content)])
-        second = FakeGuildChannel("random", position=1)
-        await self.send(FakeGuildWithTextChannels([first, second]), content)
-
-        self.assertEqual([], second.sent)
-
-    async def test_posts_without_checking_the_history_when_asked_not_to(self):
-        content = "The bot is missing a permission"
-        channel = FakeGuildChannel("general", position=0, history=[FakeHistoryMessage(content)])
-        await self.send(FakeGuildWithTextChannels([channel]), content, history_limit=0)
-
-        self.assertEqual([content], channel.sent)
+        self.assertTrue(posted)
+        self.assertEqual(1, len(channel.sent))
 
     async def test_moves_on_when_a_channel_refuses_the_message(self):
         failing = FakeGuildChannel("general", position=0, fails=True)
@@ -312,9 +383,44 @@ class SendMessageToHighestPrioChannelTests(SetupTestCase):
 
     async def test_says_nothing_in_a_server_with_no_channel_it_can_use(self):
         locked = FakeGuildChannel("rules", position=0, permissions=FakePermissions(send_messages=False))
-        await self.send(FakeGuildWithTextChannels([locked]))
+        posted = await self.send(FakeGuildWithTextChannels([locked]))
 
+        self.assertFalse(posted)
         self.assertEqual([], locked.sent)
+
+    async def test_reports_failure_when_every_channel_refuses(self):
+        failing = FakeGuildChannel("general", position=0, fails=True)
+        self.assertFalse(await self.send(FakeGuildWithTextChannels([failing])))
+
+
+class SetupFailureNoticeTests(SetupTestCase):
+    """Every retry of /set_hall_of_fame_channel on a server that is not set up fails through here."""
+
+    def setUp(self):
+        super().setUp()
+        self.patch(events, "recent_setup_failure_notices", ExpiringSet(ttl_seconds=3600))
+
+        async def fail(*_args, **_kwargs):
+            raise RuntimeError("Missing Permissions")
+
+        self.patch(utils, "create_database_context", fail)
+        self.channel = FakeGuildChannel("general", position=0)
+        self.guild = FakeGuildWithTextChannels([self.channel])
+
+    async def join(self):
+        return await events.guild_join(self.guild, FakeConnection(), object())
+
+    async def test_tells_the_server_that_setting_up_failed(self):
+        self.assertIsNone(await self.join())
+        self.assertEqual(1, len(self.channel.sent))
+        self.assertIn("Failed to setup", self.channel.sent[0])
+
+    async def test_says_it_once_however_often_setup_is_retried(self):
+        await self.join()
+        await self.join()
+        await self.join()
+
+        self.assertEqual(1, len(self.channel.sent))
 
 
 class PostServerPermsTests(SetupTestCase):

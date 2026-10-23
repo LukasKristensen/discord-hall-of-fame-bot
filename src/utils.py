@@ -7,8 +7,11 @@ from message_reactions import most_reacted_emoji, reaction_count
 from classes import server_class
 from enums import command_refs, log_type, calculation_method_type
 from repositories import (server_config_repo, hall_of_fame_message_repo, server_user_repo, hof_wrapped_repo,
-                          hof_wrapped_guild_status_repo)
+                          hof_wrapped_guild_status_repo, opt_out_repo, permission_warning_repo)
 from caches import ExpiringSet
+from constants import version
+from translations import messages
+import setup_check
 
 daily_post_limit = 100
 duplicate_log_window_seconds = 600
@@ -17,6 +20,75 @@ recently_logged_messages = ExpiringSet(ttl_seconds=duplicate_log_window_seconds)
 daily_limit_handled_on = {}
 # Guild IDs whose missing Hall of Fame channel has been logged, so each server is reported once per boot
 missing_channels_logged = set()
+# The most posts credited to one member, across every server. It keeps what the bot stores about any one
+# member small enough that /my_data can always send them all of it, which data protection law entitles
+# them to: 10,000 posts is a file of about 2.5 MB. Posts past it still reach the server's board, but are
+# stored without an author, so they add to no leaderboard, profile or Wrapped. Even one member writing
+# every post a server's daily limit allows would need 100 days to reach it, so a member who does is also
+# worth a look for farmed reactions
+member_post_limit = 10_000
+# Members whose reaching member_post_limit has been logged, so each is reported once per boot
+members_at_post_limit_logged = set()
+
+
+def author_to_store(connection, author_id: int) -> tuple[int, bool]:
+    """
+    Who a new post is credited to: the member, or nobody when they already have member_post_limit posts
+    credited to them. Checked when a post is stored rather than on every reaction, and counted from the
+    author index, so it costs one lookup per new post. A member who asked not to be featured is left out
+    by insert_hall_of_fame_message itself, in the same statement, so it is not looked up again here
+    :param connection: The database connection
+    :param author_id: The member who wrote the message
+    :return: The author ID to store, and whether the member is at the post limit
+    """
+    if hall_of_fame_message_repo.count_messages_by_author(connection, author_id) >= member_post_limit:
+        return hall_of_fame_message_repo.NO_AUTHOR_ID, True
+    return author_id, False
+
+
+# The server's rules about which messages qualify, as rule_blocking_post names them
+RULE_TOO_OLD = "too_old"
+RULE_BOT_MESSAGE = "bot_message"
+RULE_NO_MEDIA = "no_media"
+
+
+def has_image_or_video(message: discord.Message) -> bool:
+    """
+    Whether a message carries an image or a video, as an attachment or in an embed such as a link preview
+    :param message: The message to look at
+    :return: True when it has at least one image or video
+    """
+    for attachment in message.attachments or []:
+        content_type = getattr(attachment, 'content_type', '')
+        if content_type and (content_type.startswith('image/') or content_type.startswith('video/')):
+            return True
+    for embed in message.embeds or []:
+        if embed.type in ['image', 'video'] or embed.image or embed.video:
+            return True
+    return False
+
+
+def rule_blocking_post(source_message: discord.Message, db_message, server_config: server_class.Server,
+                       now: datetime.datetime = None) -> str | None:
+    """
+    The first of the server's rules about which messages qualify that a message breaks. Shared by
+    validate_message and the Why isn't this on the board? command, so the explanation a member gets is
+    the rule the bot actually applies
+    :param source_message: The message that was reacted to
+    :param db_message: Its stored Hall of Fame post, or None when it has none
+    :param server_config: The in memory configuration of the server
+    :param now: The current time, for tests
+    :return: One of the RULE_ names, or None when the message breaks none of them
+    """
+    now = now or datetime.datetime.now(timezone.utc)
+    # A post already on the board keeps being updated however old the message gets
+    if (now - source_message.created_at).days > server_config.post_due_date and not db_message:
+        return RULE_TOO_OLD
+    if source_message.author.bot and server_config.ignore_bot_messages:
+        return RULE_BOT_MESSAGE
+    if server_config.require_image_or_video and not has_image_or_video(source_message):
+        return RULE_NO_MEDIA
+    return None
 
 
 async def validate_message(reaction_event: discord.RawReactionActionEvent, bot: discord.Client, connection,
@@ -34,11 +106,13 @@ async def validate_message(reaction_event: discord.RawReactionActionEvent, bot: 
     guild_id: int = reaction_event.guild_id
 
     reaction_threshold = server_config.reaction_threshold
-    post_due_date = server_config.post_due_date
     target_channel_id = server_config.hall_of_fame_channel_id
-    ignore_bot_messages = server_config.ignore_bot_messages
     hide_hof_post_below_threshold = server_config.hide_hof_post_below_threshold
-    require_image_or_video = server_config.require_image_or_video
+
+    # The board's own posts, and messages written there, are never featured. Without this, reactions on a
+    # post would repost the bot's own post once they reached the threshold
+    if channel_id == target_channel_id:
+        return
 
     channel = bot.get_channel(channel_id)
     if channel is None:
@@ -52,32 +126,8 @@ async def validate_message(reaction_event: discord.RawReactionActionEvent, bot: 
     source_message = await channel.fetch_message(message_id)
     db_message = hall_of_fame_message_repo.find_hall_of_fame_message(connection, guild_id, channel_id, message_id)
 
-    # Checks if the post is older than the due date and has not been added to the database
-    if (datetime.datetime.now(timezone.utc) - source_message.created_at).days > post_due_date and not db_message:
+    if rule_blocking_post(source_message, db_message, server_config) is not None:
         return
-
-    # Checks if the message is from a bot
-    if source_message.author.bot and ignore_bot_messages:
-        return
-
-    # Checks if message is required to have an image or video
-    if require_image_or_video:
-        has_media = False
-        if source_message.attachments:
-            for attachment in source_message.attachments:
-                content_type = getattr(attachment, 'content_type', '')
-                if content_type and (content_type.startswith('image/') or content_type.startswith('video/')):
-                    has_media = True
-                    break
-
-        if not has_media and source_message.embeds:
-            for embed in source_message.embeds:
-                if embed.type in ['image', 'video'] or embed.image or embed.video:
-                    has_media = True
-                    break
-
-        if not has_media:
-            return
 
     target_channel = bot.get_channel(target_channel_id)
     if target_channel is None:
@@ -85,8 +135,9 @@ async def validate_message(reaction_event: discord.RawReactionActionEvent, bot: 
         return
 
     if hall_of_fame_message_repo.guild_message_count_today(connection, guild_id) >= daily_post_limit:
-        # Every reaction lands here while the server is at its limit, so it is handled once a day
-        today = datetime.date.today()
+        # Every reaction lands here while the server is at its limit, so it is handled once a day. The
+        # UTC day, since database sessions run in UTC and the limit counts from midnight UTC
+        today = datetime.datetime.now(timezone.utc).date()
         if daily_limit_handled_on.get(guild_id) == today:
             return
         daily_limit_handled_on[guild_id] = today
@@ -123,6 +174,9 @@ async def validate_message(reaction_event: discord.RawReactionActionEvent, bot: 
                                           source_message, corrected_reactions, reaction_config)
             return
         else:
+            # The post was hidden and is now back over the threshold, so it is restored with its current
+            # count, which the leaderboards and profiles read from the database
+            hall_of_fame_message_repo.update_field_for_message(connection, guild_id, channel_id, message_id, "reaction_count", corrected_reactions)
             await message_to_update.edit(embed=await create_embed(source_message, reaction_threshold, connection, reaction_config))
             # The column is present and null for every post that is not a video, so the id itself
             # is what decides whether there is a link message to restore
@@ -252,8 +306,7 @@ async def update_leaderboard(connection, bot: discord.Client, server_config: ser
             embed=await create_embed(original_message, server_config.reaction_threshold, connection, reaction_config))
 
 
-async def report_missing_hall_of_fame_channel(bot: discord.Client, guild_id: int, channel_id: int,
-                                             guild_name: str = None):
+async def report_missing_hall_of_fame_channel(bot: discord.Client, guild_id: int, channel_id: int):
     """
     Log that a server's Hall of Fame channel cannot be found, once per boot for each server
     Every reaction in such a server and the daily task all end up here, and the duplicate guard only
@@ -261,15 +314,13 @@ async def report_missing_hall_of_fame_channel(bot: discord.Client, guild_id: int
     :param bot: The Discord bot
     :param guild_id: The ID of the server
     :param channel_id: The ID of the Hall of Fame channel that could not be found
-    :param guild_name: The name of the server, when known
     :return: None
     """
     if guild_id in missing_channels_logged:
         return
     missing_channels_logged.add(guild_id)
 
-    server = f"guild {guild_id}" if guild_name is None else f"server {guild_name}"
-    await logging(bot, f"Could not find the Hall of Fame channel {channel_id} of {server}", guild_id)
+    await logging(bot, f"Could not find the Hall of Fame channel {channel_id}", guild_id)
 
 
 async def post_hall_of_fame_message(message: discord.Message, bot: discord.Client, connection, target_channel_id: int,
@@ -284,6 +335,11 @@ async def post_hall_of_fame_message(message: discord.Message, bot: discord.Clien
     :param config: The reaction related server configuration, fetched when not supplied
     :return:
     """
+    # A member who asked not to be featured is left off every board. Their message stays where they
+    # wrote it, but the bot neither reposts nor stores it. Checked here rather than on every reaction,
+    # so it only costs a lookup when a message is about to be posted
+    if opt_out_repo.is_opted_out(connection, message.author.id):
+        return
     target_channel = bot.get_channel(target_channel_id)
     if target_channel is None:
         await report_missing_hall_of_fame_channel(bot, message.guild.id, target_channel_id)
@@ -298,13 +354,16 @@ async def post_hall_of_fame_message(message: discord.Message, bot: discord.Clien
     hall_of_fame_message = await target_channel.send(embed=embed)
 
     try:
+        # The opt-out is checked again here, since sending the repost gave the member time to ask not to
+        # be featured. The post is on the board by now, so it is kept there, credited to nobody
+        author_id, at_post_limit = author_to_store(connection, int(message.author.id))
         hall_of_fame_message_repo.insert_hall_of_fame_message(connection,
                                                               int(message.id),
                                                               int(message.channel.id),
                                                               int(message.guild.id),
                                                               int(hall_of_fame_message.id),
                                                               int(await reaction_count(message, connection, config)),
-                                                              int(message.author.id),
+                                                              author_id,
                                                               datetime.datetime.now(timezone.utc),
                                                               int(video_message.id) if video_link else None)
     except Exception as e:
@@ -312,6 +371,14 @@ async def post_hall_of_fame_message(message: discord.Message, bot: discord.Clien
         if video_message:
             await video_message.delete()
         await logging(bot, e, message.guild.id, log_level=log_type.CRITICAL)
+        return
+
+    if at_post_limit and message.author.id not in members_at_post_limit_logged:
+        members_at_post_limit_logged.add(message.author.id)
+        # The ID is needed to look into it, and the log channel is private to the developer
+        await logging(bot, f"Member {message.author.id} has {member_post_limit} credited posts, the most allowed, so "
+                           f"new posts of theirs are stored without an author. Worth checking for farmed reactions",
+                      message.guild.id, log_level=log_type.CRITICAL, ping_developer=False)
 
 
 def format_reactions_field_value(count: int, top_reaction) -> str:
@@ -325,15 +392,16 @@ def format_reactions_field_value(count: int, top_reaction) -> str:
     return f"{count} {emoji}" if emoji else f"{count} reactions"
 
 
-def truncate_content(content: str) -> str:
+def truncate_content(content: str, limit: int = 1024) -> str:
     """
     Truncate message content so that it fits within the 1024 character limit of an embed field
     :param content: The content of a message
+    :param limit: The most characters the result may have, lower when the field holds other text too
     :return: The truncated content
     """
     if not content:
         return ""
-    return content[:1021] + "..." if len(content) > 1024 else content
+    return content[:limit - 3] + "..." if len(content) > limit else content
 
 
 def embed_field_value(content: str) -> str:
@@ -345,6 +413,20 @@ def embed_field_value(content: str) -> str:
     return content if content else "​"
 
 
+def add_post_footer(embed: discord.Embed, guild) -> discord.Embed:
+    """
+    Brand a Hall of Fame post, so members who see the board know which bot made it and how to get it
+    :param embed: The post embed
+    :param guild: The server the post is made in, whose bot member supplies the logo
+    :return: The same embed, with the footer set
+    """
+    bot_member = getattr(guild, "me", None)
+    # The global avatar rather than a server's custom bot profile, so the brand looks the same everywhere
+    avatar = getattr(bot_member, "avatar", None)
+    embed.set_footer(text=messages.POST_FOOTER, icon_url=avatar.url if avatar else None)
+    return embed
+
+
 async def create_embed(message: discord.Message, reaction_threshold: int, connection, config: dict = None) -> discord.Embed:
     """
     Create an embed for a message in the Hall of Fame channel
@@ -353,6 +435,18 @@ async def create_embed(message: discord.Message, reaction_threshold: int, connec
     :param connection: MySQL connection
     :param config: The reaction related server configuration, fetched when not supplied
     :return: The embed for the message
+    """
+    embed = await build_post_embed(message, connection, config)
+    return add_post_footer(embed, message.guild)
+
+
+async def build_post_embed(message: discord.Message, connection, config: dict = None) -> discord.Embed:
+    """
+    The content of a Hall of Fame post, laid out for the kind of message it is
+    :param message: The message to create an embed for
+    :param connection: MySQL connection
+    :param config: The reaction related server configuration, fetched when not supplied
+    :return: The embed for the message, without the footer
     """
     # handle 1024 character limit on embed description
     content = truncate_content(message.content)
@@ -363,6 +457,10 @@ async def create_embed(message: discord.Message, reaction_threshold: int, connec
         except discord.HTTPException:
             # The message that was replied to is gone, so the reply is embedded on its own
             reference_message = None
+    # A member who asked not to be featured is left off the board in replies too: their name, words and
+    # image would otherwise go up with the reply. The reply is embedded on its own instead
+    if reference_message is not None and opt_out_repo.is_opted_out(connection, reference_message.author.id):
+        reference_message = None
     reference_content = truncate_content(reference_message.content) if reference_message else ""
     corrected_reactions = await reaction_count(message, connection, config)
     top_reaction = most_reacted_emoji(message.reactions, message.guild.id, connection, config)
@@ -508,6 +606,68 @@ def check_video_extension(message):
     return None
 
 
+def board_topic_is_ours(topic) -> bool:
+    """
+    Whether the bot may set the topic of a board channel: it has none, or it is one the bot set itself
+    :param topic: The channel's current topic
+    :return: True when no admin has written the topic
+    """
+    return not topic or topic in messages.LEGACY_HOF_CHANNEL_TOPICS
+
+
+async def refresh_board_topic(channel, permissions) -> bool:
+    """
+    Move a board still showing a topic from an earlier version to the current one. A topic an admin
+    wrote, or removed, is left alone
+    :param channel: The Hall of Fame channel
+    :param permissions: The bot's permissions in that channel
+    :return: True when the topic was changed
+    """
+    if channel.topic not in messages.LEGACY_HOF_CHANNEL_TOPICS or not permissions.manage_channels:
+        return False
+    await channel.edit(topic=messages.HOF_CHANNEL_TOPIC, reason="Updating the Hall of Fame channel topic")
+    return True
+
+
+def check_setup_view():
+    # Imported here, as commands imports this module
+    import commands
+    return commands.build_check_setup_view()
+
+
+def welcome_view():
+    # Imported here, as commands imports this module
+    import commands
+    return commands.build_welcome_view()
+
+
+async def report_setup_problems_on_join(bot, server, hall_of_fame_channel):
+    """
+    Right after the welcome message, point out anything that already stops posts, most often channels
+    the bot cannot read because they sit behind a role it was never given. Silent when all is well
+    :param bot: The Discord bot
+    :param server: The server just joined
+    :param hall_of_fame_channel: The board
+    """
+    try:
+        # Read again, since set_permissions does not update the object create_text_channel returned, and
+        # a stale one could report a permission the bot has just granted itself as missing
+        hall_of_fame_channel = await bot.fetch_channel(hall_of_fame_channel.id)
+        # A new board starts with chat off
+        findings = setup_check.join_findings(server, hall_of_fame_channel, allow_messages_in_hof_channel=False)
+        if not setup_check.problems(findings):
+            return
+        # Only a pointer: the board is public, and the findings name channels and roles that are for admins
+        await hall_of_fame_channel.send(messages.CHECK_JOIN_NUDGE.format(command=command_refs.TROUBLESHOOT),
+                                        view=check_setup_view())
+        await logging(bot, f"Setup problems on join: "
+                           f"{', '.join(finding.title for finding in setup_check.problems(findings))}",
+                      server.id, log_level=log_type.SYSTEM)
+    except Exception as e:
+        # The server is set up either way, so a failed report must not undo the join
+        await logging(bot, f"Failed to report setup problems on join: {e}", server.id)
+
+
 async def create_database_context(bot, server, connection, custom_channel=None) -> server_class.Server:
     """
     Create a database context for the server
@@ -531,16 +691,15 @@ async def create_database_context(bot, server, connection, custom_channel=None) 
     )
 
     if server_config_repo.check_if_guild_exists(connection, server.id):
-        await logging(bot, f"Server {server.name} already exists in the SQL database, dropping it to recreate", server.id)
+        await logging(bot, "Server already exists in the database, dropping it to recreate", server.id)
         server_config_repo.delete_server_config(connection, server.id)
 
     hall_of_fame_channel = custom_channel or await server.create_text_channel("hall-of-fame")
 
     if server.me.guild_permissions.manage_channels:
-        await hall_of_fame_channel.edit(
-            topic="Patch notes for Hall Of Fame: https://discord.gg/GmFtfySetp",
-            reason="Creating Hall of Fame channel"
-        )
+        # A channel picked with /set_hall_of_fame_channel keeps the topic its admins gave it
+        if board_topic_is_ours(hall_of_fame_channel.topic):
+            await hall_of_fame_channel.edit(topic=messages.HOF_CHANNEL_TOPIC, reason="Creating Hall of Fame channel")
         await hall_of_fame_channel.set_permissions(server.me, read_messages=True, send_messages=True)
         await hall_of_fame_channel.set_permissions(server.default_role, read_messages=True, send_messages=False)
 
@@ -550,21 +709,14 @@ async def create_database_context(bot, server, connection, custom_channel=None) 
                                                 reaction_threshold_default, 1000, leader_board_messages,
                                                 1000, False, True, False, False,
                                                 [], datetime.datetime.now(timezone.utc), False, False,
-                                                server_member_count, calculation_method_type.MOST_REACTIONS_ON_EMOJI, True, False)
+                                                server_member_count, calculation_method_type.MOST_REACTIONS_ON_EMOJI, True, False,
+                                                True)
 
     await hall_of_fame_channel.send(
-        f"🎉 **Welcome to the Hall of Fame!** 🎉\n"
-        f"When a message receives **{reaction_threshold_default} or more (default threshold) of the same reaction**, it’s automatically **reposted here** to celebrate its popularity.\n\n"
-        f"🔧 **Customize your setup:**\n"
-        f"   • Change the reaction threshold with {command_refs.SET_REACTION_THRESHOLD}\n"
-        f"   • View your current settings with {command_refs.GET_SERVER_CONFIG}\n\n"
-        f"✨ **Want to only track specific emojis?**\n"
-        f"   Enable emoji filtering with {command_refs.CUSTOM_EMOJI_CHECK_LOGIC}\n\n"
-        f"🧠 **Want to adjust how reactions are counted? (e.g. all votes on a message, not just the highest reaction)**\n"
-        f"   Use {command_refs.CALCULATION_METHOD} to change the reaction count calculation method.\n\n"
-        f"🛡️ **Note on channel permissions:**\n"
-        f"   If most of your channels are view-blocked behind a certain role, the bot will not be able to see messages from these channels unless given that role.\n\n"
+        messages.HOF_WELCOME.format(threshold=reaction_threshold_default),
+        view=welcome_view()
     )
+    await report_setup_problems_on_join(bot, server, hall_of_fame_channel)
 
     new_server_class = server_class.Server(
         hall_of_fame_channel_id=hall_of_fame_channel.id,
@@ -583,7 +735,8 @@ async def create_database_context(bot, server, connection, custom_channel=None) 
         reaction_count_calculation_method=calculation_method_type.MOST_REACTIONS_ON_EMOJI,
         hide_hof_post_below_threshold=True,
         server_member_count=server_member_count,
-        require_image_or_video=False
+        require_image_or_video=False,
+        count_in_global_profiles=True
     )
     return new_server_class
 
@@ -601,31 +754,7 @@ def delete_database_context(server_id: int, connection):
     hof_wrapped_repo.delete_hof_wrapped_for_guild(connection, server_id)
     # Left behind, a guild that rejoins stays marked as done for the year and never gets its wrapped again
     hof_wrapped_guild_status_repo.delete_progress_for_guild(connection, server_id)
-
-
-async def send_server_owner_error_message(owner, e, bot):
-    """
-    Send an error message to the server owner
-    :param owner: The owner of the server
-    :param e: The error message
-    :param bot: The Discord bot
-    :return: None
-    """
-    if owner:
-        try:
-            # Fetch the message history of the owner
-            messages = []
-            async for message in owner.history(limit=1):
-                messages.append(message)
-            # Check if the specific message has already been sent
-            message_already_sent = any("Failed to setup" in msg.content for msg in messages)
-            if not message_already_sent:
-                await logging(bot, f"Sending error message {e} to server owner {owner.name}")
-                await owner.send(f"{e}")
-            else:
-                await logging(bot, f"Error message already sent to server owner {owner.name}")
-        except Exception as history_error:
-            await logging(bot, f"Failed to send error message to server owner {owner.name}: {history_error}")
+    permission_warning_repo.delete_permission_warnings(connection, [server_id])
 
 
 async def logging(bot: discord.Client, message, server_id=None, new_value=None, log_level=log_type.ERROR,
@@ -671,45 +800,96 @@ async def logging(bot: discord.Client, message, server_id=None, new_value=None, 
         await channel.send(f"{message_prefix}```diff\n{date_formatted_message}\n```")
 
 
+# The short field of the feedback form is a title, and the long one goes into a single embed field, which
+# Discord caps at 1024 characters
+feedback_title_max_length = 150
+feedback_message_max_length = 1000
+# The developer's copy is coloured by topic, so a bug report stands out in the channel. Other topics are gold
+feedback_topic_colors = {"bug": discord.Color.red(), "idea": discord.Color.green(), "question": discord.Color.blue()}
+
+
+def build_feedback_embed(user, guild_id, topic: str, title_field: tuple[str, str],
+                         message_field: tuple[str, str]) -> discord.Embed:
+    """
+    The developer's copy of a piece of feedback, only ever posted in the private feedback channel
+    :param user: The member who sent it
+    :param guild_id: The server it was sent from, None in a DM or a server that has the bot through a user
+        install only
+    :param topic: The topic picked on /feedback, a key of messages.FEEDBACK_TOPICS
+    :param title_field: The short field's label and what the member wrote in it
+    :param message_field: The long field's label and what the member wrote in it
+    :return: The embed
+    """
+    embed = discord.Embed(title=f"New feedback: {messages.FEEDBACK_TOPICS.get(topic, topic)}",
+                          color=feedback_topic_colors.get(topic, discord.Color.gold()))
+    for label, value in (title_field, message_field):
+        embed.add_field(name=label, value=value, inline=False)
+    embed.set_author(name=user.name, icon_url=user.avatar.url if user.avatar else None)
+    embed.add_field(name="Guild", value=guild_id or "None (user install)", inline=True)
+    embed.add_field(name="UserId", value=user.id, inline=True)
+    # The version the member was on, so a bug report can be checked against what was fixed since
+    embed.set_footer(text=f"Hall of Fame {version.VERSION}")
+    return embed
+
+
 # noinspection PyTypeChecker
-async def create_feedback_form(interaction: discord.Interaction, bot):
+async def create_feedback_form(interaction: discord.Interaction, bot, topic: str = "other", on_sent=None,
+                               refusal=None, on_unsent=None):
     """
     Create a feedback form for the user and send the feedback to the feedback channel
     :param interaction:
     :param bot:
+    :param topic: What the feedback is about, a key of messages.FEEDBACK_TOPICS. It decides what the form asks for
+    :param on_sent: Called with the member's user ID as the feedback is sent, before the send's await, so
+        two forms submitted at the same moment cannot both get past the daily limit
+    :param on_unsent: Called with the member's user ID when sending failed, to take back on_sent
+    :param refusal: Called with the member's user ID when the form is submitted. Returns what to answer
+        instead of sending it, such as the daily limit being reached while other forms were open, or None
     :return:
     """
-    class FeedbackModal(discord.ui.Modal, title="Feedback Form"):
-        fb_title = discord.ui.TextInput(
-            style=discord.TextStyle.short,
-            placeholder="Give your feedback here",
-            required=True,
-            label="Title"
-        )
-        message = discord.ui.TextInput(
-            style=discord.TextStyle.paragraph,
-            placeholder="Give your feedback here",
-            required=True,
-            max_length=500,
-            label="Message"
-        )
+    form_title, title_label, title_placeholder, message_label, message_placeholder = messages.FEEDBACK_FORMS.get(
+        topic, messages.FEEDBACK_FORMS["other"])
+
+    class FeedbackModal(discord.ui.Modal):
+        def __init__(self):
+            super().__init__(title=form_title)
+            self.fb_title = discord.ui.TextInput(
+                style=discord.TextStyle.short,
+                label=title_label,
+                placeholder=title_placeholder,
+                required=True,
+                max_length=feedback_title_max_length
+            )
+            self.message = discord.ui.TextInput(
+                style=discord.TextStyle.paragraph,
+                label=message_label,
+                placeholder=message_placeholder,
+                required=True,
+                max_length=feedback_message_max_length
+            )
+            self.add_item(self.fb_title)
+            self.add_item(self.message)
 
         async def on_submit(self, feedback_interaction) -> None:
+            refused = refusal(feedback_interaction.user.id) if refusal is not None else None
+            if refused:
+                await feedback_interaction.response.send_message(refused, ephemeral=True)
+                return
             target_guild = bot.get_guild(1180006529575960616)
             target_channel = target_guild.get_channel(1345558910836412456)
-            embed = discord.Embed(
-                title="New feedback",
-                color=discord.Color.gold()
-            )
-            embed.add_field(name=self.fb_title.label, value=self.fb_title.value, inline=False)
-            embed.add_field(name=self.message.label, value=self.message.value, inline=False)
-            embed.set_author(name=feedback_interaction.user.name, icon_url=feedback_interaction.user.avatar.url if feedback_interaction.user.avatar else None)
-            embed.add_field(name="Guild", value=feedback_interaction.guild.id, inline=True)
-            embed.add_field(name="UserId", value=feedback_interaction.user.id, inline=True)
-            await target_channel.send(embed=embed)
-            await feedback_interaction.response.send_message(f"Thanks for your feedback, {feedback_interaction.user.mention}")
-            await asyncio.sleep(5)
-            await feedback_interaction.delete_original_response()
+            embed = build_feedback_embed(feedback_interaction.user, feedback_interaction.guild_id, topic,
+                                         (self.fb_title.label, self.fb_title.value),
+                                         (self.message.label, self.message.value))
+            if on_sent is not None:
+                on_sent(feedback_interaction.user.id)
+            try:
+                await target_channel.send(embed=embed)
+            except Exception:
+                # A form that failed does not count toward the member's daily limit
+                if on_unsent is not None:
+                    on_unsent(feedback_interaction.user.id)
+                raise
+            await feedback_interaction.response.send_message(messages.FEEDBACK_SENT, ephemeral=True)
 
     # noinspection PyUnresolvedReferences
     await interaction.response.send_modal(FeedbackModal())
@@ -879,7 +1059,7 @@ async def post_server_perms(bot, server):
     :param server:
     :return:
     """
-    await logging(bot, f"Joined server {server.name} (ID {server.id}) with permissions:\n"
+    await logging(bot, f"Joined a server with permissions:\n"
                              f"Can manage roles: {server.me.guild_permissions.manage_roles}\n"
                              f"Can manage channels: {server.me.guild_permissions.manage_channels}\n"
                              f"Can send messages: {server.me.guild_permissions.send_messages}\n"
@@ -891,34 +1071,27 @@ async def post_server_perms(bot, server):
                              f"Can add reactions: {server.me.guild_permissions.add_reactions}\n"
                              f"Can use external emojis: {server.me.guild_permissions.use_external_emojis}\n"
                              f"Can view channels: {server.me.guild_permissions.view_channel}\n"
-                             f"Server member count: {server.member_count}", log_level=log_type.SYSTEM)
+                             f"Server member count: {server.member_count}", server.id, log_level=log_type.SYSTEM)
 
 
-async def send_message_to_highest_prio_channel(bot: discord.Client, guild: discord.Guild, message_content: str,
-                                               history_limit: int = 100):
+async def send_message_to_highest_prio_channel(bot: discord.Client, guild: discord.Guild, message_content: str) -> bool:
     """
-    Send a message to the highest priority channel in the guild where the bot has permission to send messages
+    Send a message to the highest priority channel in the guild where the bot has permission to send messages.
+    Callers keep track of what they already said themselves, as reading channel history to find out costs an
+    API call per server
     :param bot: The Discord bot
     :param guild: The guild to send the message to
     :param message_content: The content of the message to send
-    :param history_limit: The number of messages to check for recent similar messages
-    :return:
+    :return: True when the message was posted
     """
     for alt_channel in sorted(guild.text_channels, key=lambda c: c.position):
         alt_permissions = alt_channel.permissions_for(guild.me)
-        if alt_permissions.send_messages and alt_permissions.view_channel and alt_permissions.read_message_history:
-            if history_limit > 0:
-                recent_messages = [msg async for msg in alt_channel.history(limit=history_limit)]
-                if any(message_content[:20] in msg.content for msg in
-                       recent_messages):
-                    await logging(bot, f"Missing permissions message already sent to {alt_channel.name} in "
-                                             f"server {guild.name} recently", guild.id)
-                    break
+        if alt_permissions.send_messages and alt_permissions.view_channel:
             try:
                 await alt_channel.send(message_content)
-                await logging(bot, f"Sent missing permissions message to {alt_channel.name} in "
-                                         f"server {guild.name}", guild.id)
-                break
+                await logging(bot, f"Sent the missing permissions message to channel {alt_channel.id}", guild.id)
+                return True
             except Exception as e:
-                await logging(bot, f"Failed to send missing permissions message to {alt_channel.name} in server "
-                                   f"{guild.name}: {e}", guild.id)
+                await logging(bot, f"Failed to send the missing permissions message to channel {alt_channel.id}: {e}",
+                              guild.id)
+    return False

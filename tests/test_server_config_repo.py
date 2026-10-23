@@ -1,3 +1,4 @@
+import datetime
 import unittest
 
 from tests.fakes import FakeConnection
@@ -41,6 +42,43 @@ class GuildIdsWithLeaderboardTests(unittest.TestCase):
         server_config_repo.get_guild_ids_with_leaderboard(connection)
 
         self.assertEqual(1, len(connection.queries))
+        self.assertTrue(all(cursor.closed for cursor in connection.cursors))
+
+
+class RecordMissingGuildsTests(unittest.TestCase):
+    """The grace period before a departed server is deleted is counted from this date."""
+
+    NOW = datetime.datetime(2026, 10, 18, tzinfo=datetime.timezone.utc)
+
+    def test_returns_when_each_server_was_first_found_missing(self):
+        earlier = self.NOW - datetime.timedelta(days=3)
+        connection = FakeConnection(rows=[(300, earlier), (301, self.NOW)])
+
+        missing_since = server_config_repo.record_missing_guilds(connection, [300, 301], self.NOW)
+
+        self.assertEqual({300: earlier, 301: self.NOW}, missing_since)
+
+    def test_clears_servers_that_are_back_before_marking_new_ones(self):
+        connection = FakeConnection(rows=[])
+        server_config_repo.record_missing_guilds(connection, [300], self.NOW)
+
+        clear, mark, _ = connection.queries
+        self.assertIn("SET missing_since = NULL", clear)
+        self.assertIn("NOT (guild_id = ANY", clear)
+        self.assertIn("WHERE missing_since IS NULL", mark)
+        self.assertEqual([([300],), (self.NOW, [300]), None], connection.parameters)
+
+    def test_never_moves_the_date_of_a_server_already_missing(self):
+        connection = FakeConnection(rows=[])
+        server_config_repo.record_missing_guilds(connection, [300], self.NOW)
+
+        self.assertIn("missing_since IS NULL", connection.queries[1])
+
+    def test_commits_and_closes(self):
+        connection = FakeConnection(rows=[])
+        server_config_repo.record_missing_guilds(connection, [], self.NOW)
+
+        self.assertEqual(1, connection.commits)
         self.assertTrue(all(cursor.closed for cursor in connection.cursors))
 
 
@@ -142,6 +180,37 @@ class ServerClassMappingTests(unittest.TestCase):
             "custom_emoji_check_logic": True,
             "whitelisted_emojis": ["👍"]
         }, server.reaction_config())
+
+
+
+class FailingAlterCursor:
+    """A cursor whose ALTER TABLE statements fail, as on a database that refuses a column change."""
+
+    def __init__(self):
+        self.executed = []
+
+    def execute(self, query, params=None):
+        self.executed.append(query)
+        if query.strip().upper().startswith("ALTER TABLE"):
+            raise RuntimeError("permission denied")
+
+    def close(self):
+        pass
+
+
+class CreateTableMigrationTests(unittest.TestCase):
+    def test_a_column_that_cannot_be_added_does_not_stop_the_others(self):
+        """Each change is tried on its own and rolled back, so one refusal leaves the rest to run."""
+        connection = FakeConnection()
+        cursor = FailingAlterCursor()
+        connection.cursor = lambda: cursor
+        server_config_repo.create_server_config_table(connection)
+
+        altered = [query for query in cursor.executed if "ADD COLUMN IF NOT EXISTS" in query]
+        self.assertTrue(any("count_in_global_profiles" in query for query in altered))
+        self.assertTrue(any("missing_since" in query for query in altered))
+        self.assertEqual(len(altered), connection.rollbacks)
+
 
 
 if __name__ == "__main__":

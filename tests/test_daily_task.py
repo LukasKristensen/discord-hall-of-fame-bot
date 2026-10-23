@@ -11,17 +11,20 @@ different windows.
 """
 
 import asyncio
+import datetime
 import unittest
 from contextlib import asynccontextmanager
 from unittest import mock
+
+import discord
 
 import concurrency
 import events
 import utils
 from caches import ExpiringSet
-from repositories import server_config_repo, server_user_repo
+from repositories import guild_lifecycle_event_repo, server_config_repo, server_user_repo
 
-from tests.fakes import FakeBotWithGuilds, FakeConnection, FakeLogGuild
+from tests.fakes import FakeBotWithGuilds, FakeConnection, FakeLogGuild, FakePermissionWarningStore
 from tests.test_server_class import build_server
 
 
@@ -414,6 +417,8 @@ class DailyTaskPermissionSweepTests(unittest.IsolatedAsyncioTestCase):
         utils.recently_logged_messages = ExpiringSet(ttl_seconds=600)
         self.addCleanup(self.restore_cache)
 
+        FakePermissionWarningStore().install(self)
+
     def restore_cache(self):
         utils.recently_logged_messages = self.original_cache
 
@@ -425,6 +430,7 @@ class DailyTaskPermissionSweepTests(unittest.IsolatedAsyncioTestCase):
             def __init__(self, guild_id):
                 self.id = guild_id + 1000
                 self.guild_id = guild_id
+                self.topic = None
 
             def permissions_for(self, _member):
                 from tests.fakes import FakePermissions
@@ -456,6 +462,7 @@ class DailyTaskPermissionSweepTests(unittest.IsolatedAsyncioTestCase):
                     await asyncio.sleep(30)
                 await asyncio.sleep(0.005)
                 checked.append(guild.id)
+                return True
             finally:
                 test.in_flight -= 1
 
@@ -466,26 +473,26 @@ class DailyTaskPermissionSweepTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_warns_every_server_that_is_missing_a_permission(self):
         bot = self.build_bot(missing_permissions_for=self.guild_ids)
-        await events.check_write_permissions_to_hall_of_fame_channel(bot, self.server_classes)
+        await events.check_write_permissions_to_hall_of_fame_channel(bot, self.server_classes, FakeConnection())
 
         self.assertEqual(self.guild_ids, sorted(self.checked))
 
     async def test_says_nothing_to_a_server_with_every_permission(self):
         bot = self.build_bot(missing_permissions_for=())
-        await events.check_write_permissions_to_hall_of_fame_channel(bot, self.server_classes)
+        await events.check_write_permissions_to_hall_of_fame_channel(bot, self.server_classes, FakeConnection())
 
         self.assertEqual([], self.checked)
 
     async def test_keeps_the_number_of_servers_in_flight_bounded(self):
         bot = self.build_bot(missing_permissions_for=self.guild_ids)
-        await events.check_write_permissions_to_hall_of_fame_channel(bot, self.server_classes)
+        await events.check_write_permissions_to_hall_of_fame_channel(bot, self.server_classes, FakeConnection())
 
         self.assertLessEqual(self.peak_in_flight, events.daily_task_concurrency)
 
     async def test_one_hanging_server_does_not_stop_the_others(self):
         bot = self.build_bot(missing_permissions_for=self.guild_ids, hanging_for=(202,))
         with mock.patch.object(events, "daily_task_guild_timeout_seconds", 0.05):
-            await events.check_write_permissions_to_hall_of_fame_channel(bot, self.server_classes)
+            await events.check_write_permissions_to_hall_of_fame_channel(bot, self.server_classes, FakeConnection())
 
         self.assertEqual([200, 201, 203, 204, 205], sorted(self.checked))
 
@@ -612,6 +619,264 @@ class UserStatisticsSweepTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(self.guild_ids, self.rebuilt)
         self.assertEqual("RESET statement_timeout", self.connection.queries[-1])
+
+
+class FakeResponse:
+    """What discord.HTTPException reads from a failed request."""
+
+    def __init__(self, status):
+        self.status = status
+        self.reason = "test"
+
+
+class DepartedGuildCleanupTests(unittest.IsolatedAsyncioTestCase):
+    """Deleting a server's data cannot be undone, so every guard against a false positive is checked."""
+
+    NOW = datetime.datetime(2026, 10, 18, tzinfo=datetime.timezone.utc)
+
+    def setUp(self):
+        # Twenty servers the bot is in, so one or two missing stay under the share that aborts the cleanup
+        self.present = list(range(200, 220))
+        self.departed = 999
+        self.bot = FakeBotWithGuilds(self.present, guild=FakeLogGuild())
+        self.fetch_results = {}
+        self.fetched = []
+        self.bot.fetch_guild = self.fetch_guild
+        self.server_classes = {guild_id: build_server(guild_id=guild_id)
+                               for guild_id in self.present + [self.departed]}
+        self.connection = FakeConnection()
+        self.missing_since = {self.departed: self.NOW - datetime.timedelta(days=events.departed_guild_grace_days)}
+        self.recorded = []
+        self.deleted = []
+        self.lifecycle = []
+        self.latest_event = "JOIN"
+
+        self.original_cache = utils.recently_logged_messages
+        utils.recently_logged_messages = ExpiringSet(ttl_seconds=600)
+        self.addCleanup(self.restore_cache)
+
+        self.patch(server_config_repo, "record_missing_guilds", self.record_missing)
+        self.patch(utils, "delete_database_context", lambda guild_id, _connection: self.deleted.append(guild_id))
+        self.patch(guild_lifecycle_event_repo, "get_latest_event_type",
+                   lambda _connection, _guild_id: self.latest_event)
+        self.patch(guild_lifecycle_event_repo, "insert_guild_lifecycle_event",
+                   lambda _connection, guild_id, event_type, occurred_at:
+                   self.lifecycle.append((guild_id, event_type, occurred_at)))
+
+    def restore_cache(self):
+        utils.recently_logged_messages = self.original_cache
+
+    def patch(self, target, name, replacement):
+        patcher = mock.patch.object(target, name, replacement)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def record_missing(self, _connection, missing_guild_ids, now):
+        self.recorded.append((list(missing_guild_ids), now))
+        return {guild_id: since for guild_id, since in self.missing_since.items() if guild_id in missing_guild_ids}
+
+    async def fetch_guild(self, guild_id):
+        self.fetched.append(guild_id)
+        result = self.fetch_results.get(guild_id, discord.Forbidden(FakeResponse(403), "Missing Access"))
+        if isinstance(result, BaseException):
+            raise result
+        return result
+
+    async def clean_up(self):
+        return await events.clean_up_departed_guilds(self.bot, self.connection, self.server_classes, now=self.NOW)
+
+    def logged(self):
+        return " ".join(message for channel in self.bot.guild.channels.values() for message in channel.sent)
+
+    async def test_deletes_a_server_missing_for_the_whole_grace_period_that_discord_confirms_is_gone(self):
+        deleted = await self.clean_up()
+
+        self.assertEqual([self.departed], deleted)
+        self.assertEqual([self.departed], self.deleted)
+        self.assertNotIn(self.departed, self.server_classes)
+
+    async def test_a_deleted_server_unknown_to_discord_counts_as_gone(self):
+        self.fetch_results[self.departed] = discord.NotFound(FakeResponse(404), "Unknown Guild")
+
+        self.assertEqual([self.departed], await self.clean_up())
+
+    async def test_records_the_leave_for_the_server_statistics_dated_when_it_was_first_missing(self):
+        await self.clean_up()
+
+        self.assertEqual([(self.departed, "LEAVE", self.missing_since[self.departed])], self.lifecycle)
+
+    async def test_records_no_leave_without_a_join_to_match_it(self):
+        for latest_event in (None, "LEAVE"):
+            self.lifecycle.clear()
+            self.server_classes[self.departed] = build_server(guild_id=self.departed)
+            self.latest_event = latest_event
+            await self.clean_up()
+
+            self.assertEqual([], self.lifecycle)
+
+    async def test_keeps_a_server_that_has_not_been_missing_long_enough(self):
+        self.missing_since[self.departed] = self.NOW - datetime.timedelta(
+            days=events.departed_guild_grace_days, seconds=-1)
+
+        self.assertEqual([], await self.clean_up())
+        self.assertEqual([], self.deleted)
+        self.assertEqual([], self.fetched)
+        self.assertIn(self.departed, self.server_classes)
+
+    async def test_keeps_a_server_found_missing_for_the_first_time(self):
+        del self.missing_since[self.departed]
+
+        self.assertEqual([], await self.clean_up())
+        self.assertIn(f"Could not find server {self.departed}", self.logged())
+
+    async def test_keeps_a_server_discord_still_gives_the_bot_access_to(self):
+        """A server missing from the cache but returned by the API means the cache is wrong, not that it left."""
+        self.fetch_results[self.departed] = object()
+
+        self.assertEqual([], await self.clean_up())
+        self.assertEqual([], self.deleted)
+        self.assertIn("still gives the bot access", self.logged())
+
+    async def test_keeps_a_server_when_discord_fails_to_answer(self):
+        self.fetch_results[self.departed] = discord.HTTPException(FakeResponse(503), "Service Unavailable")
+
+        self.assertEqual([], await self.clean_up())
+        self.assertEqual([], self.deleted)
+        self.assertIn(self.departed, self.server_classes)
+
+    async def test_keeps_a_server_when_discord_does_not_answer_in_time(self):
+        async def hang(_guild_id):
+            await asyncio.sleep(30)
+
+        self.bot.fetch_guild = hang
+        self.patch(events, "departed_guild_fetch_timeout_seconds", 0.02)
+
+        self.assertEqual([], await self.clean_up())
+        self.assertEqual([], self.deleted)
+
+    async def test_deletes_nothing_when_too_many_servers_are_missing_at_once(self):
+        """Discord leaving servers out of the guild list must not look like a wave of servers leaving."""
+        self.bot.guilds = self.bot.guilds[:5]
+        for guild_id in self.present:
+            self.missing_since[guild_id] = self.missing_since[self.departed]
+
+        self.assertEqual([], await self.clean_up())
+        self.assertEqual([], self.deleted)
+        self.assertEqual([], self.recorded)
+        self.assertIn("Not cleaning up any server today", self.logged())
+
+    async def test_deletes_nothing_when_the_bot_sees_no_guilds_at_all(self):
+        self.bot.guilds = []
+
+        self.assertEqual([], await self.clean_up())
+        self.assertEqual([], self.recorded)
+
+    async def test_deletes_nothing_when_nothing_is_missing(self):
+        del self.server_classes[self.departed]
+
+        self.assertEqual([], await self.clean_up())
+
+    async def test_clears_the_missing_dates_when_nothing_is_missing(self):
+        """A server that came back has to start its grace period over, even when no other is missing."""
+        del self.server_classes[self.departed]
+        await self.clean_up()
+
+        self.assertEqual([([], self.NOW)], self.recorded)
+
+    async def test_only_marks_the_servers_that_are_missing(self):
+        await self.clean_up()
+
+        self.assertEqual([([self.departed], self.NOW)], self.recorded)
+
+    async def test_one_failing_server_does_not_stop_the_others(self):
+        other = 998
+        self.server_classes[other] = build_server(guild_id=other)
+        self.missing_since[other] = self.missing_since[self.departed]
+
+        def fail_on_one(guild_id, _connection):
+            if guild_id == other:
+                raise RuntimeError("database went away")
+            self.deleted.append(guild_id)
+
+        self.patch(utils, "delete_database_context", fail_on_one)
+
+        self.assertEqual([self.departed], await self.clean_up())
+        self.assertIn(other, self.server_classes)
+        self.assertEqual(1, self.connection.rollbacks)
+
+    async def test_the_daily_task_skips_the_cleanup_on_the_development_bot(self):
+        cleanups = []
+
+        async def record_cleanup(*_args, **_kwargs):
+            cleanups.append(True)
+
+        async def noop(*_args, **_kwargs):
+            return None
+
+        self.patch(events, "clean_up_departed_guilds", record_cleanup)
+        self.patch(server_config_repo, "get_guild_ids_with_leaderboard", lambda _connection: set())
+        self.patch(utils, "update_user_database", noop)
+        self.patch(events, "check_write_permissions_to_hall_of_fame_channel", noop)
+
+        await events.daily_task(self.bot, self.connection, self.server_classes, dev_testing=True,
+                                borrow_connection=None)
+        self.assertEqual([], cleanups)
+
+        await events.daily_task(self.bot, self.connection, self.server_classes, dev_testing=False,
+                                borrow_connection=None)
+        self.assertEqual([True], cleanups)
+
+
+
+class StartupJoinRecordingTests(unittest.IsolatedAsyncioTestCase):
+    async def test_a_join_that_cannot_be_recorded_does_not_stop_the_startup(self):
+        """A server added while the bot was offline is still set up when recording its join fails."""
+        logged = []
+
+        async def record_log(_bot, message, *args, **kwargs):
+            logged.append(str(message))
+
+        def fail(*_args):
+            raise RuntimeError("database went away")
+
+        guild = mock.Mock(id=4242)
+        guild.name = "Offline Server"
+        guild.me.guild_permissions.manage_channels = False
+        bot = mock.Mock(guilds=[guild])
+        connection = FakeConnection()
+        with mock.patch.object(events.server_config_repo, "check_if_guild_exists", lambda *_args: False), \
+                mock.patch.object(events, "record_guild_join", fail), \
+                mock.patch.object(events.utils, "logging", record_log):
+            found = await events.check_for_new_server_classes(bot, connection)
+
+        self.assertEqual({}, found)
+        self.assertEqual(1, connection.rollbacks)
+        self.assertTrue(any("Could not record the join" in entry for entry in logged))
+
+
+
+
+class StartupSetupFailureTests(unittest.IsolatedAsyncioTestCase):
+    async def test_a_server_that_cannot_be_set_up_is_logged_and_skipped(self):
+        logged = []
+
+        async def record_log(_bot, message, *args, **kwargs):
+            logged.append(str(message))
+
+        async def fail(*_args):
+            raise RuntimeError("Missing Permissions")
+
+        guild = mock.Mock(id=4242)
+        guild.me.guild_permissions.manage_channels = True
+        with mock.patch.object(events.server_config_repo, "check_if_guild_exists", lambda *_args: False), \
+                mock.patch.object(events, "record_guild_join", lambda *_args: None), \
+                mock.patch.object(events.utils, "create_database_context", fail), \
+                mock.patch.object(events.utils, "logging", record_log):
+            found = await events.check_for_new_server_classes(mock.Mock(guilds=[guild]), FakeConnection())
+
+        self.assertEqual({}, found)
+        self.assertTrue(any("Failed to create the database context" in entry for entry in logged))
+
 
 
 if __name__ == "__main__":

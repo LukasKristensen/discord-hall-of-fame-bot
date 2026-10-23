@@ -18,17 +18,6 @@ USER_COLUMNS = ["user_id", "guild_id", "monthly_reaction_rank", "total_message_r
 
 USER_ROW = (77, 200, 3, 1, 2, 4, 40, 5, 60, 600)
 
-USER_STATS = {
-    "monthly_reaction_rank": 3,
-    "total_message_rank": 1,
-    "total_reaction_rank": 2,
-    "this_month_hall_of_fame_messages": 4,
-    "total_hall_of_fame_messages": 40,
-    "monthly_message_rank": 5,
-    "this_month_hall_of_fame_message_reactions": 60,
-    "total_hall_of_fame_message_reactions": 600,
-}
-
 
 class GetServerUserTests(unittest.TestCase):
     def test_maps_the_row_to_its_column_names(self):
@@ -147,26 +136,6 @@ class CheckIfUserIsTopOfStatTests(unittest.TestCase):
         connection = FakeConnection(row=None)
         self.assertFalse(server_user_repo.check_if_user_is_top_of_stat(
             connection, 77, 200, "total_hall_of_fame_messages"))
-
-
-class UpdateUserStatsTests(unittest.TestCase):
-    def test_writes_every_statistic_in_the_order_the_columns_are_listed(self):
-        connection = FakeConnection()
-        server_user_repo.update_user_stats(connection, USER_STATS, 77, 200)
-
-        self.assertEqual((77, 200, 3, 1, 2, 4, 40, 5, 60, 600), connection.parameters[0])
-
-    def test_updates_a_member_who_already_has_standings(self):
-        connection = FakeConnection()
-        server_user_repo.update_user_stats(connection, USER_STATS, 77, 200)
-
-        self.assertIn("ON CONFLICT(user_id, guild_id) DO UPDATE", connection.queries[0])
-
-    def test_commits(self):
-        connection = FakeConnection()
-        server_user_repo.update_user_stats(connection, USER_STATS, 77, 200)
-
-        self.assertEqual(1, connection.commits)
 
 
 class DeleteServerUsersTests(unittest.TestCase):

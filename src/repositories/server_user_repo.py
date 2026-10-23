@@ -22,23 +22,6 @@ def create_server_user_table(connection):
     connection.commit()
     cursor.close()
 
-def insert_server_user(connection, user_id, guild_id, monthly_reaction_rank,
-                       total_message_rank, total_reaction_rank, this_month_hall_of_fame_messages,
-                       total_hall_of_fame_messages, monthly_message_rank,
-                       this_month_hall_of_fame_message_reactions, total_hall_of_fame_message_reactions):
-    cursor = connection.cursor()
-    cursor.execute("""
-        INSERT INTO server_user 
-        (user_id, guild_id, monthly_reaction_rank, total_message_rank, total_reaction_rank,
-         this_month_hall_of_fame_messages, total_hall_of_fame_messages, monthly_message_rank,
-         this_month_hall_of_fame_message_reactions, total_hall_of_fame_message_reactions)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-    """, (user_id, guild_id, monthly_reaction_rank, total_message_rank, total_reaction_rank,
-          this_month_hall_of_fame_messages, total_hall_of_fame_messages, monthly_message_rank,
-          this_month_hall_of_fame_message_reactions, total_hall_of_fame_message_reactions))
-    connection.commit()
-    cursor.close()
-
 def delete_server_users(connection, guild_id):
     cursor = connection.cursor()
     cursor.execute("""
@@ -47,6 +30,52 @@ def delete_server_users(connection, guild_id):
     """, (guild_id,))
     connection.commit()
     cursor.close()
+
+def get_server_users_for_user(connection, user_id) -> list[dict]:
+    """
+    A member's standing in every guild, for /my_data. The primary key starts with user_id, so this
+    is an index lookup
+    :param connection: The database connection
+    :param user_id: The member's user ID
+    :return: One dict per guild
+    """
+    cursor = connection.cursor()
+    cursor.execute("SELECT * FROM server_user WHERE user_id = %s ORDER BY guild_id", (user_id,))
+    columns = [desc[0] for desc in cursor.description]
+    results = [dict(zip(columns, row)) for row in cursor.fetchall()]
+    cursor.close()
+    return results
+
+def count_server_users_for_user(connection, user_id) -> int:
+    """
+    How many guilds hold a standing for a member, for the /my_data summary
+    :param connection: The database connection
+    :param user_id: The member's user ID
+    :return: The number of guilds
+    """
+    cursor = connection.cursor()
+    cursor.execute("SELECT COUNT(*) FROM server_user WHERE user_id = %s", (user_id,))
+    row = cursor.fetchone()
+    cursor.close()
+    return row[0] if row else 0
+
+
+def delete_server_users_for_user(connection, user_id, commit: bool = True) -> int:
+    """
+    Delete a member's standing in every guild. The daily rebuild writes it again from
+    hall_of_fame_message, so this only sticks once the member's posts no longer carry their ID
+    :param connection: The database connection
+    :param user_id: The member's user ID
+    :param commit: False to leave the commit to the caller, as part of a larger transaction
+    :return: The number of rows deleted
+    """
+    cursor = connection.cursor()
+    cursor.execute("DELETE FROM server_user WHERE user_id = %s", (user_id,))
+    deleted = cursor.rowcount
+    if commit:
+        connection.commit()
+    cursor.close()
+    return deleted
 
 def get_server_user(connection, user_id, guild_id):
     cursor = connection.cursor()
@@ -63,42 +92,6 @@ def get_server_user(connection, user_id, guild_id):
         result = None
     cursor.close()
     return result
-
-def update_user_stats(connection, stats, user_id, guild_id):
-    cursor = connection.cursor()
-    cursor.execute(
-        """
-        INSERT INTO server_user (
-            user_id, guild_id, monthly_reaction_rank, total_message_rank, total_reaction_rank,
-            this_month_hall_of_fame_messages, total_hall_of_fame_messages, monthly_message_rank,
-            this_month_hall_of_fame_message_reactions, total_hall_of_fame_message_reactions
-        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-        ON CONFLICT(user_id, guild_id) DO UPDATE SET
-            total_hall_of_fame_messages = excluded.total_hall_of_fame_messages,
-            this_month_hall_of_fame_messages = excluded.this_month_hall_of_fame_messages,
-            total_hall_of_fame_message_reactions = excluded.total_hall_of_fame_message_reactions,
-            this_month_hall_of_fame_message_reactions = excluded.this_month_hall_of_fame_message_reactions,
-            total_message_rank = excluded.total_message_rank,
-            monthly_message_rank = excluded.monthly_message_rank,
-            total_reaction_rank = excluded.total_reaction_rank,
-            monthly_reaction_rank = excluded.monthly_reaction_rank
-        """,
-        (
-            user_id,
-            guild_id,
-            stats["monthly_reaction_rank"],
-            stats["total_message_rank"],
-            stats["total_reaction_rank"],
-            stats["this_month_hall_of_fame_messages"],
-            stats["total_hall_of_fame_messages"],
-            stats["monthly_message_rank"],
-            stats["this_month_hall_of_fame_message_reactions"],
-            stats["total_hall_of_fame_message_reactions"],
-        ),
-    )
-    connection.commit()
-    cursor.close()
-
 
 def rebuild_user_stats_for_guild(connection, guild_id, monthly_window_start) -> int:
     """
@@ -202,7 +195,31 @@ def _ranking_clause(stat_field) -> str:
     """
     if stat_field.endswith("_rank"):
         return f"AND {stat_field} IS NOT NULL ORDER BY {stat_field} ASC"
-    return f"AND {stat_field} > 0 ORDER BY {stat_field} DESC"
+    # Ties are broken by user ID, lowest first, the same way rebuild_user_stats_for_guild ranks them.
+    # Without it a tie comes back in whatever order the rows are stored, and the champion title could
+    # go to the member ranked second
+    return f"AND {stat_field} > 0 ORDER BY {stat_field} DESC, user_id ASC"
+
+
+def get_stat_at_rank(connection, guild_id, stat_field, rank_field, rank):
+    """
+    The value of a statistic held by whoever is at a given rank in a guild, for the gap to the next
+    place on /user_profile
+    :param connection: The database connection
+    :param guild_id: The guild
+    :param stat_field: The count to read, such as this_month_hall_of_fame_messages
+    :param rank_field: The rank column that orders it, such as monthly_message_rank
+    :param rank: The position to read
+    :return: The count, or None when nobody holds that rank
+    """
+    if stat_field not in ALLOWED_STAT_FIELDS or rank_field not in ALLOWED_STAT_FIELDS:
+        raise ValueError(f"Invalid field: {stat_field}, {rank_field}")
+    cursor = connection.cursor()
+    cursor.execute(f"SELECT {stat_field} FROM server_user WHERE guild_id = %s AND {rank_field} = %s LIMIT 1",
+                   (guild_id, rank))
+    row = cursor.fetchone()
+    cursor.close()
+    return row[0] if row else None
 
 
 def get_top_users_by_stat(connection, guild_id, stat_field, limit=10):

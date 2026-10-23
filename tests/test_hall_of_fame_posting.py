@@ -136,7 +136,7 @@ class PostingTestCase(unittest.IsolatedAsyncioTestCase):
         patcher.start()
         self.addCleanup(patcher.stop)
 
-    def patch_repo(self, insert=None):
+    def patch_repo(self, insert=None, credited_posts=0):
         self.inserted = []
 
         def record_insert(*args):
@@ -146,6 +146,8 @@ class PostingTestCase(unittest.IsolatedAsyncioTestCase):
 
         repo = mock.Mock()
         repo.insert_hall_of_fame_message = record_insert
+        repo.count_messages_by_author = lambda *_args: credited_posts
+        repo.NO_AUTHOR_ID = 0
         self.patch(utils, "hall_of_fame_message_repo", repo)
         return repo
 
@@ -214,6 +216,30 @@ class PostHallOfFameMessageTests(PostingTestCase):
         await self.post(FakeSourceMessage(attachments=[FakeAttachment("https://cdn.example/clip.mp4")]))
 
         self.assertTrue(all(message.deleted for message in self.target_channel.sent))
+
+    async def test_a_member_at_the_post_limit_still_gets_on_the_board_but_is_not_credited(self):
+        self.patch(utils, "members_at_post_limit_logged", set())
+        self.patch_repo(credited_posts=utils.member_post_limit)
+        await self.post()
+
+        self.assertEqual(1, len(self.target_channel.sent))
+        self.assertEqual(0, self.inserted[0][6])
+
+    async def test_a_member_just_under_the_post_limit_is_credited(self):
+        self.patch_repo(credited_posts=utils.member_post_limit - 1)
+        await self.post()
+
+        self.assertEqual(AUTHOR_ID, self.inserted[0][6])
+
+    async def test_reaching_the_post_limit_is_logged_once(self):
+        self.patch(utils, "members_at_post_limit_logged", set())
+        self.patch_repo(credited_posts=utils.member_post_limit)
+        await self.post()
+        await self.post()
+
+        alerts = [entry for entry in self.logged if "the most allowed" in entry]
+        self.assertEqual(1, len(alerts))
+        self.assertIn(str(AUTHOR_ID), alerts[0])
 
     async def test_reports_a_failed_write(self):
         self.patch_repo(insert=lambda: (_ for _ in ()).throw(RuntimeError("write failed")))

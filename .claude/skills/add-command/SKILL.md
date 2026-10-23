@@ -14,7 +14,9 @@ change and say in the report which items did not apply.
 1. **`src/main.py`** - `@tree.command(name=..., description=...)`. Copy the shape of an existing
    command of the same kind (a toggle like `require_image_or_video` is the shortest template):
    - `if not await ensure_bot_is_loaded(interaction): return`
-   - configuration commands: `if not await check_if_user_has_manage_server_permission(interaction): return`
+   - configuration commands: `@manage_server_only` under `@tree.command`, which hides the command from
+     members without Manage Server, and `if not await check_if_user_has_manage_server_permission(interaction): return`,
+     which refuses them. Add the name to `CommandPermissionTests.MANAGE_SERVER_ONLY` in `tests/test_main.py`
    - `@app_commands.describe(...)` for every option, and `app_commands.Range[int, MIN, MAX]` with the
      bounds in `validation.py` for numbers. Check the bounds again in the handler with
      `validation.out_of_range_message`, since a client can send anything.
@@ -48,6 +50,20 @@ change and say in the report which items did not apply.
 5. **`/get_server_config`** - add a line in `commands.build_server_config_embed`, in the same group as
    `/help`, with the command that changes it.
 
+## Member data and the opt-out
+
+A member can ask not to be featured (`opted_out_member`), and from then on nothing new may be stored
+about them. When a command or setting adds or changes a repository write that includes a `user_id` or
+`author_id`:
+
+- Leave the member out in the repository itself, in the same SQL statement as the write, the way
+  `insert_hall_of_fame_message` (stores author 0) and `insert_hof_wrapped` (stores nothing) do. A check
+  in the command alone is not enough, since the next caller may not make it.
+- Add the function to `OptOutWriteGuardTests.REVIEWED` in `tests/test_member_data.py` with the reason
+  it is safe, and add the new path to `every_write_the_bot_makes` in `OptedOutMemberTests`
+  (`tests/integration/test_member_data_deletion.py`).
+- Do not put an opted-out member's name or ID in anything the bot keeps, logs included.
+
 ## Tests
 
 Add to or update:
@@ -63,7 +79,9 @@ Run the whole suite with the `hof313` interpreter (see `dev-environment`).
 ## Before finishing
 
 - Leave everything as uncommitted edits.
+- Run the `policy-check` skill and put its one-line outcome in the report. A new setting that stores or
+  shows data in a new way usually means a change to `PRIVACY.md`.
 - Tell the user the command needs its global sync (happens on bot start) before the ID exists, and ask
   for the ID if a mention is needed.
-- Add a line to the next release's Development Log only if the user asks; the `release-notes` skill
-  collects changes from git at release time.
+- Add a line to the next release's section in `CHANGELOG.md` only if the user asks; the `release-notes`
+  skill collects changes from git at release time.

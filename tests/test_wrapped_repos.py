@@ -110,13 +110,18 @@ class CheckIfGuildWrappedDataExistsTests(unittest.TestCase):
 
 
 class InsertHofWrappedTests(unittest.TestCase):
-    def test_writes_every_field_in_the_order_the_columns_are_listed(self):
+    def test_writes_every_field(self):
         connection = FakeConnection()
         hof_wrapped_repo.insert_hof_wrapped(connection, **insert_arguments())
 
-        self.assertEqual(
-            (200, 77, 2025, 640, 32, "general", "😂", 4242, 100, 55, "88", "99", "1"),
-            connection.parameters[0])
+        self.assertEqual(insert_arguments(), connection.parameters[0])
+
+    def test_the_member_is_both_looked_up_and_stored(self):
+        """Once to check whether they opted out, once as the row's member."""
+        connection = FakeConnection()
+        hof_wrapped_repo.insert_hof_wrapped(connection, **insert_arguments())
+
+        self.assertEqual(2, connection.queries[0].count("%(user_id)s"))
 
     def test_replaces_a_wrapped_that_was_generated_before(self):
         """Generation can be run again for a year, and must not leave two rows for one member."""
@@ -187,6 +192,23 @@ class WrappedProgressTests(unittest.TestCase):
         self.assertIn("DELETE FROM hof_wrapped_progress WHERE guild_id = %s", connection.queries[0])
         self.assertEqual([(200,)], connection.parameters)
         self.assertEqual(1, connection.commits)
+
+
+
+class RemoveFromFanListsTests(unittest.TestCase):
+    def test_commits_when_used_on_its_own(self):
+        connection = FakeConnection()
+        hof_wrapped_repo.remove_from_fan_lists(connection, 77)
+
+        self.assertEqual(1, connection.commits)
+        self.assertEqual(2, len(connection.queries))
+
+    def test_leaves_the_commit_to_a_larger_transaction(self):
+        connection = FakeConnection()
+        hof_wrapped_repo.remove_from_fan_lists(connection, 77, commit=False)
+
+        self.assertEqual(0, connection.commits)
+
 
 
 if __name__ == "__main__":

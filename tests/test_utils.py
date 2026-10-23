@@ -7,6 +7,7 @@ from tests.fakes import FakeAttachment, FakeGuild, FakeReaction, FakeUser
 import discord
 import utils
 from enums import calculation_method_type
+from translations import messages
 
 
 class FakeAuthor(FakeUser):
@@ -64,6 +65,14 @@ class TruncateContentTests(unittest.TestCase):
         self.assertEqual(1024, len(truncated))
         self.assertTrue(truncated.endswith("..."))
 
+    def test_truncates_to_a_lower_limit_when_the_field_holds_other_text(self):
+        truncated = utils.truncate_content("a" * 2000, limit=900)
+        self.assertEqual(900, len(truncated))
+        self.assertTrue(truncated.endswith("..."))
+
+    def test_keeps_content_exactly_at_the_limit(self):
+        self.assertEqual("a" * 900, utils.truncate_content("a" * 900, limit=900))
+
 
 class EmbedFieldValueTests(unittest.TestCase):
     def test_keeps_the_content(self):
@@ -96,7 +105,18 @@ class CheckVideoExtensionTests(unittest.TestCase):
         self.assertEqual("https://cdn.discordapp.com/a/clip.mp4", utils.check_video_extension(message))
 
 
-class CreateEmbedTests(unittest.IsolatedAsyncioTestCase):
+class EmbedTestCase(unittest.IsolatedAsyncioTestCase):
+    """Building posts without a database: the replied-to author is checked against self.opted_out"""
+
+    def setUp(self):
+        self.opted_out = set()
+        patcher = mock.patch.object(utils.opt_out_repo, "is_opted_out",
+                                    lambda _connection, user_id: user_id in self.opted_out)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+
+class CreateEmbedTests(EmbedTestCase):
     @staticmethod
     def field_names(embed):
         return [field.name for field in embed.fields]
@@ -126,6 +146,53 @@ class CreateEmbedTests(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(field.value, f"Field {field.name} has an empty value")
 
 
+class PostFooterTests(EmbedTestCase):
+    async def test_every_post_layout_carries_the_footer(self):
+        referenced_message = FakeEmbedMessage(content="original text", author_name="original")
+        sticker_message = FakeEmbedMessage(content="nice")
+        sticker_message.stickers = [FakeSticker("https://cdn/sticker.png")]
+        layouts = {
+            "plain": FakeEmbedMessage(content="a legendary moment"),
+            "sticker": sticker_message,
+            "reply": FakeEmbedMessage(content="my reply", reference_message_id=42,
+                                      channel=FakeChannel(referenced_message)),
+            "reply with image": FakeEmbedMessage(content="my reply", reference_message_id=42,
+                                                 channel=FakeChannel(referenced_message),
+                                                 attachments=[FakeAttachment("https://cdn/r.png", "image/png")]),
+            "reply with video": FakeEmbedMessage(content="my reply", reference_message_id=42,
+                                                 channel=FakeChannel(referenced_message),
+                                                 attachments=[FakeAttachment("https://cdn/c.mp4", "video/mp4")]),
+        }
+        for layout, message in layouts.items():
+            with self.subTest(layout=layout):
+                embed = await utils.create_embed(message, 5, None, REACTION_CONFIG)
+                self.assertEqual(messages.POST_FOOTER, embed.footer.text)
+
+    async def test_uses_the_bots_global_avatar_as_the_icon(self):
+        message = FakeEmbedMessage(content="a legendary moment")
+        message.guild.me = types.SimpleNamespace(avatar=types.SimpleNamespace(url="https://cdn/bot.png"))
+        embed = await utils.create_embed(message, 5, None, REACTION_CONFIG)
+
+        self.assertEqual("https://cdn/bot.png", embed.footer.icon_url)
+
+    async def test_leaves_out_the_icon_when_the_bot_has_no_avatar(self):
+        message = FakeEmbedMessage(content="a legendary moment")
+        message.guild.me = types.SimpleNamespace(avatar=None)
+        embed = await utils.create_embed(message, 5, None, REACTION_CONFIG)
+
+        self.assertEqual(messages.POST_FOOTER, embed.footer.text)
+        self.assertIsNone(embed.footer.icon_url)
+
+    def test_fits_on_one_line(self):
+        # Discord allows 2048 characters, but anything past one line turns the brand into a banner
+        self.assertLessEqual(len(messages.POST_FOOTER), 60)
+
+    def test_names_the_bot_without_asking_for_an_install(self):
+        """The board is the server's showcase, so the install ask lives on replies a member asked for."""
+        self.assertIn("Hall of Fame", messages.POST_FOOTER)
+        self.assertNotIn("/invite", messages.POST_FOOTER)
+
+
 
 class FakeSticker:
     def __init__(self, url):
@@ -142,7 +209,7 @@ def embed_with(type_name=None, url=None, image_url=None, thumbnail_url=None):
     )
 
 
-class CreateEmbedContentTests(unittest.IsolatedAsyncioTestCase):
+class CreateEmbedContentTests(EmbedTestCase):
     @staticmethod
     def field_named(embed, name):
         return next((field for field in embed.fields if field.name == name), None)
@@ -231,6 +298,22 @@ class CreateEmbedContentTests(unittest.IsolatedAsyncioTestCase):
         embed = await utils.create_embed(message, 5, None, REACTION_CONFIG)
 
         self.assertEqual("https://cdn/original.png", embed.image.url)
+
+    async def test_a_reply_to_a_member_who_is_not_featured_leaves_them_out(self):
+        """Their name, words and image would otherwise reach the board with someone else's reply."""
+        referenced_message = FakeEmbedMessage(content="their words", author_name="not featured",
+                                              attachments=[FakeAttachment("https://cdn/theirs.png", "image/png")])
+        referenced_message.author.id = 55
+        self.opted_out.add(55)
+        message = FakeEmbedMessage(content="my reply", reference_message_id=42,
+                                   channel=FakeChannel(referenced_message))
+        embed = await utils.create_embed(message, 5, None, REACTION_CONFIG)
+
+        shown = " ".join([embed.description or ""] + [f"{field.name} {field.value}" for field in embed.fields])
+        self.assertIn("my reply", shown)
+        self.assertNotIn("their words", shown)
+        self.assertNotIn("not featured", shown)
+        self.assertNotEqual("https://cdn/theirs.png", embed.image.url)
 
 
 if __name__ == "__main__":

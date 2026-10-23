@@ -43,6 +43,27 @@ Hall of Fame is source-available, not open source. See [LICENSE](LICENSE) for th
    python src/main.py
    ```
 
+## Tests
+
+The reaction counting, embed formatting and server config validation are covered by unit tests that use
+lightweight stand-ins for Discord and the database, so no bot token or Postgres instance is needed.
+The same command runs on every pull request through the `Tests` workflow.
+
+`tests/integration` runs the real SQL against PostgreSQL: the reaction path, joins, the daily task,
+Wrapped, data deletion and schema upgrades. It is skipped unless `HOF_TEST_DATABASE_URL` points at a
+throwaway database, see [tests/integration/database.py](tests/integration/database.py). The `Tests`
+workflow starts one for it.
+
+Two guard tests protect members' privacy: `OptOutWriteGuardTests` lists every repository function that
+writes a member's ID and fails on a new one until it is reviewed, and `LogPrivacyTests` fails on a log
+that names a member or a server.
+
+For behaviour under load, `tests/stress/reaction_storm.py` drives the real reaction handler with
+hundreds of concurrent reactions. It is run by hand, see [tests/stress/README.md](tests/stress/README.md).
+What Discord itself accepts is checked by hand on a development bot: the results are in
+[tests/MANUAL_TESTS.md](tests/MANUAL_TESTS.md), and [tests/RELEASE_TEST_PLAN.md](tests/RELEASE_TEST_PLAN.md)
+lists the flows to check before a release.
+
 ## Before opening a pull request
 
 - Run the tests. They use stand-ins for Discord and the database, so no token or Postgres is needed:
@@ -52,6 +73,11 @@ Hall of Fame is source-available, not open source. See [LICENSE](LICENSE) for th
   ```
 
 - Add or update tests for the behaviour you changed.
+- Members can ask not to be featured, and from then on nothing new may be stored about them. A change
+  that writes a member's user ID to the database must leave those members out in the same SQL statement,
+  and be added to `OptOutWriteGuardTests` with the reason it is safe.
+- Logs are kept in private developer channels, so they say what happened with the server's ID, never a
+  member's or a server's name. `LogPrivacyTests` checks this.
 - Keep pull requests focused on one change, and describe what it does and why.
 - Never include tokens, passwords or other credentials in code, commits or pull request descriptions.
 
