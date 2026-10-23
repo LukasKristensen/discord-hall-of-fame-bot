@@ -901,7 +901,7 @@ class CountingMethodsPictureTests(CommandTestCase):
         self.assertEqual(messages.COUNTING_METHODS_PICTURE_URL, self.embedded_picture(interaction))
 
     def test_the_picture_is_found_from_the_folder_the_bot_runs_in(self):
-        """The bot is started from src, and the picture lives in Assets beside it"""
+        """The bot runs with src/ as its working directory, and the picture lives in Assets beside it"""
         self.assertTrue(main.os.path.isfile(main.counting_methods_picture_path))
 
 
