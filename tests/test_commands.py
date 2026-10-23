@@ -647,3 +647,16 @@ class PostServerWrappedTests(unittest.IsolatedAsyncioTestCase):
         embed, view = sent[0]
         self.assertEqual(messages.SERVER_WRAPPED_FOOTER, embed.footer.text)
         self.assertEqual(link_buttons(commands.build_server_wrapped_view()), link_buttons(view))
+
+
+class SentViewTests(unittest.IsolatedAsyncioTestCase):
+    async def test_views_that_are_sent_are_already_stopped(self):
+        """discord.py keeps every unfinished view it sends until restart; a stopped one is still drawn."""
+        for build in (commands.build_help_view, commands.build_vote_view, commands.build_invite_view,
+                      commands.build_server_wrapped_view, commands.build_check_setup_view, commands.build_welcome_view):
+            with self.subTest(view=build.__name__):
+                self.assertTrue(build().is_finished())
+
+    async def test_the_registered_troubleshoot_view_is_running(self):
+        """The one main registers with bot.add_view answers every press, so it must not be stopped."""
+        self.assertFalse(commands.SetupCheckView().is_finished())

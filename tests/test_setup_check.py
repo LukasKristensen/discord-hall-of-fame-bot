@@ -57,6 +57,11 @@ class FakeChannel:
         self.everyone = everyone or perms()
         self.roles = roles or {}
 
+    def overwrites_for(self, role):
+        """An overwrite allowing View Channel for each role given its own permissions here"""
+        granted = role.id in self.roles and self.roles[role.id].view_channel
+        return types.SimpleNamespace(view_channel=True if granted else None)
+
     def permissions_for(self, target):
         if target == "bot":
             return self.bot
@@ -141,6 +146,15 @@ class ChannelVisibilityTests(unittest.TestCase):
 
         self.assertEqual([], visibility.blocked)
         self.assertEqual(1, len(visibility.private))
+        self.assertIsNone(visibility.suggested_role)
+
+    def test_a_role_without_an_overwrite_is_never_suggested(self):
+        """A channel @everyone sees, with the bot shut out, stays shut for any role that has no allow there."""
+        member = FakeRole(10, "Member", position=3)
+        channel = FakeChannel(1, bot=HIDDEN)
+        visibility = setup_check.channel_visibility(FakeGuild(channels=[channel], roles=[member]), BOARD_ID)
+
+        self.assertEqual(1, len(visibility.blocked))
         self.assertIsNone(visibility.suggested_role)
 
     def test_another_bots_role_is_never_suggested(self):
@@ -249,9 +263,11 @@ class BoardFindingTests(unittest.TestCase):
 
 
 class RuleFindingTests(unittest.TestCase):
-    def test_an_empty_whitelist_in_whitelist_mode_fails(self):
+    def test_an_empty_whitelist_in_whitelist_mode_is_only_worth_knowing(self):
+        """Every emoji counts while the whitelist is empty, so nothing is blocked."""
         [finding] = setup_check.rule_findings(server_config(custom_emoji_check_logic=True), 50)
-        self.assertEqual(setup_check.FAIL, finding.level)
+        self.assertEqual(setup_check.INFO, finding.level)
+        self.assertIn("every emoji counts", finding.detail)
 
     def test_a_whitelist_with_emojis_is_fine(self):
         self.assertEqual([], setup_check.rule_findings(

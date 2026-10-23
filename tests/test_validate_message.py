@@ -315,6 +315,21 @@ class ChannelVisibilityTests(GateTestCase):
         self.assertFalse(any("Could not find the Hall of Fame channel" in entry for entry in self.logged))
 
 
+class BoardChannelTests(GateTestCase):
+    async def test_reactions_in_the_board_never_repost_anything(self):
+        """Otherwise a well-liked post would be reposted onto the board it is on."""
+        self.build()
+
+        class InTheBoard(FakeReactionEvent):
+            def __init__(self):
+                super().__init__()
+                self.channel_id = TARGET_CHANNEL_ID
+
+        await utils.validate_message(InTheBoard(), self.bot, connection=object(), server_config=server_config())
+        self.assertDidNothing()
+        self.assertEqual([], self.target_channel.fetched)
+
+
 class PostDueDateTests(GateTestCase):
     async def test_posts_a_message_inside_the_due_date(self):
         self.build(age_days=3)
@@ -472,9 +487,17 @@ class DailyPostLimitTests(GateTestCase):
 
     async def test_reports_the_limit_again_the_next_day(self):
         self.build(messages_today=100)
-        utils.daily_limit_handled_on[GUILD_ID] = datetime.date.today() - datetime.timedelta(days=1)
+        utils.daily_limit_handled_on[GUILD_ID] = (datetime.datetime.now(timezone.utc).date()
+                                                  - datetime.timedelta(days=1))
         await self.run_gate()
         self.assertTrue(any("exceeded the daily limit" in entry for entry in self.logged))
+
+    async def test_remembers_the_notice_by_the_utc_day(self):
+        """The limit counts from midnight UTC, so the notice must not go out again at local midnight."""
+        self.build(messages_today=100)
+        await self.run_gate()
+
+        self.assertEqual(datetime.datetime.now(timezone.utc).date(), utils.daily_limit_handled_on[GUILD_ID])
 
 
 class BelowThresholdTests(GateTestCase):

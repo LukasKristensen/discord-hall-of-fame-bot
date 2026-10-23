@@ -7,7 +7,7 @@ from message_reactions import most_reacted_emoji, reaction_count
 from classes import server_class
 from enums import command_refs, log_type, calculation_method_type
 from repositories import (server_config_repo, hall_of_fame_message_repo, server_user_repo, hof_wrapped_repo,
-                          hof_wrapped_guild_status_repo, opt_out_repo)
+                          hof_wrapped_guild_status_repo, opt_out_repo, permission_warning_repo)
 from caches import ExpiringSet
 from translations import messages
 import setup_check
@@ -32,15 +32,14 @@ members_at_post_limit_logged = set()
 
 def author_to_store(connection, author_id: int) -> tuple[int, bool]:
     """
-    Who a new post is credited to: the member, or nobody when they asked not to be featured or already
-    have member_post_limit posts credited to them. Checked when a post is stored rather than on every
-    reaction, and counted from the author index, so it costs one lookup per new post
+    Who a new post is credited to: the member, or nobody when they already have member_post_limit posts
+    credited to them. Checked when a post is stored rather than on every reaction, and counted from the
+    author index, so it costs one lookup per new post. A member who asked not to be featured is left out
+    by insert_hall_of_fame_message itself, in the same statement, so it is not looked up again here
     :param connection: The database connection
     :param author_id: The member who wrote the message
     :return: The author ID to store, and whether the member is at the post limit
     """
-    if opt_out_repo.is_opted_out(connection, author_id):
-        return hall_of_fame_message_repo.NO_AUTHOR_ID, False
     if hall_of_fame_message_repo.count_messages_by_author(connection, author_id) >= member_post_limit:
         return hall_of_fame_message_repo.NO_AUTHOR_ID, True
     return author_id, False
@@ -109,6 +108,11 @@ async def validate_message(reaction_event: discord.RawReactionActionEvent, bot: 
     target_channel_id = server_config.hall_of_fame_channel_id
     hide_hof_post_below_threshold = server_config.hide_hof_post_below_threshold
 
+    # The board's own posts, and messages written there, are never featured. Without this, reactions on a
+    # post would repost the bot's own post once they reached the threshold
+    if channel_id == target_channel_id:
+        return
+
     channel = bot.get_channel(channel_id)
     if channel is None:
         # The channel is not cached, which happens when the bot cannot see it anymore
@@ -130,8 +134,9 @@ async def validate_message(reaction_event: discord.RawReactionActionEvent, bot: 
         return
 
     if hall_of_fame_message_repo.guild_message_count_today(connection, guild_id) >= daily_post_limit:
-        # Every reaction lands here while the server is at its limit, so it is handled once a day
-        today = datetime.date.today()
+        # Every reaction lands here while the server is at its limit, so it is handled once a day. The
+        # UTC day, since database sessions run in UTC and the limit counts from midnight UTC
+        today = datetime.datetime.now(timezone.utc).date()
         if daily_limit_handled_on.get(guild_id) == today:
             return
         daily_limit_handled_on[guild_id] = today
@@ -643,6 +648,9 @@ async def report_setup_problems_on_join(bot, server, hall_of_fame_channel):
     :param hall_of_fame_channel: The board
     """
     try:
+        # Read again, since set_permissions does not update the object create_text_channel returned, and
+        # a stale one could report a permission the bot has just granted itself as missing
+        hall_of_fame_channel = await bot.fetch_channel(hall_of_fame_channel.id)
         # A new board starts with chat off
         findings = setup_check.join_findings(server, hall_of_fame_channel, allow_messages_in_hof_channel=False)
         if not setup_check.problems(findings):
@@ -744,6 +752,7 @@ def delete_database_context(server_id: int, connection):
     hof_wrapped_repo.delete_hof_wrapped_for_guild(connection, server_id)
     # Left behind, a guild that rejoins stays marked as done for the year and never gets its wrapped again
     hof_wrapped_guild_status_repo.delete_progress_for_guild(connection, server_id)
+    permission_warning_repo.delete_permission_warnings(connection, [server_id])
 
 
 async def logging(bot: discord.Client, message, server_id=None, new_value=None, log_level=log_type.ERROR,
@@ -790,13 +799,14 @@ async def logging(bot: discord.Client, message, server_id=None, new_value=None, 
 
 
 # noinspection PyTypeChecker
-async def create_feedback_form(interaction: discord.Interaction, bot, on_sent=None, refusal=None):
+async def create_feedback_form(interaction: discord.Interaction, bot, on_sent=None, refusal=None, on_unsent=None):
     """
     Create a feedback form for the user and send the feedback to the feedback channel
     :param interaction:
     :param bot:
-    :param on_sent: Called with the member's user ID once the feedback reached the channel, so a form
-        that is closed or fails does not count toward the member's daily limit
+    :param on_sent: Called with the member's user ID as the feedback is sent, before the send's await, so
+        two forms submitted at the same moment cannot both get past the daily limit
+    :param on_unsent: Called with the member's user ID when sending failed, to take back on_sent
     :param refusal: Called with the member's user ID when the form is submitted. Returns what to answer
         instead of sending it, such as the daily limit being reached while other forms were open, or None
     :return:
@@ -833,9 +843,15 @@ async def create_feedback_form(interaction: discord.Interaction, bot, on_sent=No
             # None in a DM or a server that only has the bot through a user install
             embed.add_field(name="Guild", value=feedback_interaction.guild_id or "None (user install)", inline=True)
             embed.add_field(name="UserId", value=feedback_interaction.user.id, inline=True)
-            await target_channel.send(embed=embed)
             if on_sent is not None:
                 on_sent(feedback_interaction.user.id)
+            try:
+                await target_channel.send(embed=embed)
+            except Exception:
+                # A form that failed does not count toward the member's daily limit
+                if on_unsent is not None:
+                    on_unsent(feedback_interaction.user.id)
+                raise
             await feedback_interaction.response.send_message(f"Thanks for your feedback, {feedback_interaction.user.mention}")
             await asyncio.sleep(5)
             await feedback_interaction.delete_original_response()

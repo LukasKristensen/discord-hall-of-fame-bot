@@ -244,6 +244,8 @@ MISSING_HOF_CHANNEL_PERMISSIONS = ("The bot is missing the required permissions 
                                    "Update the channel permission for the bot to have: ``{missing_permissions}``\n"
                                    f"If the hall of channel does not exist, set it up using {command_refs.SET_HALL_OF_FAME_CHANNEL} "
                                    "and ensure the bot has the required permissions.")
+MISSING_HOF_CHANNEL_PERMISSIONS_LAST_WARNING = ("This is the last reminder about these permissions. Run "
+                                                f"{command_refs.TROUBLESHOOT} any time to check the setup.")
 FAILED_TO_FIND_HOF_CHANNEL = (
     "Failed to find the Hall of Fame channel - Ensure the bot has access with "
     "``View Channel, Send Messages, and Read Message History`` permissions.\n"
@@ -293,9 +295,9 @@ CHECK_CHANNELS_MOSTLY_CLOSED = ("The bot cannot read {channels}\n"
                                 "No regular role can see them either, but that is most of the server. If messages "
                                 "there should reach the board, give the bot View Channel and Read Message History "
                                 "in them, or the role that opens them.")
-CHECK_EMPTY_WHITELIST_TITLE = "No emoji can count"
-CHECK_EMPTY_WHITELIST = ("Only whitelisted emojis count, and the whitelist is empty. Add one with {whitelist}, "
-                         "or count every emoji with {logic}.")
+CHECK_EMPTY_WHITELIST_TITLE = "Every emoji counts for now"
+CHECK_EMPTY_WHITELIST = ("Only whitelisted emojis are meant to count, but the whitelist is empty, so every emoji counts "
+                         "until one is added with {whitelist}. To count every emoji on purpose, turn off {logic}.")
 CHECK_THRESHOLD_UNREACHABLE_TITLE = "No message can reach the threshold"
 CHECK_THRESHOLD_UNREACHABLE = ("A message needs {threshold} reactions, but the server has {members} members, so "
                                "none can reach it. Lower it with {command}.")
@@ -320,6 +322,10 @@ WHY_IS_BOARD = "**This is the Hall of Fame channel.** Messages here are the boar
 WHY_CANNOT_READ = ("**The bot cannot read {channel}**, so reactions here never count. An admin can give the bot "
                    "View Channel and Read Message History here, or run {command} to find every channel like this.")
 WHY_ALREADY_POSTED = "**This message is on the board:** {link}"
+# The post is stored, but not in the board channel the server has now: the board was moved, or the post deleted
+WHY_POSTED_ELSEWHERE = ("**This message was posted to the board**, but the post is no longer in {board}. The board "
+                        "may have been moved to another channel, or the post deleted.")
+WHY_MESSAGE_GONE = "**This message is gone**: it was deleted, or the bot can no longer see it."
 WHY_HIDDEN = ("**This message was on the board, but is hidden** because it dropped to {count} of the {threshold} "
               "reactions needed. It comes back once it passes the threshold again.")
 WHY_TOO_OLD = ("**This message is too old.** Only messages from the last {days} days can reach the board. "

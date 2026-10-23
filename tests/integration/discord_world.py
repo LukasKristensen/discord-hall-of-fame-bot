@@ -27,18 +27,23 @@ class Guild:
         self.member_count = member_count
         self.me = types.SimpleNamespace(id=1, guild_permissions=types.SimpleNamespace(manage_channels=manage_channels))
         self.default_role = types.SimpleNamespace(id=guild_id)
-        self.channels = {}
+        # By ID for get_channel. Discord's guild.channels is a list, which the setup check walks
+        self.channels_by_id = {}
         self.created_channels = []
         # Where the bot would post a notice when setting the server up fails; none in these tests
         self.text_channels = []
 
+    @property
+    def channels(self):
+        return list(self.channels_by_id.values())
+
     def get_channel(self, channel_id):
-        return self.channels.get(channel_id)
+        return self.channels_by_id.get(channel_id)
 
     async def create_text_channel(self, name):
         channel = Board(9_000_000 + self.id, self, name=name)
         self.created_channels.append(channel)
-        self.channels[channel.id] = channel
+        self.channels_by_id[channel.id] = channel
         return channel
 
 
@@ -83,7 +88,9 @@ class SourceChannel(discord.TextChannel):
         self.name = f"channel-{channel_id}"
         self.messages = {}
         self.readable = readable
-        guild.channels[channel_id] = self
+        # Read by the setup check, which only looks at channels members can react in
+        self._type = discord.ChannelType.text.value
+        guild.channels_by_id[channel_id] = self
 
     def permissions_for(self, _member):
         return types.SimpleNamespace(read_messages=self.readable, view_channel=self.readable,
@@ -127,6 +134,8 @@ class Board:
     for any other text channel the bot posts a notice in
     """
 
+    type = discord.ChannelType.text
+
     def __init__(self, channel_id, guild, name="hall-of-fame", position=0):
         self.id = channel_id
         self.guild = guild
@@ -139,7 +148,7 @@ class Board:
         self.posts = {}
         self.sent = []
         self.next_id = 700_000 + channel_id % 1000 * 1000
-        guild.channels[channel_id] = self
+        guild.channels_by_id[channel_id] = self
 
     async def send(self, content=None, embed=None, **_kwargs):
         self.next_id += 1
@@ -159,7 +168,7 @@ class Board:
 
     def permissions_for(self, _member):
         granted = dict(read_messages=True, view_channel=True, send_messages=True, read_message_history=True,
-                       embed_links=True, manage_channels=True)
+                       embed_links=True, manage_channels=True, manage_messages=True)
         granted.update({name: False for name in self.missing_permissions})
         return types.SimpleNamespace(**granted)
 
@@ -178,6 +187,9 @@ class Bot:
 
     def get_guild(self, guild_id):
         return next((guild for guild in self.guilds if guild.id == guild_id), None)
+
+    async def fetch_channel(self, channel_id):
+        return self.get_channel(channel_id)
 
 
 def reaction_event(message):

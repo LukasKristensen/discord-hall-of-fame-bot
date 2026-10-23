@@ -24,7 +24,7 @@ import utils
 from caches import ExpiringSet
 from repositories import guild_lifecycle_event_repo, server_config_repo, server_user_repo
 
-from tests.fakes import FakeBotWithGuilds, FakeConnection, FakeLogGuild
+from tests.fakes import FakeBotWithGuilds, FakeConnection, FakeLogGuild, FakePermissionWarningStore
 from tests.test_server_class import build_server
 
 
@@ -417,9 +417,7 @@ class DailyTaskPermissionSweepTests(unittest.IsolatedAsyncioTestCase):
         utils.recently_logged_messages = ExpiringSet(ttl_seconds=600)
         self.addCleanup(self.restore_cache)
 
-        warned = mock.patch.object(events, "permission_warnings_sent", {})
-        warned.start()
-        self.addCleanup(warned.stop)
+        FakePermissionWarningStore().install(self)
 
     def restore_cache(self):
         utils.recently_logged_messages = self.original_cache
@@ -475,26 +473,26 @@ class DailyTaskPermissionSweepTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_warns_every_server_that_is_missing_a_permission(self):
         bot = self.build_bot(missing_permissions_for=self.guild_ids)
-        await events.check_write_permissions_to_hall_of_fame_channel(bot, self.server_classes)
+        await events.check_write_permissions_to_hall_of_fame_channel(bot, self.server_classes, FakeConnection())
 
         self.assertEqual(self.guild_ids, sorted(self.checked))
 
     async def test_says_nothing_to_a_server_with_every_permission(self):
         bot = self.build_bot(missing_permissions_for=())
-        await events.check_write_permissions_to_hall_of_fame_channel(bot, self.server_classes)
+        await events.check_write_permissions_to_hall_of_fame_channel(bot, self.server_classes, FakeConnection())
 
         self.assertEqual([], self.checked)
 
     async def test_keeps_the_number_of_servers_in_flight_bounded(self):
         bot = self.build_bot(missing_permissions_for=self.guild_ids)
-        await events.check_write_permissions_to_hall_of_fame_channel(bot, self.server_classes)
+        await events.check_write_permissions_to_hall_of_fame_channel(bot, self.server_classes, FakeConnection())
 
         self.assertLessEqual(self.peak_in_flight, events.daily_task_concurrency)
 
     async def test_one_hanging_server_does_not_stop_the_others(self):
         bot = self.build_bot(missing_permissions_for=self.guild_ids, hanging_for=(202,))
         with mock.patch.object(events, "daily_task_guild_timeout_seconds", 0.05):
-            await events.check_write_permissions_to_hall_of_fame_channel(bot, self.server_classes)
+            await events.check_write_permissions_to_hall_of_fame_channel(bot, self.server_classes, FakeConnection())
 
         self.assertEqual([200, 201, 203, 204, 205], sorted(self.checked))
 

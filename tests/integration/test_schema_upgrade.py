@@ -182,7 +182,7 @@ class ProductionUpgradeTests(SchemaUpgradeTestCase):
 
     def test_adds_the_new_tables(self):
         for table in ("hidden_global_profile", "opted_out_member", "hof_wrapped_progress", "guild_lifecycle_event",
-                      "guild_monthly_snapshot"):
+                      "guild_monthly_snapshot", "permission_warning"):
             with self.subTest(table=table):
                 self.assertIn(table, self.tables())
 

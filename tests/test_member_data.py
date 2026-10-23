@@ -5,6 +5,7 @@ themselves: the global profile never shows a server, a hidden profile cannot be 
 empty one, an export goes only to the member it describes, and a deletion survives the daily rebuild.
 """
 
+import asyncio
 import datetime
 import json
 import types
@@ -1050,6 +1051,30 @@ class DownloadMyDataTests(MyDataPanelTestCase):
         self.assertFalse(main.on_daily_cooldown(77, "my_data"))
 
 
+class ConcurrentPressTests(MyDataPanelTestCase):
+    async def test_two_quick_downloads_read_the_data_once(self):
+        """The day is taken before the first await, so a second press while the first runs is refused."""
+        reads = []
+        self.patch(hall_of_fame_message_repo, "get_messages_by_author",
+                   lambda *_args: reads.append(True) or self.posts)
+        _interaction, view = await self.open_panel()
+        first, second = FakeInteraction(), FakeInteraction()
+        await asyncio.gather(view.download_button.callback(first), view.download_button.callback(second))
+
+        self.assertEqual(1, len(reads))
+        self.assertIn(messages.MY_DATA_DOWNLOAD_ON_COOLDOWN, first.response.messages + second.response.messages)
+
+    async def test_a_second_press_of_delete_while_the_first_is_answered_is_ignored(self):
+        """Two confirmations on one message would let the first one's expiry overwrite the done message."""
+        _interaction, view = await self.open_panel()
+        view.delete_pending = True
+        pressed = await self.press(view.delete_button)
+
+        self.assertTrue(pressed.response.deferred)
+        self.assertEqual([], pressed.original_edits)
+        self.assertEqual([], pressed.followup.messages)
+
+
 class TotalsAcrossServersButtonTests(MyDataPanelTestCase):
     async def test_hides_the_totals(self):
         _interaction, view = await self.open_panel()
@@ -1239,6 +1264,28 @@ class DeleteMyDataTests(MyDataPanelTestCase):
         self.assertTrue(panel.is_finished())
 
 
+class HiddenChoiceAfterStoppingTests(MyDataPanelTestCase):
+    async def test_a_stored_hidden_choice_stays_listed_and_can_be_undone(self):
+        """Hidden, then not featured with no posts: the choice is still stored, so it must still show."""
+        self.posts, self.standings = [], []
+        self.hidden.add(77)
+        self.opted_out.add(77)
+        interaction, view = await self.open_panel()
+
+        self.assertIn(messages.MY_DATA_TOTALS_HIDDEN.format(since=CHOSEN_SHOWN), interaction.followup.messages[0])
+        self.assertIn(view.totals_button, view.children)
+        self.assertEqual(messages.SHOW_TOTALS_BUTTON, view.totals_button.label)
+
+    async def test_showing_them_again_is_stored_even_without_totals(self):
+        self.posts, self.standings = [], []
+        self.hidden.add(77)
+        self.opted_out.add(77)
+        _interaction, view = await self.open_panel()
+        await self.press(view.totals_button)
+
+        self.assertEqual(set(), self.hidden)
+
+
 class StopFeaturingTests(MyDataPanelTestCase):
     """Stop featuring me: a setting of its own on /my_data, which concerns new messages only."""
 
@@ -1363,7 +1410,12 @@ class StopFeaturingTests(MyDataPanelTestCase):
 
 
 class OptingOutWhileAPostIsSentTests(unittest.IsolatedAsyncioTestCase):
-    async def test_the_post_is_stored_without_the_member(self):
+    async def test_the_insert_is_left_to_leave_the_member_out(self):
+        """
+        insert_hall_of_fame_message checks opted_out_member in the same statement, which the PostgreSQL test
+        of a member opting out while their post is sent covers, so the member is passed as they are and the
+        opt-out is not looked up a second time
+        """
         import utils
         stored = []
         answers = iter([False, True])
@@ -1393,7 +1445,8 @@ class OptingOutWhileAPostIsSentTests(unittest.IsolatedAsyncioTestCase):
             await utils.post_hall_of_fame_message(message, bot, FakeConnection(), 100, 5)
 
         # The sixth value stored is the author
-        self.assertEqual(hall_of_fame_message_repo.NO_AUTHOR_ID, stored[0][5])
+        self.assertEqual(77, stored[0][5])
+        self.assertEqual(True, next(answers), "the opt-out was looked up again before storing")
 
 
 class WrappedWithoutTheAuthorTests(unittest.IsolatedAsyncioTestCase):
@@ -1513,25 +1566,28 @@ class UserProfileOutsideServerTests(CommandTestCase):
         interaction = outside_a_server()
         await main.user_server_profile.callback(interaction, None)
 
-        embed = interaction.response.messages[0]
+        # Deferred first, since waiting for a connection can outlast Discord's three seconds
+        self.assertTrue(interaction.response.deferred)
+        self.assertFalse(interaction.response.deferred_ephemeral)
+        embed = interaction.followup.messages[0]
         self.assertIsInstance(embed, discord.Embed)
         self.assertEqual([messages.GLOBAL_PROFILE_HEADING, messages.BADGES_HEADING],
                          [field.name for field in embed.fields])
         self.assertIn("**47** posts", embed.fields[0].value)
-        self.assertEqual([False], interaction.response.ephemeral)
+        self.assertEqual([False], interaction.followup.ephemeral)
         self.assertEqual([], self.server_reads)
 
     async def test_naming_yourself_is_the_same_as_leaving_it_out(self):
         interaction = outside_a_server()
         await main.user_server_profile.callback(interaction, user_with_avatar(77))
 
-        self.assertIsInstance(interaction.response.messages[0], discord.Embed)
+        self.assertIsInstance(interaction.followup.messages[0], discord.Embed)
 
     async def test_a_server_without_the_bot_gets_the_same_card(self):
         interaction = outside_a_server(guild_id=999)
         await main.user_server_profile.callback(interaction, None)
 
-        self.assertIsInstance(interaction.response.messages[0], discord.Embed)
+        self.assertIsInstance(interaction.followup.messages[0], discord.Embed)
         self.assertEqual([], self.server_reads)
 
     async def test_another_member_cannot_be_looked_up_outside_a_server_with_the_bot(self):
@@ -1552,8 +1608,9 @@ class UserProfileOutsideServerTests(CommandTestCase):
         interaction = outside_a_server()
         await main.user_server_profile.callback(interaction, None)
 
-        self.assertEqual([messages.PROFILE_NOTHING_OUTSIDE_SERVER], interaction.response.messages)
-        self.assertEqual([True], interaction.response.ephemeral)
+        self.assertEqual([messages.PROFILE_NOTHING_OUTSIDE_SERVER], interaction.followup.messages)
+        self.assertEqual([True], interaction.followup.ephemeral)
+        self.assertTrue(interaction.deleted_original, "the public thinking message was left to carry the refusal")
 
     async def test_hidden_totals_are_not_shown_even_to_you(self):
         """The card is posted in the channel, so showing them to you shows them to everyone there."""
@@ -1562,9 +1619,18 @@ class UserProfileOutsideServerTests(CommandTestCase):
         await main.user_server_profile.callback(interaction, None)
 
         self.assertEqual([messages.PROFILE_HIDDEN_OUTSIDE_SERVER_SELF.format(command=command_refs.MY_DATA)],
-                         interaction.response.messages)
-        self.assertEqual([True], interaction.response.ephemeral)
+                         interaction.followup.messages)
+        self.assertEqual([True], interaction.followup.ephemeral)
         self.assertEqual([], self.profile_reads)
+
+    async def test_a_server_with_the_bot_but_no_setup_is_told_so(self):
+        """Not "outside a server with Hall of Fame": the bot is there, its setup did not finish."""
+        interaction = outside_a_server(guild_id=999)
+        with unittest.mock.patch.object(main, "bot", types.SimpleNamespace(get_guild=lambda _guild_id: object())):
+            await main.user_server_profile.callback(interaction, None)
+
+        self.assertEqual([messages.ERROR_SERVER_NOT_SETUP], interaction.response.messages)
+        self.assertEqual([True], interaction.response.ephemeral)
 
     async def test_a_server_with_the_bot_can_still_look_up_other_members(self):
         recorded = []

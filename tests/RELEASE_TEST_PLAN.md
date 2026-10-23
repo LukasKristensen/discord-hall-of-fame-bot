@@ -21,8 +21,9 @@ accounts where a step says "second account", and a server where you have Manage 
 
 Use an account that has never been featured.
 
-- [ ] `/my_data` answers privately: "No posts, server standings or Wrapped entries are stored about
-      you", the totals line, and the privacy policy link
+- [ ] `/my_data` answers privately: "Hall of Fame stores nothing about you, so there is nothing to
+      download or delete.", "Once you are featured, your totals across servers are shown on your
+      profile.", and the privacy policy link
 - [ ] Download my data and Delete my data are greyed out
 - [ ] Hide my totals across servers and Stop featuring me are there
 - [ ] A second account cannot press your buttons: it is told only the member who ran the command can
@@ -105,10 +106,22 @@ Watch the developer log channels while going through the steps above.
 - [ ] Deleting data, stopping or restarting featuring and downloading log "A member ...", never who
 - [ ] The post limit alert is the only log with a member's user ID
 
+## Command picker
+
+Restart the Discord client if the picker still shows the old list.
+
+- [ ] As a member without Manage Server, typing `/` offers only `/help`, `/leaderboard`, `/user_profile`,
+      `/hof_wrapped`, `/server_hof_wrapped`, `/my_data`, `/get_server_config`, `/invite`, `/vote` and
+      `/feedback`, and Apps still has Why isn't this on the board?
+- [ ] As an admin with Manage Server, all 25 commands are offered
+- [ ] Let a role without Manage Server use `/set_reaction_threshold` under Server Settings > Integrations >
+      Hall of Fame: that role now sees it, and running it is refused privately
+
 ## Setup check and joining
 
 - [ ] `/troubleshoot` answers the admin privately with the findings
-- [ ] A member without Manage Server is refused
+- [ ] A member without Manage Server does not see `/troubleshoot`, and pressing Troubleshoot on the
+      welcome message is refused
 - [ ] Add the dev bot to a new server: if something is wrong, a short note with a Troubleshoot button
       appears on the board, and the button opens the full findings for an admin
 - [ ] The welcome message's Troubleshoot, Support server and Vote buttons work, also after the bot restarts
@@ -131,10 +144,17 @@ Only if Wrapped can be generated on the development bot.
 
 ## Before deploying
 
-- [ ] Replace the plain-text `MY_DATA`, `COUNT_IN_GLOBAL_PROFILES` and `TROUBLESHOOT` in
-      `src/enums/command_refs.py` with their `</name:id>` mentions once the live bot has synced them
 - [ ] `PRIVACY.md` and `TERMS.md` carry the effective date you mean to publish (`PRIVACY.md` currently
       says 10 November 2026)
 - [ ] The README's Development Log and the 2.2 announcement name `/my_data` and not the removed commands,
       and mention the 10,000 post limit
 - [ ] Clear the test rows from the development database again
+
+## After deploying
+
+The command IDs only exist once the live bot has synced 2.2, so this is a second, small deploy.
+
+- [ ] Copy the IDs of `/my_data`, `/count_in_global_profiles` and `/troubleshoot` (Developer Mode on, Server
+      Settings > Integrations > Hall of Fame) and replace the plain-text `MY_DATA`,
+      `COUNT_IN_GLOBAL_PROFILES` and `TROUBLESHOOT` in `src/enums/command_refs.py` with `</name:id>`
+- [ ] Deploy again, then check that `/help` and a `/my_data` deletion show the commands as clickable

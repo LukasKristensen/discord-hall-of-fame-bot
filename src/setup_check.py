@@ -83,6 +83,13 @@ def is_member_role(role, guild) -> bool:
 
 
 def role_can_read(channel, role) -> bool:
+    """
+    Whether giving the bot this role would let it read the channel. The role's own permissions are not
+    enough: a channel open to @everyone that shuts the bot out with an overwrite on the bot or its own
+    role stays shut, unless the channel has an overwrite letting this role in
+    """
+    if getattr(channel.overwrites_for(role), "view_channel", None) is not True:
+        return False
     permissions = channel.permissions_for(role)
     return permissions.view_channel and permissions.read_message_history
 
@@ -130,19 +137,29 @@ def list_channels(channels) -> str:
     return shown + (messages.CHECK_AND_MORE.format(count=hidden) if hidden > 0 else "")
 
 
+def missing_board_permissions(permissions) -> list[str]:
+    """
+    The permissions the bot needs on the board and lacks, by the names Discord shows. Shared by
+    /set_hall_of_fame_channel, /troubleshoot and the Why command, so the three never disagree
+    """
+    required = [
+        ("View Channel", permissions.view_channel),
+        ("Send Messages", permissions.send_messages),
+        # validate_message fetches the posts already there to update or hide them
+        ("Read Message History", permissions.read_message_history),
+        # Every Hall of Fame post is an embed, and without this Discord drops it without an error
+        ("Embed Links", permissions.embed_links),
+    ]
+    return [name for name, granted in required if not granted]
+
+
 def board_findings(board_channel, bot_member, allow_messages_in_hof_channel: bool) -> list[Finding]:
     if board_channel is None:
         return [Finding(FAIL, messages.CHECK_BOARD_MISSING_TITLE,
                         messages.CHECK_BOARD_MISSING.format(command=command_refs.SET_HALL_OF_FAME_CHANNEL))]
 
     permissions = board_channel.permissions_for(bot_member)
-    required = [
-        ("View Channel", permissions.view_channel),
-        ("Send Messages", permissions.send_messages),
-        ("Read Message History", permissions.read_message_history),
-        ("Embed Links", permissions.embed_links),
-    ]
-    missing = [name for name, granted in required if not granted]
+    missing = missing_board_permissions(permissions)
     if missing:
         return [Finding(FAIL, messages.CHECK_BOARD_PERMISSIONS_TITLE,
                         messages.CHECK_BOARD_PERMISSIONS.format(channel=board_channel.mention,
@@ -190,7 +207,9 @@ def channel_findings(visibility: ChannelVisibility) -> list[Finding]:
 def rule_findings(server_config, member_count: int | None) -> list[Finding]:
     findings = []
     if server_config.custom_emoji_check_logic and not server_config.whitelisted_emojis:
-        findings.append(Finding(FAIL, messages.CHECK_EMPTY_WHITELIST_TITLE,
+        # Every emoji counts while the whitelist is empty, so nothing is blocked: it is worth knowing,
+        # not a failure
+        findings.append(Finding(INFO, messages.CHECK_EMPTY_WHITELIST_TITLE,
                                 messages.CHECK_EMPTY_WHITELIST.format(whitelist=command_refs.WHITELIST_EMOJI,
                                                                       logic=command_refs.CUSTOM_EMOJI_CHECK_LOGIC)))
     # Total reactions can pass the member count, as one member can add several emojis

@@ -9,7 +9,8 @@ described here. Contact: githublukas@gmail.com, or the
 ## 1. What the bot stores
 
 - **Server settings:** the server ID, the Hall of Fame channel ID, your configuration, the date the bot
-  joined, and monthly member counts.
+  joined, and monthly member counts. If the bot is missing permissions in the Hall of Fame channel, which
+  permissions it warned the server about, how many times, and when, so it stops after a few reminders.
 - **Featured messages:** the IDs of the message, its channel and its author, its reaction count and
   time, and the ID of the bot's repost. The text, images and usernames are not stored in our database.
   The repost itself lives in your server's Hall of Fame channel on Discord. At most 10,000 featured
@@ -76,7 +77,8 @@ Nothing else is shared.
 ## 5. How long data is kept
 
 - Removing the bot from a server immediately deletes that server's featured messages, member
-  statistics, Wrapped data and settings. If the bot was offline when it was removed, Discord does not
+  statistics, Wrapped data and settings, including its permission warnings. A permission warning is also
+  deleted by the daily check that finds the permissions fixed. If the bot was offline when it was removed, Discord does not
   tell it, so the data is deleted once the server has been gone for 7 days and Discord confirms the bot
   no longer has access to it.
 - Join and leave dates and monthly member counts are kept as anonymous server statistics.

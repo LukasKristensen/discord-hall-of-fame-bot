@@ -6,6 +6,7 @@ through the real reaction path first, with the rows real, and then asks the expl
 They need HOF_TEST_DATABASE_URL, see tests/integration/database.py, and are skipped without it.
 """
 
+import contextlib
 import datetime
 from unittest import mock
 
@@ -55,7 +56,11 @@ class MessageCheckTestCase(DatabaseTestCase):
         await utils.validate_message(reaction_event(self.message), self.bot, self.connection, self.config)
 
     async def explain(self, message=None, asked_by=FANS[0]):
-        return await message_check.explain(message or self.message, asked_by, self.bot, self.connection, self.config)
+        @contextlib.asynccontextmanager
+        async def connect():
+            yield self.connection
+
+        return await message_check.explain(message or self.message, asked_by, self.bot, connect, self.config)
 
     def stored(self, message_id=1):
         return hall_of_fame_message_repo.find_hall_of_fame_message(self.connection, GUILD, self.channel.id, message_id)

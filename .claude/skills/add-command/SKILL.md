@@ -14,7 +14,9 @@ change and say in the report which items did not apply.
 1. **`src/main.py`** - `@tree.command(name=..., description=...)`. Copy the shape of an existing
    command of the same kind (a toggle like `require_image_or_video` is the shortest template):
    - `if not await ensure_bot_is_loaded(interaction): return`
-   - configuration commands: `if not await check_if_user_has_manage_server_permission(interaction): return`
+   - configuration commands: `@manage_server_only` under `@tree.command`, which hides the command from
+     members without Manage Server, and `if not await check_if_user_has_manage_server_permission(interaction): return`,
+     which refuses them. Add the name to `CommandPermissionTests.MANAGE_SERVER_ONLY` in `tests/test_main.py`
    - `@app_commands.describe(...)` for every option, and `app_commands.Range[int, MIN, MAX]` with the
      bounds in `validation.py` for numbers. Check the bounds again in the handler with
      `validation.out_of_range_message`, since a client can send anything.

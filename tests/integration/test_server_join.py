@@ -51,6 +51,12 @@ class ServerJoinTests(DatabaseTestCase):
     def stored(self, guild_id):
         return server_config_repo.get_server_classes(self.connection).get(guild_id)
 
+    async def test_the_setup_report_runs_on_join(self):
+        """It is wrapped so a failure cannot undo a join, which also hides a failure from every other test."""
+        await self.join(Guild(9001, member_count=30))
+
+        self.assertFalse(any("Failed to report setup problems on join" in entry for entry in self.logged))
+
     async def test_the_stored_configuration_matches_the_one_in_memory(self):
         """Reactions are served from memory, so a difference here is a setting that changes on restart."""
         in_memory = await self.join(Guild(9001, member_count=30))

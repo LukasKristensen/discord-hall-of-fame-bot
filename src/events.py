@@ -6,7 +6,8 @@ import utils
 from caches import ExpiringSet
 from translations import messages
 from enums import command_refs, log_type
-from repositories import server_config_repo, hall_of_fame_message_repo, guild_lifecycle_event_repo
+from repositories import (server_config_repo, hall_of_fame_message_repo, guild_lifecycle_event_repo,
+                          permission_warning_repo)
 
 # The daily sweep runs once per server the bot is in, so it is paced rather than run all at once:
 # a bounded number of servers are handled together, and any single one that hangs is abandoned so
@@ -27,12 +28,12 @@ departed_guild_grace_days = 7
 departed_guild_max_missing_share = 0.1
 departed_guild_fetch_timeout_seconds = 30
 
-# Guild ID to the permissions it was last warned about missing and the day it was warned. Kept in memory
-# instead of searching a channel's history for the old warning, which cost an API call per server every
-# day. A server is warned again once the missing permissions change or this many days have passed, and a
-# restart can cost at most one repeat
-permission_warnings_sent = {}
+# A server missing permissions in its Hall of Fame channel is warned this many days apart, and only this many
+# times about the same permissions, so a server that chooses to leave it broken is not reminded forever. The
+# count starts over once the permissions are fixed or a different set goes missing. Kept in the database, as
+# a restart would otherwise warn every broken server again that day
 permission_warning_repeat_days = 7
+permission_warning_limit = 3
 
 # Guilds told recently that setting up failed. Every retry of /set_hall_of_fame_channel on a server that is
 # not set up comes through here, and should not post the same notice publicly again
@@ -251,7 +252,7 @@ async def daily_task(bot, connection, server_classes, dev_testing, borrow_connec
         await clean_up_departed_guilds(bot, connection, server_classes)
     await utils.logging(bot, f"Checked {len(server_classes)} servers for daily task")
     await update_user_database(bot, connection)
-    await check_write_permissions_to_hall_of_fame_channel(bot, server_classes)
+    await check_write_permissions_to_hall_of_fame_channel(bot, server_classes, connection)
 
 
 async def clean_up_departed_guilds(bot: discord.Client, connection, server_classes, now=None):
@@ -324,29 +325,43 @@ async def bot_has_left_guild(bot: discord.Client, guild_id: int) -> bool:
     return False
 
 
-def permission_warning_due(guild_id: int, missing_permissions: list) -> bool:
+def next_permission_warning(last_warning, missing_permissions: list, now: datetime.datetime):
     """
-    Whether a server should be warned about missing Hall of Fame channel permissions today
-    :param guild_id: The ID of the server
+    The warning a server is due today about missing Hall of Fame channel permissions, if any
+    :param last_warning: The server's stored warning, (missing permissions, warnings sent, first, last), or None
     :param missing_permissions: The permissions the bot is missing in the channel
-    :return: True when it was never warned, the missing permissions changed, or the last warning is old enough
+    :param now: The time of this check
+    :return: The warning to send and store, (missing permissions, warnings sent, first, last), or None when the
+        server was warned too recently, or already as often as it will be about these permissions
     """
-    last_warning = permission_warnings_sent.get(guild_id)
-    if last_warning is None:
-        return True
-    warned_about, warned_on = last_warning
-    if warned_about != frozenset(missing_permissions):
-        return True
-    return (datetime.date.today() - warned_on).days >= permission_warning_repeat_days
+    missing = frozenset(missing_permissions)
+    if last_warning is None or last_warning[0] != missing:
+        return missing, 1, now, now
+    _, warnings_sent, first_warned_at, last_warned_at = last_warning
+    if warnings_sent >= permission_warning_limit:
+        return None
+    # Compared as UTC days, as the database hands timestamps back in its own session's time zone
+    utc = datetime.timezone.utc
+    if (now.astimezone(utc).date() - last_warned_at.astimezone(utc).date()).days < permission_warning_repeat_days:
+        return None
+    return missing, warnings_sent + 1, first_warned_at, now
 
 
-async def check_write_permissions_to_hall_of_fame_channel(bot: discord.Client, server_classes):
+async def check_write_permissions_to_hall_of_fame_channel(bot: discord.Client, server_classes, connection, now=None):
     """
     Check if the bot has write permissions to the Hall of Fame channel for each server
     :param bot: The bot client
     :param server_classes: The server classes
+    :param connection: The database connection the warnings sent are read from and saved to
+    :param now: The time of this check
     :return: None
     """
+    now = now or datetime.datetime.now(datetime.timezone.utc)
+    # Read once and saved once, as the servers are checked concurrently and must not share the connection
+    last_warnings = permission_warning_repo.get_permission_warnings(connection)
+    warned = []
+    fixed = []
+
     async def check_one_server(server_class):
         guild = bot.get_guild(server_class.guild_id)
         if not guild:
@@ -372,15 +387,19 @@ async def check_write_permissions_to_hall_of_fame_channel(bot: discord.Client, s
 
         if not missing_permissions:
             # Forgotten once fixed, so the server hears about it straight away if it breaks again
-            permission_warnings_sent.pop(guild.id, None)
+            if guild.id in last_warnings:
+                fixed.append(guild.id)
             return
-        if not permission_warning_due(guild.id, missing_permissions):
+        warning = next_permission_warning(last_warnings.get(guild.id), missing_permissions, now)
+        if warning is None:
             return
         channel_ref = f"<#{channel.id}>"
-        posted = await utils.send_message_to_highest_prio_channel(bot, guild, messages.MISSING_HOF_CHANNEL_PERMISSIONS.format(
-                        missing_permissions=", ".join(missing_permissions), channel=channel_ref))
+        content = messages.MISSING_HOF_CHANNEL_PERMISSIONS.format(missing_permissions=", ".join(missing_permissions), channel=channel_ref)
+        if warning[1] >= permission_warning_limit:
+            content += "\n" + messages.MISSING_HOF_CHANNEL_PERMISSIONS_LAST_WARNING
+        posted = await utils.send_message_to_highest_prio_channel(bot, guild, content)
         if posted:
-            permission_warnings_sent[guild.id] = (frozenset(missing_permissions), datetime.date.today())
+            warned.append((guild.id, *warning))
 
     async def report_permission_failure(server_class, error):
         await utils.logging(bot, f"Error checking Hall of Fame channel permissions for server "
@@ -392,6 +411,13 @@ async def check_write_permissions_to_hall_of_fame_channel(bot: discord.Client, s
         limit=daily_task_concurrency,
         timeout=daily_task_guild_timeout_seconds,
         on_error=report_permission_failure)
+
+    try:
+        permission_warning_repo.save_permission_warnings(connection, warned)
+        permission_warning_repo.delete_permission_warnings(connection, fixed)
+    except Exception as e:
+        connection.rollback()
+        await utils.logging(bot, f"Could not save the permission warnings sent today: {e}")
 
 
 async def update_user_database(bot: discord.Client, connection):

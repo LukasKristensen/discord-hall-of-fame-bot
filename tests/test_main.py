@@ -96,11 +96,21 @@ class FakeInteraction:
         self.followup = FakeFollowup()
         self.command = types.SimpleNamespace(name="test_command")
         self.original_edits = []
+        self.deleted_original = False
         # Reached through the server's own install of the bot, rather than a member's user install
         self.guild_install = True
 
     async def edit_original_response(self, content=None, view=None):
         self.original_edits.append((content, view))
+
+    async def original_response(self):
+        """The deferred "thinking..." message, still loading until the first followup replaces it"""
+        loading = self.response.deferred and not self.followup.messages and not self.deleted_original
+        return types.SimpleNamespace(flags=types.SimpleNamespace(loading=loading,
+                                                                 ephemeral=self.response.deferred_ephemeral))
+
+    async def delete_original_response(self):
+        self.deleted_original = True
 
     def is_guild_integration(self):
         return self.guild_install
@@ -109,6 +119,34 @@ class FakeInteraction:
     def replies(self):
         """Everything sent back, whether as the response or as a followup"""
         return self.response.messages + self.followup.messages
+
+
+class SendErrorTests(unittest.IsolatedAsyncioTestCase):
+    async def test_an_error_after_a_public_defer_stays_private(self):
+        """The first followup would replace the public "thinking..." and be public whatever it asks."""
+        interaction = FakeInteraction()
+        await interaction.response.defer()
+        await main.send_error(interaction, "no")
+
+        self.assertTrue(interaction.deleted_original)
+        self.assertEqual(["no"], interaction.followup.messages)
+        self.assertEqual([True], interaction.followup.ephemeral)
+
+    async def test_an_error_after_a_private_defer_keeps_the_message(self):
+        interaction = FakeInteraction()
+        await interaction.response.defer(ephemeral=True)
+        await main.send_error(interaction, "no")
+
+        self.assertFalse(interaction.deleted_original)
+        self.assertEqual(["no"], interaction.followup.messages)
+
+    async def test_an_error_after_the_answer_was_sent_deletes_nothing(self):
+        interaction = FakeInteraction()
+        await interaction.response.defer()
+        await interaction.followup.send("the card")
+        await main.send_error(interaction, "no")
+
+        self.assertFalse(interaction.deleted_original)
 
 
 class FakePool:
@@ -264,7 +302,7 @@ class SetupDatabasesTests(unittest.TestCase):
         main.setup_databases(connection)
 
         created = [query for query in connection.queries if "CREATE TABLE IF NOT EXISTS" in query]
-        self.assertEqual(9, len(created))
+        self.assertEqual(10, len(created))
 
     def test_creates_each_table_only_if_it_is_missing(self):
         """This runs on every start, so it must never drop or recreate a table that holds data."""
@@ -1073,7 +1111,8 @@ class ClosedBoardTests(CommandTestCase):
 
     async def test_turns_the_public_commands_away_privately(self):
         for command, args in ((main.user_server_profile, (None,)), (main.leaderboard, ()),
-                              (main.hof_wrapped_command, ()), (main.server_hof_wrapped_command, ())):
+                              (main.hof_wrapped_command, ()), (main.server_hof_wrapped_command, ()),
+                              (main.get_help, ()), (main.invite, ()), (main.vote, ())):
             with self.subTest(command=command.name):
                 interaction = self.interaction()
                 await command.callback(interaction, *args)
@@ -1186,6 +1225,39 @@ class CommandContextTests(unittest.TestCase):
         self.assertEqual(self.USER_INSTALLABLE, user_installable)
 
 
+class CommandPermissionTests(unittest.TestCase):
+    # The commands that need Manage Server, which Discord hides from members without it
+    MANAGE_SERVER_ONLY = {"set_reaction_threshold", "include_authors_reaction", "allow_messages_in_hof_channel",
+                          "require_image_or_video", "custom_emoji_check_logic", "whitelist_emoji", "unwhitelist_emoji",
+                          "clear_whitelist", "troubleshoot", "set_post_due_date", "ignore_bot_messages",
+                          "calculation_method", "hide_hof_post_below_threshold", "count_in_global_profiles",
+                          "set_hall_of_fame_channel"}
+    # What a command calls to turn away a member without Manage Server
+    PERMISSION_CHECKS = ("check_if_user_has_manage_server_permission", "get_whitelist_server_class", "run_setup_check")
+
+    def test_only_the_settings_commands_are_hidden_from_members(self):
+        """Everything members can use stays in their command picker, the message command included."""
+        hidden = set()
+        for command in main.tree.get_commands():
+            permissions = command.to_dict(main.tree).get("default_member_permissions")
+            if permissions is not None:
+                hidden.add(command.name)
+                with self.subTest(command=command.name):
+                    self.assertEqual(discord.Permissions(manage_guild=True).value, permissions)
+
+        self.assertEqual(self.MANAGE_SERVER_ONLY, hidden)
+
+    def test_every_command_that_refuses_members_is_hidden_from_them(self):
+        """A new settings command without manage_server_only would be offered to members only to refuse them."""
+        import inspect
+
+        for command in main.tree.get_commands(type=discord.AppCommandType.chat_input):
+            source = inspect.getsource(command.callback)
+            if any(check in source for check in self.PERMISSION_CHECKS):
+                with self.subTest(command=command.name):
+                    self.assertIn(command.name, self.MANAGE_SERVER_ONLY)
+
+
 def outside_a_server(interaction, guild_id=None):
     """A user install answers in a DM (no guild) or in a server the bot is not in."""
     interaction.guild_id = guild_id
@@ -1217,7 +1289,7 @@ class FeedbackCooldownTests(MainTestCase):
         self.forms = []
         self.refusals = []
 
-        async def open_form(interaction, _bot, on_sent=None, refusal=None):
+        async def open_form(interaction, _bot, on_sent=None, refusal=None, on_unsent=None):
             self.forms.append(on_sent)
             self.refusals.append(refusal)
 
@@ -1315,6 +1387,50 @@ class FeedbackFormTests(unittest.IsolatedAsyncioTestCase):
             guild_id=guild_id,
             response=types.SimpleNamespace(send_message=nothing),
             delete_original_response=nothing)
+
+    async def test_the_use_is_counted_before_the_send_so_forms_sent_together_cannot_both_pass(self):
+        order = []
+
+        async def post(embed=None):
+            order.append("sent")
+
+        channel = types.SimpleNamespace(send=post)
+        self.bot = types.SimpleNamespace(get_guild=lambda _id: types.SimpleNamespace(get_channel=lambda _id: channel))
+        modal = await self.open_form(lambda _user_id: order.append("counted"))
+        modal.fb_title._value = "Title"
+        modal.message._value = "Body"
+
+        async def no_wait(_seconds):
+            return None
+
+        with mock.patch.object(utils.asyncio, "sleep", no_wait):
+            await modal.on_submit(self.submitter())
+
+        self.assertEqual(["counted", "sent"], order)
+
+    async def test_a_form_that_could_not_be_sent_does_not_count(self):
+        async def broken(embed=None):
+            raise RuntimeError("Discord went away")
+
+        channel = types.SimpleNamespace(send=broken)
+        self.bot = types.SimpleNamespace(get_guild=lambda _id: types.SimpleNamespace(get_channel=lambda _id: channel))
+        counted, taken_back = [], []
+        modals = []
+        interaction = types.SimpleNamespace(response=types.SimpleNamespace())
+
+        async def send_modal(modal):
+            modals.append(modal)
+
+        interaction.response.send_modal = send_modal
+        await utils.create_feedback_form(interaction, self.bot, on_sent=counted.append, on_unsent=taken_back.append)
+        modal = modals[0]
+        modal.fb_title._value = "Title"
+        modal.message._value = "Body"
+
+        with self.assertRaises(RuntimeError):
+            await modal.on_submit(self.submitter())
+        self.assertEqual([77], counted)
+        self.assertEqual([77], taken_back)
 
     async def test_a_sent_form_counts_and_works_from_a_dm(self):
         sent = []
@@ -1468,6 +1584,19 @@ class GuildJoinAndRemoveTests(MainTestCase):
         self.assertNotIn(GUILD_ID, main.server_classes)
         self.assertEqual(70, main.total_member_count)
 
+    async def test_a_server_whose_setup_failed_is_counted_and_taken_off_alike(self):
+        """The daily recount counts every server, so join and leave must agree with it."""
+        async def fail(*_args):
+            return None
+
+        self.patch(main.events, "guild_join", fail)
+        self.patch(main.events, "record_guild_leave", lambda *_args: None)
+        await main.on_guild_join(self.server)
+        self.assertEqual(125, main.total_member_count)
+
+        await main.on_guild_remove(self.server)
+        self.assertEqual(100, main.total_member_count)
+
     async def test_the_leave_of_a_server_never_set_up_is_still_recorded(self):
         recorded = []
         self.patch(main.events, "record_guild_leave", lambda _connection, guild_id, _when: recorded.append(guild_id))
@@ -1483,6 +1612,23 @@ class GuildJoinAndRemoveTests(MainTestCase):
         await main.on_guild_remove(self.server)
 
         self.assertTrue(any("Error recording the leave" in entry for entry in self.logged))
+
+
+class TroubleshootButtonFailureTests(CommandTestCase):
+    async def test_a_failure_after_reading_the_activity_is_answered(self):
+        """A press of the button has no command error handler behind it, so the admin is answered here."""
+        self.patch(main.hall_of_fame_message_repo, "get_post_activity",
+                   lambda *_args: {"total": 0, "latest": None, "today": 0})
+
+        def broken(*_args):
+            raise RuntimeError("boom")
+
+        self.patch(main.setup_check, "check_server", broken)
+        interaction = FakeInteraction()
+        await main.run_setup_check(interaction)
+
+        self.assertEqual([messages.COMMAND_FAILED], interaction.followup.messages)
+        self.assertTrue(any("Error running the setup check" in entry for entry in self.logged))
 
 
 class SetupCheckCommandTests(CommandTestCase):
@@ -1638,8 +1784,16 @@ class LogPrivacyTests(unittest.TestCase):
                     self.assertNotIn(name, call)
 
     def test_where_a_command_was_used_never_says_which_server(self):
-        self.assertEqual("a server", main.where_used(FakeInteraction()))
-        self.assertEqual("a DM or a server without the bot", main.where_used(types.SimpleNamespace(guild=None)))
+        with mock.patch.object(main, "bot", types.SimpleNamespace(get_guild=lambda _guild_id: object())):
+            self.assertEqual("a server", main.where_used(FakeInteraction()))
+        dm = types.SimpleNamespace(guild=None, guild_id=None)
+        self.assertEqual("a DM or a server without the bot", main.where_used(dm))
+
+    def test_a_server_without_the_bot_is_not_a_server_with_it(self):
+        """discord.py gives a user install there a partial guild, so interaction.guild is not None."""
+        interaction = types.SimpleNamespace(guild=object(), guild_id=999)
+        with mock.patch.object(main, "bot", types.SimpleNamespace(get_guild=lambda _guild_id: None)):
+            self.assertEqual("a DM or a server without the bot", main.where_used(interaction))
 
 
 

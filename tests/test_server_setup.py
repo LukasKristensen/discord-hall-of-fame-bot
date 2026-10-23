@@ -6,6 +6,7 @@ introduced with a welcome message. Leaving has to undo all of it, across every t
 that removes and re-adds the bot inherits its old board.
 """
 
+import types
 import unittest
 from unittest import mock
 
@@ -18,7 +19,7 @@ from caches import ExpiringSet
 from enums import calculation_method_type
 from translations import messages
 from repositories import (hall_of_fame_message_repo, hof_wrapped_guild_status_repo, hof_wrapped_repo,
-                          server_config_repo, server_user_repo)
+                          permission_warning_repo, server_config_repo, server_user_repo)
 
 from tests.fakes import FakeConnection, FakePermissions
 
@@ -128,7 +129,12 @@ class CreateDatabaseContextTests(SetupTestCase):
 
     async def join(self, guild=None, custom_channel=None):
         guild = guild if guild is not None else FakeJoinedGuild()
-        created = await utils.create_database_context(object(), guild, FakeConnection(), custom_channel)
+
+        async def fetch_channel(channel_id):
+            return next(channel for channel in [*guild.created_channels, *guild.channels] if channel.id == channel_id)
+
+        bot = types.SimpleNamespace(fetch_channel=fetch_channel)
+        created = await utils.create_database_context(bot, guild, FakeConnection(), custom_channel)
         return guild, created
 
     async def test_creates_a_hall_of_fame_channel(self):
@@ -305,11 +311,14 @@ class DeleteDatabaseContextTests(unittest.TestCase):
              mock.patch.object(hof_wrapped_repo, "delete_hof_wrapped_for_guild",
                                lambda _c, guild_id: calls.append(("wrapped", guild_id))), \
              mock.patch.object(hof_wrapped_guild_status_repo, "delete_progress_for_guild",
-                               lambda _c, guild_id: calls.append(("wrapped progress", guild_id))):
+                               lambda _c, guild_id: calls.append(("wrapped progress", guild_id))), \
+             mock.patch.object(permission_warning_repo, "delete_permission_warnings",
+                               lambda _c, guild_ids: calls.append(("permission warnings", guild_ids))):
             utils.delete_database_context(GUILD_ID, connection)
 
         self.assertEqual([("messages", GUILD_ID), ("users", GUILD_ID), ("config", GUILD_ID),
-                          ("wrapped", GUILD_ID), ("wrapped progress", GUILD_ID)], calls)
+                          ("wrapped", GUILD_ID), ("wrapped progress", GUILD_ID),
+                          ("permission warnings", [GUILD_ID])], calls)
 
 
 class FakeGuildChannel:

@@ -19,13 +19,17 @@ def build_link_buttons(*links: tuple[str, str]) -> discord.ui.View:
     A row of link buttons, one per (label, url) pair, in the order given.
 
     Link buttons open the URL in Discord itself and never call back to the bot, so the view has no
-    timeout and the buttons keep working after a restart. Must be built inside a running event loop.
+    timeout and the buttons keep working after a restart. It is stopped before it is returned: discord.py
+    keeps every unfinished view it sends in memory, and one that never stops would stay there until the
+    bot restarts, one per reply. A stopped view is still drawn the same. Must be built inside a running
+    event loop.
     :param links: (label, url) pairs
     :return: The view to send with the reply
     """
     view = discord.ui.View(timeout=None)
     for label, url in links:
         view.add_item(discord.ui.Button(style=discord.ButtonStyle.link, label=label, url=url))
+    view.stop()
     return view
 
 
@@ -79,14 +83,24 @@ class SetupCheckView(discord.ui.View):
             await setup_check_handler(interaction)
 
 
+def sent_copy(view: discord.ui.View) -> discord.ui.View:
+    """
+    A SetupCheckView to send. Presses are answered by the one main registers with bot.add_view, which
+    matches the button by its custom_id on any message, so the copy sent is stopped: otherwise discord.py
+    would keep every copy ever sent in memory until the bot restarts
+    """
+    view.stop()
+    return view
+
+
 def build_check_setup_view() -> discord.ui.View:
     # The same button as on the welcome message, so the view main registers answers it too
-    return SetupCheckView()
+    return sent_copy(SetupCheckView())
 
 
 def build_welcome_view() -> discord.ui.View:
     # The server has just installed the bot, so there is nothing to invite it to yet
-    return SetupCheckView(SUPPORT_SERVER_LINK, VOTE_LINK)
+    return sent_copy(SetupCheckView(SUPPORT_SERVER_LINK, VOTE_LINK))
 
 
 def build_help_embed() -> discord.Embed:
@@ -768,7 +782,9 @@ def my_data_summary(summary: dict, note: str = None) -> str:
         lines.append(messages.MY_DATA_NOTHING_STORED)
     else:
         lines.append(messages.MY_DATA_NOTHING_AT_ALL)
-    if has_totals(summary):
+    # A hidden choice is listed whenever it is stored, even once the member has no totals, so it is never
+    # kept without the member seeing it and the button to undo it
+    if has_totals(summary) or summary["hidden_since"]:
         if summary["hidden_since"]:
             lines.append(messages.MY_DATA_TOTALS_HIDDEN.format(since=discord_date(summary["hidden_since"])))
         else:
@@ -806,6 +822,8 @@ class MyDataView(discord.ui.View):
         self.summary = summary
         self.original_interaction = None
         self.finished = False
+        # Set while a press of Delete is being answered, so a second quick press is not answered twice
+        self.delete_pending = False
 
         self.download_button = discord.ui.Button(style=discord.ButtonStyle.primary,
                                                  label=messages.MY_DATA_DOWNLOAD_BUTTON)
@@ -834,8 +852,9 @@ class MyDataView(discord.ui.View):
         # stored data is the choice not to be featured can still download and delete it
         self.download_button.disabled = not has_anything_stored(self.summary)
         self.add_item(self.download_button)
-        # Hiding totals a member cannot have would store a choice about them for nothing
-        if has_totals(self.summary):
+        # Hiding totals a member cannot have would store a choice about them for nothing, but a choice
+        # already stored can always be undone
+        if has_totals(self.summary) or self.summary["hidden_since"]:
             self.add_item(self.totals_button)
         self.add_item(self.featuring_button)
         # Deleting removes everything stored, the member's two choices included

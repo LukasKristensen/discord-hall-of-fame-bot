@@ -99,13 +99,14 @@ messages being reacted to. The bot checks this when it joins and posts what to f
 ## Commands
 
 All commands are slash commands, apart from **Why isn't this on the board?**, which is under Apps when you right-click or long-press a message. They work inside a server with the bot. Add Hall of Fame to your own
-account (the **Add to your account** button under `/invite`) and `/user_profile`, the three under
+account (the **Add to your account** button under `/invite`) and `/user_profile`, `/my_data` under
 [Your data](#your-data), `/help`, `/invite`, `/vote` and `/feedback` also work in DMs and in servers
 without the bot; see [Can I use it outside a server?](#can-i-use-it-outside-a-server). The rest need the
 server's configuration, so they stay in servers that added the bot. The configuration ones need the **Manage Server**
-permission, and say so on each group; everything under [Recognition](#recognition-commands),
-[Your data](#your-data) and [Bot and help](#bot-and-help) is open to every member. If a command is
-refused, for example because a value is out of range, only you see the reply.
+permission and say so on each group. Discord only shows them in the command picker to members who have it, see
+[Why can't I see the settings commands?](#why-cant-i-see-the-settings-commands). Everything under
+[Recognition](#recognition-commands), [Your data](#your-data) and [Bot and help](#bot-and-help) is open to every
+member. If a command is refused, for example because a value is out of range, only you see the reply.
 
 ### Setting up the board
 
@@ -293,6 +294,12 @@ Every channel it has permission to read. Channels restricted to a role stay invi
 it is given that role. `/troubleshoot` shows how many channels it reads, lists the ones members can see
 but the bot cannot, and names the role that would open most of them. Staff-only channels are counted
 apart, since leaving the bot out of those is usually on purpose.
+
+### Why can't I see the settings commands?
+
+Discord only shows them to members with the **Manage Server** permission, since everyone else would be
+refused. A server can show them to other roles under Server Settings > Integrations > Hall of Fame, but
+running one still needs Manage Server.
 
 <br>
 

@@ -75,8 +75,7 @@ class DailyMaintenanceTests(DatabaseTestCase):
         async def no_log(*_args, **_kwargs):
             pass
 
-        for target, name, value in ((utils, "logging", no_log), (utils, "create_embed", post_embed),
-                                    (events, "permission_warnings_sent", {})):
+        for target, name, value in ((utils, "logging", no_log), (utils, "create_embed", post_embed)):
             patcher = mock.patch.object(target, name, value)
             patcher.start()
             self.addCleanup(patcher.stop)

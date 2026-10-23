@@ -22,7 +22,7 @@ from tests.integration.test_member_data_deletion import (
 
 # Tables whose rows for a server are deleted when the bot is removed from it
 DELETED_WITH_THE_SERVER = {"hall_of_fame_message", "server_user", "server_configs", "hof_wrapped",
-                           "hof_wrapped_progress"}
+                           "hof_wrapped_progress", "permission_warning"}
 # Tables with a guild_id that are kept on purpose: anonymous statistics about servers, not members
 KEPT_AS_ANONYMOUS_STATISTICS = {"guild_lifecycle_event", "guild_monthly_snapshot"}
 
