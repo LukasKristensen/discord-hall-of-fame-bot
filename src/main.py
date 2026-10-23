@@ -86,6 +86,16 @@ all_time_emoji = "<:all_time_most_hof_messages:1380272422842007622>" if not dev_
 bot_loaded = False
 
 
+def manage_server_only(command):
+    """
+    Hide a command that needs Manage Server from members without it, so the command picker only offers
+    what they can use. Discord applies this, and a server can change who sees the command under Server
+    Settings > Integrations, so the command still checks the permission itself with
+    check_if_user_has_manage_server_permission. A role a server lets see it there is still refused
+    """
+    return app_commands.default_permissions(manage_guild=True)(command)
+
+
 async def ensure_bot_is_loaded(interaction: discord.Interaction) -> bool:
     """
     Check that the bot has finished loading and let the user know when it has not,
@@ -414,6 +424,7 @@ async def get_help(interaction: discord.Interaction):
                         interaction.guild.id, log_level=log_type.COMMAND)
 
 @tree.command(name="set_reaction_threshold", description="Configure the amount of reactions needed to post a message in the Hall of Fame")
+@manage_server_only
 @app_commands.describe(reaction_threshold=f"Reactions a message needs to reach the Hall of Fame "
                                           f"({validation.REACTION_THRESHOLD_MIN}-{validation.REACTION_THRESHOLD_MAX})")
 async def configure_bot(interaction: discord.Interaction,
@@ -454,6 +465,7 @@ async def send_feedback(interaction: discord.Interaction):
     await utils.create_feedback_form(interaction, bot)
 
 @tree.command(name="include_authors_reaction", description="Should the author's own reaction be included in the reaction threshold calculation?")
+@manage_server_only
 async def include_author_own_reaction_in_threshold(interaction: discord.Interaction, include: bool):
     if not await ensure_bot_is_loaded(interaction):
         return
@@ -466,6 +478,7 @@ async def include_author_own_reaction_in_threshold(interaction: discord.Interact
                         interaction.guild.id, include, log_level=log_type.COMMAND)
 
 @tree.command(name="allow_messages_in_hof_channel", description="Should people be allowed to send messages in the Hall of Fame channel?")
+@manage_server_only
 async def allow_messages_in_hof_channel(interaction: discord.Interaction, allow: bool):
     if not await ensure_bot_is_loaded(interaction):
         return
@@ -480,6 +493,7 @@ async def allow_messages_in_hof_channel(interaction: discord.Interaction, allow:
                         interaction.guild.id, allow, log_level=log_type.COMMAND)
 
 @tree.command(name="require_image_or_video", description="Should only messages with images or videos be allowed in the Hall of Fame?")
+@manage_server_only
 async def require_image_or_video(interaction: discord.Interaction, require: bool):
     if not await ensure_bot_is_loaded(interaction):
         return
@@ -501,6 +515,7 @@ async def vote(interaction: discord.Interaction):
 
 @tree.command(name="custom_emoji_check_logic",
               description="Here you can decide if it only should be whitelisted emojis or all emojis")
+@manage_server_only
 @discord.app_commands.choices(
     config_option=[
         app_commands.Choice(name="All emojis", value="all_emojis"),
@@ -552,6 +567,7 @@ async def get_whitelist_server_class(interaction: discord.Interaction):
 
 
 @tree.command(name="whitelist_emoji", description="Whitelist an emoji for the server if custom emoji check logic is enabled")
+@manage_server_only
 @app_commands.describe(emoji="A single emoji, either a standard one or a custom emoji from this server")
 async def whitelist_emoji(interaction: discord.Interaction, emoji: str):
     server_class = await get_whitelist_server_class(interaction)
@@ -586,6 +602,7 @@ async def whitelist_emoji(interaction: discord.Interaction, emoji: str):
 @tree.command(
     name="unwhitelist_emoji",
     description="Unwhitelist an emoji for the server if custom emoji check logic is enabled")
+@manage_server_only
 @app_commands.describe(emoji="The whitelisted emoji to remove")
 async def unwhitelist_emoji(interaction: discord.Interaction, emoji: str):
     server_class = await get_whitelist_server_class(interaction)
@@ -613,6 +630,7 @@ async def unwhitelist_emoji(interaction: discord.Interaction, emoji: str):
 
 
 @tree.command(name="clear_whitelist", description="Clear the whitelist for the server if custom emoji check logic is enabled")
+@manage_server_only
 async def clear_whitelist(interaction: discord.Interaction):
     server_class = await get_whitelist_server_class(interaction)
     if server_class is None:
@@ -648,6 +666,7 @@ async def get_server_config(interaction: discord.Interaction):
 @tree.command(
     name="set_post_due_date",
     description="How many days ago should the post be to be considered old and not valid?")
+@manage_server_only
 @app_commands.describe(post_due_date=f"How many days old a message can be and still reach the Hall of Fame "
                                      f"({validation.POST_DUE_DATE_MIN}-{validation.POST_DUE_DATE_MAX})")
 async def set_post_due_date(interaction: discord.Interaction,
@@ -679,6 +698,7 @@ async def invite(interaction: discord.Interaction):
                         interaction.guild.id, log_level=log_type.COMMAND)
 
 @tree.command(name="ignore_bot_messages", description="Should the bot ignore messages from other bots?")
+@manage_server_only
 async def ignore_bot_messages(interaction: discord.Interaction, should_ignore_bot_messages: bool):
     if not await ensure_bot_is_loaded(interaction):
         return
@@ -692,6 +712,7 @@ async def ignore_bot_messages(interaction: discord.Interaction, should_ignore_bo
                         interaction.guild.id, should_ignore_bot_messages, log_level=log_type.COMMAND)
 
 @tree.command(name="calculation_method", description="Set the calculation method for reactions")
+@manage_server_only
 @discord.app_commands.choices(
     method=[
         app_commands.Choice(name="reaction_count = Most reactions on an emoji (default, recommended)", value=calculation_method_type.MOST_REACTIONS_ON_EMOJI),
@@ -713,6 +734,7 @@ async def calculation_method(interaction: discord.Interaction, method: app_comma
                         interaction.guild.id, method.value, log_level=log_type.COMMAND)
 
 @tree.command(name="hide_hof_post_below_threshold", description="Should hall of fame posts be hidden when they go below the reaction threshold?")
+@manage_server_only
 async def hide_hall_of_fame_posts_when_they_are_below_threshold(interaction: discord.Interaction, hide: bool):
     """
     Hide hall of fame posts when they are below the threshold
@@ -800,6 +822,7 @@ async def leaderboard(interaction: discord.Interaction):
                         interaction.guild.id, log_level=log_type.COMMAND)
 
 @tree.command(name="set_hall_of_fame_channel", description="Manually set the Hall of Fame channel for the server")
+@manage_server_only
 @app_commands.describe(channel="The text channel Hall of Fame posts go to")
 async def set_hall_of_fame_channel(interaction: discord.Interaction, channel: discord.TextChannel):
     """

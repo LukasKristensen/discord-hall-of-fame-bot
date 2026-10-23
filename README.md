@@ -94,9 +94,10 @@ messages being reacted to.
 ## Commands
 
 All commands are slash commands and only work inside a server. The configuration ones need the
-**Manage Server** permission, and say so on each group; everything under
-[Recognition](#recognition-commands) and [Bot and help](#bot-and-help) is open to every member. If a
-command is refused, for example because a value is out of range, only you see the reply.
+**Manage Server** permission and say so on each group. Discord only shows them in the command picker to
+members who have it, see [Why can't I see the settings commands?](#why-cant-i-see-the-settings-commands).
+Everything under [Recognition](#recognition-commands) and [Bot and help](#bot-and-help) is open to every
+member. If a command is refused, for example because a value is out of range, only you see the reply.
 
 ### Setting up the board
 
@@ -255,6 +256,12 @@ anyone to read and contribute to, see [License](#license).
 
 Every channel it has permission to read. Channels restricted to a role stay invisible to the bot unless
 it is given that role.
+
+### Why can't I see the settings commands?
+
+Discord only shows them to members with the **Manage Server** permission, since everyone else would be
+refused. A server can show them to other roles under Server Settings > Integrations > Hall of Fame, but
+running one still needs Manage Server.
 
 <br>
 

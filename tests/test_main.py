@@ -1045,5 +1045,37 @@ class CommandContextTests(unittest.TestCase):
         self.assertFalse(contexts.private_channel)
 
 
+class CommandPermissionTests(unittest.TestCase):
+    # The commands that need Manage Server, which Discord hides from members without it
+    MANAGE_SERVER_ONLY = {"set_reaction_threshold", "include_authors_reaction", "allow_messages_in_hof_channel",
+                          "require_image_or_video", "custom_emoji_check_logic", "whitelist_emoji", "unwhitelist_emoji",
+                          "clear_whitelist", "set_post_due_date", "ignore_bot_messages", "calculation_method",
+                          "hide_hof_post_below_threshold", "set_hall_of_fame_channel"}
+    # What a command calls to turn away a member without Manage Server
+    PERMISSION_CHECKS = ("check_if_user_has_manage_server_permission", "get_whitelist_server_class")
+
+    def test_only_the_settings_commands_are_hidden_from_members(self):
+        """Everything members can use stays in their command picker."""
+        hidden = set()
+        for command in main.tree.get_commands():
+            permissions = command.to_dict(main.tree).get("default_member_permissions")
+            if permissions is not None:
+                hidden.add(command.name)
+                with self.subTest(command=command.name):
+                    self.assertEqual(discord.Permissions(manage_guild=True).value, permissions)
+
+        self.assertEqual(self.MANAGE_SERVER_ONLY, hidden)
+
+    def test_every_command_that_refuses_members_is_hidden_from_them(self):
+        """A new settings command without manage_server_only would be offered to members only to refuse them."""
+        import inspect
+
+        for command in main.tree.get_commands(type=discord.AppCommandType.chat_input):
+            source = inspect.getsource(command.callback)
+            if any(check in source for check in self.PERMISSION_CHECKS):
+                with self.subTest(command=command.name):
+                    self.assertIn(command.name, self.MANAGE_SERVER_ONLY)
+
+
 if __name__ == "__main__":
     unittest.main()
