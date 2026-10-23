@@ -9,6 +9,7 @@ from enums import command_refs, log_type, calculation_method_type
 from repositories import (server_config_repo, hall_of_fame_message_repo, server_user_repo, hof_wrapped_repo,
                           hof_wrapped_guild_status_repo, opt_out_repo, permission_warning_repo)
 from caches import ExpiringSet
+from constants import version
 from translations import messages
 import setup_check
 
@@ -391,15 +392,16 @@ def format_reactions_field_value(count: int, top_reaction) -> str:
     return f"{count} {emoji}" if emoji else f"{count} reactions"
 
 
-def truncate_content(content: str) -> str:
+def truncate_content(content: str, limit: int = 1024) -> str:
     """
     Truncate message content so that it fits within the 1024 character limit of an embed field
     :param content: The content of a message
+    :param limit: The most characters the result may have, lower when the field holds other text too
     :return: The truncated content
     """
     if not content:
         return ""
-    return content[:1021] + "..." if len(content) > 1024 else content
+    return content[:limit - 3] + "..." if len(content) > limit else content
 
 
 def embed_field_value(content: str) -> str:
@@ -798,12 +800,46 @@ async def logging(bot: discord.Client, message, server_id=None, new_value=None, 
         await channel.send(f"{message_prefix}```diff\n{date_formatted_message}\n```")
 
 
+# The short field of the feedback form is a title, and the long one goes into a single embed field, which
+# Discord caps at 1024 characters
+feedback_title_max_length = 150
+feedback_message_max_length = 1000
+# The developer's copy is coloured by topic, so a bug report stands out in the channel. Other topics are gold
+feedback_topic_colors = {"bug": discord.Color.red(), "idea": discord.Color.green(), "question": discord.Color.blue()}
+
+
+def build_feedback_embed(user, guild_id, topic: str, title_field: tuple[str, str],
+                         message_field: tuple[str, str]) -> discord.Embed:
+    """
+    The developer's copy of a piece of feedback, only ever posted in the private feedback channel
+    :param user: The member who sent it
+    :param guild_id: The server it was sent from, None in a DM or a server that has the bot through a user
+        install only
+    :param topic: The topic picked on /feedback, a key of messages.FEEDBACK_TOPICS
+    :param title_field: The short field's label and what the member wrote in it
+    :param message_field: The long field's label and what the member wrote in it
+    :return: The embed
+    """
+    embed = discord.Embed(title=f"New feedback: {messages.FEEDBACK_TOPICS.get(topic, topic)}",
+                          color=feedback_topic_colors.get(topic, discord.Color.gold()))
+    for label, value in (title_field, message_field):
+        embed.add_field(name=label, value=value, inline=False)
+    embed.set_author(name=user.name, icon_url=user.avatar.url if user.avatar else None)
+    embed.add_field(name="Guild", value=guild_id or "None (user install)", inline=True)
+    embed.add_field(name="UserId", value=user.id, inline=True)
+    # The version the member was on, so a bug report can be checked against what was fixed since
+    embed.set_footer(text=f"Hall of Fame {version.VERSION}")
+    return embed
+
+
 # noinspection PyTypeChecker
-async def create_feedback_form(interaction: discord.Interaction, bot, on_sent=None, refusal=None, on_unsent=None):
+async def create_feedback_form(interaction: discord.Interaction, bot, topic: str = "other", on_sent=None,
+                               refusal=None, on_unsent=None):
     """
     Create a feedback form for the user and send the feedback to the feedback channel
     :param interaction:
     :param bot:
+    :param topic: What the feedback is about, a key of messages.FEEDBACK_TOPICS. It decides what the form asks for
     :param on_sent: Called with the member's user ID as the feedback is sent, before the send's await, so
         two forms submitted at the same moment cannot both get past the daily limit
     :param on_unsent: Called with the member's user ID when sending failed, to take back on_sent
@@ -811,20 +847,28 @@ async def create_feedback_form(interaction: discord.Interaction, bot, on_sent=No
         instead of sending it, such as the daily limit being reached while other forms were open, or None
     :return:
     """
-    class FeedbackModal(discord.ui.Modal, title="Feedback Form"):
-        fb_title = discord.ui.TextInput(
-            style=discord.TextStyle.short,
-            placeholder="Give your feedback here",
-            required=True,
-            label="Title"
-        )
-        message = discord.ui.TextInput(
-            style=discord.TextStyle.paragraph,
-            placeholder="Give your feedback here",
-            required=True,
-            max_length=500,
-            label="Message"
-        )
+    form_title, title_label, title_placeholder, message_label, message_placeholder = messages.FEEDBACK_FORMS.get(
+        topic, messages.FEEDBACK_FORMS["other"])
+
+    class FeedbackModal(discord.ui.Modal):
+        def __init__(self):
+            super().__init__(title=form_title)
+            self.fb_title = discord.ui.TextInput(
+                style=discord.TextStyle.short,
+                label=title_label,
+                placeholder=title_placeholder,
+                required=True,
+                max_length=feedback_title_max_length
+            )
+            self.message = discord.ui.TextInput(
+                style=discord.TextStyle.paragraph,
+                label=message_label,
+                placeholder=message_placeholder,
+                required=True,
+                max_length=feedback_message_max_length
+            )
+            self.add_item(self.fb_title)
+            self.add_item(self.message)
 
         async def on_submit(self, feedback_interaction) -> None:
             refused = refusal(feedback_interaction.user.id) if refusal is not None else None
@@ -833,16 +877,9 @@ async def create_feedback_form(interaction: discord.Interaction, bot, on_sent=No
                 return
             target_guild = bot.get_guild(1180006529575960616)
             target_channel = target_guild.get_channel(1345558910836412456)
-            embed = discord.Embed(
-                title="New feedback",
-                color=discord.Color.gold()
-            )
-            embed.add_field(name=self.fb_title.label, value=self.fb_title.value, inline=False)
-            embed.add_field(name=self.message.label, value=self.message.value, inline=False)
-            embed.set_author(name=feedback_interaction.user.name, icon_url=feedback_interaction.user.avatar.url if feedback_interaction.user.avatar else None)
-            # None in a DM or a server that only has the bot through a user install
-            embed.add_field(name="Guild", value=feedback_interaction.guild_id or "None (user install)", inline=True)
-            embed.add_field(name="UserId", value=feedback_interaction.user.id, inline=True)
+            embed = build_feedback_embed(feedback_interaction.user, feedback_interaction.guild_id, topic,
+                                         (self.fb_title.label, self.fb_title.value),
+                                         (self.message.label, self.message.value))
             if on_sent is not None:
                 on_sent(feedback_interaction.user.id)
             try:
@@ -852,9 +889,7 @@ async def create_feedback_form(interaction: discord.Interaction, bot, on_sent=No
                 if on_unsent is not None:
                     on_unsent(feedback_interaction.user.id)
                 raise
-            await feedback_interaction.response.send_message(f"Thanks for your feedback, {feedback_interaction.user.mention}")
-            await asyncio.sleep(5)
-            await feedback_interaction.delete_original_response()
+            await feedback_interaction.response.send_message(messages.FEEDBACK_SENT, ephemeral=True)
 
     # noinspection PyUnresolvedReferences
     await interaction.response.send_modal(FeedbackModal())

@@ -231,7 +231,7 @@ def on_off(value: bool) -> str:
 
 
 async def update_setting(interaction: discord.Interaction, parameter: str, value, label: str,
-                         shown_value: str = None, note: str = "") -> bool:
+                         shown_value: str = None, note: str = "", extras: dict = None) -> bool:
     """
     Store a server setting and confirm it, or say so when it already had that value instead of
     writing it again
@@ -241,6 +241,9 @@ async def update_setting(interaction: discord.Interaction, parameter: str, value
     :param label: What the setting is called in the reply
     :param shown_value: How the value reads in the reply, On or Off when left out
     :param note: A line added to the confirmation, explaining what the change means
+    :param extras: More for the answer whether the setting changed or not, as send_message keyword
+        arguments, such as a picture that explains it (files or embed). Every other setting passes none and
+        answers exactly as before
     :return: True when the setting changed
     """
     server_class = server_classes.get(interaction.guild_id)
@@ -248,11 +251,12 @@ async def update_setting(interaction: discord.Interaction, parameter: str, value
         await send_error(interaction, messages.ERROR_SERVER_NOT_SETUP)
         return False
 
+    attached = extras or {}
     shown_value = shown_value if shown_value is not None else on_off(value)
     if getattr(server_class, parameter, None) == value:
         # noinspection PyUnresolvedReferences
         await interaction.response.send_message(
-            messages.SETTING_UNCHANGED.format(label=label, value=shown_value), ephemeral=True)
+            messages.SETTING_UNCHANGED.format(label=label, value=shown_value), ephemeral=True, **attached)
         return False
 
     async with get_db_connection(connection_pool) as connection:
@@ -263,7 +267,7 @@ async def update_setting(interaction: discord.Interaction, parameter: str, value
     if note:
         content += f"\n{note}"
     # noinspection PyUnresolvedReferences
-    await interaction.response.send_message(content)
+    await interaction.response.send_message(content, **attached)
     return True
 
 
@@ -643,14 +647,17 @@ async def configure_bot(interaction: discord.Interaction,
     await utils.logging(bot, f"Reaction threshold configure command used in a server",
                         interaction.guild.id, reaction_threshold, log_level=log_type.COMMAND)
 
-@tree.command(name="feedback", description="Send feedback to the developer")
+@tree.command(name="feedback", description="Report a bug, suggest an idea or ask the developer a question")
 @user_install
-async def send_feedback(interaction: discord.Interaction):
+@app_commands.describe(topic="What the feedback is about, which decides what the form asks for")
+@app_commands.choices(topic=[app_commands.Choice(name=label, value=key)
+                             for key, label in messages.FEEDBACK_TOPICS.items()])
+async def send_feedback(interaction: discord.Interaction, topic: app_commands.Choice[str]):
     refused = feedback_refusal(interaction.user.id)
     if refused:
         await send_error(interaction, refused)
         return
-    await utils.create_feedback_form(interaction, bot,
+    await utils.create_feedback_form(interaction, bot, topic=topic.value,
                                      on_sent=lambda user_id: start_daily_cooldown(user_id, "feedback"),
                                      on_unsent=lambda user_id: end_daily_cooldown(user_id, "feedback"),
                                      refusal=feedback_refusal)
@@ -1000,6 +1007,36 @@ async def ignore_bot_messages(interaction: discord.Interaction, should_ignore_bo
     await utils.logging(bot, f"Ignore bot messages command used in a server",
                         interaction.guild.id, should_ignore_bot_messages, log_level=log_type.COMMAND)
 
+# The picture of the three counting methods side by side, sent with /calculation_method's answer so the
+# admin sees how each one counts the same reactions. Assets sits beside src in the checkout the bot runs from
+counting_methods_picture_path = os.path.normpath(os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), os.pardir, "Assets", "reaction_calculation_methods_wide.jpg"))
+
+
+def counting_methods_picture(interaction: discord.Interaction) -> dict:
+    """
+    The counting methods picture, as what to add to an answer. Discord refuses the whole answer when it
+    carries something the bot may not send in the channel, and the setting is saved by the time the answer
+    goes, so the picture only goes in a form the bot is allowed:
+    - attached from the checkout when the bot may attach files, which needs nothing from outside;
+    - otherwise as an embed of the copy on GitHub when the bot may embed links, which a server may grant
+      where it did not grant Attach Files, or when the file is missing from the checkout;
+    - otherwise not at all, and the answer goes without it.
+    :param interaction: The command being answered, whose app_permissions are the bot's in that channel
+    :return: Keyword arguments for send_message: files, embed, or none
+    """
+    permissions = getattr(interaction, "app_permissions", None)
+    if permissions is None:
+        return {}
+    if permissions.attach_files and os.path.isfile(counting_methods_picture_path):
+        return {"files": [discord.File(counting_methods_picture_path, filename="counting-methods.jpg")]}
+    if permissions.embed_links:
+        embed = discord.Embed(color=discord.Color.gold())
+        embed.set_image(url=messages.COUNTING_METHODS_PICTURE_URL)
+        return {"embed": embed}
+    return {}
+
+
 @tree.command(name="calculation_method", description="Set the calculation method for reactions")
 @manage_server_only
 @discord.app_commands.choices(
@@ -1017,8 +1054,11 @@ async def calculation_method(interaction: discord.Interaction, method: app_comma
         return
 
     label = commands.calculation_method_labels.get(method.value, method.name)
+    # The picture goes with "already set" too, since an admin picking the method they already have is
+    # usually checking what the methods mean
     await update_setting(interaction, "reaction_count_calculation_method", method.value,
-                         "Reactions are counted as", shown_value=label)
+                         "Reactions are counted as", shown_value=label,
+                         extras=counting_methods_picture(interaction))
     await utils.logging(bot, f"Calculation method command used in a server",
                         interaction.guild.id, method.value, log_level=log_type.COMMAND)
 
@@ -1609,9 +1649,16 @@ async def hof_wrapped_command(interaction: discord.Interaction):
 
     async with get_db_connection(connection_pool) as connection:
         user_wrapped = hof_wrapped_repo.get_hof_wrapped(connection, interaction.guild_id, interaction.user.id, version.WRAPPED_YEAR)
+        if user_wrapped is None:
+            # Only looked up when there is nothing to show, to tell the member which of the reasons applies
+            opted_out = opt_out_repo.is_opted_out(connection, interaction.user.id)
+            server_has_wrapped = hof_wrapped_repo.check_if_guild_wrapped_data_exists(
+                connection, interaction.guild_id, version.WRAPPED_YEAR)
     if user_wrapped is None:
+        # Private, as it is about the member alone and of no use to the rest of the channel
         # noinspection PyUnresolvedReferences
-        await interaction.response.send_message(f"No Hall of Fame Wrapped data available for you in {version.WRAPPED_YEAR}. Participate more in Hall of Fame to get your wrapped next year!")
+        await interaction.response.send_message(hof_wrapped.missing_wrapped_text(server_has_wrapped, opted_out),
+                                                ephemeral=True)
         await utils.logging(bot, f"HOF Wrapped command used in a server but no data available",
                             interaction.guild.id, log_level=log_type.COMMAND)
         return
@@ -1637,7 +1684,8 @@ async def server_hof_wrapped_command(interaction: discord.Interaction):
     async with get_db_connection(connection_pool) as connection:
         if not hof_wrapped_repo.check_if_guild_wrapped_data_exists(connection, interaction.guild_id, version.WRAPPED_YEAR):
             # noinspection PyUnresolvedReferences
-            await interaction.response.send_message(f"No Hall of Fame Wrapped data available for {version.WRAPPED_YEAR}. The bot will start collecting data for next year's wrapped!")
+            await interaction.response.send_message(hof_wrapped.missing_wrapped_text(server_has_wrapped=False),
+                                                    ephemeral=True)
             return
         all_users_wrapped = hof_wrapped_repo.get_all_hof_wrapped_for_guild(connection, interaction.guild_id,  version.WRAPPED_YEAR)
     embed = hof_wrapped.create_server_embed(interaction.guild, all_users_wrapped)

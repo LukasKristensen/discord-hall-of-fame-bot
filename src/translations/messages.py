@@ -13,8 +13,9 @@ VOTE_MESSAGE = "Votes on top.gg help more servers find Hall of Fame. You can vot
 # work: View Channel, Send Messages, Read Message History, Embed Links, Use External Emojis (the
 # leaderboard emojis), Manage Messages (chat in the board channel), Manage Channels and Manage Roles
 # (creating the board channel and setting its overwrites), Send Messages in Threads (answering a ping
-# inside a thread). Attach Files and Add Reactions are not used yet, but are asked for now so later
-# features such as image cards work on servers that install today. tests/test_commands.py checks the value.
+# inside a thread), Attach Files (the counting methods picture /calculation_method answers with). Add
+# Reactions is not used yet, but is asked for now so later features work on servers that install today.
+# tests/test_commands.py checks the value.
 INVITE_PERMISSIONS = 275146730576
 # integration_type=0 installs to a server, so the link keeps working if user installs are added
 INVITE_URL = ("https://discord.com/oauth2/authorize?client_id=1177041673352663070"
@@ -80,10 +81,40 @@ BOT_LOADING = "Please wait while the bot is loading..."
 COMMAND_ON_COOLDOWN = "This command is on a daily cooldown. Please try again later."
 FEEDBACK_ON_COOLDOWN = ("You have sent {limit} pieces of feedback today, the most allowed in a day. Try again "
                         f"tomorrow, or ask in the support server: <{SUPPORT_SERVER_URL}>")
+# /feedback. The topic is a choice on the command itself, since a modal on discord.py 2.5 holds text inputs
+# only, and it shapes the form: its title, and what its two fields ask for
+FEEDBACK_TOPICS = {
+    "bug": "Bug report",
+    "idea": "Idea or feature request",
+    "question": "Question",
+    "other": "Something else",
+}
+# Per topic: the form's title, then the label and placeholder of the short field and of the long one. Discord
+# allows 45 characters for a title or label and 100 for a placeholder, which the feedback tests check
+FEEDBACK_FORMS = {
+    "bug": ("Report a bug",
+            "What went wrong?", "For example: a message passed the threshold but was not posted",
+            "Details", "What you did, what happened instead, and which command or message it was"),
+    "idea": ("Suggest an idea",
+             "Your idea in a few words", "For example: a monthly champion post on the board",
+             "Details", "What it should do, and how it would help your server"),
+    "question": ("Ask a question",
+                 "Your question", "For example: how is the reaction count worked out?",
+                 "Details", "Anything that helps answer it, such as the command you used"),
+    "other": ("Send feedback",
+              "Title", "What it is about, in a few words",
+              "Message", "Your feedback"),
+}
+# Private, since a thank-you is of no use to the rest of the channel
+FEEDBACK_SENT = "✅ Thanks, your feedback reached the developer."
 SETTING_CHANGED = "✅ {label}: **{value}**"
 SETTING_UNCHANGED = "ℹ️ {label} is already **{value}**, so nothing changed."
 REACTION_THRESHOLD_NOTE = ("A message reaches the Hall of Fame once it has {threshold} reaction{plural}, "
                            "counted as: {method}.")
+# The counting methods picture on GitHub, shown as an embed image when /calculation_method's answer cannot
+# attach it. The raw file rather than the page around it, so Discord renders the image itself
+COUNTING_METHODS_PICTURE_URL = ("https://raw.githubusercontent.com/LukasKristensen/discord-hall-of-fame-bot/main/"
+                                "Assets/reaction_calculation_methods_wide.jpg")
 POST_DUE_DATE_NOTE = "Messages older than {days} day{plural} can no longer reach the Hall of Fame."
 HOF_CHANNEL_SET = "✅ Hall of Fame channel set to {channel}."
 HOF_CHANNEL_SET_ANNOUNCEMENT_FAILED = ("✅ Hall of Fame channel set to {channel}, but the bot could not post its "
@@ -262,6 +293,18 @@ PRESENCE_STATUSES = [
 ]
 # Joins the statuses only in Wrapped season, December and January
 PRESENCE_WRAPPED = "✨ /hof_wrapped - your year on the board"
+
+# /hof_wrapped and /server_hof_wrapped when there is no Wrapped to show, answered privately. Wrapped is made
+# once a year in December, for servers with a message on their board and for every member credited with one
+WRAPPED_NONE_FOR_SERVER = ("**This server has no Hall of Fame Wrapped {year}.** Wrapped is made each December for "
+                           "servers with at least one message on their board. Wrapped {next_year} arrives in "
+                           "December {next_year}.")
+WRAPPED_NONE_FOR_MEMBER = ("**You are not in this server's Hall of Fame Wrapped {year}**, because no message on its "
+                           "board was credited to you when it was made. Wrapped {next_year} arrives in December "
+                           "{next_year} and includes every member with a message on the board by then.")
+# Wrapped leaves out members who asked not to be featured, so promising them the next one would not be true
+WRAPPED_NONE_OPTED_OUT = ("**You asked not to be featured**, so no Hall of Fame Wrapped is made for you. You can "
+                          "change that with {command}.")
 
 # /troubleshoot, the Troubleshoot button (TROUBLESHOOT_BUTTON above), and the report sent when the bot joins
 CHECK_TITLE = "🩺 Hall of Fame setup check"

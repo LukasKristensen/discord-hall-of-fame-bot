@@ -16,6 +16,7 @@ import discord
 
 import main
 import utils
+from constants import version
 from enums import command_refs, log_type
 from caches import ExpiringSet
 from translations import messages
@@ -32,15 +33,17 @@ class FakeResponse:
         self.contents = []
         self.ephemeral = []
         self.views = []
+        self.files = []
         self.edits = []
         self.deferred = False
         self.deferred_ephemeral = False
 
-    async def send_message(self, content=None, embed=None, ephemeral=False, view=None):
+    async def send_message(self, content=None, embed=None, ephemeral=False, view=None, files=None):
         self.messages.append(embed if embed is not None else content)
         self.contents.append(content)
         self.ephemeral.append(ephemeral)
         self.views.append(view)
+        self.files.append(list(files or []))
 
     async def edit_message(self, content=None, view=None):
         self.edits.append((content, view))
@@ -820,6 +823,87 @@ class UpdateSettingTests(CommandTestCase):
         self.assertIn(command_refs.SET_HALL_OF_FAME_CHANNEL, messages.ERROR_SERVER_NOT_SETUP)
         self.assertIn(command_refs.TROUBLESHOOT, messages.ERROR_SERVER_NOT_SETUP)
 
+    async def test_sends_no_files_unless_given_some(self):
+        """Every setting but /calculation_method answers exactly as before the picture was added"""
+        self.server.ignore_bot_messages = False
+        interaction = FakeInteraction()
+        await main.update_setting(interaction, "ignore_bot_messages", True, "Ignore messages from bots")
+
+        self.assertEqual([[]], interaction.response.files)
+
+
+class CountingMethodsPictureTests(CommandTestCase):
+    """
+    /calculation_method answers with the picture of the three counting methods: attached when the bot may
+    attach files, as an embed of the copy on GitHub when it may only embed links, and not at all otherwise
+    """
+
+    TOTAL = discord.app_commands.Choice(name="Total reactions", value="total_reactions")
+    MOST = discord.app_commands.Choice(name="Most reactions on an emoji", value="most_reactions_on_emoji")
+
+    async def choose(self, method, attach_files=True, embed_links=True):
+        self.server.reaction_count_calculation_method = "most_reactions_on_emoji"
+        interaction = FakeInteraction()
+        interaction.app_permissions = FakePermissions(attach_files=attach_files, embed_links=embed_links)
+        await main.calculation_method.callback(interaction, method)
+        for sent in interaction.response.files:
+            for file in sent:
+                self.addCleanup(file.close)
+        return interaction
+
+    async def test_a_change_comes_with_the_picture(self):
+        interaction = await self.choose(self.TOTAL)
+
+        self.assertEqual([(GUILD_ID, "reaction_count_calculation_method", "total_reactions")], self.writes)
+        [picture] = interaction.response.files[0]
+        self.assertEqual("counting-methods.jpg", picture.filename)
+        self.assertEqual([False], interaction.response.ephemeral)
+
+    async def test_picking_the_method_already_set_shows_the_picture_too(self):
+        """Usually an admin checking what the methods mean, so the picture is the useful part of the answer"""
+        interaction = await self.choose(self.MOST)
+
+        self.assertEqual([], self.writes)
+        self.assertIn("already", interaction.response.contents[0])
+        self.assertEqual(1, len(interaction.response.files[0]))
+        self.assertEqual([True], interaction.response.ephemeral)
+
+    def embedded_picture(self, interaction):
+        [sent] = interaction.response.messages
+        self.assertIsInstance(sent, discord.Embed)
+        return sent.image.url
+
+    async def test_without_attach_files_the_picture_is_embedded_from_github(self):
+        """Discord would refuse an attachment, after the setting is already saved"""
+        interaction = await self.choose(self.TOTAL, attach_files=False)
+
+        self.assertEqual([(GUILD_ID, "reaction_count_calculation_method", "total_reactions")], self.writes)
+        self.assertEqual([[]], interaction.response.files)
+        self.assertEqual(messages.COUNTING_METHODS_PICTURE_URL, self.embedded_picture(interaction))
+        self.assertIn("Total reactions across all emojis", interaction.response.contents[0])
+
+    async def test_the_embedded_picture_is_the_raw_file_on_main(self):
+        """The page around a file on GitHub is HTML, which Discord cannot show as an image"""
+        self.assertTrue(messages.COUNTING_METHODS_PICTURE_URL.startswith("https://raw.githubusercontent.com/"))
+        self.assertIn("/main/Assets/reaction_calculation_methods_wide.jpg", messages.COUNTING_METHODS_PICTURE_URL)
+
+    async def test_without_attach_files_or_embed_links_the_answer_goes_without_it(self):
+        interaction = await self.choose(self.TOTAL, attach_files=False, embed_links=False)
+
+        self.assertEqual([[]], interaction.response.files)
+        self.assertIn("Total reactions across all emojis", interaction.response.messages[0])
+
+    async def test_a_picture_missing_from_the_checkout_is_embedded_instead(self):
+        self.patch(main, "counting_methods_picture_path", "does-not-exist.jpg")
+        interaction = await self.choose(self.TOTAL)
+
+        self.assertEqual([[]], interaction.response.files)
+        self.assertEqual(messages.COUNTING_METHODS_PICTURE_URL, self.embedded_picture(interaction))
+
+    def test_the_picture_is_found_from_the_folder_the_bot_runs_in(self):
+        """The bot is started from src, and the picture lives in Assets beside it"""
+        self.assertTrue(main.os.path.isfile(main.counting_methods_picture_path))
+
 
 class RefusalsAreEphemeralTests(CommandTestCase):
     async def test_a_member_without_manage_server_is_told_privately(self):
@@ -1280,6 +1364,10 @@ class UserInstallLinkCommandTests(MainTestCase):
 
 
 
+# The topic a member picks on /feedback
+BUG_REPORT = discord.app_commands.Choice(name="Bug report", value="bug")
+
+
 class FeedbackCooldownTests(MainTestCase):
     """/feedback is open to anyone with the bot on their account, so it is capped per member and day."""
 
@@ -1288,19 +1376,33 @@ class FeedbackCooldownTests(MainTestCase):
         self.patch(main, "daily_command_cooldowns", {})
         self.forms = []
         self.refusals = []
+        self.topics = []
 
-        async def open_form(interaction, _bot, on_sent=None, refusal=None, on_unsent=None):
+        async def open_form(interaction, _bot, topic=None, on_sent=None, refusal=None, on_unsent=None):
             self.forms.append(on_sent)
             self.refusals.append(refusal)
+            self.topics.append(topic)
 
         self.patch(utils, "create_feedback_form", open_form)
 
     async def send(self, interaction):
         """Open the form and submit it, as a member who fills it in would"""
         opened = len(self.forms)
-        await main.send_feedback.callback(interaction)
+        await main.send_feedback.callback(interaction, BUG_REPORT)
         if len(self.forms) > opened:
             self.forms[-1](interaction.user.id)
+
+    async def test_the_topic_picked_decides_the_form(self):
+        await main.send_feedback.callback(FakeInteraction(), discord.app_commands.Choice(name="Question",
+                                                                                        value="question"))
+
+        self.assertEqual(["question"], self.topics)
+
+    def test_offers_every_topic_the_forms_know(self):
+        offered = {choice.value for choice in main.send_feedback.get_parameter("topic").choices}
+
+        self.assertEqual(set(messages.FEEDBACK_TOPICS), offered)
+        self.assertTrue(main.send_feedback.get_parameter("topic").required)
 
     async def test_refuses_once_the_daily_limit_is_reached(self):
         for _ in range(main.feedback_daily_limit):
@@ -1327,7 +1429,7 @@ class FeedbackCooldownTests(MainTestCase):
 
     async def test_a_closed_form_does_not_count(self):
         for _ in range(main.feedback_daily_limit + 2):
-            await main.send_feedback.callback(FakeInteraction())
+            await main.send_feedback.callback(FakeInteraction(), BUG_REPORT)
 
         self.assertEqual(main.feedback_daily_limit + 2, len(self.forms))
         self.assertEqual(0, main.daily_uses(77, "feedback"))
@@ -1338,7 +1440,7 @@ class FeedbackCooldownTests(MainTestCase):
 
         other = FakeInteraction()
         other.user = FakeUser(user_id=78)
-        await main.send_feedback.callback(other)
+        await main.send_feedback.callback(other, BUG_REPORT)
 
         self.assertEqual(main.feedback_daily_limit + 1, len(self.forms))
         self.assertEqual([], other.response.messages)
@@ -1346,7 +1448,7 @@ class FeedbackCooldownTests(MainTestCase):
     async def test_forms_opened_together_are_checked_again_when_sent(self):
         """Every form passes the check when it opens, so the limit is asked again on submit."""
         for _ in range(main.feedback_daily_limit + 1):
-            await main.send_feedback.callback(FakeInteraction())
+            await main.send_feedback.callback(FakeInteraction(), BUG_REPORT)
         for on_sent, refusal in list(zip(self.forms, self.refusals))[:main.feedback_daily_limit]:
             self.assertIsNone(refusal(77))
             on_sent(77)
@@ -1358,7 +1460,7 @@ class FeedbackCooldownTests(MainTestCase):
 class FeedbackFormTests(unittest.IsolatedAsyncioTestCase):
     """The form reports the send back only once the feedback reached the developer channel."""
 
-    async def open_form(self, on_sent, refusal=None):
+    async def open_form(self, on_sent, refusal=None, topic="other"):
         modals = []
         interaction = types.SimpleNamespace(response=types.SimpleNamespace())
 
@@ -1366,7 +1468,7 @@ class FeedbackFormTests(unittest.IsolatedAsyncioTestCase):
             modals.append(modal)
 
         interaction.response.send_modal = send_modal
-        await utils.create_feedback_form(interaction, self.bot, on_sent=on_sent, refusal=refusal)
+        await utils.create_feedback_form(interaction, self.bot, topic=topic, on_sent=on_sent, refusal=refusal)
         return modals[0]
 
     def setUp(self):
@@ -1465,6 +1567,63 @@ class FeedbackFormTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual([], self.posted)
         self.assertEqual([], sent)
         self.assertEqual([("Limit reached", True)], answers)
+
+    async def submit(self, topic="bug"):
+        """
+        Fill in the form for a topic and send it
+        :return: The submitter, whose answers hold (content, ephemeral) for each reply
+        """
+        modal = await self.open_form(None, topic=topic)
+        modal.fb_title._value = "Title"
+        modal.message._value = "Body"
+        submitter = self.submitter()
+        submitter.answers = []
+
+        async def answer(content=None, ephemeral=False):
+            submitter.answers.append((content, ephemeral))
+
+        submitter.response.send_message = answer
+        await modal.on_submit(submitter)
+        return submitter
+
+    @staticmethod
+    def field(embed, name):
+        return {field.name: field.value for field in embed.fields}[name]
+
+    async def test_the_form_asks_for_what_helps_with_the_topic(self):
+        modal = await self.open_form(None, topic="bug")
+
+        self.assertEqual("Report a bug", modal.title)
+        self.assertEqual("What went wrong?", modal.fb_title.label)
+
+    async def test_an_unknown_topic_gets_the_plain_form(self):
+        modal = await self.open_form(None, topic="not a topic")
+
+        self.assertEqual(messages.FEEDBACK_FORMS["other"][0], modal.title)
+
+    def test_every_topic_has_a_form_within_discords_limits(self):
+        """Discord refuses a modal whose title or a label is over 45 characters, or a placeholder over 100."""
+        self.assertEqual(set(messages.FEEDBACK_TOPICS), set(messages.FEEDBACK_FORMS))
+        for topic, (title, short_label, short_hint, long_label, long_hint) in messages.FEEDBACK_FORMS.items():
+            with self.subTest(topic=topic):
+                for text in (title, short_label, long_label):
+                    self.assertLessEqual(len(text), 45)
+                for text in (short_hint, long_hint, messages.FEEDBACK_TOPICS[topic]):
+                    self.assertLessEqual(len(text), 100)
+
+    async def test_the_thanks_is_private_and_mentions_nobody(self):
+        submitter = await self.submit()
+
+        self.assertEqual([(messages.FEEDBACK_SENT, True)], submitter.answers)
+        self.assertNotIn("<@77>", messages.FEEDBACK_SENT)
+
+    async def test_the_developer_copy_names_the_topic_and_the_version(self):
+        await self.submit(topic="bug")
+
+        [embed] = self.posted
+        self.assertIn(messages.FEEDBACK_TOPICS["bug"], embed.title)
+        self.assertIn(version.VERSION, embed.footer.text)
+        self.assertEqual("Body", self.field(embed, "Details"))
 
 
 
@@ -1840,12 +1999,45 @@ class WrappedCommandTests(CommandTestCase):
         self.assertEqual(["member embed"], interaction.response.messages)
         self.assertTrue(any("HOF Wrapped command used in a server" in entry for entry in self.logged))
 
-    async def test_says_so_when_the_member_has_no_wrapped(self):
+    async def ask_without_wrapped(self, server_has_wrapped=True, opted_out=False):
         self.patch(main.hof_wrapped_repo, "get_hof_wrapped", lambda *_args: None)
+        self.patch(main.hof_wrapped_repo, "check_if_guild_wrapped_data_exists", lambda *_args: server_has_wrapped)
+        self.patch(main.opt_out_repo, "is_opted_out", lambda *_args: opted_out)
         interaction = FakeInteraction()
         await main.hof_wrapped_command.callback(interaction)
+        return interaction
 
-        self.assertIn("No Hall of Fame Wrapped data available for you", interaction.response.messages[0])
+    async def test_says_so_when_the_member_has_no_wrapped(self):
+        interaction = await self.ask_without_wrapped()
+
+        self.assertEqual([main.hof_wrapped.missing_wrapped_text(server_has_wrapped=True)],
+                         interaction.response.messages)
+        self.assertIn("You are not in this server's Hall of Fame Wrapped", interaction.response.messages[0])
+
+    async def test_answers_a_member_without_wrapped_privately(self):
+        interaction = await self.ask_without_wrapped()
+
+        self.assertEqual([True], interaction.response.ephemeral)
+
+    async def test_tells_a_member_without_wrapped_when_the_next_one_comes(self):
+        interaction = await self.ask_without_wrapped()
+
+        next_year = main.hof_wrapped.next_wrapped_year()
+        self.assertIn(f"Wrapped {next_year} arrives in December {next_year}", interaction.response.messages[0])
+
+    async def test_says_the_server_has_none_rather_than_blaming_the_member(self):
+        interaction = await self.ask_without_wrapped(server_has_wrapped=False)
+
+        self.assertIn("This server has no Hall of Fame Wrapped", interaction.response.messages[0])
+
+    async def test_tells_a_member_who_opted_out_why_there_is_none(self):
+        """Wrapped leaves them out, so they are pointed at the choice instead of promised the next one"""
+        interaction = await self.ask_without_wrapped(opted_out=True)
+
+        self.assertIn("You asked not to be featured", interaction.response.messages[0])
+        self.assertIn(command_refs.MY_DATA, interaction.response.messages[0])
+        self.assertNotIn("arrives in December", interaction.response.messages[0])
+        self.assertEqual([True], interaction.response.ephemeral)
 
     async def test_shows_the_servers_wrapped(self):
         self.patch(main.hof_wrapped_repo, "check_if_guild_wrapped_data_exists", lambda *_args: True)
@@ -1863,7 +2055,9 @@ class WrappedCommandTests(CommandTestCase):
         interaction = FakeInteraction()
         await main.server_hof_wrapped_command.callback(interaction)
 
-        self.assertIn("No Hall of Fame Wrapped data available", interaction.response.messages[0])
+        self.assertEqual([main.hof_wrapped.missing_wrapped_text(server_has_wrapped=False)],
+                         interaction.response.messages)
+        self.assertEqual([True], interaction.response.ephemeral)
 
 
 

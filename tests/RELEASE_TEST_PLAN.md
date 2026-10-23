@@ -146,7 +146,7 @@ Only if Wrapped can be generated on the development bot.
 
 - [ ] `PRIVACY.md` and `TERMS.md` carry the effective date you mean to publish (`PRIVACY.md` currently
       says 10 November 2026)
-- [ ] The README's Development Log and the 2.2 announcement name `/my_data` and not the removed commands,
+- [ ] CHANGELOG.md and the 2.2 announcement name `/my_data` and not the removed commands,
       and mention the 10,000 post limit
 - [ ] Clear the test rows from the development database again
 

@@ -173,7 +173,7 @@ Match the invite link, `INVITE_PERMISSIONS` in `src/translations/messages.py` (`
 | Manage Channels | Create the #hall-of-fame channel on join |
 | Manage Roles | Set the hall of fame channel's permission overwrites on join |
 | Manage Messages | Remove chat from the hall of fame channel when chat there is off |
-| Attach Files | Not used yet, asked for so image cards work on servers that install now |
+| Attach Files | The picture of the three counting methods in `/calculation_method`'s answer |
 | Add Reactions | Not used yet, asked for ahead of later features |
 
 The current listing also asks for Manage Threads, Create Public Threads and Pin Messages. Nothing in

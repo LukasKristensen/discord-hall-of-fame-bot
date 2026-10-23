@@ -1,13 +1,13 @@
 ---
 name: release-notes
-description: Prepare a Hall of Fame bot release - update the README (Development Log and any outdated docs) and draft the Discord announcement for the community, covering everything done since the last feature release (the last major or minor version bump). Use when asked to "write release notes", "draft the update post", "announce version X", "changelog for the support server", or similar.
+description: Prepare a Hall of Fame bot release - add the version to CHANGELOG.md, fix any README docs the release made outdated, and draft the Discord announcement for the community, covering everything done since the last feature release (the last major or minor version bump). Use when asked to "write release notes", "draft the update post", "announce version X", "changelog for the support server", or similar.
 ---
 
 # Release notes
 
 Every release request produces two things from the same list of changes:
 
-1. **README update** - a new version section in the README "Development Log", plus fixes to any part
+1. **Changelog and README update** - a new version section in `CHANGELOG.md`, plus fixes to any part
    of the README the release made outdated. The reader is anyone browsing the repo, so it can be more
    complete and a bit more technical.
 2. **Discord announcement** - the update post for the Hall of Fame support server. The reader is a
@@ -15,13 +15,13 @@ Every release request produces two things from the same list of changes:
 
 ## Rules
 
-- **README is an uncommitted edit.** Edit `README.md` in the working tree and leave staging and
-  committing to the user.
+- **Uncommitted edits only.** Edit `CHANGELOG.md` and `README.md` in the working tree and leave staging
+  and committing to the user.
 - **Discord post is ready to paste.** The user copies it and posts it manually, so never post, send
   or publish it yourself. Return it in a ```` ```md ```` code fence containing exactly the message
   text and nothing else (see "Paste-ready checklist").
-- **Both must agree.** Every item in the Discord post must be in the README section. The README may
-  have more (tests, CI, refactors), the Discord post may not.
+- **Both must agree.** Every item in the Discord post must be in the `CHANGELOG.md` section. The
+  changelog may have more (tests, CI, refactors), the Discord post may not.
 - **Stay under 2000 characters** (Discord's message limit). If it does not fit, trim the "Behind the
   scenes" section first, then merge small items. If it still does not fit, split it into two messages
   at a section boundary and say so.
@@ -51,7 +51,7 @@ Every release request produces two things from the same list of changes:
      target. If `VERSION` has already been bumped to the target, skip that commit and use the one before.
    - The range is `<base>..HEAD` on the branch being released. If that branch is not merged into
      `main` yet, say so in the report.
-   - Cross-check with the README "Development Log": the section for the base version (e.g. `### 2.1`)
+   - Cross-check with `CHANGELOG.md`: the section for the base version (e.g. `## 2.1`)
      lists what was already announced. Leave those items out even if a commit in the range touches them.
      If a section for the target version already exists (the skill ran before), update that section
      instead of adding a second one.
@@ -64,10 +64,10 @@ Every release request produces two things from the same list of changes:
    bullet.
    Also read [upcoming.md](upcoming.md): the user's own notes for the next release (announcements,
    community news, roadmap). Every item there must end up in the Discord post. Items about the code
-   also go in the README; community news and personal notes do not.
-3. **Update the README.**
-   - **Development Log:** add `### {major}.{minor}` directly under `## Development Log`, above the
-     previous version, in the same style as the existing sections (see "README Development Log").
+   also go in `CHANGELOG.md`; community news and personal notes do not.
+3. **Update the changelog and the README.**
+   - **CHANGELOG.md:** add `## {major}.{minor}` below the intro paragraph, above the previous version,
+     in the same style as the existing sections (see "CHANGELOG.md sections").
    - **Rest of the README:** for every change in the range, check whether the README now says
      something wrong or is missing something. Typical cases: a new or renamed command missing from
      the "Commands" tables, a changed default (threshold, limits) in "Quick start" or the FAQ, a new
@@ -81,8 +81,7 @@ Every release request produces two things from the same list of changes:
    - **Fill in the template**, then check the character count
      (`python -c "import sys; print(len(sys.stdin.read()))"` on the text, or count it yourself).
 5. **Report back** with:
-   - what changed in the README (the new Development Log section, plus a one-line list of any other
-     README sections you corrected);
+   - the new `CHANGELOG.md` section, plus a one-line list of any README sections you corrected;
    - the Discord post in a code fence (one fence per message if it had to be split, labelled
      "Message 1", "Message 2" above each fence);
    - after the post, a short list of: screenshots to attach, commands written as plain `/name`
@@ -92,12 +91,12 @@ Every release request produces two things from the same list of changes:
    uncommitted edit). Once the user confirms the announcement is posted, offer to clear the list in
    `upcoming.md`.
 
-## README Development Log
+## CHANGELOG.md sections
 
-Match the existing sections in `README.md`:
+Match the existing sections in `CHANGELOG.md`:
 
 ```markdown
-### 2.2
+## 2.2
 - [x] Added /set_hall_of_fame_channel to pick the Hall of Fame channel manually.
 - [x] Fixed Hall of Fame posts failing when the message that was replied to had been deleted.
 - [x] The leaderboard updates each post in a single edit instead of three, cutting its daily rate limit cost.

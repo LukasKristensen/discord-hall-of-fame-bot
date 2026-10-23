@@ -33,7 +33,8 @@ described here. Contact: githublukas@gmail.com, or the
   no new posts, and no Wrapped, since a Wrapped also records whose posts you reacted to. You are left out
   of other members' Wrapped too. Choosing "Feature me again" or deleting your data deletes this record.
 - **Support:** feedback sent with `/feedback` and custom profile requests, delivered to a private
-  developer channel on Discord.
+  developer channel on Discord. Feedback carries your username and user ID, the ID of the server it was
+  sent from, the topic you picked and the bot's version.
 - **Logs:** which commands were used, when the bot joins or leaves a server and what it is allowed to do
   there, and errors, each with the server's ID, posted to private developer channels on Discord for
   troubleshooting. Logs do not name servers or the members who used a command. The

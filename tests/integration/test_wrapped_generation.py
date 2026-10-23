@@ -242,7 +242,8 @@ class OptedOutFriendTests(WrappedTestCase):
 
     @staticmethod
     def as_member(author):
-        return types.SimpleNamespace(id=author.id, mention=f"<@{author.id}>", avatar=None)
+        return types.SimpleNamespace(id=author.id, mention=f"<@{author.id}>",
+                                     display_avatar=types.SimpleNamespace(url=f"https://cdn.example/{author.id}.png"))
 
     async def shown_to(self, author, guild_id=FIRST):
         """Everything /hof_wrapped shows the member, as one text"""

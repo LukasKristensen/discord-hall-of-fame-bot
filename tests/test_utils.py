@@ -65,6 +65,14 @@ class TruncateContentTests(unittest.TestCase):
         self.assertEqual(1024, len(truncated))
         self.assertTrue(truncated.endswith("..."))
 
+    def test_truncates_to_a_lower_limit_when_the_field_holds_other_text(self):
+        truncated = utils.truncate_content("a" * 2000, limit=900)
+        self.assertEqual(900, len(truncated))
+        self.assertTrue(truncated.endswith("..."))
+
+    def test_keeps_content_exactly_at_the_limit(self):
+        self.assertEqual("a" * 900, utils.truncate_content("a" * 900, limit=900))
+
 
 class EmbedFieldValueTests(unittest.TestCase):
     def test_keeps_the_content(self):

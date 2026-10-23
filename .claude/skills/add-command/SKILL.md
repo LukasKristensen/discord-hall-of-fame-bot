@@ -83,5 +83,5 @@ Run the whole suite with the `hof313` interpreter (see `dev-environment`).
   shows data in a new way usually means a change to `PRIVACY.md`.
 - Tell the user the command needs its global sync (happens on bot start) before the ID exists, and ask
   for the ID if a mention is needed.
-- Add a line to the next release's Development Log only if the user asks; the `release-notes` skill
-  collects changes from git at release time.
+- Add a line to the next release's section in `CHANGELOG.md` only if the user asks; the `release-notes`
+  skill collects changes from git at release time.

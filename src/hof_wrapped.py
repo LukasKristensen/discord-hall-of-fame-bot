@@ -7,6 +7,7 @@ import psycopg2
 import os
 import json
 import environment
+import utils
 from constants import version
 from enums import command_refs
 from translations import messages
@@ -171,10 +172,8 @@ async def create_embed(discord_user, data_for_user_wrapped, bot):
         ),
         color=discord.Color.gold()
     )
-    if hasattr(discord_user, 'avatar') and discord_user.avatar:
-        embed.set_thumbnail(url=discord_user.avatar.url)
-    elif hasattr(discord_user, 'default_avatar'):
-        embed.set_thumbnail(url=discord_user.default_avatar.url)
+    # The avatar the member shows in this server, falling back to their own and then Discord's default
+    embed.set_thumbnail(url=discord_user.display_avatar.url)
 
     if user_wrapped.hallOfFameMessagePosts > 0:
         embed.description += f"\n{user_wrapped.get_hof_status()}\n"
@@ -238,12 +237,14 @@ async def create_embed(discord_user, data_for_user_wrapped, bot):
         post = user_wrapped.mostReactedPost["post"]
         if post is not None and hasattr(post, 'content'):
             most_reacted_post = user_wrapped.mostReactedPost
+            heading = f"**Reactions:** {most_reacted_post['reaction_count']} 🎉\n**Content:** "
+            # A message can be longer than an embed field, and Discord rejects the whole card over one
+            # field that is too long, so the text is cut to what fits after the reactions line
+            content = (utils.truncate_content(post.content, commands_module.embed_field_value_limit - len(heading))
+                       if post.content else '*No text content*')
             embed.add_field(
                 name="🔥 Most Reacted HOF Post",
-                value=(
-                    f"**Reactions:** {most_reacted_post['reaction_count']} 🎉\n"
-                    f"**Content:** {post.content if post.content else '*No text content*'}"
-                ),
+                value=heading + content,
                 inline=False
             )
             if hasattr(post, 'attachments') and post.attachments:
@@ -257,6 +258,29 @@ async def create_embed(discord_user, data_for_user_wrapped, bot):
 
     embed.set_footer(text=messages.INVITE_FOOTER)
     return embed
+
+
+def next_wrapped_year(now: datetime.datetime = None) -> int:
+    """
+    The year the next Wrapped is made for. Wrapped is made each December for the year then ending, so the
+    next one is this year's until WRAPPED_YEAR moves on to it, and next year's from then on
+    :param now: The current time, taken from the clock when not supplied
+    """
+    now = now or datetime.datetime.now(datetime.timezone.utc)
+    return max(now.year, version.WRAPPED_YEAR + 1)
+
+
+def missing_wrapped_text(server_has_wrapped: bool, opted_out: bool = False, now: datetime.datetime = None) -> str:
+    """
+    What /hof_wrapped and /server_hof_wrapped answer when there is no Wrapped to show, and why
+    :param server_has_wrapped: Whether the server has a Wrapped for WRAPPED_YEAR at all
+    :param opted_out: Whether the member asking chose not to be featured, which leaves them out of every Wrapped
+    :param now: The current time, for tests
+    """
+    if opted_out:
+        return messages.WRAPPED_NONE_OPTED_OUT.format(command=command_refs.MY_DATA)
+    template = messages.WRAPPED_NONE_FOR_MEMBER if server_has_wrapped else messages.WRAPPED_NONE_FOR_SERVER
+    return template.format(year=version.WRAPPED_YEAR, next_year=next_wrapped_year(now))
 
 
 def rank_stats(users: dict):

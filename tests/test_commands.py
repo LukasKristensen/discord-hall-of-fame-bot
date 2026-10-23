@@ -6,6 +6,7 @@ edges: a member with no history, a leaderboard entry whose member is gone, and t
 landing in the reply rather than being quietly dropped.
 """
 
+import datetime
 import types
 import unittest
 from unittest import mock
@@ -572,12 +573,90 @@ class HofWrappedEmbedTests(unittest.IsolatedAsyncioTestCase):
                 "most_reacted_post_message_id": None, "most_reacted_post_channel_id": None,
                 "most_reacted_post_reaction_count": 0}
 
+    @staticmethod
+    def member():
+        return types.SimpleNamespace(id=77, mention="<@77>",
+                                     display_avatar=types.SimpleNamespace(url="https://cdn.example/77-server.png"))
+
+    def bot_with_best_post(self, content):
+        """A bot that finds the member's best post, with the given text, where the Wrapped row points"""
+        post = types.SimpleNamespace(content=content, attachments=[], jump_url="https://discord.com/channels/1/5/6")
+
+        class Channel(discord.TextChannel):
+            def __init__(self):
+                pass
+
+            async def fetch_message(self, _message_id):
+                return post
+
+        channel = Channel()
+        return types.SimpleNamespace(get_channel=lambda _channel_id: channel)
+
+    def row_with_best_post(self):
+        return dict(self.wrapped_row(), most_reacted_post_message_id=6, most_reacted_post_channel_id=5,
+                    most_reacted_post_reaction_count=40)
+
+    async def best_post_field(self, content):
+        embed = await hof_wrapped.create_embed(self.member(), self.row_with_best_post(),
+                                               self.bot_with_best_post(content))
+        return next(field for field in embed.fields if "Most Reacted" in field.name)
+
     async def test_footer_points_at_the_invite_command(self):
-        member = types.SimpleNamespace(id=77, mention="<@77>", avatar=None,
-                                       default_avatar=types.SimpleNamespace(url="https://cdn.example/0.png"))
-        embed = await hof_wrapped.create_embed(member, self.wrapped_row(), bot=None)
+        embed = await hof_wrapped.create_embed(self.member(), self.wrapped_row(), bot=None)
 
         self.assertEqual(messages.INVITE_FOOTER, embed.footer.text)
+
+    async def test_thumbnail_is_the_avatar_the_member_shows_in_the_server(self):
+        embed = await hof_wrapped.create_embed(self.member(), self.wrapped_row(), bot=None)
+
+        self.assertEqual("https://cdn.example/77-server.png", embed.thumbnail.url)
+
+    async def test_a_long_best_post_is_cut_to_fit_the_field(self):
+        """Discord rejects the whole card over one field longer than 1024 characters"""
+        field = await self.best_post_field("a" * 2000)
+
+        self.assertLessEqual(len(field.value), commands.embed_field_value_limit)
+        self.assertTrue(field.value.endswith("..."))
+        self.assertIn("**Reactions:** 40", field.value)
+
+    async def test_a_best_post_that_fits_is_shown_whole(self):
+        field = await self.best_post_field("when the build finally passes on the first try")
+
+        self.assertTrue(field.value.endswith("when the build finally passes on the first try"))
+
+    async def test_a_best_post_with_no_text_says_so(self):
+        field = await self.best_post_field("")
+
+        self.assertIn("*No text content*", field.value)
+
+
+class MissingWrappedTextTests(unittest.TestCase):
+    """What /hof_wrapped and /server_hof_wrapped say when there is no Wrapped, and when the next one comes."""
+
+    def next_year(self, wrapped_year, now):
+        with mock.patch.object(hof_wrapped.version, "WRAPPED_YEAR", wrapped_year):
+            return hof_wrapped.next_wrapped_year(now)
+
+    def test_the_next_wrapped_is_this_years_until_it_is_made(self):
+        self.assertEqual(2026, self.next_year(2025, datetime.datetime(2026, 10, 23, tzinfo=datetime.timezone.utc)))
+
+    def test_the_next_wrapped_is_next_years_once_this_years_is_out(self):
+        self.assertEqual(2027, self.next_year(2026, datetime.datetime(2026, 12, 28, tzinfo=datetime.timezone.utc)))
+        self.assertEqual(2027, self.next_year(2026, datetime.datetime(2027, 1, 10, tzinfo=datetime.timezone.utc)))
+
+    def test_names_the_year_shown_and_the_next_one(self):
+        now = datetime.datetime(2026, 10, 23, tzinfo=datetime.timezone.utc)
+        with mock.patch.object(hof_wrapped.version, "WRAPPED_YEAR", 2025):
+            for server_has_wrapped in (True, False):
+                with self.subTest(server_has_wrapped=server_has_wrapped):
+                    text = hof_wrapped.missing_wrapped_text(server_has_wrapped, now=now)
+                    self.assertIn("Wrapped 2025", text)
+                    self.assertIn("Wrapped 2026 arrives in December 2026", text)
+
+    def test_a_member_who_opted_out_is_pointed_at_my_data(self):
+        text = hof_wrapped.missing_wrapped_text(server_has_wrapped=True, opted_out=True)
+
+        self.assertEqual(messages.WRAPPED_NONE_OPTED_OUT.format(command=command_refs.MY_DATA), text)
 
 
 def wrapped_guild(bot_avatar_url=None):

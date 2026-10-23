@@ -73,4 +73,4 @@ Every slash command has a clickable mention in `src/enums/command_refs.py`, for 
 | Check whether the privacy policy or terms need updating after a feature | `policy-check` |
 | Work through review comments on a PR | `address-pr-review` |
 | Turn feedback or bugs into GitHub issues | `report-issue` |
-| README changelog and Discord announcement for a release | `release-notes` |
+| CHANGELOG.md entry and Discord announcement for a release | `release-notes` |
