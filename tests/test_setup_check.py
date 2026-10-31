@@ -80,8 +80,9 @@ class FakeChannel:
 
 
 class FakeGuild:
-    def __init__(self, channels=(), roles=(), member_count=50, joined_at=None):
+    def __init__(self, channels=(), roles=(), member_count=50, joined_at=None, features=()):
         self.id = GUILD_ID
+        self.features = list(features)
         self.default_role = FakeRole(GUILD_ID, "@everyone", position=0)
         self.roles = [self.default_role, *roles]
         self.channels = list(channels)
@@ -430,6 +431,50 @@ class CheckServerTests(unittest.TestCase):
 
         self.assertIn(messages.CHECK_AGE_RESTRICTED_TITLE, [finding.title for finding in findings])
         self.assertEqual([], setup_check.problems(findings))
+
+
+class WebPresenceFindingTests(unittest.TestCase):
+    """A Discoverable server's public channels can reach the web, and a repost is the bot's message."""
+
+    def test_notes_a_public_board_in_a_discoverable_server(self):
+        guild = FakeGuild(features=["DISCOVERABLE", "COMMUNITY"])
+        [finding] = setup_check.web_presence_findings(guild, FakeChannel(BOARD_ID))
+
+        self.assertEqual(setup_check.INFO, finding.level)
+        self.assertEqual(messages.CHECK_WEB_PRESENCE.format(board=f"<#{BOARD_ID}>"), finding.detail)
+
+    def test_says_nothing_in_a_server_that_is_not_discoverable(self):
+        guild = FakeGuild(features=["COMMUNITY"])
+        self.assertEqual([], setup_check.web_presence_findings(guild, FakeChannel(BOARD_ID)))
+
+    def test_says_nothing_when_the_board_is_not_public(self):
+        """Only channels everyone can see take part."""
+        guild = FakeGuild(features=["DISCOVERABLE"])
+        board = FakeChannel(BOARD_ID, everyone=HIDDEN)
+        self.assertEqual([], setup_check.web_presence_findings(guild, board))
+
+    def test_says_nothing_without_a_board(self):
+        self.assertEqual([], setup_check.web_presence_findings(FakeGuild(features=["DISCOVERABLE"]), None))
+
+    def test_a_guild_without_features_is_not_discoverable(self):
+        guild = FakeGuild()
+        del guild.features
+        self.assertEqual([], setup_check.web_presence_findings(guild, FakeChannel(BOARD_ID)))
+
+    def test_troubleshoot_shows_it_without_calling_it_a_problem(self):
+        guild = FakeGuild(channels=[FakeChannel(1)], joined_at=NOW - datetime.timedelta(days=60),
+                          features=["DISCOVERABLE"])
+        findings = setup_check.check_server(guild, FakeChannel(BOARD_ID), server_config(),
+                                            {"total": 10, "latest": NOW, "today": 1}, 100, NOW)
+
+        self.assertIn(messages.CHECK_WEB_PRESENCE_TITLE, [finding.title for finding in findings])
+        self.assertEqual([], setup_check.problems(findings))
+
+    def test_the_public_note_on_join_leaves_it_out(self):
+        """The join note is posted on the board, so it only carries what stops posts."""
+        guild = FakeGuild(channels=[FakeChannel(1)], features=["DISCOVERABLE"])
+        findings = setup_check.join_findings(guild, FakeChannel(BOARD_ID), False)
+        self.assertNotIn(messages.CHECK_WEB_PRESENCE_TITLE, [finding.title for finding in findings])
 
 
 class AgeRestrictedFindingTests(unittest.TestCase):

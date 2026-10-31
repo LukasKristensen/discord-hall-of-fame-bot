@@ -13,7 +13,10 @@ described here. Contact: githublukas@gmail.com, or the
   permissions it warned the server about, how many times, and when, so it stops after a few reminders.
 - **Featured messages:** the IDs of the message, its channel and its author, its reaction count and
   time, and the ID of the bot's repost. The text, images and usernames are not stored in our database.
-  The repost itself lives in your server's Hall of Fame channel on Discord. At most 10,000 featured
+  The repost itself lives in your server's Hall of Fame channel on Discord. In a Discoverable server,
+  Discord can also show that channel on the server's public web page and in search results, when the
+  server's admins let it take part under Web Presence. That is Discord's feature, chosen by the admins:
+  the bot itself sends nothing to the web. At most 10,000 featured
   messages are linked to any one member, across all servers, so `/my_data` can always give you all of
   your data. Messages of yours featured past that are stored without your user ID.
 - **Member statistics:** per-server totals and ranks for featured messages and reactions.
@@ -50,8 +53,8 @@ images and videos, so that it does not repost age-restricted or flagged media to
 meant for it, and it checks its own posts on the board again when Discord updates them with those flags.
 
 When the bot joins a server, and whenever an admin runs `/troubleshoot`, it also reads the server's
-channels, roles, channel permissions and member count, to find setup problems such as channels it
-cannot see. The result is posted in that server and is not saved.
+channels, roles, channel permissions, member count and whether the server is Discoverable, to find
+setup problems such as channels it cannot see. The result is posted in that server and is not saved.
 
 When a member uses **Why isn't this on the board?** on a message, the bot reads that message, its
 reactions and the server's settings to explain whether it reached the board. Only that member sees the

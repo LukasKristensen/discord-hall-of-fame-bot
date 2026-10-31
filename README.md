@@ -117,7 +117,7 @@ Requires **Manage Server**.
 | `/set_hall_of_fame_channel` | `channel` | Point the bot at the channel it should post to. Checks its own permissions first (View Channel, Send Messages, Read Message History and Embed Links) and tells you what is missing. |
 | `/set_reaction_threshold` | `reaction_threshold` (1 to 1000) | How many reactions a message needs. Seeded once on join from your member count, and fixed at that value until you change it here. |
 | `/allow_messages_in_hof_channel` | `allow` (true/false) | Let members chat in the hall of fame channel. Off by default, so the board stays clean: chat is removed, and `/user_profile`, `/leaderboard` and the Wrapped commands are turned away there with a private note to use another channel. Removing chat needs the bot to have **Manage Messages** in that channel. |
-| `/troubleshoot` | | A health check for debugging a board that is not posting. Checks everything that can stop messages reaching the board: the board's permissions, how many channels the bot can read and which ones it cannot (with the role that would open them, where Discord shows the bot who can see them), age-restricted channels the board leaves out, an empty emoji whitelist, a threshold above the member count, the daily post limit and when the last post was. Only you see the answer. |
+| `/troubleshoot` | | A health check for debugging a board that is not posting. Checks everything that can stop messages reaching the board: the board's permissions, how many channels the bot can read and which ones it cannot (with the role that would open them, where Discord shows the bot who can see them), age-restricted channels the board leaves out, whether the board can appear on the web in a Discoverable server, an empty emoji whitelist, a threshold above the member count, the daily post limit and when the last post was. Only you see the answer. |
 | `/count_in_global_profiles` | `count` (true/false) | Whether members' totals across servers include their posts from this server. On by default. The server is never named either way. |
 
 ### Choosing what qualifies
@@ -300,6 +300,15 @@ shows your posts and reactions added up across every server with the bot. Other 
 looked up inside a server with the bot. You can also see, download or delete your data with
 `/my_data`. Leaderboards, Wrapped and settings belong to a server, so
 they only work in servers that added the bot.
+
+### Can Hall of Fame posts show up on the web?
+
+Only through Discord, and only in Discoverable servers. Discord can show a Discoverable server's
+public channels on a public web page and in search results, and the board is a public channel. The
+admins decide which channels take part under Server Settings > Web Presence, and `/troubleshoot`
+reminds them that the board is one of them. A member's own setting for keeping their messages off the
+web covers what they post themselves, and may not cover a repost, which is the bot's message. For the
+board, the admins' choice is the one to rely on. The bot itself sends nothing to the web.
 
 ### Is the bot free?
 

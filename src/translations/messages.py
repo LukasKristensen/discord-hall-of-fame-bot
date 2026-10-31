@@ -354,6 +354,10 @@ CHECK_CHANNELS_HIDDEN_MOSTLY = ("The bot cannot see {channels}\n"
 CHECK_AGE_RESTRICTED_TITLE = "Age-restricted channels stay off the board"
 CHECK_AGE_RESTRICTED = ("Messages in {channels} are not featured, because the board {board} is not age-restricted. "
                         "To feature them, mark the board age-restricted in its channel settings.")
+CHECK_WEB_PRESENCE_TITLE = "The board can appear on the web"
+CHECK_WEB_PRESENCE = ("This server is Discoverable, so Discord can show its public channels on a public web page "
+                      "and in search results. Posts on {board} repost members' messages with their names. Choose "
+                      "whether the board takes part under Server Settings > Web Presence.")
 CHECK_EMPTY_WHITELIST_TITLE = "Every emoji counts for now"
 CHECK_EMPTY_WHITELIST = ("Only whitelisted emojis are meant to count, but the whitelist is empty, so every emoji counts "
                          "until one is added with {whitelist}. To count every emoji on purpose, turn off {logic}.")

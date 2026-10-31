@@ -252,6 +252,23 @@ def age_restricted_findings(visibility: ChannelVisibility, board_channel) -> lis
                                                          board=board_channel.mention))]
 
 
+def web_presence_findings(guild, board_channel) -> list[Finding]:
+    """
+    A board Discord may put on the web. From 16 November 2026 a Discoverable server gets a public web page
+    with summaries of its public channels, and from mid-December their messages, unless an admin leaves a
+    channel out under Web Presence. A member's own setting keeps their messages off it, and may not cover a
+    repost, which is the bot's message, so the admin's choice for the board is the one to rely on. Only
+    worth knowing: the choice is the admin's to make
+    """
+    if board_channel is None or "DISCOVERABLE" not in (getattr(guild, "features", None) or []):
+        return []
+    # Only channels everyone in the server can see take part
+    if not board_channel.permissions_for(guild.default_role).view_channel:
+        return []
+    return [Finding(INFO, messages.CHECK_WEB_PRESENCE_TITLE,
+                    messages.CHECK_WEB_PRESENCE.format(board=board_channel.mention))]
+
+
 def rule_findings(server_config, member_count: int | None) -> list[Finding]:
     findings = []
     if server_config.custom_emoji_check_logic and not server_config.whitelisted_emojis:
@@ -326,6 +343,7 @@ def check_server(guild, board_channel, server_config, activity: dict, daily_post
                  now: datetime.datetime = None) -> list[Finding]:
     joined_at = getattr(guild.me, "joined_at", None)
     return (join_findings(guild, board_channel, server_config.allow_messages_in_hof_channel)
+            + web_presence_findings(guild, board_channel)
             + rule_findings(server_config, guild.member_count)
             + activity_findings(activity, server_config.reaction_threshold, joined_at, daily_post_limit, now))
 
