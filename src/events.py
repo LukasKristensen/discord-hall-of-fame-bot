@@ -166,7 +166,8 @@ async def on_message(message: discord.Message, bot: discord.Client, server_confi
         return
 
     msg = await message.channel.send(f"Only Hall of Fame messages are allowed in this channel, {message.author.mention}. "
-                                     f"Can be disabled by {command_refs.ALLOW_MESSAGES_IN_HOF_CHANNEL}")
+                                     f"Someone with the Manage Server permission can turn this off with "
+                                     f"{command_refs.ALLOW_MESSAGES_IN_HOF_CHANNEL}")
     await asyncio.sleep(5)
     try:
         await msg.delete()

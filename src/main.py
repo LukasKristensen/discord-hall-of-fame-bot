@@ -118,6 +118,8 @@ presence_rotation_minutes = 10
 presence_index = 0
 # The months the status also points to /hof_wrapped: December and January
 wrapped_presence_months = (12, 1)
+# The month before, when the status says Wrapped is on its way: November
+wrapped_teaser_months = (11,)
 
 
 def user_install(command):
@@ -409,9 +411,17 @@ def presence_status(turn: int, member_count: int, month: int = None) -> str:
     :param month: The month it is, the current one when left out
     """
     pointers = list(messages.PRESENCE_STATUSES)
+    month = month or datetime.now(timezone.utc).month
     # Wrapped is only worth pointing at around the turn of the year, when members look back on it
-    if (month or datetime.now(timezone.utc).month) in wrapped_presence_months:
-        pointers.append(messages.PRESENCE_WRAPPED)
+    seasonal = None
+    if month in wrapped_presence_months:
+        seasonal = messages.PRESENCE_WRAPPED
+    elif month in wrapped_teaser_months:
+        seasonal = messages.PRESENCE_WRAPPED_TEASER
+    # Matters more than the other pointers while it lasts, so it follows each of them and gets half
+    # the pointer turns
+    if seasonal:
+        pointers = [status for pointer in pointers for status in (pointer, seasonal)]
     # A total of 0 only means Discord has not reported member counts yet, so leave the count out
     # rather than advertise 0 users
     if member_count <= 0:

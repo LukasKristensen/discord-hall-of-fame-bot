@@ -115,8 +115,8 @@ def build_help_embed() -> discord.Embed:
     embed = discord.Embed(
         title="📖 Hall of Fame Commands",
         description=f"React to a message, and once it passes the threshold it is reposted to the hall "
-                    f"of fame channel. To get started, pick a channel with "
-                    f"{command_refs.SET_HALL_OF_FAME_CHANNEL} and a threshold with "
+                    f"of fame channel. To get started, someone with the Manage Server permission picks a "
+                    f"channel with {command_refs.SET_HALL_OF_FAME_CHANNEL} and a threshold with "
                     f"{command_refs.SET_REACTION_THRESHOLD}.",
         color=discord.Color.gold()
     )
@@ -175,7 +175,8 @@ def build_help_embed() -> discord.Embed:
               f"[Vote]({messages.VOTE_URL}) · "
               f"[Source]({messages.SOURCE_URL})\n"
               f"Found a bug or have an idea? {command_refs.FEEDBACK}\n"
-              f"Not working? Run {command_refs.TROUBLESHOOT}.",
+              f"Not working? Ask about one message with **{messages.WHY_MENU_NAME}**, or someone with "
+              f"the Manage Server permission can run {command_refs.TROUBLESHOOT}.",
         inline=False)
 
     embed.set_footer(text=f"Hall of Fame {version.VERSION} · {version.DATE}")

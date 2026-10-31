@@ -5,7 +5,7 @@ BOT_PERMISSIONS_ERROR = "The bot does not have the required permissions to setup
 SERVER_ALREADY_SETUP = "The server is already set up"
 CUSTOM_EMOJI_CHECK_DISABLED = (
     "Custom emoji check logic is not enabled for this server. "
-    f"Use {command_refs.CUSTOM_EMOJI_CHECK_LOGIC} to enable it."
+    f"Someone with the Manage Server permission can enable it with {command_refs.CUSTOM_EMOJI_CHECK_LOGIC}."
 )
 # /invite and /vote answer with link buttons, so the text says why to click and leaves the URL to the button
 VOTE_MESSAGE = "Votes on top.gg help more servers find Hall of Fame. You can vote every 12 hours."
@@ -60,7 +60,7 @@ LEGACY_HOF_CHANNEL_TOPICS = (
 )
 INVITE_MESSAGE = ("Add Hall of Fame to a server you run, or to your account to see your own profile and data "
                   "anywhere, DMs included. Need a hand setting it up? Ask in the support server.")
-NOT_AUTHORIZED = "You are not authorized to use this command, only for members with manage server permission"
+NOT_AUTHORIZED = "This command is only for members with the Manage Server permission."
 DEV_NOT_AUTHORIZED = "You are not authorized to use this command, only for developers"
 WHITELIST_CLEARED = "✅ Whitelist cleared. Every emoji counts toward the threshold again until one is added with {command}."
 WHITELIST_ALREADY_EMPTY = "ℹ️ The whitelist is already empty."
@@ -73,7 +73,8 @@ WHITELIST_EMPTY_NOTE = "\nThe whitelist is empty, so every emoji counts until on
 FAILED_SETUP_HOF = ("Failed to setup Hall Of Fame for server {serverName}.\n"
                     "This may be due to missing permissions, try re-inviting the bot with the correct permissions.\n"
                     f"If the problem persists, please contact support. {SUPPORT_SERVER_URL}\n"
-                    f"Want to setup the Hall Of Fame manually? Use the {command_refs.SET_HALL_OF_FAME_CHANNEL} command.")
+                    f"Want to setup the Hall Of Fame manually? Someone with the Manage Server permission can use "
+                    f"{command_refs.SET_HALL_OF_FAME_CHANNEL}.")
 ERROR_SERVER_NOT_SETUP = ("The bot is not set up yet because the installation failed, often due to missing "
                           f"permissions. Use {command_refs.SET_HALL_OF_FAME_CHANNEL} to complete the installation "
                           f"manually, then run {command_refs.TROUBLESHOOT} to confirm everything is in place.")
@@ -134,7 +135,7 @@ CONFIG_TROUBLESHOOT_HINT = (f"Something not working? Press **{TROUBLESHOOT_BUTTO
 HOF_WELCOME = ("🎉 **Welcome to the Hall of Fame!** 🎉\n"
                "When a message receives **{threshold} or more (default threshold) of the same reaction**, it’s "
                "automatically **reposted here** to celebrate its popularity.\n\n"
-               "🔧 **Customize your setup:**\n"
+               "🔧 **Customize your setup** (needs the Manage Server permission)**:**\n"
                f"   • Change the reaction threshold with {command_refs.SET_REACTION_THRESHOLD}\n"
                f"   • View your current settings with {command_refs.GET_SERVER_CONFIG}\n\n"
                "✨ **Want to only track specific emojis?**\n"
@@ -273,14 +274,17 @@ PROFILE_HIDDEN_OUTSIDE_SERVER_SELF = ("Your totals across servers are hidden, so
                                       "a server with Hall of Fame. Show them again from {command}.")
 MISSING_HOF_CHANNEL_PERMISSIONS = ("The bot is missing the required permissions to post in {channel}.\n"
                                    "Update the channel permission for the bot to have: ``{missing_permissions}``\n"
-                                   f"If the hall of channel does not exist, set it up using {command_refs.SET_HALL_OF_FAME_CHANNEL} "
+                                   "If the hall of channel does not exist, someone with the Manage Server permission "
+                                   f"can set it up using {command_refs.SET_HALL_OF_FAME_CHANNEL} "
                                    "and ensure the bot has the required permissions.")
-MISSING_HOF_CHANNEL_PERMISSIONS_LAST_WARNING = ("This is the last reminder about these permissions. Run "
-                                                f"{command_refs.TROUBLESHOOT} any time to check the setup.")
+MISSING_HOF_CHANNEL_PERMISSIONS_LAST_WARNING = ("This is the last reminder about these permissions. Someone with "
+                                                f"the Manage Server permission can run {command_refs.TROUBLESHOOT} "
+                                                "any time to check the setup.")
 FAILED_TO_FIND_HOF_CHANNEL = (
     "Failed to find the Hall of Fame channel - Ensure the bot has access with "
     "``View Channel, Send Messages, and Read Message History`` permissions.\n"
-    f"Set it up using {command_refs.SET_HALL_OF_FAME_CHANNEL} if it doesn't exist.\n"
+    f"Someone with the Manage Server permission can set it up using {command_refs.SET_HALL_OF_FAME_CHANNEL} "
+    "if it doesn't exist.\n"
     f"For further assistance, contact support: <{SUPPORT_SERVER_URL}>"
 )
 
@@ -293,6 +297,8 @@ PRESENCE_STATUSES = [
 ]
 # Joins the statuses only in Wrapped season, December and January
 PRESENCE_WRAPPED = "✨ /hof_wrapped - your year on the board"
+# Joins the statuses in November, the month before Wrapped, so members still have time to make the board
+PRESENCE_WRAPPED_TEASER = "⏳ Hall of Fame Wrapped is coming - one more month to make the board"
 
 # /hof_wrapped and /server_hof_wrapped when there is no Wrapped to show, answered privately. Wrapped is made
 # once a year in December, for servers with a message on their board and for every member credited with one
@@ -310,8 +316,8 @@ WRAPPED_NONE_OPTED_OUT = ("**You asked not to be featured**, so no Hall of Fame 
 CHECK_TITLE = "🩺 Hall of Fame setup check"
 # Posted in the board on join instead of the findings themselves, as everyone can read the board
 CHECK_JOIN_NUDGE = ("⚠️ **Something may stop messages from reaching the Hall of Fame**, for example channels "
-                    "the bot cannot read. An admin can press **Troubleshoot** below, or run {command}, to see "
-                    "what it is and how to fix it.")
+                    "the bot cannot read. Someone with the Manage Server permission can press **Troubleshoot** "
+                    "below, or run {command}, to see what it is and how to fix it.")
 CHECK_SUMMARY_OK = "Everything the bot needs is in place."
 CHECK_SUMMARY_PROBLEMS = "Found {count} thing{plural} that can stop messages from reaching the board."
 CHECK_FOOTER = "Fixed something? Press Troubleshoot or run /troubleshoot again to check."
@@ -362,8 +368,9 @@ CHECK_LAST_POST_STALE = "Nothing has reached the board in a month. If reactions 
 # The Why isn't this on the board? message command, named with WHY_MENU_NAME above
 WHY_ON_COOLDOWN = "You just asked about a message. Try again in a few seconds."
 WHY_IS_BOARD = "**This is the Hall of Fame channel.** Messages here are the board itself, so they are not posted again."
-WHY_CANNOT_READ = ("**The bot cannot read {channel}**, so reactions here never count. An admin can give the bot "
-                   "View Channel and Read Message History here, or run {command} to find every channel like this.")
+WHY_CANNOT_READ = ("**The bot cannot read {channel}**, so reactions here never count. Someone with the Manage "
+                   "Server permission can give the bot View Channel and Read Message History here, or run "
+                   "{command} to find every channel like this.")
 WHY_ALREADY_POSTED = "**This message is on the board:** {link}"
 # The post is stored, but not in the board channel the server has now: the board was moved, or the post deleted
 WHY_POSTED_ELSEWHERE = ("**This message was posted to the board**, but the post is no longer in {board}. The board "
@@ -372,13 +379,15 @@ WHY_MESSAGE_GONE = "**This message is gone**: it was deleted, or the bot can no 
 WHY_HIDDEN = ("**This message was on the board, but is hidden** because it dropped to {count} of the {threshold} "
               "reactions needed. It comes back once it passes the threshold again.")
 WHY_TOO_OLD = ("**This message is too old.** Only messages from the last {days} days can reach the board. "
-               "An admin can change that with {command}.")
-WHY_BOT_MESSAGE = ("**Messages from bots are not posted here.** An admin can change that with {command}.")
-WHY_NO_MEDIA = ("**Only messages with an image or video are posted here.** An admin can change that with {command}.")
-WHY_NO_BOARD = ("**The board channel is missing**: it was deleted, or the bot can no longer see it. An admin can "
-                "pick a channel with {command}.")
-WHY_CANNOT_POST = ("**The bot cannot post on the board.** It is missing {missing} in {channel}. An admin can run "
-                   "{command} for the details.")
+               "Someone with the Manage Server permission can change that with {command}.")
+WHY_BOT_MESSAGE = ("**Messages from bots are not posted here.** Someone with the Manage Server permission can "
+                   "change that with {command}.")
+WHY_NO_MEDIA = ("**Only messages with an image or video are posted here.** Someone with the Manage Server "
+                "permission can change that with {command}.")
+WHY_NO_BOARD = ("**The board channel is missing**: it was deleted, or the bot can no longer see it. Someone with "
+                "the Manage Server permission can pick a channel with {command}.")
+WHY_CANNOT_POST = ("**The bot cannot post on the board.** It is missing {missing} in {channel}. Someone with the "
+                   "Manage Server permission can run {command} for the details.")
 WHY_DAILY_LIMIT = ("**The board reached its limit of {limit} posts today.** Posting resumes at midnight UTC, and the "
                    "next reaction after that posts this message if it still has enough.")
 WHY_BELOW_THRESHOLD = "**Not enough reactions yet:** it has {count} of the {threshold} needed."
