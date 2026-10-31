@@ -20,6 +20,15 @@ recently_logged_messages = ExpiringSet(ttl_seconds=duplicate_log_window_seconds)
 daily_limit_handled_on = {}
 # Guild IDs whose missing Hall of Fame channel has been logged, so each server is reported once per boot
 missing_channels_logged = set()
+# Discord's error code for having edited too many messages older than an hour in one channel
+OLD_MESSAGE_EDIT_LIMIT_CODE = 30046
+# How old a message has to be for its edits to count toward that limit
+old_message_age = datetime.timedelta(hours=1)
+old_message_edit_pause = datetime.timedelta(minutes=15)
+# Guild ID to when the board's posts older than old_message_age may be edited again, after Discord
+# refused an edit with OLD_MESSAGE_EDIT_LIMIT_CODE. Newer posts are not limited, so they keep updating.
+# The stored counts keep updating meanwhile, and the next reaction after the pause brings the post up to date
+old_message_edits_paused_until = {}
 # The most posts credited to one member, across every server. It keeps what the bot stores about any one
 # member small enough that /my_data can always send them all of it, which data protection law entitles
 # them to: 10,000 posts is a file of about 2.5 MB. Posts past it still reach the server's board, but are
@@ -218,15 +227,27 @@ async def update_reaction_counter(db_message, bot: discord.Client, target_channe
         await hall_of_fame_message.edit(embed=await create_embed(discord_message, reaction_threshold, connection, config))
         return
 
+    guild_id = discord_message.guild.id
+    now = datetime.datetime.now(timezone.utc)
+    paused_until = old_message_edits_paused_until.get(guild_id)
+    if (paused_until is not None and now < paused_until
+            and now - hall_of_fame_message.created_at >= old_message_age):
+        return
+
     embed = hall_of_fame_message.embeds[0]
     if corrected_reactions is None:
         corrected_reactions = await reaction_count(discord_message, connection, config)
-    top_reaction = most_reacted_emoji(discord_message.reactions, discord_message.guild.id, connection, config)
+    top_reaction = most_reacted_emoji(discord_message.reactions, guild_id, connection, config)
     reactions_field_value = format_reactions_field_value(corrected_reactions, top_reaction)
 
     for i, field in enumerate(embed.fields):
         field_name = (field.name or "").strip()
         if field_name == "Reactions" or field_name.endswith("Reactions"):
+            if field_name == "Reactions" and field.value == reactions_field_value:
+                # Many reactions leave the count as it was, such as one that is not counted or a second
+                # emoji from the same member. Editing anyway spends Discord's limit on edits to old
+                # messages, which busy boards ran out of
+                return
             embed.set_field_at(
                 index=i,
                 name="Reactions",
@@ -235,7 +256,13 @@ async def update_reaction_counter(db_message, bot: discord.Client, target_channe
             )
             break
 
-    await hall_of_fame_message.edit(embed=embed)
+    try:
+        await hall_of_fame_message.edit(embed=embed)
+    except discord.HTTPException as error:
+        if error.code != OLD_MESSAGE_EDIT_LIMIT_CODE:
+            raise
+        # Every further edit to an old post would be refused too, and each refusal was logged as an error
+        old_message_edits_paused_until[guild_id] = now + old_message_edit_pause
 
 
 async def remove_embed(message, bot: discord.Client, target_channel_id: int):
@@ -272,38 +299,59 @@ async def update_leaderboard(connection, bot: discord.Client, server_config: ser
     if not hall_of_fame_channel:
         return
 
-    server_messages = hall_of_fame_message_repo.find_top_messages_by_reaction_count(connection, int(server_config.guild_id), limit=30)
-    most_reacted_messages = list(server_messages)
+    guild_id = int(server_config.guild_id)
+    places = min(20, len(msg_id_array))
+    # Only the messages the leaderboard shows are fetched and counted, and each only once. Counting can
+    # cost a request per member who reacted, and recounting ten messages that were never shown, then
+    # fetching and counting the shown ones a second time for their embeds, took large servers past the
+    # daily task's time limit every day
+    most_reacted_messages = list(hall_of_fame_message_repo.find_top_messages_by_reaction_count(
+        connection, guild_id, limit=places))[:places]
     reaction_config = server_config.reaction_config()
 
-    # Update the reaction count of the top 30 most reacted messages
-    for i in range(min(len(most_reacted_messages), 30)):
-        message = most_reacted_messages[i]
-        channel = bot.get_channel(int(message["channel_id"]))
-        if not channel:
-            continue
-        message = await channel.fetch_message(int(message["message_id"]))
-        hall_of_fame_message_repo.update_field_for_message(connection, int(server_config.guild_id), message.channel.id, message.id,
-                                                          "reaction_count", await reaction_count(message, connection, reaction_config))
-
-    # Update the top 20 messages in the leaderboard
-    for i in range(min(20, len(most_reacted_messages), len(msg_id_array))):
-        original_channel = bot.get_channel(int(most_reacted_messages[i]["channel_id"]))
+    for i, top_message in enumerate(most_reacted_messages):
+        original_channel = bot.get_channel(int(top_message["channel_id"]))
         if not original_channel:
             # The channel was deleted or hidden from the bot since the message was featured.
             # Its place is left as it was, rather than losing the rest of the leaderboard with it
             continue
-        hall_of_fame_message = await hall_of_fame_channel.fetch_message(int(msg_id_array[i]))
-        original_message = await original_channel.fetch_message(int(most_reacted_messages[i]["message_id"]))
+        try:
+            hall_of_fame_message = await hall_of_fame_channel.fetch_message(int(msg_id_array[i]))
+        except discord.NotFound:
+            # Someone deleted this place's message. The other places are still updated
+            continue
+        except discord.Forbidden:
+            # The bot cannot read its own board, so no place can be updated. The daily permission check
+            # tells the server what is missing
+            return
+        try:
+            original_message = await original_channel.fetch_message(int(top_message["message_id"]))
+        except (discord.NotFound, discord.Forbidden):
+            # Deleted since it was featured, or in a channel the bot can no longer read. Like a deleted
+            # channel, this used to stop the whole update, so the same servers failed every day
+            continue
+
+        corrected_reactions = await reaction_count(original_message, connection, reaction_config)
+        hall_of_fame_message_repo.update_field_for_message(connection, guild_id, original_message.channel.id,
+                                                          original_message.id, "reaction_count", corrected_reactions)
 
         leaderboard_content = f"**HallOfFame#{i+1}**"
         if original_message.attachments:
             leaderboard_content += f"\n{original_message.attachments[0].url}"
 
         # Edited in one request, as editing the same message several times triples the rate limit cost
-        await hall_of_fame_message.edit(
-            content=leaderboard_content,
-            embed=await create_embed(original_message, server_config.reaction_threshold, connection, reaction_config))
+        try:
+            await hall_of_fame_message.edit(
+                content=leaderboard_content,
+                embed=await create_embed(original_message, server_config.reaction_threshold, connection,
+                                         reaction_config, corrected_reactions))
+        except discord.Forbidden:
+            return
+        except discord.HTTPException as error:
+            if error.code != OLD_MESSAGE_EDIT_LIMIT_CODE:
+                raise
+            # Every place is an old message, so the rest would be refused too. Tried again tomorrow
+            return
 
 
 async def report_missing_hall_of_fame_channel(bot: discord.Client, guild_id: int, channel_id: int):
@@ -427,25 +475,29 @@ def add_post_footer(embed: discord.Embed, guild) -> discord.Embed:
     return embed
 
 
-async def create_embed(message: discord.Message, reaction_threshold: int, connection, config: dict = None) -> discord.Embed:
+async def create_embed(message: discord.Message, reaction_threshold: int, connection, config: dict = None,
+                       corrected_reactions: int = None) -> discord.Embed:
     """
     Create an embed for a message in the Hall of Fame channel
     :param message: The message to create an embed for
     :param reaction_threshold: The minimum number of reactions for a message to be posted in the Hall of Fame
     :param connection: MySQL connection
     :param config: The reaction related server configuration, fetched when not supplied
+    :param corrected_reactions: The already calculated reaction count, recalculated when not supplied
     :return: The embed for the message
     """
-    embed = await build_post_embed(message, connection, config)
+    embed = await build_post_embed(message, connection, config, corrected_reactions)
     return add_post_footer(embed, message.guild)
 
 
-async def build_post_embed(message: discord.Message, connection, config: dict = None) -> discord.Embed:
+async def build_post_embed(message: discord.Message, connection, config: dict = None,
+                           corrected_reactions: int = None) -> discord.Embed:
     """
     The content of a Hall of Fame post, laid out for the kind of message it is
     :param message: The message to create an embed for
     :param connection: MySQL connection
     :param config: The reaction related server configuration, fetched when not supplied
+    :param corrected_reactions: The already calculated reaction count, recalculated when not supplied
     :return: The embed for the message, without the footer
     """
     # handle 1024 character limit on embed description
@@ -462,7 +514,8 @@ async def build_post_embed(message: discord.Message, connection, config: dict = 
     if reference_message is not None and opt_out_repo.is_opted_out(connection, reference_message.author.id):
         reference_message = None
     reference_content = truncate_content(reference_message.content) if reference_message else ""
-    corrected_reactions = await reaction_count(message, connection, config)
+    if corrected_reactions is None:
+        corrected_reactions = await reaction_count(message, connection, config)
     top_reaction = most_reacted_emoji(message.reactions, message.guild.id, connection, config)
     reactions_field_value = format_reactions_field_value(corrected_reactions, top_reaction)
 
@@ -691,7 +744,10 @@ async def create_database_context(bot, server, connection, custom_channel=None) 
     )
 
     if server_config_repo.check_if_guild_exists(connection, server.id):
-        await logging(bot, "Server already exists in the database, dropping it to recreate", server.id)
+        # on_guild_join stores a bare row before setting a server up, which made every join log this
+        # as an error. Only a row with a board is a configuration from an earlier visit
+        if server_config_repo.get_parameter_value(connection, server.id, "hall_of_fame_channel_id") is not None:
+            await logging(bot, "Server already exists in the database, dropping it to recreate", server.id)
         server_config_repo.delete_server_config(connection, server.id)
 
     hall_of_fame_channel = custom_channel or await server.create_text_channel("hall-of-fame")

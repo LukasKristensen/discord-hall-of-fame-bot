@@ -120,8 +120,12 @@ class CreateDatabaseContextTests(SetupTestCase):
         self.existing_guild = False
         self.deleted = []
 
+        # The board of the stored row, which is None for the bare row on_guild_join stores first
+        self.existing_board = 4242
         self.patch(server_config_repo, "check_if_guild_exists",
                    lambda _connection, _guild_id: self.existing_guild)
+        self.patch(server_config_repo, "get_parameter_value",
+                   lambda _connection, _guild_id, _param: self.existing_board if self.existing_guild else None)
         self.patch(server_config_repo, "insert_server_with_parameters",
                    lambda *args: self.inserted.append(args))
         self.patch(server_config_repo, "delete_server_config",
@@ -295,6 +299,15 @@ class CreateDatabaseContextTests(SetupTestCase):
         await self.join()
 
         self.assertTrue(any("already exists" in entry for entry in self.logged))
+
+    async def test_replaces_the_bare_row_of_a_join_without_saying_so(self):
+        """on_guild_join stores a bare row first, and every join logged it as an error."""
+        self.existing_guild = True
+        self.existing_board = None
+        await self.join()
+
+        self.assertEqual([GUILD_ID], self.deleted)
+        self.assertFalse(any("already exists" in entry for entry in self.logged))
 
 
 class DeleteDatabaseContextTests(unittest.TestCase):
