@@ -43,6 +43,7 @@ version, so 2.2 covers 2.2.0 and every 2.2.x after it. For how the bot works tod
 - [x] Logs in the developer channels carry the command and the server ID, never a member's or a server's name.
 - [x] Production credentials and the production database are only loaded in production, so a development run cannot reach them.
 - [x] Message locks are recreated on each run, so none stays bound to a closed event loop.
+- [x] Upgraded discord.py from 2.5.0 to 2.7.1. The /feedback form asks its questions through Discord's newer form labels, which look the same to members.
 - [x] Removed the MongoDB-era tooling, the unused manual sweep and the Google Drive backup script.
 - [x] Added integration tests that run the reaction path, joins, the daily task, Wrapped, data deletion, schema upgrades and the stats queries against a real PostgreSQL, which CI now starts for them.
 - [x] Added project skills and an expanded CLAUDE.md for development.

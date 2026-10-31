@@ -316,5 +316,22 @@ class CreateEmbedContentTests(EmbedTestCase):
         self.assertNotEqual("https://cdn/theirs.png", embed.image.url)
 
 
+class CustomProfileFormTests(unittest.IsolatedAsyncioTestCase):
+    async def test_each_field_is_a_label_around_its_input_with_the_current_url(self):
+        modals = []
+
+        async def send_modal(modal):
+            modals.append(modal)
+
+        interaction = types.SimpleNamespace(response=types.SimpleNamespace(send_modal=send_modal))
+        await utils.create_custom_profile_picture_and_cover_form(interaction, None, "https://cdn/avatar.png")
+        components = modals[0].to_components()
+
+        self.assertEqual(["Custom Profile Picture URL", "Custom Cover Image URL"],
+                         [component["label"] for component in components])
+        self.assertEqual("https://cdn/avatar.png", components[0]["component"]["value"])
+        self.assertTrue(all(component["component"].get("label") is None for component in components))
+
+
 if __name__ == "__main__":
     unittest.main()

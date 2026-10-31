@@ -1594,7 +1594,17 @@ class FeedbackFormTests(unittest.IsolatedAsyncioTestCase):
         modal = await self.open_form(None, topic="bug")
 
         self.assertEqual("Report a bug", modal.title)
-        self.assertEqual("What went wrong?", modal.fb_title.label)
+        self.assertEqual("What went wrong?", modal.fb_title_label.text)
+
+    async def test_each_question_is_a_label_around_its_input(self):
+        """Discord refuses a text input that carries a label of its own inside a Label."""
+        modal = await self.open_form(None, topic="bug")
+        components = modal.to_components()
+
+        self.assertEqual([discord.ComponentType.label.value] * 2, [component["type"] for component in components])
+        self.assertEqual(["What went wrong?", messages.FEEDBACK_FORMS["bug"][3]],
+                         [component["label"] for component in components])
+        self.assertTrue(all(component["component"].get("label") is None for component in components))
 
     async def test_an_unknown_topic_gets_the_plain_form(self):
         modal = await self.open_form(None, topic="not a topic")

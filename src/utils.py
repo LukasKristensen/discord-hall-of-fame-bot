@@ -1003,20 +1003,22 @@ async def create_feedback_form(interaction: discord.Interaction, bot, topic: str
             super().__init__(title=form_title)
             self.fb_title = discord.ui.TextInput(
                 style=discord.TextStyle.short,
-                label=title_label,
                 placeholder=title_placeholder,
                 required=True,
                 max_length=feedback_title_max_length
             )
             self.message = discord.ui.TextInput(
                 style=discord.TextStyle.paragraph,
-                label=message_label,
                 placeholder=message_placeholder,
                 required=True,
                 max_length=feedback_message_max_length
             )
-            self.add_item(self.fb_title)
-            self.add_item(self.message)
+            # Each question sits on a Label around its input. Discord does not allow a label on the input
+            # itself inside one, and discord.py 2.6 deprecated reading it there
+            self.fb_title_label = discord.ui.Label(text=title_label, component=self.fb_title)
+            self.message_label = discord.ui.Label(text=message_label, component=self.message)
+            self.add_item(self.fb_title_label)
+            self.add_item(self.message_label)
 
         async def on_submit(self, feedback_interaction) -> None:
             refused = refusal(feedback_interaction.user.id) if refusal is not None else None
@@ -1026,8 +1028,8 @@ async def create_feedback_form(interaction: discord.Interaction, bot, topic: str
             target_guild = bot.get_guild(1180006529575960616)
             target_channel = target_guild.get_channel(1345558910836412456)
             embed = build_feedback_embed(feedback_interaction.user, feedback_interaction.guild_id, topic,
-                                         (self.fb_title.label, self.fb_title.value),
-                                         (self.message.label, self.message.value))
+                                         (self.fb_title_label.text, self.fb_title.value),
+                                         (self.message_label.text, self.message.value))
             if on_sent is not None:
                 on_sent(feedback_interaction.user.id)
             try:
@@ -1054,20 +1056,18 @@ async def create_custom_profile_picture_and_cover_form(interaction: discord.Inte
     :return:
     """
     class CustomProfilePictureAndCoverModal(discord.ui.Modal, title="Custom Bot Profile For Server"):
-        profile_picture_url_input = discord.ui.TextInput(
+        profile_picture_url_input = discord.ui.Label(text="Custom Profile Picture URL", component=discord.ui.TextInput(
             style=discord.TextStyle.short,
             placeholder="Enter the URL of the profile picture for the bot",
             required=False,
-            label="Custom Profile Picture URL",
             default=default_profile_url
-        )
-        cover_url_input = discord.ui.TextInput(
+        ))
+        cover_url_input = discord.ui.Label(text="Custom Cover Image URL", component=discord.ui.TextInput(
             style=discord.TextStyle.short,
             placeholder="Enter the URL of the cover image for the bot",
             required=False,
-            label="Custom Cover Image URL",
             default=default_cover_url
-        )
+        ))
 
         async def on_submit(self, custom_profile_interaction) -> None:
             target_guild = bot.get_guild(1180006529575960616)
@@ -1076,8 +1076,8 @@ async def create_custom_profile_picture_and_cover_form(interaction: discord.Inte
                 title="New Custom Profile Picture and Cover Request",
                 color=discord.Color.gold()
             )
-            embed.add_field(name=self.profile_picture_url_input.label, value=self.profile_picture_url_input.value, inline=False)
-            embed.add_field(name=self.cover_url_input.label, value=self.cover_url_input.value, inline=False)
+            embed.add_field(name=self.profile_picture_url_input.text, value=self.profile_picture_url_input.component.value, inline=False)
+            embed.add_field(name=self.cover_url_input.text, value=self.cover_url_input.component.value, inline=False)
             embed.set_author(name=custom_profile_interaction.user.name, icon_url=custom_profile_interaction.user.avatar.url if custom_profile_interaction.user.avatar else None)
             embed.add_field(name="Guild", value=custom_profile_interaction.guild.id, inline=True)
             embed.add_field(name="UserId", value=custom_profile_interaction.user.id, inline=True)
