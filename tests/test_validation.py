@@ -46,6 +46,12 @@ class FindInWhitelistTests(unittest.TestCase):
         self.assertIsNone(validation.find_in_whitelist(["🔥"], "😂"))
 
 
+class WhitelistLimitTests(unittest.TestCase):
+    def test_the_whitelist_holds_up_to_100_emojis(self):
+        """The README, the landing page and the App Directory listing all promise 100."""
+        self.assertEqual(100, validation.WHITELIST_MAX_SIZE)
+
+
 class OutOfRangeMessageTests(unittest.TestCase):
     def test_accepts_the_bounds_themselves(self):
         self.assertIsNone(validation.out_of_range_message("X", 1, 1, 10))

@@ -2,13 +2,17 @@ import discord as discord
 import message_reactions
 from discord.ext import commands
 import datetime
-from repositories import hof_wrapped_repo, hall_of_fame_message_repo, server_config_repo, hof_wrapped_guild_status_repo
+from repositories import opt_out_repo, hof_wrapped_repo, hall_of_fame_message_repo, server_config_repo, hof_wrapped_guild_status_repo
 import psycopg2
 import os
 import json
 import environment
+import utils
 from constants import version
 from enums import command_refs
+from translations import messages
+# Named apart from discord.ext.commands, which this module also uses for the Bot in its manual run
+import commands as commands_module
 
 users = {}
 total_hall_of_fame_posts = 0
@@ -42,6 +46,21 @@ class User:
 def initialize_users(connection, guild_id: int):
     for user_id in hall_of_fame_message_repo.find_members_for_guild(connection, guild_id):
         users[user_id] = User(user_id)
+
+
+def leave_out_members_who_are_gone(still_members):
+    """
+    Drop the members who deleted their data while Wrapped was being prepared or asked not to be
+    featured, and take them out of everyone else's fan lists, so nothing is saved about them
+    :param still_members: The IDs that are still the author of a post in the server
+    """
+    gone = set(users) - set(still_members)
+    for user_id in gone:
+        del users[user_id]
+    for user in users.values():
+        for fans in (user.usersFans, user.fanOfUsers):
+            for user_id in gone:
+                fans.pop(user_id, None)
 
 
 async def process_message_reactions(message: discord.Message, connection):
@@ -99,6 +118,10 @@ async def process_hof_messages_from_db(guild: discord.Guild, connection):
     print("rows fetched from DB:", len(messages))
 
     for message in messages:
+        # A post whose author was removed by deleting their data on /my_data is credited to nobody,
+        # even though Discord still knows who wrote it
+        if message['author_id'] == hall_of_fame_message_repo.NO_AUTHOR_ID:
+            continue
         channel_id = message['channel_id']
         message_id = message['message_id']
         channel = guild.get_channel(channel_id)
@@ -149,10 +172,8 @@ async def create_embed(discord_user, data_for_user_wrapped, bot):
         ),
         color=discord.Color.gold()
     )
-    if hasattr(discord_user, 'avatar') and discord_user.avatar:
-        embed.set_thumbnail(url=discord_user.avatar.url)
-    elif hasattr(discord_user, 'default_avatar'):
-        embed.set_thumbnail(url=discord_user.default_avatar.url)
+    # The avatar the member shows in this server, falling back to their own and then Discord's default
+    embed.set_thumbnail(url=discord_user.display_avatar.url)
 
     if user_wrapped.hallOfFameMessagePosts > 0:
         embed.description += f"\n{user_wrapped.get_hof_status()}\n"
@@ -216,12 +237,14 @@ async def create_embed(discord_user, data_for_user_wrapped, bot):
         post = user_wrapped.mostReactedPost["post"]
         if post is not None and hasattr(post, 'content'):
             most_reacted_post = user_wrapped.mostReactedPost
+            heading = f"**Reactions:** {most_reacted_post['reaction_count']} 🎉\n**Content:** "
+            # A message can be longer than an embed field, and Discord rejects the whole card over one
+            # field that is too long, so the text is cut to what fits after the reactions line
+            content = (utils.truncate_content(post.content, commands_module.embed_field_value_limit - len(heading))
+                       if post.content else '*No text content*')
             embed.add_field(
                 name="🔥 Most Reacted HOF Post",
-                value=(
-                    f"**Reactions:** {most_reacted_post['reaction_count']} 🎉\n"
-                    f"**Content:** {post.content if post.content else '*No text content*'}"
-                ),
+                value=heading + content,
                 inline=False
             )
             if hasattr(post, 'attachments') and post.attachments:
@@ -233,7 +256,31 @@ async def create_embed(discord_user, data_for_user_wrapped, bot):
                     inline=False
                 )
 
+    embed.set_footer(text=messages.INVITE_FOOTER)
     return embed
+
+
+def next_wrapped_year(now: datetime.datetime = None) -> int:
+    """
+    The year the next Wrapped is made for. Wrapped is made each December for the year then ending, so the
+    next one is this year's until WRAPPED_YEAR moves on to it, and next year's from then on
+    :param now: The current time, taken from the clock when not supplied
+    """
+    now = now or datetime.datetime.now(datetime.timezone.utc)
+    return max(now.year, version.WRAPPED_YEAR + 1)
+
+
+def missing_wrapped_text(server_has_wrapped: bool, opted_out: bool = False, now: datetime.datetime = None) -> str:
+    """
+    What /hof_wrapped and /server_hof_wrapped answer when there is no Wrapped to show, and why
+    :param server_has_wrapped: Whether the server has a Wrapped for WRAPPED_YEAR at all
+    :param opted_out: Whether the member asking chose not to be featured, which leaves them out of every Wrapped
+    :param now: The current time, for tests
+    """
+    if opted_out:
+        return messages.WRAPPED_NONE_OPTED_OUT.format(command=command_refs.MY_DATA)
+    template = messages.WRAPPED_NONE_FOR_MEMBER if server_has_wrapped else messages.WRAPPED_NONE_FOR_SERVER
+    return template.format(year=version.WRAPPED_YEAR, next_year=next_wrapped_year(now))
 
 
 def rank_stats(users: dict):
@@ -307,18 +354,45 @@ def save_user_wrapped_to_db(guild_id, user, year):
 async def main(guild_id: int, bot: commands.Bot, get_reaction_threshold: int, connection):
     global rankings
     global reactionThreshold
+    global total_hall_of_fame_posts
     reactionThreshold = get_reaction_threshold
+    # Wrapped runs server after server in one process. Without starting over, every member of the
+    # servers done before would be saved again under this one, with their other servers' stats
+    users.clear()
+    total_hall_of_fame_posts = 0
+    rankings = None
 
     print(f"Hall Of Fame Wrapped {version.WRAPPED_YEAR} is being prepared... 🎁")
     guild = bot.get_guild(guild_id)
 
     initialize_users(connection, guild_id)
     await process_hof_messages_from_db(guild, connection)
+    # Deleting data detaches the member's posts, so whoever is no longer an author here deleted their
+    # data while the posts were being read. A member who asked not to be featured keeps their earlier
+    # posts, but Wrapped records whose posts they reacted to, which is new data about them, so they are
+    # left out too. Checked after the posts were read, so asking while Wrapped runs counts
+    authors = set(hall_of_fame_message_repo.find_members_for_guild(connection, guild_id))
+    leave_out_members_who_are_gone(authors - opt_out_repo.find_opted_out(connection, users))
 
     rankings = rank_stats(users)
 
     for user in users.values():
         save_user_wrapped_to_db(guild.id, user, version.WRAPPED_YEAR)
+    forget_members_who_deleted_meanwhile(connection, guild_id)
+
+
+def forget_members_who_deleted_meanwhile(connection, guild_id: int):
+    """
+    Delete the Wrapped of members who deleted their data while the rows above were being saved, which
+    would otherwise give them their own row and their place in other members' fan lists back. Checked
+    once every row is saved: a deletion before this check is finished here, and one after it removes the
+    saved rows itself. Members who asked not to be featured were left out of users before saving
+    :param connection: The database connection
+    :param guild_id: The server whose Wrapped was just saved
+    """
+    still_authors = set(hall_of_fame_message_repo.find_members_for_guild(connection, guild_id))
+    for user_id in set(users) - still_authors:
+        hof_wrapped_repo.delete_hof_wrapped_for_user(connection, user_id)
 
 def create_server_embed(guild, users):
     user_list = list(users)
@@ -428,6 +502,9 @@ def create_server_embed(guild, users):
         value=f"Use the command {command_refs.HOF_WRAPPED} to get your personal Hall Of Fame Wrapped summary!",
         inline=False
     )
+    # The global avatar rather than a server's custom bot profile, the same logo as on board posts
+    avatar = getattr(getattr(guild, "me", None), "avatar", None)
+    embed.set_footer(text=messages.SERVER_WRAPPED_FOOTER, icon_url=avatar.url if avatar else None)
     return embed
 
 async def post_server_wrapped_embed(guild, connection):
@@ -446,7 +523,7 @@ async def post_server_wrapped_embed(guild, connection):
         print(f"No suitable channel found to post the Hall Of Fame Wrapped in guild {guild.name} (ID: {guild.id}).")
         return
 
-    await post_channel.send(embed=embed)
+    await post_channel.send(embed=embed, view=commands_module.build_server_wrapped_view())
     print(f"Posted Hall Of Fame Wrapped for guild {guild.name} (ID: {guild.id}) in channel {post_channel.name}.")
 
 if __name__ == "__main__":

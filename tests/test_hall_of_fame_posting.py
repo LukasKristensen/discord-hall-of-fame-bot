@@ -7,6 +7,8 @@ posted, a post whose embed was removed while it was hidden, and a video that has
 separate message.
 """
 
+import datetime
+import types
 import unittest
 from unittest import mock
 
@@ -25,6 +27,23 @@ MESSAGE_ID = 4242
 HALL_OF_FAME_MESSAGE_ID = 5555
 VIDEO_LINK_MESSAGE_ID = 6666
 AUTHOR_ID = 77
+
+
+def http_error(error_type, status, code, text):
+    return error_type(types.SimpleNamespace(status=status, reason=text), {"code": code, "message": text})
+
+
+def unknown_message():
+    return http_error(discord.NotFound, 404, 10008, "Unknown Message")
+
+
+def missing_access():
+    return http_error(discord.Forbidden, 403, 50001, "Missing Access")
+
+
+def old_message_edit_limit():
+    return http_error(discord.HTTPException, 429, utils.OLD_MESSAGE_EDIT_LIMIT_CODE,
+                      "Maximum number of edits to messages older than 1 hour reached.")
 
 
 class FakeAttachment:
@@ -67,8 +86,14 @@ class FakePostedMessage:
         self.content = content
         self.edits = []
         self.deleted = False
+        # Old enough by default for its edits to count toward Discord's limit on edits to old messages
+        self.created_at = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=2)
+        # Raised by the next edit instead of making it, as Discord refusing it
+        self.edit_error = None
 
     async def edit(self, **kwargs):
+        if self.edit_error is not None:
+            raise self.edit_error
         self.edits.append(kwargs)
 
     async def delete(self):
@@ -91,6 +116,9 @@ class FakeTargetChannel:
     async def fetch_message(self, message_id):
         if message_id not in self.messages:
             raise AssertionError(f"fetched an unexpected message id: {message_id!r}")
+        # An error in place of a message is what Discord answers for it, such as a deleted message
+        if isinstance(self.messages[message_id], Exception):
+            raise self.messages[message_id]
         return self.messages[message_id]
 
 
@@ -123,6 +151,7 @@ class PostingTestCase(unittest.IsolatedAsyncioTestCase):
         self.patch(utils, "reaction_count", count_reactions)
         self.patch(utils, "create_embed", build_embed)
         self.patch(utils, "missing_channels_logged", set())
+        self.patch(utils, "old_message_edits_paused_until", {})
 
         self.original_cache = utils.recently_logged_messages
         utils.recently_logged_messages = ExpiringSet(ttl_seconds=600)
@@ -136,7 +165,7 @@ class PostingTestCase(unittest.IsolatedAsyncioTestCase):
         patcher.start()
         self.addCleanup(patcher.stop)
 
-    def patch_repo(self, insert=None):
+    def patch_repo(self, insert=None, credited_posts=0):
         self.inserted = []
 
         def record_insert(*args):
@@ -146,6 +175,8 @@ class PostingTestCase(unittest.IsolatedAsyncioTestCase):
 
         repo = mock.Mock()
         repo.insert_hall_of_fame_message = record_insert
+        repo.count_messages_by_author = lambda *_args: credited_posts
+        repo.NO_AUTHOR_ID = 0
         self.patch(utils, "hall_of_fame_message_repo", repo)
         return repo
 
@@ -214,6 +245,30 @@ class PostHallOfFameMessageTests(PostingTestCase):
         await self.post(FakeSourceMessage(attachments=[FakeAttachment("https://cdn.example/clip.mp4")]))
 
         self.assertTrue(all(message.deleted for message in self.target_channel.sent))
+
+    async def test_a_member_at_the_post_limit_still_gets_on_the_board_but_is_not_credited(self):
+        self.patch(utils, "members_at_post_limit_logged", set())
+        self.patch_repo(credited_posts=utils.member_post_limit)
+        await self.post()
+
+        self.assertEqual(1, len(self.target_channel.sent))
+        self.assertEqual(0, self.inserted[0][6])
+
+    async def test_a_member_just_under_the_post_limit_is_credited(self):
+        self.patch_repo(credited_posts=utils.member_post_limit - 1)
+        await self.post()
+
+        self.assertEqual(AUTHOR_ID, self.inserted[0][6])
+
+    async def test_reaching_the_post_limit_is_logged_once(self):
+        self.patch(utils, "members_at_post_limit_logged", set())
+        self.patch_repo(credited_posts=utils.member_post_limit)
+        await self.post()
+        await self.post()
+
+        alerts = [entry for entry in self.logged if "the most allowed" in entry]
+        self.assertEqual(1, len(alerts))
+        self.assertIn(str(AUTHOR_ID), alerts[0])
 
     async def test_reports_a_failed_write(self):
         self.patch_repo(insert=lambda: (_ for _ in ()).throw(RuntimeError("write failed")))
@@ -304,6 +359,57 @@ class UpdateReactionCounterTests(PostingTestCase):
         await self.update()
 
         self.assertEqual([], self.posted.edits)
+
+    async def test_leaves_a_post_whose_count_has_not_changed(self):
+        """Discord limits edits to old messages, and busy boards spent it on edits that changed nothing."""
+        self.posted.embeds = [self.embed_with_reactions(utils.format_reactions_field_value(20, None))]
+        await self.update(corrected_reactions=20)
+
+        self.assertEqual([], self.posted.edits)
+
+    async def test_rewrites_an_old_field_name_even_when_the_count_is_the_same(self):
+        value = utils.format_reactions_field_value(20, None)
+        self.posted.embeds = [self.embed_with_reactions(value, name="🔥 Reactions")]
+        await self.update(corrected_reactions=20)
+
+        self.assertEqual(1, len(self.posted.edits))
+
+    async def test_the_old_message_edit_limit_is_not_raised(self):
+        """Each refusal was logged as an error in the reaction event."""
+        self.posted.edit_error = old_message_edit_limit()
+
+        await self.update()
+
+    async def test_pauses_edits_in_the_server_after_reaching_the_old_message_edit_limit(self):
+        self.posted.edit_error = old_message_edit_limit()
+        await self.update(corrected_reactions=20)
+        self.posted.edit_error = None
+        await self.update(corrected_reactions=21)
+
+        self.assertEqual([], self.posted.edits)
+
+    async def test_keeps_editing_new_posts_during_the_pause(self):
+        """The limit only counts edits to messages older than an hour, so a fresh post keeps climbing."""
+        utils.old_message_edits_paused_until[GUILD_ID] = (datetime.datetime.now(datetime.timezone.utc)
+                                                          + datetime.timedelta(minutes=10))
+        self.posted.created_at = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(minutes=30)
+        await self.update(corrected_reactions=20)
+
+        self.assertEqual(1, len(self.posted.edits))
+
+    async def test_edits_again_once_the_pause_is_over(self):
+        utils.old_message_edits_paused_until[GUILD_ID] = (datetime.datetime.now(datetime.timezone.utc)
+                                                          - datetime.timedelta(seconds=1))
+        await self.update(corrected_reactions=20)
+
+        self.assertEqual(1, len(self.posted.edits))
+
+    async def test_other_edit_failures_are_still_raised(self):
+        self.posted.edit_error = missing_access()
+
+        with self.assertRaises(discord.Forbidden):
+            await self.update()
+        self.assertEqual({}, utils.old_message_edits_paused_until)
 
 
 class RemoveEmbedTests(PostingTestCase):
@@ -430,6 +536,85 @@ class UpdateLeaderboardTests(PostingTestCase):
 
         self.assertEqual([], self.leaderboard_messages[8001].edits)
         self.assertIn("HallOfFame#2", self.leaderboard_messages[8002].edits[0]["content"])
+
+    async def test_one_deleted_message_does_not_cost_the_rest_of_the_leaderboard(self):
+        """One deleted featured message stopped the whole update, so the same servers failed every day."""
+        self.patch_leaderboard_repo()
+        self.source_messages[MESSAGE_ID] = unknown_message()
+        await utils.update_leaderboard(FakeConnection(), self.bot, self.config())
+
+        self.assertEqual([], self.leaderboard_messages[8001].edits)
+        self.assertIn("HallOfFame#2", self.leaderboard_messages[8002].edits[0]["content"])
+
+    async def test_a_message_in_a_channel_the_bot_cannot_read_is_skipped(self):
+        self.patch_leaderboard_repo()
+        self.source_messages[MESSAGE_ID] = missing_access()
+        await utils.update_leaderboard(FakeConnection(), self.bot, self.config())
+
+        self.assertIn("HallOfFame#2", self.leaderboard_messages[8002].edits[0]["content"])
+
+    async def test_a_deleted_place_does_not_cost_the_other_places(self):
+        self.patch_leaderboard_repo()
+        self.leaderboard_messages[8001] = unknown_message()
+        await utils.update_leaderboard(FakeConnection(), self.bot, self.config())
+
+        self.assertIn("HallOfFame#2", self.leaderboard_messages[8002].edits[0]["content"])
+
+    async def test_stops_quietly_when_the_bot_cannot_read_its_board(self):
+        """The daily permission check already tells the server, so failing every place adds nothing."""
+        self.patch_leaderboard_repo()
+        self.leaderboard_messages[8001] = missing_access()
+        await utils.update_leaderboard(FakeConnection(), self.bot, self.config())
+
+        self.assertEqual([], self.leaderboard_messages[8002].edits)
+
+    async def test_stops_quietly_at_the_old_message_edit_limit(self):
+        self.patch_leaderboard_repo()
+        self.leaderboard_messages[8001].edit_error = old_message_edit_limit()
+        await utils.update_leaderboard(FakeConnection(), self.bot, self.config())
+
+        self.assertEqual([], self.leaderboard_messages[8002].edits)
+
+    async def test_other_edit_failures_are_still_raised(self):
+        self.patch_leaderboard_repo()
+        self.leaderboard_messages[8001].edit_error = http_error(discord.HTTPException, 503, 0, "Service Unavailable")
+
+        with self.assertRaises(discord.HTTPException):
+            await utils.update_leaderboard(FakeConnection(), self.bot, self.config())
+
+    async def test_only_asks_for_as_many_messages_as_there_are_places(self):
+        self.patch_leaderboard_repo()
+        limits = []
+
+        def find_top_messages(*_args, limit):
+            limits.append(limit)
+            return self.top_messages
+
+        utils.hall_of_fame_message_repo.find_top_messages_by_reaction_count = find_top_messages
+        await utils.update_leaderboard(FakeConnection(), self.bot, self.config())
+
+        self.assertEqual([len(self.leaderboard_ids)], limits)
+
+    async def test_counts_each_shown_message_once(self):
+        """Counting can cost a request per member who reacted, and counting twice timed large servers out."""
+        self.patch_leaderboard_repo()
+        counted = []
+        embed_counts = []
+
+        async def count_reactions(message, *_args, **_kwargs):
+            counted.append(message.id)
+            return 44
+
+        async def build_embed(*args):
+            embed_counts.append(args[4])
+            return self.embed
+
+        self.patch(utils, "reaction_count", count_reactions)
+        self.patch(utils, "create_embed", build_embed)
+        await utils.update_leaderboard(FakeConnection(), self.bot, self.config())
+
+        self.assertEqual([MESSAGE_ID, MESSAGE_ID + 1], counted)
+        self.assertEqual([44, 44], embed_counts)
 
 
 if __name__ == "__main__":

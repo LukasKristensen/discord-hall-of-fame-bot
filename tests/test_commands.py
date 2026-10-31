@@ -6,6 +6,7 @@ edges: a member with no history, a leaderboard entry whose member is gone, and t
 landing in the reply rather than being quietly dropped.
 """
 
+import datetime
 import types
 import unittest
 from unittest import mock
@@ -13,8 +14,11 @@ from unittest import mock
 import discord
 
 import commands
+import hof_wrapped
 from constants import version
-from repositories import server_config_repo, server_user_repo
+from enums import command_refs
+from repositories import server_config_repo, server_user_repo, hall_of_fame_message_repo
+from translations import messages
 
 MONTH_EMOJI = "<:month:1>"
 ALL_TIME_EMOJI = "<:all_time:2>"
@@ -23,10 +27,12 @@ ALL_TIME_EMOJI = "<:all_time:2>"
 class FakeResponse:
     def __init__(self):
         self.messages = []
+        self.views = []
         self.deferred = False
 
-    async def send_message(self, content=None, embed=None, ephemeral=False):
+    async def send_message(self, content=None, embed=None, ephemeral=False, view=None):
         self.messages.append(embed if embed is not None else content)
+        self.views.append(view)
 
     async def defer(self):
         self.deferred = True
@@ -127,6 +133,91 @@ class GetHelpTests(unittest.IsolatedAsyncioTestCase):
         values = " ".join(field.value or "" for field in interaction.response.messages[0].fields)
         self.assertIn("discord.gg", values)
 
+    async def test_offers_invite_vote_and_support_buttons(self):
+        interaction = FakeInteraction()
+        await commands.get_help(interaction)
+
+        self.assertEqual([messages.INVITE_URL, messages.VOTE_URL, messages.SUPPORT_SERVER_URL],
+                         [button.url for button in interaction.response.views[0].children])
+
+
+class InviteUrlTests(unittest.TestCase):
+    """The install link everything shares. Without scopes and permissions it relied on portal defaults."""
+
+    def test_asks_for_exactly_the_permissions_the_bot_uses(self):
+        expected = discord.Permissions(view_channel=True, send_messages=True, read_message_history=True,
+                                       embed_links=True, use_external_emojis=True, manage_messages=True,
+                                       manage_channels=True, manage_roles=True, attach_files=True,
+                                       add_reactions=True, send_messages_in_threads=True)
+        self.assertEqual(expected.value, messages.INVITE_PERMISSIONS)
+        self.assertIn(f"permissions={expected.value}", messages.INVITE_URL)
+
+    def test_installs_the_bot_and_its_commands_to_a_server(self):
+        self.assertIn("scope=bot+applications.commands", messages.INVITE_URL)
+        self.assertIn("integration_type=0", messages.INVITE_URL)
+        self.assertIn("client_id=1177041673352663070", messages.INVITE_URL)
+
+    def test_the_account_link_adds_only_the_commands_to_the_member(self):
+        """A user install has no bot member, so it takes no bot scope and no permissions."""
+        self.assertIn("integration_type=1", messages.USER_INSTALL_URL)
+        self.assertIn("scope=applications.commands", messages.USER_INSTALL_URL)
+        self.assertNotIn("bot", messages.USER_INSTALL_URL.split("scope=")[1])
+        self.assertNotIn("permissions=", messages.USER_INSTALL_URL)
+        self.assertIn("client_id=1177041673352663070", messages.USER_INSTALL_URL)
+
+
+class BoardTopicTests(unittest.TestCase):
+    def test_carries_the_install_link(self):
+        self.assertIn(messages.APP_DIRECTORY_URL, messages.HOF_CHANNEL_TOPIC)
+
+    def test_keeps_the_link_short(self):
+        # The full OAuth link took up most of the channel header
+        self.assertNotIn("oauth2", messages.HOF_CHANNEL_TOPIC)
+
+    def test_fits_in_a_channel_topic(self):
+        self.assertLessEqual(len(messages.HOF_CHANNEL_TOPIC), 1024)
+
+    def test_is_not_mistaken_for_an_old_topic(self):
+        # Otherwise the daily sweep would rewrite the current topic every day
+        self.assertNotIn(messages.HOF_CHANNEL_TOPIC, messages.LEGACY_HOF_CHANNEL_TOPICS)
+
+
+def link_buttons(view):
+    return [(button.label, button.url) for button in view.children]
+
+
+class LinkButtonTests(unittest.IsolatedAsyncioTestCase):
+    """The buttons under /invite, /vote and /help. Views need a running event loop, hence async tests."""
+
+    async def test_invite_offers_the_install_link_first_then_the_account_link_then_support(self):
+        self.assertEqual([(messages.INVITE_BUTTON, messages.INVITE_URL),
+                          (messages.USER_INSTALL_BUTTON, messages.USER_INSTALL_URL),
+                          (messages.SUPPORT_SERVER_BUTTON, messages.SUPPORT_SERVER_URL)],
+                         link_buttons(commands.build_invite_view()))
+
+    async def test_vote_offers_only_the_vote_link(self):
+        self.assertEqual([(messages.VOTE_BUTTON, messages.VOTE_URL)], link_buttons(commands.build_vote_view()))
+
+    async def test_server_wrapped_asks_for_an_install_then_a_vote(self):
+        self.assertEqual([(messages.INVITE_BUTTON, messages.INVITE_URL), (messages.VOTE_BUTTON, messages.VOTE_URL)],
+                         link_buttons(commands.build_server_wrapped_view()))
+
+    async def test_buttons_are_links_that_never_expire(self):
+        """A non-link button would need a callback, and a timeout would grey the buttons out."""
+        for view in (commands.build_invite_view(), commands.build_vote_view(), commands.build_help_view(),
+                     commands.build_server_wrapped_view()):
+            with self.subTest(view=link_buttons(view)):
+                self.assertIsNone(view.timeout)
+                for button in view.children:
+                    self.assertEqual(discord.ButtonStyle.link, button.style)
+                    self.assertTrue(button.url.startswith("https://"))
+
+    async def test_labels_fit_discords_button_limit(self):
+        for label in (messages.INVITE_BUTTON, messages.USER_INSTALL_BUTTON, messages.VOTE_BUTTON,
+                      messages.SUPPORT_SERVER_BUTTON):
+            with self.subTest(label=label):
+                self.assertLessEqual(len(label), 80)
+
 
 def server_config(**overrides):
     config = {
@@ -141,12 +232,20 @@ def server_config(**overrides):
         "reaction_count_calculation_method": "unique_users",
         "hide_hof_post_below_threshold": False,
         "require_image_or_video": False,
+        "count_in_global_profiles": True,
     }
     config.update(overrides)
     return types.SimpleNamespace(**config)
 
 
 class BuildServerConfigEmbedTests(unittest.TestCase):
+    def test_points_to_troubleshooting_and_the_message_command(self):
+        embed = commands.build_server_config_embed(FakeGuild(), server_config())
+        last = embed.fields[-1].value
+
+        self.assertIn(messages.TROUBLESHOOT_BUTTON, last)
+        self.assertIn(messages.WHY_MENU_NAME, last)
+
     def test_shows_the_board_channel_threshold_and_counting_method(self):
         embed = commands.build_server_config_embed(FakeGuild(), server_config())
         board = field_named(embed, "Board").value
@@ -262,6 +361,17 @@ class UserServerProfileTests(unittest.IsolatedAsyncioTestCase):
             "monthly_reaction_rank": 3,
             "total_reaction_rank": 5,
         }
+        # The highlights read the database too; these tests are about the columns and the crowns
+        for target, name, replacement in (
+                (hall_of_fame_message_repo, "get_member_highlights",
+                 lambda *_args: {"best_post": None, "last_featured": None}),
+                (hall_of_fame_message_repo, "get_member_badge_facts",
+                 lambda *_args: {"posts_by_month": [], "first_featured": None, "biggest_post": 0,
+                                 "champion_months": 0}),
+                (server_user_repo, "get_stat_at_rank", lambda *_args: None)):
+            patcher = mock.patch.object(target, name, replacement)
+            patcher.start()
+            self.addCleanup(patcher.stop)
 
     def patch_top_of_stat(self, monthly=False, all_time=False):
         def is_top(_connection, _user_id, _guild_id, stat):
@@ -276,21 +386,21 @@ class UserServerProfileTests(unittest.IsolatedAsyncioTestCase):
     async def run_command(self, stats):
         await commands.user_server_profile(self.interaction, self.user, stats, object(),
                                            MONTH_EMOJI, ALL_TIME_EMOJI)
-        return self.interaction.response.messages[0]
+        # The command defers first, so the card goes out as its followup
+        return self.interaction.followup.messages[0]
 
     async def test_shows_the_totals_and_the_ranks(self):
         self.patch_top_of_stat()
         embed = await self.run_command(self.stats)
 
-        self.assertIn("40", field_named(embed, "Total Hall of Fame Messages").value)
-        self.assertIn("Rank: 1", field_named(embed, "Total Hall of Fame Messages").value)
+        self.assertIn("**40** posts · #1", field_named(embed, "All time").value)
 
     async def test_shows_the_monthly_standing(self):
         self.patch_top_of_stat()
         embed = await self.run_command(self.stats)
 
-        self.assertIn("4", field_named(embed, "This Month's Hall of Fame Messages").value)
-        self.assertIn("Rank: 2", field_named(embed, "This Month's Hall of Fame Messages").value)
+        self.assertIn("**4** posts · #2", field_named(embed, "This month").value)
+        self.assertIn("**60** reactions · #3", field_named(embed, "This month").value)
 
     async def test_shows_no_monthly_rank_for_a_member_with_nothing_this_month(self):
         self.patch_top_of_stat()
@@ -298,14 +408,14 @@ class UserServerProfileTests(unittest.IsolatedAsyncioTestCase):
                      this_month_hall_of_fame_message_reactions=0, monthly_reaction_rank=None)
         embed = await self.run_command(stats)
 
-        self.assertIn("Rank: N/A", field_named(embed, "This Month's Hall of Fame Messages").value)
-        self.assertIn("Rank: N/A", field_named(embed, "Reactions Received This Month").value)
+        self.assertIn("**0** posts · -", field_named(embed, "This month").value)
+        self.assertIn("**0** reactions · -", field_named(embed, "This month").value)
 
     async def test_shows_the_reactions_earned(self):
         self.patch_top_of_stat()
         embed = await self.run_command(self.stats)
 
-        self.assertIn("600", field_named(embed, "Total Reactions Received").value)
+        self.assertIn("**600** reactions · #5", field_named(embed, "All time").value)
 
     async def test_crowns_the_monthly_champion(self):
         self.patch_top_of_stat(monthly=True)
@@ -330,7 +440,7 @@ class UserServerProfileTests(unittest.IsolatedAsyncioTestCase):
         self.patch_top_of_stat()
         embed = await self.run_command(None)
 
-        self.assertIn("0", field_named(embed, "Total Hall of Fame Messages").value)
+        self.assertIn("**0** posts", field_named(embed, "All time").value)
 
     async def test_does_not_crown_a_member_with_no_history(self):
         self.patch_top_of_stat(monthly=True, all_time=True)
@@ -350,6 +460,12 @@ class UserServerProfileTests(unittest.IsolatedAsyncioTestCase):
         embed = await self.run_command(self.stats)
 
         self.assertIn("24 hours", embed.footer.text)
+
+    async def test_points_at_the_invite_command(self):
+        self.patch_top_of_stat()
+        embed = await self.run_command(self.stats)
+
+        self.assertIn("/invite", embed.footer.text)
 
 
 class ServerLeaderboardTests(unittest.IsolatedAsyncioTestCase):
@@ -398,6 +514,13 @@ class ServerLeaderboardTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("1. Champion: 4 messages", board)
         self.assertIn("2. Runner Up: 2 messages", board)
 
+    async def test_footer_says_when_it_updates_and_points_at_the_invite_command(self):
+        self.patch_top_users()
+        footer = (await self.run_command()).footer.text
+
+        self.assertIn("24 hours", footer)
+        self.assertIn("/invite", footer)
+
     async def test_shows_all_four_boards(self):
         self.patch_top_users()
         board = field_named(await self.run_command(), "Leaderboard").value
@@ -437,3 +560,182 @@ class ServerLeaderboardTests(unittest.IsolatedAsyncioTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class HofWrappedEmbedTests(unittest.IsolatedAsyncioTestCase):
+    """The card /hof_wrapped answers with, built from a member's precomputed Wrapped row."""
+
+    def wrapped_row(self):
+        return {"reaction_count": 12, "hof_message_posts": 3, "fan_of_users": "{}", "users_fans": "{}",
+                "most_used_channels": "{}", "most_used_emojis": "{}",
+                "user_ranks": '{"hallOfFameMessagePosts": 1, "mostUsedChannels": 2, "mostUsedEmojis": 3, '
+                              '"usersFans": 4, "fanOfUsers": 5}',
+                "most_reacted_post_message_id": None, "most_reacted_post_channel_id": None,
+                "most_reacted_post_reaction_count": 0}
+
+    @staticmethod
+    def member():
+        return types.SimpleNamespace(id=77, mention="<@77>",
+                                     display_avatar=types.SimpleNamespace(url="https://cdn.example/77-server.png"))
+
+    def bot_with_best_post(self, content):
+        """A bot that finds the member's best post, with the given text, where the Wrapped row points"""
+        post = types.SimpleNamespace(content=content, attachments=[], jump_url="https://discord.com/channels/1/5/6")
+
+        class Channel(discord.TextChannel):
+            def __init__(self):
+                pass
+
+            async def fetch_message(self, _message_id):
+                return post
+
+        channel = Channel()
+        return types.SimpleNamespace(get_channel=lambda _channel_id: channel)
+
+    def row_with_best_post(self):
+        return dict(self.wrapped_row(), most_reacted_post_message_id=6, most_reacted_post_channel_id=5,
+                    most_reacted_post_reaction_count=40)
+
+    async def best_post_field(self, content):
+        embed = await hof_wrapped.create_embed(self.member(), self.row_with_best_post(),
+                                               self.bot_with_best_post(content))
+        return next(field for field in embed.fields if "Most Reacted" in field.name)
+
+    async def test_footer_points_at_the_invite_command(self):
+        embed = await hof_wrapped.create_embed(self.member(), self.wrapped_row(), bot=None)
+
+        self.assertEqual(messages.INVITE_FOOTER, embed.footer.text)
+
+    async def test_thumbnail_is_the_avatar_the_member_shows_in_the_server(self):
+        embed = await hof_wrapped.create_embed(self.member(), self.wrapped_row(), bot=None)
+
+        self.assertEqual("https://cdn.example/77-server.png", embed.thumbnail.url)
+
+    async def test_a_long_best_post_is_cut_to_fit_the_field(self):
+        """Discord rejects the whole card over one field longer than 1024 characters"""
+        field = await self.best_post_field("a" * 2000)
+
+        self.assertLessEqual(len(field.value), commands.embed_field_value_limit)
+        self.assertTrue(field.value.endswith("..."))
+        self.assertIn("**Reactions:** 40", field.value)
+
+    async def test_a_best_post_that_fits_is_shown_whole(self):
+        field = await self.best_post_field("when the build finally passes on the first try")
+
+        self.assertTrue(field.value.endswith("when the build finally passes on the first try"))
+
+    async def test_a_best_post_with_no_text_says_so(self):
+        field = await self.best_post_field("")
+
+        self.assertIn("*No text content*", field.value)
+
+
+class MissingWrappedTextTests(unittest.TestCase):
+    """What /hof_wrapped and /server_hof_wrapped say when there is no Wrapped, and when the next one comes."""
+
+    def next_year(self, wrapped_year, now):
+        with mock.patch.object(hof_wrapped.version, "WRAPPED_YEAR", wrapped_year):
+            return hof_wrapped.next_wrapped_year(now)
+
+    def test_the_next_wrapped_is_this_years_until_it_is_made(self):
+        self.assertEqual(2026, self.next_year(2025, datetime.datetime(2026, 10, 23, tzinfo=datetime.timezone.utc)))
+
+    def test_the_next_wrapped_is_next_years_once_this_years_is_out(self):
+        self.assertEqual(2027, self.next_year(2026, datetime.datetime(2026, 12, 28, tzinfo=datetime.timezone.utc)))
+        self.assertEqual(2027, self.next_year(2026, datetime.datetime(2027, 1, 10, tzinfo=datetime.timezone.utc)))
+
+    def test_names_the_year_shown_and_the_next_one(self):
+        now = datetime.datetime(2026, 10, 23, tzinfo=datetime.timezone.utc)
+        with mock.patch.object(hof_wrapped.version, "WRAPPED_YEAR", 2025):
+            for server_has_wrapped in (True, False):
+                with self.subTest(server_has_wrapped=server_has_wrapped):
+                    text = hof_wrapped.missing_wrapped_text(server_has_wrapped, now=now)
+                    self.assertIn("Wrapped 2025", text)
+                    self.assertIn("Wrapped 2026 arrives in December 2026", text)
+
+    def test_a_member_who_opted_out_is_pointed_at_my_data(self):
+        text = hof_wrapped.missing_wrapped_text(server_has_wrapped=True, opted_out=True)
+
+        self.assertEqual(messages.WRAPPED_NONE_OPTED_OUT.format(command=command_refs.MY_DATA), text)
+
+
+def wrapped_guild(bot_avatar_url=None):
+    avatar = types.SimpleNamespace(url=bot_avatar_url) if bot_avatar_url else None
+    return types.SimpleNamespace(id=1, name="Test server", icon=None, me=types.SimpleNamespace(avatar=avatar))
+
+
+def server_wrapped_row():
+    return {"user_id": 77, "hof_message_posts": 3, "reaction_count": 12, "most_used_channels": '{"5": 3}',
+            "most_used_emojis": '{"😂": 3}', "most_reacted_post_reaction_count": 9,
+            "most_reacted_post_channel_id": 5, "most_reacted_post_message_id": 6}
+
+
+class ServerWrappedEmbedTests(unittest.TestCase):
+    """The card posted on every board in December, and what /server_hof_wrapped answers with."""
+
+    def test_footer_carries_the_brand_and_the_invite_ask(self):
+        embed = hof_wrapped.create_server_embed(wrapped_guild(), [server_wrapped_row()])
+
+        self.assertEqual(messages.SERVER_WRAPPED_FOOTER, embed.footer.text)
+        self.assertIn("/invite", embed.footer.text)
+
+    def test_footer_shows_the_bots_logo(self):
+        embed = hof_wrapped.create_server_embed(wrapped_guild("https://cdn.example/bot.png"), [server_wrapped_row()])
+
+        self.assertEqual("https://cdn.example/bot.png", embed.footer.icon_url)
+
+    def test_footer_leaves_out_the_logo_when_the_bot_has_no_avatar(self):
+        embed = hof_wrapped.create_server_embed(wrapped_guild(), [server_wrapped_row()])
+
+        self.assertIsNone(embed.footer.icon_url)
+
+    def test_still_points_members_to_their_own_wrapped(self):
+        embed = hof_wrapped.create_server_embed(wrapped_guild(), [server_wrapped_row()])
+
+        self.assertTrue(any(command_refs.HOF_WRAPPED in field.value for field in embed.fields))
+
+    def test_footer_fits_on_one_line(self):
+        self.assertLessEqual(len(messages.SERVER_WRAPPED_FOOTER), 60)
+
+
+class PostServerWrappedTests(unittest.IsolatedAsyncioTestCase):
+    """The manual December run that posts the server Wrapped on each board."""
+
+    async def test_posts_the_card_with_the_install_and_vote_buttons(self):
+        sent = []
+
+        class Board(discord.TextChannel):
+            def __init__(self):
+                self.name = "hall-of-fame"
+
+            def permissions_for(self, _member):
+                return types.SimpleNamespace(send_messages=True)
+
+            async def send(self, embed=None, view=None):
+                sent.append((embed, view))
+
+        board = Board()
+        guild = wrapped_guild()
+        guild.get_channel = lambda _channel_id: board
+        with mock.patch.object(hof_wrapped.hof_wrapped_repo, "get_all_hof_wrapped_for_guild",
+                               return_value=[server_wrapped_row()]), \
+                mock.patch.object(hof_wrapped.server_config_repo, "get_parameter_value", return_value=10):
+            await hof_wrapped.post_server_wrapped_embed(guild, connection=None)
+
+        self.assertEqual(1, len(sent))
+        embed, view = sent[0]
+        self.assertEqual(messages.SERVER_WRAPPED_FOOTER, embed.footer.text)
+        self.assertEqual(link_buttons(commands.build_server_wrapped_view()), link_buttons(view))
+
+
+class SentViewTests(unittest.IsolatedAsyncioTestCase):
+    async def test_views_that_are_sent_are_already_stopped(self):
+        """discord.py keeps every unfinished view it sends until restart; a stopped one is still drawn."""
+        for build in (commands.build_help_view, commands.build_vote_view, commands.build_invite_view,
+                      commands.build_server_wrapped_view, commands.build_check_setup_view, commands.build_welcome_view):
+            with self.subTest(view=build.__name__):
+                self.assertTrue(build().is_finished())
+
+    async def test_the_registered_troubleshoot_view_is_running(self):
+        """The one main registers with bot.add_view answers every press, so it must not be stopped."""
+        self.assertFalse(commands.SetupCheckView().is_finished())

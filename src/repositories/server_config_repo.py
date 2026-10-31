@@ -18,7 +18,8 @@ ALLOWED_COLUMNS = {
     "reaction_count_calculation_method",
     "hide_hof_post_below_threshold",
     "joined_date",
-    "require_image_or_video"
+    "require_image_or_video",
+    "count_in_global_profiles"
 }
 
 def create_server_config_table(connection):
@@ -42,7 +43,8 @@ def create_server_config_table(connection):
                 server_member_count INT DEFAULT 0,
                 reaction_count_calculation_method VARCHAR(50) DEFAULT 'most_reactions_on_emoji',
                 hide_hof_post_below_threshold BOOLEAN DEFAULT TRUE,
-                require_image_or_video BOOLEAN DEFAULT FALSE
+                require_image_or_video BOOLEAN DEFAULT FALSE,
+                count_in_global_profiles BOOLEAN DEFAULT TRUE
             )
         """
     )
@@ -51,32 +53,71 @@ def create_server_config_table(connection):
         cursor.execute("ALTER TABLE server_configs ADD COLUMN IF NOT EXISTS require_image_or_video BOOLEAN DEFAULT FALSE")
     except Exception:
         connection.rollback()
+    # Existing servers count toward members' global profiles until an admin opts out, the same as new ones
+    try:
+        cursor.execute("ALTER TABLE server_configs ADD COLUMN IF NOT EXISTS count_in_global_profiles BOOLEAN DEFAULT TRUE")
+    except Exception:
+        connection.rollback()
+    # When the daily task first found the server missing from the bot's guilds, so a server is only
+    # cleaned up after it has stayed missing for a while. NULL while the bot is in the server
+    try:
+        cursor.execute("ALTER TABLE server_configs ADD COLUMN IF NOT EXISTS missing_since TIMESTAMPTZ")
+    except Exception:
+        connection.rollback()
 
     connection.commit()
     cursor.close()
+
+def record_missing_guilds(connection, missing_guild_ids, now) -> dict:
+    """
+    Remember which servers the bot could not find today. A server keeps the date it was first found
+    missing for as long as it stays missing, and loses it as soon as the bot sees it again
+    :param connection: The database connection
+    :param missing_guild_ids: The servers with a configuration that are not among the bot's guilds
+    :param now: The time of this check
+    :return: Every server that is missing, mapped to when it was first found missing
+    """
+    missing_guild_ids = [int(guild_id) for guild_id in missing_guild_ids]
+    cursor = connection.cursor()
+    cursor.execute("""
+        UPDATE server_configs SET missing_since = NULL
+        WHERE missing_since IS NOT NULL AND NOT (guild_id = ANY(%s::bigint[]))
+    """, (missing_guild_ids,))
+    cursor.execute("""
+        UPDATE server_configs SET missing_since = %s
+        WHERE missing_since IS NULL AND guild_id = ANY(%s::bigint[])
+    """, (now, missing_guild_ids))
+    cursor.execute("SELECT guild_id, missing_since FROM server_configs WHERE missing_since IS NOT NULL")
+    missing_since = {row[0]: row[1] for row in cursor.fetchall()}
+    connection.commit()
+    cursor.close()
+    return missing_since
 
 def insert_server_with_parameters(connection, guild_id, hall_of_fame_channel_id, reaction_threshold,
                                   post_due_date, leaderboard_message_ids, sweep_limit, sweep_limited,
                                   include_author_in_reaction_calculation, allow_messages_in_hof_channel,
                                   custom_emoji_check_logic, whitelisted_emojis, joined_date, leaderboard_setup,
                                   ignore_bot_messages, server_member_count, reaction_count_calculation_method,
-                                  hide_hof_post_below_threshold, require_image_or_video):
+                                  hide_hof_post_below_threshold, require_image_or_video,
+                                  count_in_global_profiles=True):
     cursor = connection.cursor()
     cursor.execute("""
         INSERT INTO server_configs (
             guild_id, hall_of_fame_channel_id, reaction_threshold, post_due_date, leaderboard_message_ids,
             sweep_limit, sweep_limited, include_author_in_reaction_calculation, allow_messages_in_hof_channel,
             custom_emoji_check_logic, whitelisted_emojis, joined_date, leaderboard_setup, ignore_bot_messages,
-            server_member_count, reaction_count_calculation_method, hide_hof_post_below_threshold, require_image_or_video
+            server_member_count, reaction_count_calculation_method, hide_hof_post_below_threshold, require_image_or_video,
+            count_in_global_profiles
         ) VALUES (
-            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
         )
         ON CONFLICT (guild_id) DO NOTHING
     """, (
         guild_id, hall_of_fame_channel_id, reaction_threshold, post_due_date, leaderboard_message_ids,
         sweep_limit, sweep_limited, include_author_in_reaction_calculation, allow_messages_in_hof_channel,
         custom_emoji_check_logic, whitelisted_emojis, joined_date, leaderboard_setup, ignore_bot_messages,
-        server_member_count, reaction_count_calculation_method, hide_hof_post_below_threshold, require_image_or_video
+        server_member_count, reaction_count_calculation_method, hide_hof_post_below_threshold, require_image_or_video,
+        count_in_global_profiles
     ))
     connection.commit()
     cursor.close()
@@ -146,7 +187,8 @@ def get_server_classes(connection) -> dict[int, ServerClass]:
                leaderboard_message_ids, sweep_limit, sweep_limited, include_author_in_reaction_calculation,
                allow_messages_in_hof_channel, custom_emoji_check_logic, whitelisted_emojis,
                joined_date, leaderboard_setup, ignore_bot_messages, server_member_count,
-               reaction_count_calculation_method, hide_hof_post_below_threshold, require_image_or_video
+               reaction_count_calculation_method, hide_hof_post_below_threshold, require_image_or_video,
+               count_in_global_profiles
         FROM server_configs
     """)
     rows = cursor.fetchall()
@@ -171,7 +213,8 @@ def get_server_classes(connection) -> dict[int, ServerClass]:
             server_member_count=row[14],
             reaction_count_calculation_method=row[15],
             hide_hof_post_below_threshold=row[16],
-            require_image_or_video=row[17] if len(row) > 17 else False
+            require_image_or_video=row[17] if len(row) > 17 else False,
+            count_in_global_profiles=row[18] if len(row) > 18 and row[18] is not None else True
         )
         classes[server_class.guild_id] = server_class
     return classes
@@ -199,7 +242,8 @@ def row_to_server_class(row) -> ServerClass:
         hide_hof_post_below_threshold=row[16],
         leaderboard_message_ids=row[4],
         server_member_count=row[14],
-        require_image_or_video=row[17] if len(row) > 17 else False
+        require_image_or_video=row[17] if len(row) > 17 else False,
+        count_in_global_profiles=row[18] if len(row) > 18 and row[18] is not None else True
     )
 
 
@@ -211,7 +255,8 @@ def get_all_server_configs(connection) -> list[ServerClass]:
                leaderboard_message_ids, sweep_limit, sweep_limited, include_author_in_reaction_calculation,
                allow_messages_in_hof_channel, custom_emoji_check_logic, whitelisted_emojis,
                joined_date, leaderboard_setup, ignore_bot_messages, server_member_count,
-               reaction_count_calculation_method, hide_hof_post_below_threshold, require_image_or_video
+               reaction_count_calculation_method, hide_hof_post_below_threshold, require_image_or_video,
+               count_in_global_profiles
         FROM server_configs
     """)
     rows = cursor.fetchall()

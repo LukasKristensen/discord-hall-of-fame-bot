@@ -169,10 +169,15 @@ class FakeSentMessage:
 class FakeTextChannel:
     """A channel that reports a fixed permission set for the bot."""
 
-    def __init__(self, channel_id=100, permissions=None):
+    def __init__(self, channel_id=100, permissions=None, topic=None):
         self.id = channel_id
         self.permissions = permissions if permissions is not None else FakePermissions()
+        self.topic = topic
         self.sent = []
+        self.edits = []
+
+    async def edit(self, **kwargs):
+        self.edits.append(kwargs)
 
     def permissions_for(self, _member):
         return self.permissions
@@ -214,6 +219,37 @@ class FakeGuildWithChannels(FakeMemberGuild):
 
     def get_channel(self, channel_id):
         return self.channels.get(channel_id)
+
+
+class FakePermissionWarningStore:
+    """The permission_warning table held in memory, patched over the repository for the daily sweep."""
+
+    def __init__(self):
+        self.rows = {}
+        self.saves = 0
+
+    def install(self, test_case):
+        from unittest import mock
+        from repositories import permission_warning_repo
+        for name, replacement in (("get_permission_warnings", self.get),
+                                  ("save_permission_warnings", self.save),
+                                  ("delete_permission_warnings", self.delete)):
+            patcher = mock.patch.object(permission_warning_repo, name, replacement)
+            patcher.start()
+            test_case.addCleanup(patcher.stop)
+        return self
+
+    def get(self, _connection):
+        return dict(self.rows)
+
+    def save(self, _connection, records):
+        self.saves += 1
+        for guild_id, missing, sent, first, last in records:
+            self.rows[guild_id] = (frozenset(missing), sent, first, last)
+
+    def delete(self, _connection, guild_ids):
+        for guild_id in guild_ids:
+            self.rows.pop(guild_id, None)
 
 
 class FakeBotWithGuildLookup:

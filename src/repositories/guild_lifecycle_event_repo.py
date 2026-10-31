@@ -42,6 +42,23 @@ def insert_guild_lifecycle_event(connection, guild_id, event_type, occurred_at):
     cursor.close()
 
 
+def get_latest_event_type(connection, guild_id):
+    """The type of the server's most recent join or leave, or None when none was ever recorded."""
+    cursor = connection.cursor()
+    cursor.execute(
+        """
+        SELECT event_type FROM guild_lifecycle_event
+        WHERE guild_id = %s
+        ORDER BY occurred_at DESC, id DESC
+        LIMIT 1
+        """,
+        (guild_id,),
+    )
+    row = cursor.fetchone()
+    cursor.close()
+    return row[0] if row else None
+
+
 def get_monthly_join_leave_counts(connection, start_month, end_month):
     cursor = connection.cursor()
     cursor.execute(

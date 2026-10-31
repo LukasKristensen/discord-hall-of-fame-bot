@@ -1,15 +1,17 @@
+import datetime
 import types
 import unittest
 from unittest import mock
 
 import discord
 
-from tests.fakes import (FakeBotWithGuildLookup, FakeChannelMessage, FakeGuildWithChannels, FakeMemberGuild,
-                         FakePermissions, FakeTextChannel)
+from tests.fakes import (FakeBotWithGuildLookup, FakeChannelMessage, FakeConnection, FakeGuildWithChannels,
+                         FakeMemberGuild, FakePermissionWarningStore, FakePermissions, FakeTextChannel)
 from tests.test_server_class import build_server
 
 import events
 import utils
+from translations import messages
 
 
 class OnMessageTests(unittest.IsolatedAsyncioTestCase):
@@ -138,6 +140,9 @@ class DailyPermissionCheckTests(unittest.IsolatedAsyncioTestCase):
         logged_on.start()
         self.addCleanup(logged_on.stop)
 
+        self.store = FakePermissionWarningStore().install(self)
+        self.now = datetime.datetime(2026, 10, 1, 12, tzinfo=datetime.timezone.utc)
+
         notify = mock.patch("events.utils.send_message_to_highest_prio_channel", new=self.record_warning)
         notify.start()
         self.addCleanup(notify.stop)
@@ -151,15 +156,18 @@ class DailyPermissionCheckTests(unittest.IsolatedAsyncioTestCase):
 
     async def record_warning(self, _bot, guild, content):
         self.warnings.append((guild.id, content))
+        return True
 
-    async def sweep(self, permissions, allow_messages=False, channel_missing=False):
-        channel = FakeTextChannel(channel_id=self.HOF_CHANNEL_ID, permissions=permissions)
+    async def sweep(self, permissions, allow_messages=False, channel_missing=False, topic=None, days_later=0):
+        channel = FakeTextChannel(channel_id=self.HOF_CHANNEL_ID, permissions=permissions, topic=topic)
+        self.channel = channel
         channels = {} if channel_missing else {self.HOF_CHANNEL_ID: channel}
         guild = FakeGuildWithChannels(guild_id=200, channels=channels)
         bot = FakeBotWithGuildLookup({200: guild})
         server = build_server(guild_id=200, hall_of_fame_channel_id=self.HOF_CHANNEL_ID,
                               allow_messages_in_hof_channel=allow_messages)
-        await events.check_write_permissions_to_hall_of_fame_channel(bot, {200: server})
+        self.now += datetime.timedelta(days=days_later)
+        await events.check_write_permissions_to_hall_of_fame_channel(bot, {200: server}, FakeConnection(), self.now)
         return self.warnings
 
     async def test_says_nothing_when_every_permission_is_present(self):
@@ -177,6 +185,99 @@ class DailyPermissionCheckTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual([], await self.sweep(FakePermissions(manage_messages=False)))
         self.assertEqual([], await self.sweep(FakePermissions(manage_messages=False), allow_messages=True))
 
+    async def test_does_not_repeat_a_warning_the_next_day(self):
+        await self.sweep(FakePermissions(send_messages=False))
+        warnings = await self.sweep(FakePermissions(send_messages=False), days_later=1)
+
+        self.assertEqual(1, len(warnings))
+
+    async def test_warns_again_once_the_last_warning_is_old_enough(self):
+        await self.sweep(FakePermissions(send_messages=False))
+        warnings = await self.sweep(FakePermissions(send_messages=False),
+                                    days_later=events.permission_warning_repeat_days)
+
+        self.assertEqual(2, len(warnings))
+
+    async def test_a_restart_does_not_warn_again(self):
+        """The warning is saved in the database, so a deploy does not remind every broken server that day."""
+        self.store.rows[200] = (frozenset({"Send Messages"}), 1, self.now, self.now)
+
+        self.assertEqual([], await self.sweep(FakePermissions(send_messages=False), days_later=1))
+
+    async def test_stops_after_the_last_warning_about_the_same_permissions(self):
+        """A server that leaves the board broken on purpose is not reminded every week forever."""
+        for _ in range(events.permission_warning_limit + 3):
+            await self.sweep(FakePermissions(send_messages=False), days_later=events.permission_warning_repeat_days)
+
+        self.assertEqual(events.permission_warning_limit, len(self.warnings))
+        self.assertEqual(events.permission_warning_limit, self.store.rows[200][1])
+
+    async def test_the_last_warning_says_it_is_the_last(self):
+        for _ in range(events.permission_warning_limit):
+            await self.sweep(FakePermissions(send_messages=False), days_later=events.permission_warning_repeat_days)
+
+        contents = [content for _, content in self.warnings]
+        self.assertTrue(contents[-1].endswith(messages.MISSING_HOF_CHANNEL_PERMISSIONS_LAST_WARNING))
+        self.assertFalse(any(messages.MISSING_HOF_CHANNEL_PERMISSIONS_LAST_WARNING in content
+                             for content in contents[:-1]))
+
+    async def test_keeps_the_date_of_the_first_warning(self):
+        first = self.now
+        await self.sweep(FakePermissions(send_messages=False))
+        await self.sweep(FakePermissions(send_messages=False), days_later=events.permission_warning_repeat_days)
+
+        missing, sent, first_warned_at, last_warned_at = self.store.rows[200]
+        self.assertEqual((frozenset({"Send Messages"}), 2, first, self.now),
+                         (missing, sent, first_warned_at, last_warned_at))
+
+    async def test_starts_counting_again_when_different_permissions_go_missing(self):
+        for _ in range(events.permission_warning_limit):
+            await self.sweep(FakePermissions(send_messages=False), days_later=events.permission_warning_repeat_days)
+        await self.sweep(FakePermissions(send_messages=False, view_channel=False), days_later=1)
+
+        self.assertEqual(events.permission_warning_limit + 1, len(self.warnings))
+        self.assertEqual(1, self.store.rows[200][1])
+
+    async def test_a_fix_deletes_the_record(self):
+        await self.sweep(FakePermissions(send_messages=False))
+        await self.sweep(FakePermissions(), days_later=1)
+
+        self.assertNotIn(200, self.store.rows)
+
+    async def test_a_failed_save_is_logged(self):
+        def fail(*_args):
+            raise RuntimeError("database went away")
+
+        with mock.patch("events.permission_warning_repo.save_permission_warnings", new=fail):
+            warnings = await self.sweep(FakePermissions(send_messages=False))
+
+        self.assertEqual(1, len(warnings))
+        self.assertTrue(any("Could not save the permission warnings" in entry for entry in self.logged))
+
+    async def test_warns_again_when_a_different_permission_goes_missing(self):
+        await self.sweep(FakePermissions(send_messages=False))
+        warnings = await self.sweep(FakePermissions(send_messages=False, view_channel=False), days_later=1)
+
+        self.assertEqual(2, len(warnings))
+        self.assertIn("View Channel", warnings[1][1])
+
+    async def test_warns_again_when_a_fixed_permission_breaks_again(self):
+        await self.sweep(FakePermissions(send_messages=False))
+        await self.sweep(FakePermissions(), days_later=1)
+        warnings = await self.sweep(FakePermissions(send_messages=False), days_later=1)
+
+        self.assertEqual(2, len(warnings))
+
+    async def test_tries_again_tomorrow_when_the_warning_could_not_be_posted(self):
+        async def nowhere_to_post(_bot, guild, content):
+            self.warnings.append((guild.id, content))
+            return False
+
+        with mock.patch("events.utils.send_message_to_highest_prio_channel", new=nowhere_to_post):
+            await self.sweep(FakePermissions(send_messages=False))
+
+        self.assertNotIn(200, self.store.rows)
+
     async def test_reports_view_channel_alongside_the_others(self):
         warnings = await self.sweep(FakePermissions(send_messages=False, view_channel=False))
 
@@ -184,12 +285,13 @@ class DailyPermissionCheckTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("Send Messages", content)
         self.assertIn("View Channel", content)
 
-    async def test_reports_a_missing_hall_of_fame_channel_with_the_server_name(self):
+    async def test_reports_a_missing_hall_of_fame_channel_without_the_server_name(self):
+        """The server ID goes with the log on its own, and a server's name can be a person's name."""
         await self.sweep(FakePermissions(), channel_missing=True)
 
         self.assertEqual(1, len(self.logged))
         self.assertIn("Could not find the Hall of Fame channel", self.logged[0])
-        self.assertIn("Test Server", self.logged[0])
+        self.assertNotIn("Test Server", self.logged[0])
 
     async def test_skips_a_missing_channel_the_reactions_already_reported(self):
         """One line per server for the whole boot, whichever of the two noticed it first."""
@@ -197,6 +299,46 @@ class DailyPermissionCheckTests(unittest.IsolatedAsyncioTestCase):
         await self.sweep(FakePermissions(), channel_missing=True)
 
         self.assertEqual([], self.logged)
+
+    async def test_moves_a_board_off_the_old_default_topic(self):
+        await self.sweep(FakePermissions(), topic=messages.LEGACY_HOF_CHANNEL_TOPICS[0])
+
+        self.assertEqual([messages.HOF_CHANNEL_TOPIC], [edit["topic"] for edit in self.channel.edits])
+
+    async def test_shortens_the_topic_with_the_full_invite_link(self):
+        await self.sweep(FakePermissions(), topic=messages.LEGACY_HOF_CHANNEL_TOPICS[1])
+
+        self.assertEqual([messages.HOF_CHANNEL_TOPIC], [edit["topic"] for edit in self.channel.edits])
+
+    async def test_never_touches_a_topic_an_admin_wrote(self):
+        await self.sweep(FakePermissions(), topic="Our funniest moments, no spoilers")
+
+        self.assertEqual([], self.channel.edits)
+
+    async def test_does_not_add_a_topic_an_admin_removed(self):
+        await self.sweep(FakePermissions(), topic=None)
+
+        self.assertEqual([], self.channel.edits)
+
+    async def test_leaves_the_old_topic_without_manage_channels(self):
+        await self.sweep(FakePermissions(manage_channels=False), topic=messages.LEGACY_HOF_CHANNEL_TOPICS[0])
+
+        self.assertEqual([], self.channel.edits)
+
+    async def test_a_failed_topic_change_still_reports_missing_permissions(self):
+        async def refuse(**_kwargs):
+            raise discord.Forbidden(types.SimpleNamespace(status=403, reason="Forbidden"), "Missing Access")
+
+        channel = FakeTextChannel(channel_id=self.HOF_CHANNEL_ID, permissions=FakePermissions(send_messages=False),
+                                  topic=messages.LEGACY_HOF_CHANNEL_TOPICS[0])
+        channel.edit = refuse
+        guild = FakeGuildWithChannels(guild_id=200, channels={self.HOF_CHANNEL_ID: channel})
+        server = build_server(guild_id=200, hall_of_fame_channel_id=self.HOF_CHANNEL_ID)
+        await events.check_write_permissions_to_hall_of_fame_channel(FakeBotWithGuildLookup({200: guild}),
+                                                                     {200: server}, FakeConnection())
+
+        self.assertEqual(1, len(self.warnings))
+        self.assertIn("Send Messages", self.warnings[0][1])
 
 
 if __name__ == "__main__":

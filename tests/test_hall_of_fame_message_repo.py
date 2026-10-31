@@ -25,10 +25,33 @@ class CreateTableTests(unittest.TestCase):
         connection = FakeConnection()
         hall_of_fame_message_repo.create_hall_of_fame_message_table(connection)
 
-        index = " ".join(connection.queries[-1].split())
-        self.assertIn("CREATE INDEX IF NOT EXISTS", index)
-        self.assertIn("ON hall_of_fame_message (guild_id, created_at)", index)
+        indexes = [" ".join(query.split()) for query in connection.queries if "CREATE INDEX" in query]
+        self.assertTrue(any("ON hall_of_fame_message (guild_id, created_at)" in index for index in indexes))
+        self.assertTrue(all("IF NOT EXISTS" in index for index in indexes))
         self.assertEqual(1, connection.commits)
+
+    def test_indexes_the_table_by_author(self):
+        """/my_data, deleting a member's data and the global profile read one member's posts across guilds."""
+        connection = FakeConnection()
+        hall_of_fame_message_repo.create_hall_of_fame_message_table(connection)
+
+        indexes = [" ".join(query.split()) for query in connection.queries if "CREATE INDEX" in query]
+        self.assertTrue(any("ON hall_of_fame_message (author_id)" in index for index in indexes))
+
+
+class GetPostActivityTests(unittest.TestCase):
+    def test_reads_the_total_latest_and_today_for_one_guild(self):
+        latest = datetime.datetime(2026, 10, 17, 9, 0)
+        connection = FakeConnection(row=(40, latest, 3))
+        activity = hall_of_fame_message_repo.get_post_activity(connection, 200)
+
+        self.assertEqual({"total": 40, "latest": latest, "today": 3}, activity)
+        self.assertEqual((200,), connection.parameters[0])
+
+    def test_a_guild_without_posts_has_no_latest(self):
+        connection = FakeConnection(row=(0, None, 0))
+        self.assertEqual({"total": 0, "latest": None, "today": 0},
+                         hall_of_fame_message_repo.get_post_activity(connection, 200))
 
 
 class FindHallOfFameMessageTests(unittest.TestCase):
@@ -94,19 +117,26 @@ class InsertHallOfFameMessageTests(unittest.TestCase):
             connection, 4242, 100, 200, 5555, 12, 77,
             datetime.datetime(2026, 3, 1, 12, 0), video_link_message_id)
 
-    def test_writes_every_column_in_order(self):
+    def test_writes_every_column(self):
         connection = FakeConnection()
         self.insert(connection)
 
-        self.assertEqual(
-            (4242, 100, 200, 5555, 12, 77, datetime.datetime(2026, 3, 1, 12, 0), None),
-            connection.parameters[0])
+        self.assertEqual({"message_id": 4242, "channel_id": 100, "guild_id": 200, "hall_of_fame_message_id": 5555,
+                          "reaction_count": 12, "author_id": 77, "created_at": datetime.datetime(2026, 3, 1, 12, 0),
+                          "video_link_message_id": None}, connection.parameters[0])
+
+    def test_the_author_is_both_looked_up_and_stored(self):
+        """Once to check whether they opted out, once as the value stored when they did not."""
+        connection = FakeConnection()
+        self.insert(connection)
+
+        self.assertEqual(2, connection.queries[0].count("%(author_id)s"))
 
     def test_keeps_the_video_link_when_there_is_one(self):
         connection = FakeConnection()
         self.insert(connection, video_link_message_id=6666)
 
-        self.assertEqual(6666, connection.parameters[0][-1])
+        self.assertEqual(6666, connection.parameters[0]["video_link_message_id"])
 
     def test_replaces_a_message_that_is_already_recorded(self):
         """A message can be reposted after being hidden, and must not become a second row."""
