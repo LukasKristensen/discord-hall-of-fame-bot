@@ -82,7 +82,7 @@ class Message:
 class SourceChannel(discord.TextChannel):
     """A text channel members post in. A real TextChannel subclass, as Wrapped checks the type"""
 
-    def __init__(self, channel_id, guild, readable=True):
+    def __init__(self, channel_id, guild, readable=True, nsfw=False):
         self.id = channel_id
         self.guild = guild
         self.name = f"channel-{channel_id}"
@@ -90,6 +90,10 @@ class SourceChannel(discord.TextChannel):
         self.readable = readable
         # Read by the setup check, which only looks at channels members can react in
         self._type = discord.ChannelType.text.value
+        # What TextChannel.is_nsfw and TextChannel.flags read: whether the channel is age-restricted, and
+        # the channel flags, which carry whether Discord hid the channel from the bot
+        self.nsfw = nsfw
+        self._flags = 0
         guild.channels_by_id[channel_id] = self
 
     def permissions_for(self, _member):
@@ -148,7 +152,12 @@ class Board:
         self.posts = {}
         self.sent = []
         self.next_id = 700_000 + channel_id % 1000 * 1000
+        # Whether the board is age-restricted, which decides what may be posted to it
+        self.nsfw = False
         guild.channels_by_id[channel_id] = self
+
+    def is_nsfw(self):
+        return self.nsfw
 
     async def send(self, content=None, embed=None, **_kwargs):
         self.next_id += 1

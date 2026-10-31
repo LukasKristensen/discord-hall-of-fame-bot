@@ -201,5 +201,33 @@ class GateTests(ReactionPathTestCase):
         self.assertIsNotNone(self.stored())
 
 
+class AgeRestrictedChannelTests(ReactionPathTestCase):
+    async def test_a_message_from_an_age_restricted_channel_is_neither_posted_nor_stored(self):
+        self.channel.nsfw = True
+        await self.react(*FANS[:4])
+
+        self.assertIsNone(self.stored())
+        self.assertEqual([], self.board.sent)
+
+    async def test_a_post_whose_channel_became_age_restricted_hides_but_keeps_its_row(self):
+        await self.react(*FANS[:3])
+        self.channel.nsfw = True
+        await self.react(FANS[3])
+
+        self.assertEqual([], self.board_post().embeds)
+        self.assertIsNotNone(self.stored())
+
+    async def test_making_the_board_age_restricted_brings_it_back_with_its_count(self):
+        await self.react(*FANS[:3])
+        self.channel.nsfw = True
+        await self.react(FANS[3])
+        self.board.nsfw = True
+        await self.react(FANS[4])
+
+        self.assertEqual(1, len(self.board.sent))
+        self.assertEqual(1, len(self.board_post().embeds))
+        self.assertEqual(5, self.stored()["reaction_count"])
+
+
 if __name__ == "__main__":
     unittest.main()
