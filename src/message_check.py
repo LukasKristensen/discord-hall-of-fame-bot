@@ -51,6 +51,10 @@ def rule_text(rule: str, server_config) -> str:
         return messages.WHY_TOO_OLD.format(days=server_config.post_due_date, command=command_refs.SET_POST_DUE_DATE)
     if rule == utils.RULE_BOT_MESSAGE:
         return messages.WHY_BOT_MESSAGE.format(command=command_refs.IGNORE_BOT_MESSAGES)
+    if rule == utils.RULE_AGE_RESTRICTED:
+        return messages.WHY_AGE_RESTRICTED
+    if rule == utils.RULE_FLAGGED_MEDIA:
+        return messages.WHY_FLAGGED_MEDIA
     return messages.WHY_NO_MEDIA.format(command=command_refs.REQUIRE_IMAGE_OR_VIDEO)
 
 
@@ -112,8 +116,8 @@ async def explain(message: discord.Message, asked_by_id: int, bot: discord.Clien
     db_message = await lookup(connect, lambda connection: hall_of_fame_message_repo.find_hall_of_fame_message(
         connection, guild.id, channel.id, message.id))
     reaction_config = server_config.reaction_config()
-    rule = utils.rule_blocking_post(source_message, db_message, server_config, now)
     board = bot.get_channel(board_id)
+    rule = utils.rule_blocking_post(source_message, db_message, server_config, now, board=board)
 
     if db_message:
         return await explain_stored_post(source_message, db_message, board, rule, connect, server_config)
@@ -178,6 +182,9 @@ async def explain_stored_post(source_message, db_message, board, rule, connect, 
         # A link built from the board the server has now would lead nowhere
         return Verdict(POSTED_ELSEWHERE, messages.WHY_POSTED_ELSEWHERE.format(
             board=board.mention if board is not None else f"<#{server_config.hall_of_fame_channel_id}>"))
+    if rule in utils.SAFETY_RULES:
+        # Even a post the board still shows, since validate_message hides it on the next reaction
+        return Verdict(rule, rule_text(rule, server_config))
     if shown:
         return Verdict(ALREADY_POSTED, messages.WHY_ALREADY_POSTED.format(
             link=post_link(guild.id, board.id, post_id)))

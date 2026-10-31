@@ -59,6 +59,17 @@ def author_to_store(connection, author_id: int) -> tuple[int, bool]:
 RULE_TOO_OLD = "too_old"
 RULE_BOT_MESSAGE = "bot_message"
 RULE_NO_MEDIA = "no_media"
+RULE_AGE_RESTRICTED = "age_restricted"
+RULE_FLAGGED_MEDIA = "flagged_media"
+# Rules that keep a message off the board for safety rather than by the server's choice. A post already on
+# the board that breaks one is hidden, and comes back once the rule stops applying
+SAFETY_RULES = (RULE_AGE_RESTRICTED, RULE_FLAGGED_MEDIA)
+
+# Set by Discord's content scanning on attachments and embeds, with the same bits on both. discord.py 2.5
+# names only the explicit one, so all three are read from the raw flags value
+EXPLICIT_CONTENT = 1 << 4
+GORE_CONTENT = 1 << 6
+SELF_HARM_CONTENT = 1 << 7
 
 
 def has_image_or_video(message: discord.Message) -> bool:
@@ -77,8 +88,37 @@ def has_image_or_video(message: discord.Message) -> bool:
     return False
 
 
+def content_scan_flags(message) -> int:
+    """
+    The content scanning flags Discord set on any of a message's attachments and embeds, combined. Scanning
+    can finish after a message is sent, so a message fetched later can carry flags it did not have at first
+    :param message: The message to look at
+    :return: The EXPLICIT_CONTENT, GORE_CONTENT and SELF_HARM_CONTENT bits that are set
+    """
+    flags = 0
+    for item in [*(getattr(message, "attachments", None) or []), *(getattr(message, "embeds", None) or [])]:
+        item_flags = getattr(item, "flags", None)
+        if item_flags is not None:
+            flags |= item_flags.value
+    return flags & (EXPLICIT_CONTENT | GORE_CONTENT | SELF_HARM_CONTENT)
+
+
+def has_flagged_media(message, board) -> bool:
+    """
+    Whether a message carries media Discord flagged that may not go on this board. Gore and self-harm are
+    never reposted, since a repost puts them in front of members who did not choose to see them. Explicit
+    media may go where Discord allows it: a board that is age-restricted itself
+    :param message: The message, or a post on the board
+    :param board: The board channel, None when it is missing
+    """
+    flags = content_scan_flags(message)
+    if flags & (GORE_CONTENT | SELF_HARM_CONTENT):
+        return True
+    return bool(flags & EXPLICIT_CONTENT) and not setup_check.is_age_restricted(board)
+
+
 def rule_blocking_post(source_message: discord.Message, db_message, server_config: server_class.Server,
-                       now: datetime.datetime = None) -> str | None:
+                       now: datetime.datetime = None, board=None) -> str | None:
     """
     The first of the server's rules about which messages qualify that a message breaks. Shared by
     validate_message and the Why isn't this on the board? command, so the explanation a member gets is
@@ -87,9 +127,16 @@ def rule_blocking_post(source_message: discord.Message, db_message, server_confi
     :param db_message: Its stored Hall of Fame post, or None when it has none
     :param server_config: The in memory configuration of the server
     :param now: The current time, for tests
+    :param board: The board channel, whose own age restriction decides what may be posted there
     :return: One of the RULE_ names, or None when the message breaks none of them
     """
     now = now or datetime.datetime.now(timezone.utc)
+    # The safety rules come first, so a post already on the board that breaks one is hidden even when
+    # another rule applies too. Discord keeps age-restricted content inside age-restricted channels
+    if setup_check.is_age_restricted(source_message.channel) and not setup_check.is_age_restricted(board):
+        return RULE_AGE_RESTRICTED
+    if has_flagged_media(source_message, board):
+        return RULE_FLAGGED_MEDIA
     # A post already on the board keeps being updated however old the message gets
     if (now - source_message.created_at).days > server_config.post_due_date and not db_message:
         return RULE_TOO_OLD
@@ -134,11 +181,17 @@ async def validate_message(reaction_event: discord.RawReactionActionEvent, bot: 
     # The event only carries ids, so the message itself is fetched under a name that says what it is
     source_message = await channel.fetch_message(message_id)
     db_message = hall_of_fame_message_repo.find_hall_of_fame_message(connection, guild_id, channel_id, message_id)
+    target_channel = bot.get_channel(target_channel_id)
 
-    if rule_blocking_post(source_message, db_message, server_config) is not None:
+    rule = rule_blocking_post(source_message, db_message, server_config, board=target_channel)
+    if rule is not None:
+        if rule in SAFETY_RULES and db_message and target_channel is not None:
+            # Posted before the rule existed, or Discord flagged its media since. Hidden like a post below
+            # the threshold, so it is restored below once the rule stops applying, such as when the board
+            # is made age-restricted too
+            await hide_post(db_message, bot, target_channel, source_message)
         return
 
-    target_channel = bot.get_channel(target_channel_id)
     if target_channel is None:
         await report_missing_hall_of_fame_channel(bot, guild_id, target_channel_id)
         return
@@ -167,12 +220,7 @@ async def validate_message(reaction_event: discord.RawReactionActionEvent, bot: 
     corrected_reactions = await reaction_count(source_message, connection, reaction_config)
     if corrected_reactions < reaction_threshold:
         if hide_hof_post_below_threshold and db_message:
-            await remove_embed(db_message, bot, target_channel_id)
-            if "video_link_message_id" in db_message and source_message.attachments:
-                video_link_message = db_message["video_link_message_id"]
-                if video_link_message is not None:
-                    video_link_message = await target_channel.fetch_message(int(video_link_message))
-                    await video_link_message.edit(content="** **", embed=None)
+            await hide_post(db_message, bot, target_channel, source_message)
         return
 
     if db_message:
@@ -263,6 +311,46 @@ async def update_reaction_counter(db_message, bot: discord.Client, target_channe
             raise
         # Every further edit to an old post would be refused too, and each refusal was logged as an error
         old_message_edits_paused_until[guild_id] = now + old_message_edit_pause
+
+
+async def hide_post(db_message, bot: discord.Client, target_channel, source_message: discord.Message):
+    """
+    Hide a post on the board, keeping the message so it can be restored, and blank the video link posted
+    with it
+    :param db_message: The stored post
+    :param bot: The Discord bot
+    :param target_channel: The board
+    :param source_message: The message the post is of
+    """
+    await remove_embed(db_message, bot, target_channel.id)
+    # The column is present and null for every post that is not a video
+    video_link_message_id = db_message.get("video_link_message_id")
+    if video_link_message_id is not None and source_message.attachments:
+        video_link_message = await target_channel.fetch_message(int(video_link_message_id))
+        await video_link_message.edit(content="** **", embed=None)
+
+
+async def take_down_flagged_post(post: discord.Message, board, bot: discord.Client, guild_id: int) -> bool:
+    """
+    Blank one of the bot's own messages on the board when Discord's content scanning flagged its media, such
+    as the image of the message a post replies to. Scanning can finish after a message is sent, so Discord
+    asks apps that repost media to check their messages again when they are updated, not only when sent
+    :param post: A post or video link the bot sent to the board
+    :param board: The board channel
+    :param bot: The Discord bot
+    :param guild_id: The server, for the log
+    :return: True when the post was taken down
+    """
+    if not has_flagged_media(post, board):
+        return False
+    try:
+        await post.edit(content="** **", embed=None)
+    except discord.NotFound:
+        # Deleted meanwhile, which takes it down just as well
+        return False
+    await logging(bot, "Took down a board post whose media Discord's content scanning flagged", guild_id,
+                  log_level=log_type.SYSTEM, validate_for_duplicates=True)
+    return True
 
 
 async def remove_embed(message, bot: discord.Client, target_channel_id: int):
@@ -420,6 +508,10 @@ async def post_hall_of_fame_message(message: discord.Message, bot: discord.Clien
             await video_message.delete()
         await logging(bot, e, message.guild.id, log_level=log_type.CRITICAL)
         return
+
+    # Checked once stored, so a post taken down here can still be restored. Results that arrive later come
+    # through events.on_raw_message_edit
+    await take_down_flagged_post(hall_of_fame_message, target_channel, bot, message.guild.id)
 
     if at_post_limit and message.author.id not in members_at_post_limit_logged:
         members_at_post_limit_logged.add(message.author.id)

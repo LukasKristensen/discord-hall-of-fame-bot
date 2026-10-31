@@ -3,7 +3,8 @@
 The check exists because a board that never posts looks the same as a server where nobody reacts. So
 the tests are about telling apart the channels the bot is wrongly locked out of from the staff channels
 it is left out of on purpose, naming the role that fixes it, and flagging the settings that make
-posting impossible.
+posting impossible. Channels Discord hides from the bot cannot be told apart, so they are counted on
+their own instead of being judged by the stand-in permissions Discord sends for them.
 """
 
 import datetime
@@ -49,13 +50,19 @@ class FakeRole:
 class FakeChannel:
     """A channel with permissions per target. Anything not named reads the channel."""
 
-    def __init__(self, channel_id, kind=discord.ChannelType.text, bot=None, everyone=None, roles=None):
+    def __init__(self, channel_id, kind=discord.ChannelType.text, bot=None, everyone=None, roles=None,
+                 obfuscated=False, nsfw=False):
         self.id = channel_id
         self.type = kind
         self.mention = f"<#{channel_id}>"
         self.bot = bot or perms()
         self.everyone = everyone or perms()
         self.roles = roles or {}
+        self.flags = types.SimpleNamespace(value=setup_check.CHANNEL_OBFUSCATED if obfuscated else 0)
+        self.nsfw = nsfw
+
+    def is_nsfw(self):
+        return self.nsfw
 
     def overwrites_for(self, role):
         """An overwrite allowing View Channel for each role given its own permissions here"""
@@ -102,6 +109,11 @@ def server_config(**overrides):
 
 
 HIDDEN = perms(view=False)
+
+
+def obfuscated_channel(channel_id, roles=None):
+    """A channel the bot cannot view, as Discord sends it: flagged, with only an @everyone deny"""
+    return FakeChannel(channel_id, bot=HIDDEN, everyone=HIDDEN, roles=roles, obfuscated=True)
 
 
 class ChannelVisibilityTests(unittest.TestCase):
@@ -181,6 +193,43 @@ class ChannelVisibilityTests(unittest.TestCase):
         self.assertIsNone(visibility.suggested_role)
         self.assertEqual(100, len(visibility.private))
 
+    def test_a_channel_discord_hides_is_counted_apart(self):
+        """Its stand-in permissions would make a members' channel look like a staff one."""
+        member = FakeRole(10, "Member", position=3)
+        visibility = setup_check.channel_visibility(
+            FakeGuild(channels=[FakeChannel(1), obfuscated_channel(2)], roles=[member]), BOARD_ID)
+
+        self.assertEqual([2], [channel.id for channel in visibility.hidden])
+        self.assertEqual([], visibility.blocked)
+        self.assertEqual([], visibility.private)
+        self.assertEqual(2, visibility.total)
+        self.assertIsNone(visibility.suggested_role)
+
+    def test_a_hidden_channel_is_never_judged_by_its_permissions(self):
+        member = FakeRole(10, "Member", position=3)
+        channel = obfuscated_channel(1, roles={10: perms()})
+        visibility = setup_check.channel_visibility(FakeGuild(channels=[channel], roles=[member]), BOARD_ID)
+
+        self.assertEqual(1, len(visibility.hidden))
+        self.assertIsNone(visibility.suggested_role)
+
+    def test_a_channel_the_bot_views_without_history_is_still_judged(self):
+        """Discord only hides channels the bot cannot view, so this one keeps its real permissions."""
+        member = FakeRole(10, "Member", position=3)
+        channels = [obfuscated_channel(1),
+                    FakeChannel(2, bot=perms(history=False), everyone=HIDDEN, roles={10: perms()})]
+        visibility = setup_check.channel_visibility(FakeGuild(channels=channels, roles=[member]), BOARD_ID)
+
+        self.assertEqual([1], [channel.id for channel in visibility.hidden])
+        self.assertEqual([2], [channel.id for channel in visibility.blocked])
+        self.assertEqual(member, visibility.suggested_role)
+        self.assertEqual(1, visibility.suggested_role_opens)
+
+    def test_a_channel_without_flags_is_never_hidden(self):
+        channel = FakeChannel(1, bot=HIDDEN)
+        del channel.flags
+        self.assertEqual(1, len(setup_check.channel_visibility(FakeGuild(channels=[channel]), BOARD_ID).blocked))
+
 
 class ChannelFindingTests(unittest.TestCase):
     def test_all_readable_is_fine(self):
@@ -227,6 +276,24 @@ class ChannelFindingTests(unittest.TestCase):
     def test_a_server_without_channels_is_fine(self):
         visibility = setup_check.ChannelVisibility(readable=[], blocked=[], private=[])
         self.assertEqual(setup_check.OK, setup_check.channel_findings(visibility)[0].level)
+
+    def test_a_few_hidden_channels_are_listed_without_a_warning(self):
+        visibility = setup_check.ChannelVisibility(readable=[FakeChannel(1), FakeChannel(2)], blocked=[],
+                                                   private=[], hidden=[FakeChannel(3)])
+        [finding] = setup_check.channel_findings(visibility)
+
+        self.assertEqual(setup_check.OK, finding.level)
+        self.assertEqual("Reads 2 of 3 channels", finding.title)
+        self.assertIn(messages.CHECK_CHANNELS_HIDDEN.format(channels="<#3>"), finding.detail)
+
+    def test_mostly_hidden_channels_are_a_warning(self):
+        visibility = setup_check.ChannelVisibility(readable=[FakeChannel(1)], blocked=[], private=[],
+                                                   hidden=[FakeChannel(2), FakeChannel(3), FakeChannel(4)])
+        [finding] = setup_check.channel_findings(visibility)
+
+        self.assertEqual(setup_check.WARN, finding.level)
+        self.assertEqual("Reads 1 of 4 channels", finding.title)
+        self.assertIn(messages.CHECK_CHANNELS_HIDDEN_MOSTLY.format(channels="<#2> <#3> <#4>"), finding.detail)
 
     def test_a_long_list_is_cut_short(self):
         listed = setup_check.list_channels([FakeChannel(index) for index in range(15)])
@@ -356,6 +423,44 @@ class CheckServerTests(unittest.TestCase):
         findings = setup_check.join_findings(guild, FakeChannel(BOARD_ID), False)
 
         self.assertEqual(1, len(setup_check.problems(findings)))
+
+    def test_the_join_check_notes_age_restricted_channels_without_calling_them_a_problem(self):
+        guild = FakeGuild(channels=[FakeChannel(1), FakeChannel(2, nsfw=True)])
+        findings = setup_check.join_findings(guild, FakeChannel(BOARD_ID), False)
+
+        self.assertIn(messages.CHECK_AGE_RESTRICTED_TITLE, [finding.title for finding in findings])
+        self.assertEqual([], setup_check.problems(findings))
+
+
+class AgeRestrictedFindingTests(unittest.TestCase):
+    """Messages there stay off a board that is not age-restricted, which an admin may not expect."""
+
+    def visibility(self, *channels):
+        return setup_check.ChannelVisibility(readable=list(channels), blocked=[], private=[])
+
+    def test_lists_the_age_restricted_channels_the_board_leaves_out(self):
+        visibility = self.visibility(FakeChannel(1, nsfw=True), FakeChannel(2))
+        [finding] = setup_check.age_restricted_findings(visibility, FakeChannel(BOARD_ID))
+
+        self.assertEqual(setup_check.INFO, finding.level)
+        self.assertEqual(messages.CHECK_AGE_RESTRICTED.format(channels="<#1>", board=f"<#{BOARD_ID}>"),
+                         finding.detail)
+
+    def test_says_nothing_when_the_board_is_age_restricted_too(self):
+        visibility = self.visibility(FakeChannel(1, nsfw=True))
+        self.assertEqual([], setup_check.age_restricted_findings(visibility, FakeChannel(BOARD_ID, nsfw=True)))
+
+    def test_says_nothing_without_age_restricted_channels(self):
+        self.assertEqual([], setup_check.age_restricted_findings(self.visibility(FakeChannel(1)), FakeChannel(BOARD_ID)))
+
+    def test_says_nothing_without_a_board(self):
+        """The missing board is the finding that matters then."""
+        visibility = self.visibility(FakeChannel(1, nsfw=True))
+        self.assertEqual([], setup_check.age_restricted_findings(visibility, None))
+
+    def test_a_channel_without_the_check_is_not_age_restricted(self):
+        self.assertFalse(setup_check.is_age_restricted(types.SimpleNamespace()))
+        self.assertFalse(setup_check.is_age_restricted(None))
 
 
 class BuildEmbedTests(unittest.TestCase):

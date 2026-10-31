@@ -117,7 +117,7 @@ Requires **Manage Server**.
 | `/set_hall_of_fame_channel` | `channel` | Point the bot at the channel it should post to. Checks its own permissions first (View Channel, Send Messages, Read Message History and Embed Links) and tells you what is missing. |
 | `/set_reaction_threshold` | `reaction_threshold` (1 to 1000) | How many reactions a message needs. Seeded once on join from your member count, and fixed at that value until you change it here. |
 | `/allow_messages_in_hof_channel` | `allow` (true/false) | Let members chat in the hall of fame channel. Off by default, so the board stays clean: chat is removed, and `/user_profile`, `/leaderboard` and the Wrapped commands are turned away there with a private note to use another channel. Removing chat needs the bot to have **Manage Messages** in that channel. |
-| `/troubleshoot` | | A health check for debugging a board that is not posting. Checks everything that can stop messages reaching the board: the board's permissions, how many channels the bot can read and which ones members see but the bot does not (with the role that would open them), an empty emoji whitelist, a threshold above the member count, the daily post limit and when the last post was. Only you see the answer. |
+| `/troubleshoot` | | A health check for debugging a board that is not posting. Checks everything that can stop messages reaching the board: the board's permissions, how many channels the bot can read and which ones it cannot (with the role that would open them, where Discord shows the bot who can see them), age-restricted channels the board leaves out, an empty emoji whitelist, a threshold above the member count, the daily post limit and when the last post was. Only you see the answer. |
 | `/count_in_global_profiles` | `count` (true/false) | Whether members' totals across servers include their posts from this server. On by default. The server is never named either way. |
 
 ### Choosing what qualifies
@@ -155,7 +155,7 @@ Open to everyone.
 | `/user_profile` | `specific_user` (optional) | All time and monthly totals and ranks for a member. Defaults to you. When the member has been featured in other servers too, the card ends with their posts, reactions and titles added up across every server with the bot, without naming any server. Earned badges, such as monthly champion or a 100-reaction post, sit under the columns; badges that come from other servers are left out when the member hid their totals. Used in a DM or a server without the bot, it only looks you up, and shows your totals across servers alone. |
 | `/hof_wrapped` | | Your personal Hall of Fame Wrapped for the year. |
 | `/server_hof_wrapped` | | The Hall of Fame Wrapped for the whole server. |
-| **Why isn't this on the board?** | Right-click or long-press a message, then Apps | Says why that message is or is not on the board: already posted (with a link), hidden after dropping below the threshold, how many reactions it has against the threshold and how the server counts them, too old, from a bot, missing an image or video, in a channel the bot cannot read, the board missing or the bot unable to post there, or the daily post limit. Only you see the answer. |
+| **Why isn't this on the board?** | Right-click or long-press a message, then Apps | Says why that message is or is not on the board: already posted (with a link), hidden after dropping below the threshold, how many reactions it has against the threshold and how the server counts them, too old, from a bot, missing an image or video, from an age-restricted channel, with media Discord flagged as sensitive, in a channel the bot cannot read, the board missing or the bot unable to post there, or the daily post limit. Only you see the answer. |
 
 ### Your data
 
@@ -259,6 +259,18 @@ yourself if your membership changes a lot.
 Yes. Images, videos and stickers are carried over into the hall of fame post, and videos are posted so
 that they stay playable rather than becoming a bare link.
 
+### What about age-restricted channels and sensitive images?
+
+Discord keeps age-restricted content inside age-restricted channels, so the bot does too:
+
+- Messages from an age-restricted channel are only featured when the board is age-restricted as well.
+  `/troubleshoot` lists the age-restricted channels the board leaves out.
+- Media that Discord's content scanning flags as explicit is only reposted to an age-restricted board.
+  Media flagged as gore or self-harm is never reposted.
+- A post already on the board that breaks either rule is hidden at its next reaction, and comes back if
+  the rule stops applying, for example once the board is age-restricted. Discord can finish scanning
+  after a message is sent, so the bot also takes down its own posts when Discord flags them later.
+
 ### What happens when someone removes their reaction?
 
 The post updates its reaction count live. If it drops back below the threshold it is hidden, and it
@@ -297,9 +309,10 @@ anyone to read and contribute to, see [License](#license).
 ### Which channels does it watch?
 
 Every channel it has permission to read. Channels restricted to a role stay invisible to the bot unless
-it is given that role. `/troubleshoot` shows how many channels it reads, lists the ones members can see
-but the bot cannot, and names the role that would open most of them. Staff-only channels are counted
-apart, since leaving the bot out of those is usually on purpose.
+it is given that role. `/troubleshoot` shows how many channels it reads and lists the ones it cannot.
+Discord does not tell a bot who else can see a channel it is shut out of, so the check cannot always
+tell a members' channel from a staff-only one, and only warns when the bot reads fewer than half of
+them. If members chat in a channel on that list, give the bot the role those members have.
 
 ### Why can't I see the settings commands?
 

@@ -136,6 +136,24 @@ async def on_raw_reaction(message: discord.RawReactionActionEvent, bot: discord.
                             validate_for_duplicates=True)
 
 
+async def on_raw_message_edit(payload: discord.RawMessageUpdateEvent, bot: discord.Client, server_config):
+    """
+    Event handler for an edited message, which is how Discord delivers content scanning results that finish
+    after a message was sent. Only the bot's own messages on the board are looked at, so the cost for every
+    other edit is one comparison
+    :param payload: The edit, carrying the whole message
+    :param bot: The bot client
+    :param server_config: The in memory configuration of the server the message is in
+    :return: None
+    """
+    if payload.channel_id != server_config.hall_of_fame_channel_id:
+        return
+    post = payload.message
+    if post.author.id != bot.user.id:
+        return
+    await utils.take_down_flagged_post(post, bot.get_channel(payload.channel_id), bot, payload.guild_id)
+
+
 async def on_message(message: discord.Message, bot: discord.Client, server_config):
     """
     Event handler for when a message is sent in a channel

@@ -1,6 +1,6 @@
 # Terms of Service for Hall of Fame
 
-Effective date: 21 October 2026
+Effective date: 31 October 2026
 
 These terms apply between Lukas Kristensen ("the Owner") and anyone who adds Hall of Fame (the "Bot") to
 a server or uses it. By using the Bot you agree to them. If you do not agree, remove the Bot or stop
@@ -18,8 +18,9 @@ using it.
    is stored about each member stays small enough to give them in full; posts past that still reach a
    server's Hall of Fame but are not credited to them.
 3. **Content.** Messages the Bot reposts remain the property of their authors. Each server's admins
-   decide what their Hall of Fame shows and can remove reposts at any time. The Owner does not review
-   reposted content.
+   decide what their Hall of Fame shows and can remove reposts at any time. The Bot itself leaves out
+   messages from age-restricted channels unless the Hall of Fame channel is age-restricted too, and
+   media Discord's content scanning flags. The Owner does not review reposted content.
 4. **Availability.** The Bot is free and provided "as is", without guarantees that it will be
    available, error-free or suitable for a particular purpose. The Owner may change, pause or
    discontinue the Bot at any time.

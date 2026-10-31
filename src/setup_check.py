@@ -8,7 +8,7 @@ Everything except the post activity is worked out from Discord's cached permissi
 API calls and the join report needs no database.
 """
 import datetime
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import timezone
 
 import discord
@@ -41,6 +41,12 @@ STAFF_PERMISSIONS = ("administrator", "manage_guild", "manage_channels", "manage
 # the event loop. Channels are then judged by @everyone alone
 MAX_ROLE_CHECKS = 20_000
 
+# Discord sets this on channels the bot cannot view and replaces their permission overwrites with a single
+# @everyone deny, so who else can see them is unknown. Every bot gets it from 16 November 2026, and a
+# development bot can opt in early with Private Channel Obfuscation under Bot in the Developer Portal.
+# discord.py 2.5 does not name the flag, but keeps it in the channel's flags value
+CHANNEL_OBFUSCATED = 1 << 17
+
 MAX_LISTED_CHANNELS = 10
 # A server this old without a single post most likely has a threshold nobody reaches
 QUIET_AFTER_DAYS = 7
@@ -61,18 +67,32 @@ class ChannelVisibility:
     blocked: list
     # Only staff, or nobody, can see these. Usually on purpose
     private: list
+    # Discord hides these from the bot, so they could be either of the above
+    hidden: list = field(default_factory=list)
     suggested_role: discord.Role | None = None
     suggested_role_opens: int = 0
 
     @property
     def total(self) -> int:
-        return len(self.readable) + len(self.blocked) + len(self.private)
+        return len(self.readable) + len(self.blocked) + len(self.private) + len(self.hidden)
 
 
 def bot_can_read(channel, bot_member) -> bool:
     # Without Read Message History the reaction arrives, but the message it is on cannot be fetched
     permissions = channel.permissions_for(bot_member)
     return permissions.view_channel and permissions.read_message_history
+
+
+def is_obfuscated(channel) -> bool:
+    """Whether Discord hid this channel's permissions from the bot, which makes them unusable for the checks"""
+    flags = getattr(channel, "flags", None)
+    return flags is not None and bool(flags.value & CHANNEL_OBFUSCATED)
+
+
+def is_age_restricted(channel) -> bool:
+    """Whether a channel is age-restricted, which a thread takes from its parent. A missing channel is not"""
+    is_nsfw = getattr(channel, "is_nsfw", None)
+    return bool(is_nsfw()) if callable(is_nsfw) else False
 
 
 def is_member_role(role, guild) -> bool:
@@ -99,13 +119,21 @@ def channel_visibility(guild, board_channel_id: int | None) -> ChannelVisibility
     Sort every channel members can react in by whether the bot can read it
     :param guild: The server
     :param board_channel_id: The board, which is left out as nothing there is featured
-    :return: The channels the bot reads, the ones members see but it does not, and private ones
+    :return: The channels the bot reads, the ones members see but it does not, private ones, and the ones
+        Discord hides from it
     """
     channels = [channel for channel in getattr(guild, "channels", [])
                 if channel.type in REACTABLE_CHANNEL_TYPES and channel.id != board_channel_id]
-    readable, unreadable = [], []
+    readable, unreadable, hidden = [], [], []
     for channel in channels:
-        (readable if bot_can_read(channel, guild.me) else unreadable).append(channel)
+        if bot_can_read(channel, guild.me):
+            readable.append(channel)
+        elif is_obfuscated(channel):
+            # Its overwrites are a stand-in that would make every hidden channel look private, so it is
+            # kept out of the role analysis
+            hidden.append(channel)
+        else:
+            unreadable.append(channel)
 
     member_roles = [role for role in getattr(guild, "roles", []) if is_member_role(role, guild)]
     check_roles = len(unreadable) * len(member_roles) <= MAX_ROLE_CHECKS
@@ -121,7 +149,7 @@ def channel_visibility(guild, board_channel_id: int | None) -> ChannelVisibility
         else:
             private.append(channel)
 
-    visibility = ChannelVisibility(readable=readable, blocked=blocked, private=private)
+    visibility = ChannelVisibility(readable=readable, blocked=blocked, private=private, hidden=hidden)
     if opened_by_role:
         # The role that opens the most channels, and among equals the highest one, as that is
         # usually the general member role rather than a niche one
@@ -199,9 +227,29 @@ def channel_findings(visibility: ChannelVisibility) -> list[Finding]:
         # Named, as the answer is only shown to the admin who asked
         template = messages.CHECK_CHANNELS_MOSTLY_CLOSED if too_few else messages.CHECK_CHANNELS_PRIVATE
         lines.append(template.format(count=len(visibility.private), channels=list_channels(visibility.private)))
+    if visibility.hidden:
+        # Discord does not say whether members or only staff see these, so like private channels they are
+        # only a warning when they are most of the server
+        template = messages.CHECK_CHANNELS_HIDDEN_MOSTLY if too_few else messages.CHECK_CHANNELS_HIDDEN
+        lines.append(template.format(channels=list_channels(visibility.hidden)))
     if not lines:
         lines.append(messages.CHECK_CHANNELS_ALL)
     return [Finding(WARN if visibility.blocked or too_few else OK, title, "\n".join(lines))]
+
+
+def age_restricted_findings(visibility: ChannelVisibility, board_channel) -> list[Finding]:
+    """
+    Channels whose messages never reach the board because they are age-restricted and the board is not.
+    Only worth knowing: keeping them off is what the admin wants unless the board is age-restricted too
+    """
+    if board_channel is None or is_age_restricted(board_channel):
+        return []
+    restricted = [channel for channel in visibility.readable if is_age_restricted(channel)]
+    if not restricted:
+        return []
+    return [Finding(INFO, messages.CHECK_AGE_RESTRICTED_TITLE,
+                    messages.CHECK_AGE_RESTRICTED.format(channels=list_channels(restricted),
+                                                         board=board_channel.mention))]
 
 
 def rule_findings(server_config, member_count: int | None) -> list[Finding]:
@@ -264,9 +312,14 @@ def activity_findings(activity: dict, threshold: int, joined_at, daily_post_limi
 
 
 def join_findings(guild, board_channel, allow_messages_in_hof_channel: bool) -> list[Finding]:
-    """What can already be wrong the moment the bot joins: the board and the channels it cannot read."""
+    """
+    What can already be wrong the moment the bot joins: the board, the channels it cannot read, and the
+    age-restricted channels the board leaves out
+    """
+    visibility = channel_visibility(guild, getattr(board_channel, "id", None))
     return (board_findings(board_channel, guild.me, allow_messages_in_hof_channel)
-            + channel_findings(channel_visibility(guild, getattr(board_channel, "id", None))))
+            + channel_findings(visibility)
+            + age_restricted_findings(visibility, board_channel))
 
 
 def check_server(guild, board_channel, server_config, activity: dict, daily_post_limit: int,

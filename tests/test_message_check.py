@@ -32,8 +32,8 @@ def not_found():
 
 
 class FakeBoard(FakeTargetChannel):
-    def __init__(self, permissions=None, posts=None):
-        super().__init__(messages=posts)
+    def __init__(self, permissions=None, posts=None, nsfw=False):
+        super().__init__(messages=posts, nsfw=nsfw)
         self.permissions = permissions or FakePermissions()
         self.mention = f"<#{TARGET_CHANNEL_ID}>"
 
@@ -50,9 +50,13 @@ class FakeBoard(FakeTargetChannel):
 class FakeChannelRef:
     """The channel as the interaction's message carries it, which the bot may not be able to read"""
 
-    def __init__(self, channel_id=SOURCE_CHANNEL_ID):
+    def __init__(self, channel_id=SOURCE_CHANNEL_ID, nsfw=False):
         self.id = channel_id
         self.mention = f"<#{channel_id}>"
+        self.nsfw = nsfw
+
+    def is_nsfw(self):
+        return self.nsfw
 
 
 class ExplainTestCase(unittest.IsolatedAsyncioTestCase):
@@ -75,7 +79,8 @@ class ExplainTestCase(unittest.IsolatedAsyncioTestCase):
 
     def build(self, *, age_days=0, author_bot=False, attachments=(), read_messages=True, read_history=True,
               source_channel_missing=False, board_missing=False, board_permissions=None, db_message=None,
-              messages_today=0, asked_in=SOURCE_CHANNEL_ID, post_shown=True, message_deleted=False):
+              messages_today=0, asked_in=SOURCE_CHANNEL_ID, post_shown=True, message_deleted=False,
+              channel_nsfw=False, board_nsfw=False):
         """
         :param post_shown: For a stored post, whether the board shows it (True), hid it (False) or no longer
             has it (None)
@@ -84,7 +89,7 @@ class ExplainTestCase(unittest.IsolatedAsyncioTestCase):
         guild = FakeGuild()
         self.source_message = FakeSourceMessage(guild, age_days=age_days, author_bot=author_bot,
                                                 attachments=attachments)
-        self.source_message.channel = FakeChannelRef(asked_in)
+        self.source_message.channel = FakeChannelRef(asked_in, nsfw=channel_nsfw)
         source_channel = FakeSourceChannel(guild, self.source_message, read_messages=read_messages)
         source_channel.permissions.read_message_history = read_history
         if message_deleted:
@@ -100,7 +105,7 @@ class ExplainTestCase(unittest.IsolatedAsyncioTestCase):
             if db_message is not None and post_shown is not None:
                 posts[HALL_OF_FAME_MESSAGE_ID] = FakePostedMessage(
                     HALL_OF_FAME_MESSAGE_ID, embeds=[object()] if post_shown else [])
-            channels[TARGET_CHANNEL_ID] = FakeBoard(board_permissions, posts)
+            channels[TARGET_CHANNEL_ID] = FakeBoard(board_permissions, posts, nsfw=board_nsfw)
         self.bot = FakeBot(channels)
 
         self.repo = FakeMessageRepo(db_message=db_message, messages_today=messages_today)
@@ -235,6 +240,29 @@ class RuleTests(ExplainTestCase):
         self.assertEqual(message_check.QUALIFIES,
                          (await self.explain(server_config(require_image_or_video=True))).reason)
 
+    async def test_from_an_age_restricted_channel(self):
+        self.build(channel_nsfw=True)
+        verdict = await self.explain()
+
+        self.assertEqual(utils.RULE_AGE_RESTRICTED, verdict.reason)
+        self.assertEqual(messages.WHY_AGE_RESTRICTED, verdict.text)
+
+    async def test_from_an_age_restricted_channel_to_an_age_restricted_board(self):
+        self.build(channel_nsfw=True, board_nsfw=True)
+        self.assertEqual(message_check.QUALIFIES, (await self.explain()).reason)
+
+    async def test_with_media_discord_flagged(self):
+        self.build(attachments=[FakeAttachment(flags=utils.GORE_CONTENT)])
+        verdict = await self.explain()
+
+        self.assertEqual(utils.RULE_FLAGGED_MEDIA, verdict.reason)
+        self.assertEqual(messages.WHY_FLAGGED_MEDIA, verdict.text)
+
+    async def test_a_post_still_shown_is_explained_by_a_safety_rule(self):
+        """validate_message hides it on the next reaction, so saying it is on the board would mislead."""
+        self.build(channel_nsfw=True, db_message=database_row(), post_shown=True)
+        self.assertEqual(utils.RULE_AGE_RESTRICTED, (await self.explain()).reason)
+
 
 class BoardTests(ExplainTestCase):
     async def test_the_board_is_missing(self):
@@ -363,6 +391,19 @@ class RuleBlockingPostTests(unittest.TestCase):
 
     def test_a_message_breaking_no_rule(self):
         self.assertIsNone(utils.rule_blocking_post(self.message(), None, server_config()))
+
+    def test_the_safety_rules_come_first(self):
+        message = self.message(age_days=30, author_bot=True, channel_nsfw=True)
+        self.assertEqual(utils.RULE_AGE_RESTRICTED, utils.rule_blocking_post(message, None, server_config()))
+
+    def test_without_a_board_age_restricted_messages_stay_off(self):
+        message = self.message(channel_nsfw=True)
+        self.assertEqual(utils.RULE_AGE_RESTRICTED,
+                         utils.rule_blocking_post(message, None, server_config(), board=None))
+
+    def test_an_age_restricted_board_takes_them(self):
+        message = self.message(channel_nsfw=True)
+        self.assertIsNone(utils.rule_blocking_post(message, None, server_config(), board=FakeBoard(nsfw=True)))
 
 
 class MenuNameTests(unittest.TestCase):

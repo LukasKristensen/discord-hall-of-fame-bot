@@ -344,6 +344,16 @@ CHECK_CHANNELS_MOSTLY_CLOSED = ("The bot cannot read {channels}\n"
                                 "No regular role can see them either, but that is most of the server. If messages "
                                 "there should reach the board, give the bot View Channel and Read Message History "
                                 "in them, or the role that opens them.")
+CHECK_CHANNELS_HIDDEN = ("Discord hides these from the bot, so it cannot tell whether members or only staff see them: "
+                         "{channels}\nIf members chat in any of them, give the bot the role those members have, or "
+                         "View Channel and Read Message History in them.")
+CHECK_CHANNELS_HIDDEN_MOSTLY = ("The bot cannot see {channels}\n"
+                                "That is most of the server. Discord does not tell the bot who else can see them, so "
+                                "if messages there should reach the board, give the bot the role your members have, "
+                                "or View Channel and Read Message History in them.")
+CHECK_AGE_RESTRICTED_TITLE = "Age-restricted channels stay off the board"
+CHECK_AGE_RESTRICTED = ("Messages in {channels} are not featured, because the board {board} is not age-restricted. "
+                        "To feature them, mark the board age-restricted in its channel settings.")
 CHECK_EMPTY_WHITELIST_TITLE = "Every emoji counts for now"
 CHECK_EMPTY_WHITELIST = ("Only whitelisted emojis are meant to count, but the whitelist is empty, so every emoji counts "
                          "until one is added with {whitelist}. To count every emoji on purpose, turn off {logic}.")
@@ -384,6 +394,10 @@ WHY_BOT_MESSAGE = ("**Messages from bots are not posted here.** Someone with the
                    "change that with {command}.")
 WHY_NO_MEDIA = ("**Only messages with an image or video are posted here.** Someone with the Manage Server "
                 "permission can change that with {command}.")
+WHY_AGE_RESTRICTED = ("**This message is in an age-restricted channel and the board is not**, so it is kept off "
+                      "the board. Someone with the Manage Server permission can mark the board age-restricted in "
+                      "its channel settings to feature these.")
+WHY_FLAGGED_MEDIA = "**Discord flagged an image or video in this message as sensitive**, so the bot does not repost it."
 WHY_NO_BOARD = ("**The board channel is missing**: it was deleted, or the bot can no longer see it. Someone with "
                 "the Manage Server permission can pick a channel with {command}.")
 WHY_CANNOT_POST = ("**The bot cannot post on the board.** It is missing {missing} in {channel}. Someone with the "

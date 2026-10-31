@@ -45,6 +45,9 @@ described here. Contact: githublukas@gmail.com, or the
 
 To work, the bot reads reactions and the content and attachments of messages that reach the threshold,
 so it can count them and repost them in the same server. Message content is not saved to our database.
+It also reads whether the channel is age-restricted and the flags Discord's content scanning sets on
+images and videos, so that it does not repost age-restricted or flagged media to a board that is not
+meant for it, and it checks its own posts on the board again when Discord updates them with those flags.
 
 When the bot joins a server, and whenever an admin runs `/troubleshoot`, it also reads the server's
 channels, roles, channel permissions and member count, to find setup problems such as channels it

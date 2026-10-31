@@ -126,6 +126,14 @@ Restart the Discord client if the picker still shows the old list.
       appears on the board, and the button opens the full findings for an admin
 - [ ] The welcome message's Troubleshoot, Support server and Vote buttons work, also after the bot restarts
 - [ ] `/get_server_config` has a Troubleshoot button: an admin gets the findings privately, a member is refused
+- [ ] Turn on Private Channel Obfuscation for the dev bot (Developer Portal > Bot) and restart it: a channel
+      only a member role can see is listed as hidden from the bot, with the note to give it the members'
+      role. Giving the bot that role and running `/troubleshoot` again counts the channel as read
+- [ ] Mark a channel age-restricted and react a message there past the threshold: nothing is posted, Why
+      isn't this on the board? says the channel is age-restricted, and `/troubleshoot` lists the channel.
+      Mark the board age-restricted too and react again: the message is posted
+- [ ] With a post already on the board, mark its source channel age-restricted and react once more: the
+      post is hidden. Mark the board age-restricted and react again: it comes back
 - [ ] Apps > Why isn't this on the board? on a message, as a member without Manage Server: a posted message
       links to its post, one short of the threshold shows the count, and one in a channel the bot cannot
       read says so. Only you see the answer, and asking again straight away is refused for a few seconds

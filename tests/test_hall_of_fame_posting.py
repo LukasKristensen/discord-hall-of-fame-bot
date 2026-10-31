@@ -233,6 +233,21 @@ class PostHallOfFameMessageTests(PostingTestCase):
 
         self.assertIsNone(self.inserted[0][8])
 
+    async def test_takes_down_a_post_discord_flags_as_it_is_sent(self):
+        """Such as the image of the message it replies to, which the message itself does not carry."""
+        self.patch_repo()
+        self.embed = discord.Embed.from_dict({"title": "an embed", "flags": utils.GORE_CONTENT})
+        await self.post()
+
+        self.assertEqual([{"content": "** **", "embed": None}], self.target_channel.sent[0].edits)
+        self.assertEqual(1, len(self.inserted), "the post is still recorded, so it can be restored")
+
+    async def test_leaves_a_post_without_flags_alone(self):
+        self.patch_repo()
+        await self.post()
+
+        self.assertEqual([], self.target_channel.sent[0].edits)
+
     async def test_takes_the_post_back_down_when_it_cannot_be_recorded(self):
         """A post the database does not know about can never be updated or hidden again."""
         self.patch_repo(insert=lambda: (_ for _ in ()).throw(RuntimeError("write failed")))

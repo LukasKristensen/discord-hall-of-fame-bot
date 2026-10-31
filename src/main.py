@@ -522,6 +522,17 @@ async def on_raw_reaction_add(payload: discord.RawReactionActionEvent):
 async def on_raw_reaction_remove(payload: discord.RawReactionActionEvent):
     await handle_raw_reaction(payload, "on_raw_reaction_remove")
 
+
+@bot.event
+async def on_raw_message_edit(payload: discord.RawMessageUpdateEvent):
+    server_class = server_classes.get(payload.guild_id) if payload.guild_id is not None else None
+    if server_class is None:
+        return
+    try:
+        await events.on_raw_message_edit(payload, bot, server_class)
+    except Exception as e:
+        await utils.logging(bot, f"Error in on_raw_message_edit: {e}", payload.guild_id, validate_for_duplicates=True)
+
 @bot.event
 async def on_message(message: discord.Message):
     if message.author == bot.user or message.guild is None:
