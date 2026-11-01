@@ -412,6 +412,7 @@ class StopFeaturingTests(MemberDataDeletionTestCase):
     def setUp(self):
         super().setUp()
         self.sent = []
+        self.taken_down = []
 
     async def post(self, author_id, message_id=900, while_sending=None):
         """
@@ -422,7 +423,11 @@ class StopFeaturingTests(MemberDataDeletionTestCase):
             self.sent.append(message_id)
             if while_sending is not None:
                 await while_sending()
-            return types.SimpleNamespace(id=message_id + 5000)
+
+            async def delete():
+                self.taken_down.append(message_id)
+
+            return types.SimpleNamespace(id=message_id + 5000, delete=delete)
 
         async def no_embed(*_args, **_kwargs):
             return None
@@ -463,14 +468,15 @@ class StopFeaturingTests(MemberDataDeletionTestCase):
 
         self.assertEqual([], self.sent)
 
-    async def test_a_member_who_opts_out_while_their_post_is_sent_is_not_credited(self):
+    async def test_a_member_who_opts_out_while_their_post_is_sent_gets_the_repost_taken_down(self):
         """Sending the repost lets other events run, so the request can land between the check and the store."""
         before = self.posts_by(DELETED)
 
         async def opt_out():
             self.stop_featuring()
 
-        self.assertEqual(hall_of_fame_message_repo.NO_AUTHOR_ID, await self.post(DELETED, while_sending=opt_out))
+        self.assertIsNone(await self.post(DELETED, message_id=905, while_sending=opt_out))
+        self.assertEqual([905], self.taken_down)
         self.assertEqual(before, self.posts_by(DELETED))
 
     async def test_stopping_keeps_the_earlier_posts_credited(self):
@@ -681,6 +687,25 @@ class OptOutGuardPerMethodTests(MemberDataDeletionTestCase):
 
     def test_storing_a_post_by_anyone_else_credits_them(self):
         self.assertEqual(OTHER, self.store(981, OTHER))
+
+    def store_capped(self, message_id, author, limit):
+        return hall_of_fame_message_repo.insert_hall_of_fame_message(
+            self.connection, message_id, 501, SHARED, message_id + 5000, 9, author, NOW - datetime.timedelta(days=1),
+            author_post_limit=limit)
+
+    def test_a_post_past_the_cap_is_stored_without_its_author(self):
+        """The count is taken in the INSERT itself, under the author's lock."""
+        credited = len(self.posts_by(OTHER))
+
+        self.assertEqual(hall_of_fame_message_repo.NO_AUTHOR_ID, self.store_capped(982, OTHER, credited))
+        self.assertEqual(OTHER, self.store_capped(983, OTHER, credited + 1))
+
+    def test_storing_a_post_they_already_have_again_keeps_it_credited_at_the_cap(self):
+        """Their other posts are counted, so an update never pushes an existing post over the cap."""
+        message_id = self.posts_by(OTHER)[0][0]
+        credited = len(self.posts_by(OTHER))
+
+        self.assertEqual(OTHER, self.store_capped(message_id, OTHER, credited))
 
     # insert_hof_wrapped
 

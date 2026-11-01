@@ -123,7 +123,7 @@ class InsertHallOfFameMessageTests(unittest.TestCase):
 
         self.assertEqual({"message_id": 4242, "channel_id": 100, "guild_id": 200, "hall_of_fame_message_id": 5555,
                           "reaction_count": 12, "author_id": 77, "created_at": datetime.datetime(2026, 3, 1, 12, 0),
-                          "video_link_message_id": None}, connection.parameters[1])
+                          "video_link_message_id": None, "author_post_limit": None}, connection.parameters[1])
 
     def test_takes_the_authors_lock_first(self):
         """So a deletion or opt-out of the author in progress is waited for, then seen."""
@@ -133,12 +133,21 @@ class InsertHallOfFameMessageTests(unittest.TestCase):
         self.assertIn("pg_advisory_xact_lock", connection.queries[0])
         self.assertEqual((77,), connection.parameters[0])
 
-    def test_the_author_is_both_looked_up_and_stored(self):
-        """Once to check whether they opted out, once as the value stored when they did not."""
+    def test_the_author_is_looked_up_counted_and_stored(self):
+        """Once for the opt-out, once to count their other posts against the cap, once as the value stored."""
         connection = FakeConnection()
         self.insert(connection)
 
-        self.assertEqual(2, connection.queries[1].count("%(author_id)s"))
+        self.assertEqual(3, connection.queries[1].count("%(author_id)s"))
+
+    def test_the_post_cap_is_checked_in_the_same_statement(self):
+        """Under the author's lock, so two posts stored at once cannot both slip under it."""
+        connection = FakeConnection()
+        hall_of_fame_message_repo.insert_hall_of_fame_message(
+            connection, 4242, 100, 200, 5555, 12, 77, datetime.datetime(2026, 3, 1, 12, 0), author_post_limit=10_000)
+
+        self.assertIn("COUNT(*)", connection.queries[1])
+        self.assertEqual(10_000, connection.parameters[1]["author_post_limit"])
 
     def test_keeps_the_video_link_when_there_is_one(self):
         connection = FakeConnection()

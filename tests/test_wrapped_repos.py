@@ -150,8 +150,10 @@ class DeleteHofWrappedForGuildTests(unittest.TestCase):
         connection = FakeConnection()
         hof_wrapped_repo.delete_hof_wrapped_for_guild(connection, 200)
 
-        self.assertIn("WHERE guild_id = %s", connection.queries[0])
-        self.assertEqual([(200,)], connection.parameters)
+        # After the fan lists lock, like every other Wrapped write
+        self.assertIn("pg_advisory_xact_lock", connection.queries[0])
+        self.assertIn("WHERE guild_id = %s", connection.queries[1])
+        self.assertEqual([(hof_wrapped_repo.FAN_LISTS_LOCK,), (200,)], connection.parameters)
 
 
 class WrappedProgressTests(unittest.TestCase):

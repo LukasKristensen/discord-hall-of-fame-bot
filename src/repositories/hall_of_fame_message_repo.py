@@ -44,11 +44,15 @@ def lock_member(connection, user_id):
     cursor.close()
 
 def insert_hall_of_fame_message(connection, message_id, channel_id, guild_id, hall_of_fame_message_id, reaction_count, author_id,
-                                created_at, video_link_message_id=None):
+                                created_at, video_link_message_id=None, author_post_limit=None) -> int:
     """
     Store a post, or update it when the message is stored already. A member who asked not to be featured
     is stored as no author whoever calls this, so the opt-out does not rest on every caller checking it.
-    The author's lock is taken first, so a deletion or opt-out in progress is waited for and then seen
+    The author's lock is taken first, so a deletion or opt-out in progress is waited for and then seen.
+    :param author_post_limit: The most posts one member may have credited. Counted in the same statement,
+        under the author's lock, so two posts stored at once cannot both slip under it. Their other posts
+        are counted, so storing a post they already have again never pushes it over
+    :return: Who the post is credited to, NO_AUTHOR_ID when nobody
     """
     lock_member(connection, author_id)
     cursor = connection.cursor()
@@ -56,8 +60,12 @@ def insert_hall_of_fame_message(connection, message_id, channel_id, guild_id, ha
         INSERT INTO hall_of_fame_message 
         (message_id, channel_id, guild_id, hall_of_fame_message_id, reaction_count, author_id, created_at, video_link_message_id)
         SELECT %(message_id)s, %(channel_id)s, %(guild_id)s, %(hall_of_fame_message_id)s, %(reaction_count)s,
-               CASE WHEN EXISTS (SELECT 1 FROM opted_out_member WHERE user_id = %(author_id)s)
-                    THEN 0 ELSE %(author_id)s END,
+               CASE WHEN EXISTS (SELECT 1 FROM opted_out_member WHERE user_id = %(author_id)s) THEN 0
+                    WHEN CAST(%(author_post_limit)s AS integer) IS NOT NULL
+                         AND (SELECT COUNT(*) FROM hall_of_fame_message
+                              WHERE author_id = %(author_id)s AND message_id <> %(message_id)s)
+                             >= CAST(%(author_post_limit)s AS integer) THEN 0
+                    ELSE %(author_id)s END,
                %(created_at)s, %(video_link_message_id)s
         ON CONFLICT (message_id) DO UPDATE SET
             channel_id=EXCLUDED.channel_id,
@@ -69,11 +77,15 @@ def insert_hall_of_fame_message(connection, message_id, channel_id, guild_id, ha
             author_id=CASE WHEN hall_of_fame_message.author_id = 0 THEN 0 ELSE EXCLUDED.author_id END,
             created_at=EXCLUDED.created_at,
             video_link_message_id=EXCLUDED.video_link_message_id
+        RETURNING author_id
     """, {"message_id": message_id, "channel_id": channel_id, "guild_id": guild_id,
           "hall_of_fame_message_id": hall_of_fame_message_id, "reaction_count": reaction_count,
-          "author_id": author_id, "created_at": created_at, "video_link_message_id": video_link_message_id})
+          "author_id": author_id, "created_at": created_at, "video_link_message_id": video_link_message_id,
+          "author_post_limit": author_post_limit})
+    row = cursor.fetchone()
     connection.commit()
     cursor.close()
+    return row[0] if row else author_id
 
 def delete_hall_of_fame_messages_for_guild(connection, guild_id):
     cursor = connection.cursor()

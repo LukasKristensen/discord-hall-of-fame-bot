@@ -1418,21 +1418,24 @@ class StopFeaturingTests(MyDataPanelTestCase):
 
 
 class OptingOutWhileAPostIsSentTests(unittest.IsolatedAsyncioTestCase):
-    async def test_the_insert_is_left_to_leave_the_member_out(self):
+    async def test_the_repost_is_taken_down_and_nothing_is_stored(self):
         """
-        insert_hall_of_fame_message checks opted_out_member in the same statement, which the PostgreSQL test
-        of a member opting out while their post is sent covers, so the member is passed as they are and the
-        opt-out is not looked up a second time
+        The opt-out is looked up again right before storing, with no await in between, so an opt-out handled
+        while the repost was sent is seen: the member asked not to be reposted, so the repost goes
         """
         import utils
         stored = []
+        deleted = []
         answers = iter([False, True])
 
-        def record(_connection, *args):
+        def record(_connection, *args, **_kwargs):
             stored.append(args)
 
+        async def delete():
+            deleted.append(True)
+
         async def send(*_args, **_kwargs):
-            return types.SimpleNamespace(id=999)
+            return types.SimpleNamespace(id=999, delete=delete)
 
         async def no_embed(*_args, **_kwargs):
             return None
@@ -1452,9 +1455,8 @@ class OptingOutWhileAPostIsSentTests(unittest.IsolatedAsyncioTestCase):
                 unittest.mock.patch.object(utils, "check_video_extension", lambda _m: None):
             await utils.post_hall_of_fame_message(message, bot, FakeConnection(), 100, 5)
 
-        # The sixth value stored is the author
-        self.assertEqual(77, stored[0][5])
-        self.assertEqual(True, next(answers), "the opt-out was looked up again before storing")
+        self.assertEqual([], stored)
+        self.assertEqual([True], deleted)
 
 
 class WrappedWithoutTheAuthorTests(unittest.IsolatedAsyncioTestCase):
