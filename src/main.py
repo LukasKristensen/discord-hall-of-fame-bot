@@ -1796,9 +1796,12 @@ async def open_wrapped(interaction: discord.Interaction):
 
     async with get_db_connection(connection_pool) as connection:
         user_wrapped = hof_wrapped_repo.get_hof_wrapped(connection, interaction.guild_id, interaction.user.id, version.WRAPPED_YEAR)
+        # Checked on every open, as a Wrapped made before the member asked not to be featured is kept, and
+        # must not be shown or shared again, just as a plaque's buttons refuse it
+        opted_out = opt_out_repo.is_opted_out(connection, interaction.user.id)
+        if opted_out:
+            user_wrapped = None
         if user_wrapped is None:
-            # Only looked up when there is nothing to show, to tell the member which of the reasons applies
-            opted_out = opt_out_repo.is_opted_out(connection, interaction.user.id)
             server_has_wrapped = hof_wrapped_repo.check_if_guild_wrapped_data_exists(
                 connection, interaction.guild_id, version.WRAPPED_YEAR)
         else:

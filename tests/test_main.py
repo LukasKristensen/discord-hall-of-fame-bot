@@ -2400,6 +2400,24 @@ class WrappedCommandTests(CommandTestCase):
         self.assertEqual([(interaction, {"user_id": 77}, totals)], opened)
         self.assertTrue(any("HOF Wrapped command used in a server" in entry for entry in self.logged))
 
+    async def test_a_wrapped_made_before_the_member_opted_out_is_not_opened(self):
+        """Otherwise the story, its best post and a plaque to share come back after they asked."""
+        opened = []
+
+        async def send_story(*args):
+            opened.append(args)
+
+        self.patch(main.hof_wrapped_repo, "get_hof_wrapped", lambda *_args: {"user_id": 77})
+        self.patch(main.hof_wrapped_repo, "check_if_guild_wrapped_data_exists", lambda *_args: True)
+        self.patch(main.opt_out_repo, "is_opted_out", lambda *_args: True)
+        self.patch(main.wrapped_story, "send_story", send_story)
+        interaction = FakeInteraction()
+        await main.hof_wrapped_command.callback(interaction)
+
+        self.assertEqual([], opened)
+        self.assertEqual([main.hof_wrapped.missing_wrapped_text(server_has_wrapped=True, opted_out=True)],
+                         interaction.response.messages)
+
     async def ask_without_wrapped(self, server_has_wrapped=True, opted_out=False):
         self.patch(main.hof_wrapped_repo, "get_hof_wrapped", lambda *_args: None)
         self.patch(main.hof_wrapped_repo, "check_if_guild_wrapped_data_exists", lambda *_args: server_has_wrapped)
