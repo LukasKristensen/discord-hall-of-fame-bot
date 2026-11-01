@@ -157,7 +157,7 @@ and reply from the payload:
 
 - [ ] A Tenor GIF, on its own and as the message replied to, loops as a GIF with no player controls. A GIF
       from another site plays as a video
-- [ ] A forwarded message, a poll and a message over 300 characters look right: the forward labelled, the
+- [x] A forwarded message, a poll and a message over 300 characters look right: the forward labelled, the
       poll's votes listed, the long text full width under the header
 - [ ] A forward of a message from this server shows the message it forwards. A forward from another
       server, a forward of a forward, and a forward of a member who pressed Stop featuring me each show

@@ -3,6 +3,58 @@
 Checks run by hand on the development bot, for behaviour the automated tests can only fake: what
 Discord itself accepts, and how the bot looks to a member. Newest first.
 
+## 1 November 2026: Components V2 board posts, message by message (3.0)
+
+Run on the development bot (`DEV_TEST=True`) in the development server, threshold 1, one channel per kind of
+message under a "test cases" category so each post names what it tests.
+
+### Passed
+
+| Channel | Message | Result |
+|:---|:---|:---|
+| plain-text | Short text | Name, channel and text beside the avatar |
+| image | One image | Shown in the gallery. A small image makes the card as narrow as the image |
+| gif | A GIF | Loops in the gallery. Narrow like a small image |
+| video | One video | Plays in place |
+| emoji | Only an emoji | Shown beside the avatar at normal size, not jumbo as in the channel |
+| forward | A forwarded screenshot | "in #forward · Forwarded" and the image |
+| poll | A poll | "Poll", the question in bold and each answer with its votes, "1 vote" and "0 votes" |
+| thread / forum post | Text in a forum post | The mention shows the thread's name with its icon |
+| reply | A reply to a text message | "Replying to", the quote, a gap, then the poster's name above their words, as in Discord |
+| long-text | Over 300 characters | Full width under the header, no avatar |
+| long-text | About 1,970 characters | Shown whole. Did not reach the 2,000 cut, see below |
+| multi-media | 4 images, 10 images | Laid out as in Discord, 2 by 2 and 1 over 3 by 3, order kept |
+| multi-media | Images, a spoiler and a video together | The spoiler covered, the video playing, order kept |
+| mixed | Text and an image | Text beside the avatar, the image full width below |
+| mixed | A reply to a poll | The quote reads *Poll: question*. The app cannot send text and a poll in one message |
+| reply | A reply to a member who pressed Stop featuring me | Posted with no "Replying to" line and no quote, so the member is not named |
+
+### Found
+
+- **One gallery item can fail to load for good** ([#104](https://github.com/LukasKristensen/discord-hall-of-fame-bot/issues/104)).
+  The same video attached four times failed on its first item in 4 of 5 posts, on desktop and mobile.
+  Holding the post until the message was 10 seconds old did not help and was reverted. Different files
+  in one gallery have always loaded so far.
+- A spoiler once showed uncovered right after posting. A reload covered it, so it was the client, not the
+  bot.
+- Poll votes are written when the post is made and not updated after.
+- Whether a post shows the avatar depends on its text: only posts with up to 300 characters of text have
+  it, so media-only and long-text posts look like a different template.
+
+### Still to run
+
+- **The 2,000 character cut:** needs Nitro, or a lower `post_text_limit` on the development bot.
+- **More than 10 media:** 10 attachments plus an image link or a sticker, for the "more in the original"
+  note.
+- **A member who opted out:** check that their message posted after opting out does not reach the board.
+  In this run their message was on the board, possibly reacted to before they opted out.
+- **reply:** to an image (the quoted media), to a deleted message.
+- **sticker:** a normal one and an animated (Lottie) one, which is named instead of shown.
+- **file:** a PDF or zip, an audio file and a voice message.
+- **link:** a Tenor GIF link alone, an image URL alone, a YouTube link, text with a link.
+- **mentions:** `@user`, `@role` and `@everyone`, with nobody pinged.
+- **forward:** a forwarded poll, and a forward from a channel the bot cannot see.
+
 ## 21 October 2026: member data, the post limit and the export (3.0, then called 2.2)
 
 Run on the development bot (`DEV_TEST=True`) in the development server, against the development
