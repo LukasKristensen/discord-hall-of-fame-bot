@@ -440,6 +440,11 @@ async def create_post_view(message: discord.Message, connection, config: dict = 
     reference_media, quote = [], ""
     if reference_message is not None:
         reference_body, _, _ = await shown_body(reference_message, connection)
+        # Asked again after the awaits above, which leave time for the member to opt out. Nothing below waits,
+        # so what is checked here is what the post shows
+        if opt_out_repo.is_opted_out(connection, reference_message.author.id):
+            reference_message = None
+    if reference_message is not None:
         answered_media, _, link_replaces_quote = message_media(reference_body)
         # Its media is only checked here, never for posting, so media Discord flagged is named, never shown
         if not media and not content_scan_flags(reference_body):

@@ -506,6 +506,24 @@ class PostViewTests(EmbedTestCase):
         self.assertNotIn("meme.png", shown)
         self.assertIn(messages.POST_FORWARD_NOT_SHOWN, shown)
 
+    async def test_a_reply_whose_author_opts_out_while_the_post_is_built_leaves_them_out(self):
+        """The first check runs before the reactions are counted and the forward is fetched."""
+        replied = FakeEmbedMessage("my words", author_name="private")
+        replied.author.id = 44
+        message = FakeEmbedMessage("a reply", reference_message_id=9, channel=FakeChannel(replied))
+        shown_body = board_post.shown_body
+
+        async def opt_out_meanwhile(source, connection):
+            self.opted_out.add(44)
+            return await shown_body(source, connection)
+
+        with mock.patch.object(board_post, "shown_body", opt_out_meanwhile):
+            shown = json.dumps(await self.payload(message), ensure_ascii=False)
+
+        self.assertNotIn("my words", shown)
+        self.assertNotIn("private", shown)
+        self.assertIn("a reply", shown)
+
     async def test_a_forward_of_a_forward_leaves_it_out(self):
         """The message fetched was written by whoever forwarded it, not by whoever wrote the words."""
         middle = FakeEmbedMessage("", author_name="forwarder")
