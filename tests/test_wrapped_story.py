@@ -163,6 +163,46 @@ class StoryPageTests(unittest.TestCase):
 
 
 class StoryViewTests(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        self.row = wrapped_row()
+        self.opted_out = False
+
+        class Lend:
+            async def __aenter__(self):
+                return object()
+
+            async def __aexit__(self, *_args):
+                return False
+
+        for target, name, value in (
+                (wrapped_story, "connect", lambda: Lend()),
+                (wrapped_story.hof_wrapped_repo, "get_hof_wrapped", lambda *_args: self.row),
+                (wrapped_story.opt_out_repo, "is_opted_out", lambda *_args: self.opted_out)):
+            patcher = mock.patch.object(target, name, value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    async def share_after(self, change):
+        view = self.story()
+        await buttons(view)[messages.WRAPPED_SKIP].callback(FakeInteraction())
+        change()
+        interaction = FakeInteraction()
+        await buttons(view)[messages.WRAPPED_SHARE].callback(interaction)
+        return interaction
+
+    async def test_a_member_who_opted_out_since_opening_cannot_show_it(self):
+        interaction = await self.share_after(lambda: setattr(self, "opted_out", True))
+
+        [(content, sent)] = interaction.followups
+        self.assertEqual(messages.WRAPPED_CARD_GONE, content)
+        self.assertTrue(sent.get("ephemeral"))
+
+    async def test_a_member_who_deleted_their_data_since_opening_cannot_show_it(self):
+        interaction = await self.share_after(lambda: setattr(self, "row", None))
+
+        [(content, _sent)] = interaction.followups
+        self.assertEqual(messages.WRAPPED_CARD_GONE, content)
+
     def story(self, **overrides):
         return wrapped_story.StoryView(summary(**overrides), "Mia", "https://cdn.example/a.png", None)
 

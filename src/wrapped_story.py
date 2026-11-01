@@ -367,8 +367,17 @@ class StoryView(discord.ui.LayoutView):
             await interaction.response.defer()
             return
         self.shared = True
+        # The story holds what was read when it opened. The member may have asked not to be featured, or deleted
+        # their data, since then, so that is asked again before anything goes in front of the channel
+        async with connect() as connection:
+            row = hof_wrapped_repo.get_hof_wrapped(connection, self.summary.guild_id, self.summary.user_id,
+                                                   self.summary.year)
+            available = row is not None and not opt_out_repo.is_opted_out(connection, self.summary.user_id)
         self.render()
         await interaction.response.edit_message(view=self)
+        if not available:
+            await interaction.followup.send(messages.WRAPPED_CARD_GONE, ephemeral=True)
+            return
         await interaction.followup.send(view=plaque_view(self.summary, self.name, self.avatar_url, self.media),
                                         allowed_mentions=discord.AllowedMentions.none())
 
