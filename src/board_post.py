@@ -129,6 +129,10 @@ async def forward_may_show(message: discord.Message, connection) -> bool:
         original = await channel.fetch_message(reference.message_id)
     except discord.HTTPException:
         return False
+    if getattr(original, "message_snapshots", None):
+        # A forward of a forward: its author forwarded the words but did not write them, and who did is one
+        # more step back, so it is left out like one that cannot be read
+        return False
     return not opt_out_repo.is_opted_out(connection, original.author.id)
 
 

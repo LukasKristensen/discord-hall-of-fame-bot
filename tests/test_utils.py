@@ -506,6 +506,16 @@ class PostViewTests(EmbedTestCase):
         self.assertNotIn("meme.png", shown)
         self.assertIn(messages.POST_FORWARD_NOT_SHOWN, shown)
 
+    async def test_a_forward_of_a_forward_leaves_it_out(self):
+        """The message fetched was written by whoever forwarded it, not by whoever wrote the words."""
+        middle = FakeEmbedMessage("", author_name="forwarder")
+        middle.message_snapshots = [types.SimpleNamespace(content="the original words", attachments=[],
+                                                          embeds=[], stickers=[])]
+        shown = json.dumps(await self.payload(self.forward_of(middle)), ensure_ascii=False)
+
+        self.assertNotIn("the original words", shown)
+        self.assertIn(messages.POST_FORWARD_NOT_SHOWN, shown)
+
     async def test_a_forward_whose_original_cannot_be_read_leaves_it_out(self):
         """Nobody can tell whose it is, so it is treated like a member who opted out."""
         shown = json.dumps(await self.payload(self.forward_of(None)), ensure_ascii=False)
