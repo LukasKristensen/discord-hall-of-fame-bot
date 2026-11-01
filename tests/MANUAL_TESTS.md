@@ -29,6 +29,7 @@ message under a "test cases" category so each post names what it tests.
 | mixed | A reply to a poll | The quote reads *Poll: question*. The app cannot send text and a poll in one message |
 | link | A YouTube link alone | The link kept as text, the video's thumbnail as a still picture in the gallery |
 | link | A GIF link alone | The link replaced by the GIF, as Discord shows it. Loops as a GIF, no player controls |
+| mentions | `@user`, `@here`, `@everyone` | Shown as mentions, and the posts were not highlighted as pinging the tester |
 | sticker | An animated (Lottie) sticker | Named in italics where the text goes, *Sticker: name* |
 | sticker | A picture sticker, two different reactions | Shown in the gallery. The reactions line lists both emojis with their counts |
 | reply | A reply to an image, a reply to a video | The quote, then the answered image or playable video full width, then the reply under its poster's name |
@@ -78,7 +79,7 @@ Not bugs, and nothing decided yet:
   In this run their message was on the board, possibly reacted to before they opted out.
 - **file:** a PDF or zip, an audio file and a voice message.
 - **link:** an image URL alone, text with a link.
-- **mentions:** `@user`, `@role` and `@everyone`, with nobody pinged.
+- **mentions:** `@role`, and a second account checking it got no notification from `@everyone`.
 - **forward:** a forwarded poll, and a forward from a channel the bot cannot see.
 
 ## 21 October 2026: member data, the post limit and the export (3.0, then called 2.2)
