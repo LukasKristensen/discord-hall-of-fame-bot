@@ -129,7 +129,7 @@ class CreateDatabaseContextTests(SetupTestCase):
         self.patch(server_config_repo, "insert_server_with_parameters",
                    lambda *args: self.inserted.append(args))
         self.patch(server_config_repo, "delete_server_config",
-                   lambda _connection, guild_id: self.deleted.append(guild_id))
+                   lambda _connection, guild_id, commit=True: self.deleted.append(guild_id))
 
     async def join(self, guild=None, custom_channel=None):
         guild = guild if guild is not None else FakeJoinedGuild()
@@ -316,17 +316,17 @@ class DeleteDatabaseContextTests(unittest.TestCase):
         calls = []
 
         with mock.patch.object(hall_of_fame_message_repo, "delete_hall_of_fame_messages_for_guild",
-                               lambda _c, guild_id: calls.append(("messages", guild_id))), \
+                               lambda _c, guild_id, commit=True: calls.append(("messages", guild_id))), \
              mock.patch.object(server_user_repo, "delete_server_users",
-                               lambda _c, guild_id: calls.append(("users", guild_id))), \
+                               lambda _c, guild_id, commit=True: calls.append(("users", guild_id))), \
              mock.patch.object(server_config_repo, "delete_server_config",
-                               lambda _c, guild_id: calls.append(("config", guild_id))), \
+                               lambda _c, guild_id, commit=True: calls.append(("config", guild_id))), \
              mock.patch.object(hof_wrapped_repo, "delete_hof_wrapped_for_guild",
-                               lambda _c, guild_id: calls.append(("wrapped", guild_id))), \
+                               lambda _c, guild_id, commit=True: calls.append(("wrapped", guild_id))), \
              mock.patch.object(hof_wrapped_guild_status_repo, "delete_progress_for_guild",
-                               lambda _c, guild_id: calls.append(("wrapped progress", guild_id))), \
+                               lambda _c, guild_id, commit=True: calls.append(("wrapped progress", guild_id))), \
              mock.patch.object(permission_warning_repo, "delete_permission_warnings",
-                               lambda _c, guild_ids: calls.append(("permission warnings", guild_ids))):
+                               lambda _c, guild_ids, commit=True: calls.append(("permission warnings", guild_ids))):
             utils.delete_database_context(GUILD_ID, connection)
 
         self.assertEqual([("messages", GUILD_ID), ("users", GUILD_ID), ("config", GUILD_ID),

@@ -150,9 +150,11 @@ async def validate_message(reaction_event: discord.RawReactionActionEvent, bot: 
     target_channel_id = server_config.hall_of_fame_channel_id
     hide_hof_post_below_threshold = server_config.hide_hof_post_below_threshold
 
-    # The board's own posts, and messages written there, are never featured. Without this, reactions on a
-    # post would repost the bot's own post once they reached the threshold
-    if channel_id == target_channel_id:
+    # The board's own posts are never featured, or reactions on a post would repost it once they reached the
+    # threshold. Members' messages there still are, for servers that chat in the board channel. Reaction adds
+    # say who wrote the message, which spares fetching it for every reaction on a post
+    in_board = channel_id == target_channel_id
+    if in_board and getattr(reaction_event, "message_author_id", None) == bot.user.id:
         return
 
     channel = bot.get_channel(channel_id)
@@ -165,6 +167,8 @@ async def validate_message(reaction_event: discord.RawReactionActionEvent, bot: 
 
     # The event only carries ids, so the message itself is fetched under a name that says what it is
     source_message = await channel.fetch_message(message_id)
+    if in_board and source_message.author.id == bot.user.id:
+        return
     db_message = hall_of_fame_message_repo.find_hall_of_fame_message(connection, guild_id, channel_id, message_id)
     target_channel = bot.get_channel(target_channel_id)
 
@@ -892,13 +896,20 @@ def delete_database_context(server_id: int, connection):
     :param connection: MySQL connection
     :return: None
     """
-    hall_of_fame_message_repo.delete_hall_of_fame_messages_for_guild(connection, server_id)
-    server_user_repo.delete_server_users(connection, server_id)
-    server_config_repo.delete_server_config(connection, server_id)
-    hof_wrapped_repo.delete_hof_wrapped_for_guild(connection, server_id)
-    # Left behind, a guild that rejoins stays marked as done for the year and never gets its wrapped again
-    hof_wrapped_guild_status_repo.delete_progress_for_guild(connection, server_id)
-    permission_warning_repo.delete_permission_warnings(connection, [server_id])
+    # Committed once at the end, so a failure part way leaves the server whole and the daily task can
+    # find it again tomorrow instead of losing its config with its Wrapped still stored
+    try:
+        hall_of_fame_message_repo.delete_hall_of_fame_messages_for_guild(connection, server_id, commit=False)
+        server_user_repo.delete_server_users(connection, server_id, commit=False)
+        server_config_repo.delete_server_config(connection, server_id, commit=False)
+        hof_wrapped_repo.delete_hof_wrapped_for_guild(connection, server_id, commit=False)
+        # Left behind, a guild that rejoins stays marked as done for the year and never gets its wrapped again
+        hof_wrapped_guild_status_repo.delete_progress_for_guild(connection, server_id, commit=False)
+        permission_warning_repo.delete_permission_warnings(connection, [server_id], commit=False)
+        connection.commit()
+    except Exception:
+        connection.rollback()
+        raise
 
 
 async def logging(bot: discord.Client, message, server_id=None, new_value=None, log_level=log_type.ERROR,

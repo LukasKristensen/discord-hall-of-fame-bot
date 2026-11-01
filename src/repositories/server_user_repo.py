@@ -22,13 +22,14 @@ def create_server_user_table(connection):
     connection.commit()
     cursor.close()
 
-def delete_server_users(connection, guild_id):
+def delete_server_users(connection, guild_id, commit: bool = True):
     cursor = connection.cursor()
     cursor.execute("""
         DELETE FROM server_user 
         WHERE guild_id = %s
     """, (guild_id,))
-    connection.commit()
+    if commit:
+        connection.commit()
     cursor.close()
 
 def get_server_users_for_user(connection, user_id) -> list[dict]:

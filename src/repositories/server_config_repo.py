@@ -189,13 +189,14 @@ def check_if_guild_exists(connection, guild_id):
     cursor.close()
     return exists
 
-def delete_server_config(connection, guild_id):
+def delete_server_config(connection, guild_id, commit: bool = True):
     cursor = connection.cursor()
     cursor.execute("""
         DELETE FROM server_configs 
         WHERE guild_id = %s
     """, (guild_id,))
-    connection.commit()
+    if commit:
+        connection.commit()
     cursor.close()
 
 def get_server_classes(connection) -> dict[int, ServerClass]:
