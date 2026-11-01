@@ -22,7 +22,7 @@ message under a "test cases" category so each post names what it tests.
 | thread / forum post | Text in a forum post | The mention shows the thread's name with its icon |
 | reply | A reply to a text message | "Replying to", the quote, a gap, then the poster's name above their words, as in Discord |
 | long-text | Over 300 characters | Full width under the header, no avatar |
-| long-text | About 1,970 characters | Shown whole. Did not reach the 2,000 cut, see below |
+| long-text | About 1,970 characters | Shown whole. The 2,000 cut needs Nitro to send, so it is left to `tests/test_post_matrix.py`, whose long text is 2,500 characters |
 | multi-media | 4 images, 10 images | Laid out as in Discord, 2 by 2 and 1 over 3 by 3, order kept |
 | multi-media | Images, a spoiler and a video together | The spoiler covered, the video playing, order kept |
 | multi-media | 10 copies of one image and an image link | The first 10 in the gallery and "1 more in the original message" under it. All 10 copies loaded |
@@ -100,7 +100,6 @@ Not bugs, and nothing decided yet:
 
 ### Still to run
 
-- **The 2,000 character cut:** needs Nitro, or a lower `post_text_limit` on the development bot.
 - **file:** whether a file link still opens a day after posting.
 
 ## 21 October 2026: member data, the post limit and the export (3.0, then called 2.2)
