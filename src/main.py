@@ -302,6 +302,13 @@ async def get_db_connection(connection_pool):
             yield conn
             conn.commit()
         except Exception as e:
+            # A failed statement leaves the transaction aborted, and the pool would hand that connection to
+            # the next caller, whose every command then fails. Rolled back here, so no caller has to
+            try:
+                conn.rollback()
+            except Exception:
+                # The connection itself is broken, which the pool finds out on its own
+                pass
             # Anything raised while the connection is held lands here, most of it Discord errors
             # rather than database ones, so it is an ordinary error and not a page. Only failing to
             # get a connection at all, above, is critical
