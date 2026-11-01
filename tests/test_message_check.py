@@ -18,8 +18,8 @@ from enums import calculation_method_type, command_refs
 from translations import messages
 
 from tests.fakes import FakePermissions
-from tests.test_validate_message import (AUTHOR_ID, GUILD_ID, HALL_OF_FAME_MESSAGE_ID, SOURCE_CHANNEL_ID,
-                                         TARGET_CHANNEL_ID, FakeAttachment, FakeBot, FakeGuild, FakeMessageRepo,
+from tests.test_validate_message import (AUTHOR_ID, BOT_USER_ID, GUILD_ID, HALL_OF_FAME_MESSAGE_ID, SOURCE_CHANNEL_ID,
+                                         TARGET_CHANNEL_ID, FakeAttachment, FakeAuthor, FakeBot, FakeGuild, FakeMessageRepo,
                                          FakePostedMessage, FakeSourceChannel, FakeSourceMessage,
                                          FakeTargetChannel, database_row, server_config)
 
@@ -126,9 +126,14 @@ class ExplainTestCase(unittest.IsolatedAsyncioTestCase):
 
 
 class WhereTheMessageIsTests(ExplainTestCase):
-    async def test_a_message_on_the_board_itself(self):
+    async def test_a_post_on_the_board_itself(self):
         self.build(asked_in=TARGET_CHANNEL_ID)
+        self.source_message.author = FakeAuthor(author_id=BOT_USER_ID)
         self.assertEqual(message_check.IS_BOARD, (await self.explain()).reason)
+
+    async def test_a_members_message_in_the_board_is_judged_like_any_other(self):
+        self.build(asked_in=TARGET_CHANNEL_ID)
+        self.assertNotEqual(message_check.IS_BOARD, (await self.explain()).reason)
 
     async def test_a_channel_the_bot_cannot_see(self):
         self.build(source_channel_missing=True)

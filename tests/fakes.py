@@ -247,7 +247,7 @@ class FakePermissionWarningStore:
         for guild_id, missing, sent, first, last in records:
             self.rows[guild_id] = (frozenset(missing), sent, first, last)
 
-    def delete(self, _connection, guild_ids):
+    def delete(self, _connection, guild_ids, commit=True):
         for guild_id in guild_ids:
             self.rows.pop(guild_id, None)
 

@@ -466,6 +466,32 @@ class RemoveEmbedTests(PostingTestCase):
 
         self.assertEqual([], self.posted.edits)
 
+    def pause_old_message_edits(self):
+        utils.old_message_edits_paused_until[GUILD_ID] = (datetime.datetime.now(datetime.timezone.utc)
+                                                          + datetime.timedelta(minutes=10))
+
+    async def test_waits_out_the_pause_on_edits_to_old_posts(self):
+        """The edit would be refused too, and logged as an error."""
+        self.pause_old_message_edits()
+        await utils.remove_embed({"hall_of_fame_message_id": HALL_OF_FAME_MESSAGE_ID},
+                                 self.bot, TARGET_CHANNEL_ID, guild_id=GUILD_ID)
+
+        self.assertEqual([], self.posted.edits)
+
+    async def test_a_post_hidden_for_safety_is_tried_during_the_pause(self):
+        self.pause_old_message_edits()
+        await utils.remove_embed({"hall_of_fame_message_id": HALL_OF_FAME_MESSAGE_ID},
+                                 self.bot, TARGET_CHANNEL_ID, guild_id=GUILD_ID, always=True)
+
+        self.assertEqual(1, len(self.posted.edits))
+
+    async def test_reaching_the_limit_while_hiding_is_not_raised_and_pauses(self):
+        self.posted.edit_error = old_message_edit_limit()
+        await utils.remove_embed({"hall_of_fame_message_id": HALL_OF_FAME_MESSAGE_ID},
+                                 self.bot, TARGET_CHANNEL_ID, guild_id=GUILD_ID)
+
+        self.assertIn(GUILD_ID, utils.old_message_edits_paused_until)
+
 
 class UpdateLeaderboardTests(PostingTestCase):
     def setUp(self):
@@ -603,6 +629,14 @@ class UpdateLeaderboardTests(PostingTestCase):
         await utils.update_leaderboard(FakeConnection(), self.bot, self.config())
 
         self.assertEqual([], self.leaderboard_messages[8002].edits)
+
+    async def test_the_old_message_edit_limit_pauses_the_boards_other_edits_too(self):
+        """Reactions after the leaderboard reached the limit would otherwise keep spending it."""
+        self.patch_leaderboard_repo()
+        self.leaderboard_messages[8001].edit_error = old_message_edit_limit()
+        await utils.update_leaderboard(FakeConnection(), self.bot, self.config())
+
+        self.assertIn(GUILD_ID, utils.old_message_edits_paused_until)
 
     async def test_other_edit_failures_are_still_raised(self):
         self.patch_leaderboard_repo()

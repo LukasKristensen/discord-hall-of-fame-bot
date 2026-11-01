@@ -1353,7 +1353,7 @@ async def my_data(interaction: discord.Interaction):
                 return
             parts = await send_export_in_parts(button_interaction, document, len(whole))
             if parts is None:
-                end_daily_cooldown(user_id, "my_data")
+                # The day was given back where it failed, once, so a second press now is not freed too
                 return
         await utils.logging(bot, f"A member downloaded their data in {where_used(interaction)}"
                                  + (f", split into {parts} files after Discord refused one" if parts > 1 else ""),
@@ -1380,6 +1380,7 @@ async def my_data(interaction: discord.Interaction):
                 if len(batches) > commands.export_max_messages(button_interaction):
                     raise commands.ExportTooLarge(f"{len(files)} files in {len(batches)} messages")
             except commands.ExportTooLarge as e:
+                end_daily_cooldown(user_id, "my_data")
                 await button_interaction.followup.send(messages.MY_DATA_EXPORT_TOO_LARGE, ephemeral=True)
                 await utils.logging(bot, f"A member's data export is too large to send through Discord: {e}",
                                     interaction.guild_id, log_level=log_type.ERROR)

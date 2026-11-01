@@ -96,7 +96,7 @@ async def explain(message: discord.Message, asked_by_id: int, bot: discord.Clien
     """
     guild = message.guild
     board_id = server_config.hall_of_fame_channel_id
-    if message.channel.id == board_id:
+    if message.channel.id == board_id and message.author.id == bot.user.id:
         return Verdict(IS_BOARD, messages.WHY_IS_BOARD)
 
     # The interaction carries the message even from a channel the bot cannot read, which is exactly the

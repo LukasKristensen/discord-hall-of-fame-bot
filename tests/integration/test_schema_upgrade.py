@@ -190,6 +190,7 @@ class ProductionUpgradeTests(SchemaUpgradeTestCase):
         self.assertIn("hall_of_fame_message_author_idx", self.indexes("hall_of_fame_message"))
         self.assertIn("hall_of_fame_message_guild_created_idx", self.indexes("hall_of_fame_message"))
         self.assertIn("hof_wrapped_user_idx", self.indexes("hof_wrapped"))
+        self.assertIn("server_user_guild_idx", self.indexes("server_user"))
 
     def test_the_bot_reads_the_upgraded_servers(self):
         servers = server_config_repo.get_server_classes(self.connection)

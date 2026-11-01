@@ -381,7 +381,7 @@ CHECK_LAST_POST_STALE = "Nothing has reached the board in a month. If reactions 
 
 # The Why isn't this on the board? message command, named with WHY_MENU_NAME above
 WHY_ON_COOLDOWN = "You just asked about a message. Try again in a few seconds."
-WHY_IS_BOARD = "**This is the Hall of Fame channel.** Messages here are the board itself, so they are not posted again."
+WHY_IS_BOARD = "**This is a Hall of Fame post.** Posts on the board are not posted again."
 WHY_CANNOT_READ = ("**The bot cannot read {channel}**, so reactions here never count. Someone with the Manage "
                    "Server permission can give the bot View Channel and Read Message History here, or run "
                    "{command} to find every channel like this.")
