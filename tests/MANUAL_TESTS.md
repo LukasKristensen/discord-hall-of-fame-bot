@@ -29,7 +29,7 @@ message under a "test cases" category so each post names what it tests.
 | mixed | A reply to a poll | The quote reads *Poll: question*. The app cannot send text and a poll in one message |
 | link | A YouTube link alone | The link kept as text, the video's thumbnail as a still picture in the gallery |
 | link | A GIF link alone | The link replaced by the GIF, as Discord shows it. Loops as a GIF, no player controls |
-| mentions | `@user`, `@here`, `@everyone` | Shown as mentions, and the posts were not highlighted as pinging the tester |
+| mentions | `@user`, `@role`, `@here`, `@everyone` | Shown as mentions. A second account in the server got no notification and no mention badge |
 | sticker | An animated (Lottie) sticker | Named in italics where the text goes, *Sticker: name* |
 | sticker | A picture sticker, two different reactions | Shown in the gallery. The reactions line lists both emojis with their counts |
 | reply | A reply to an image, a reply to a video | The quote, then the answered image or playable video full width, then the reply under its poster's name |
@@ -42,6 +42,11 @@ message under a "test cases" category so each post names what it tests.
   The same video attached four times failed on its first item in 4 of 5 posts, on desktop and mobile.
   Holding the post until the message was 10 seconds old did not help and was reverted. Different files
   in one gallery have always loaded so far.
+- **A user mention can read as unknown user.** The second account saw `@Lukas` on the board as "@unknown-user"
+  (in Danish, "@ukendt-bruger"), as a post does not carry the users it mentions and the reader's app had not
+  loaded that member. Roles, `@here` and `@everyone` showed fine. Possible fix: write each user mention as
+  the member's name in bold, taken from the original message's `mentions`, at the cost of the click to
+  their profile.
 - A spoiler once showed uncovered right after posting. A reload covered it, so it was the client, not the
   bot.
 - Poll votes are written when the post is made and not updated after.
@@ -79,7 +84,6 @@ Not bugs, and nothing decided yet:
   In this run their message was on the board, possibly reacted to before they opted out.
 - **file:** a PDF or zip, an audio file and a voice message.
 - **link:** an image URL alone, text with a link.
-- **mentions:** `@role`, and a second account checking it got no notification from `@everyone`.
 - **forward:** a forwarded poll, and a forward from a channel the bot cannot see.
 
 ## 21 October 2026: member data, the post limit and the export (3.0, then called 2.2)
