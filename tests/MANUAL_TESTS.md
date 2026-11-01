@@ -47,6 +47,28 @@ message under a "test cases" category so each post names what it tests.
 - Whether a post shows the avatar depends on its text: only posts with up to 300 characters of text have
   it, so media-only and long-text posts look like a different template.
 
+### Ideas from these tests
+
+Not bugs, and nothing decided yet:
+
+- **An avatar on every post.** Only posts with up to 300 characters of text show it today. A third heading
+  line with when the message was sent (`<t:...:R>`) would fill the space beside the avatar, so media-only
+  and long-text posts could keep it too, and posts would show their date, which none do now.
+- **Poll votes that stay current.** Rebuild the poll text when the post is edited, or label the counts as
+  at the time it was featured. A closed poll could mark its winning answer.
+- **A neater cut at 2,000 characters.** Cut at the last space and end with `…`, instead of mid-word with
+  `...`. The docstring of `truncate_content` still describes the old 1,024 character embed field.
+- **Jumbo emoji.** A message that is only emoji shows them at normal size. Worth trying whether a full-width
+  `TextDisplay`, outside the `Section`, shows them large as Discord does.
+- **The parent of a thread.** "in #forum › thread name", so a thread with a vague name still says where it is.
+- **A reply to a member who opted out.** It shows no reply line at all. "Replying to a message", with no
+  name or quote, keeps the context without naming them, like the line for a deleted message.
+- **The title of a YouTube link.** Its thumbnail looks like any picture and opens the picture.
+  "-# YouTube · title" under it, from the link preview, says it is a video.
+- **Smaller quoted media.** The answered image or video is shown full width, larger than the reply itself.
+  A thumbnail beside the quote would put the featured message first, but a thumbnail cannot play a video.
+  Kept as it is for now.
+
 ### Still to run
 
 - **The 2,000 character cut:** needs Nitro, or a lower `post_text_limit` on the development bot.
