@@ -1432,7 +1432,7 @@ class OptingOutWhileAPostIsSentTests(unittest.IsolatedAsyncioTestCase):
         async def count(*_args, **_kwargs):
             return 5
 
-        channel = types.SimpleNamespace(send=send)
+        channel = types.SimpleNamespace(id=100, send=send)
         bot = types.SimpleNamespace(get_channel=lambda _id: channel)
         message = types.SimpleNamespace(id=1, channel=types.SimpleNamespace(id=2), guild=types.SimpleNamespace(id=3),
                                         author=types.SimpleNamespace(id=77))

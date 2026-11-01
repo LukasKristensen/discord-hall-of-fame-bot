@@ -268,6 +268,35 @@ class PostHallOfFameMessageTests(PostingTestCase):
         self.assertEqual(self.target_channel.sent, checked)
         self.assertEqual(1, len(self.inserted), "a post taken down is still recorded, so it can be restored")
 
+    async def test_reads_the_scan_results_a_new_post_carries_in_its_raw_components(self):
+        """discord.py does not keep them, and a replied-to image may already be flagged when the post is sent."""
+        self.patch_repo()
+        requested = []
+
+        async def get_message(channel_id, message_id):
+            requested.append((channel_id, message_id))
+            return {"components": [{"type": 17, "components": [{"type": 12, "items": [
+                {"media": {"url": "https://cdn.example/a.png", "content_scan_metadata": {"flags": 1 << 1}}}]}]}]}
+
+        self.bot.http = types.SimpleNamespace(get_message=get_message)
+        await self.post()
+
+        posted = self.target_channel.sent[0]
+        self.assertEqual([(TARGET_CHANNEL_ID, posted.id)], requested)
+        self.assertEqual(1, len(posted.edits), "the flagged post is blanked")
+        self.assertNotIn("embed", posted.edits[0])
+
+    async def test_a_post_whose_raw_components_cannot_be_read_stays_up(self):
+        self.patch_repo()
+
+        async def get_message(_channel_id, _message_id):
+            raise http_error(discord.HTTPException, 500, 0, "Server Error")
+
+        self.bot.http = types.SimpleNamespace(get_message=get_message)
+        await self.post()
+
+        self.assertEqual([], self.target_channel.sent[0].edits)
+
     async def test_leaves_a_post_without_flags_alone(self):
         self.patch_repo()
         await self.post()

@@ -5,6 +5,7 @@ from unittest import mock
 from tests.fakes import FakeAttachment, FakeGuild, FakeReaction, FakeUser
 
 import discord
+import board_post
 import utils
 from enums import calculation_method_type
 from translations import messages
@@ -314,7 +315,7 @@ class PostViewTests(EmbedTestCase):
     """The Components V2 post, read from the payload Discord would receive."""
 
     async def payload(self, message, counted=2):
-        view = await utils.create_post_view(message, None, REACTION_CONFIG, counted)
+        view = await board_post.create_post_view(message, None, REACTION_CONFIG, counted)
         [container] = view.to_components()
         return container
 
@@ -353,13 +354,13 @@ class PostViewTests(EmbedTestCase):
 
     def test_leaves_a_link_that_is_already_encoded_alone(self):
         url = "https://cdn/a/%C3%B8delagt%20clip.mp4?ex=1&is=2&hm=abc"
-        self.assertEqual(url, utils.ascii_url(url))
+        self.assertEqual(url, board_post.ascii_url(url))
 
     async def test_holds_at_most_ten_pictures(self):
         attachments = [FakeAttachment(f"https://cdn/{index}.png", "image/png") for index in range(12)]
         [gallery] = self.of_type(await self.payload(FakeEmbedMessage(attachments=attachments)), 12)
 
-        self.assertEqual(utils.post_media_limit, len(gallery["items"]))
+        self.assertEqual(board_post.post_media_limit, len(gallery["items"]))
 
     async def test_links_files_that_are_not_pictures(self):
         notes = FakeAttachment("https://cdn/notes.txt", "text/plain")
@@ -420,7 +421,7 @@ class PostViewTests(EmbedTestCase):
         reactions = [FakeReaction("🔥", [1, 2]), FakeReaction("😭", [1, 2, 3, 4]),
                      FakeReaction("👀", [5])]
         container = await self.payload(FakeEmbedMessage(reactions=reactions), counted=4)
-        [line] = [c for c in self.of_type(container, 10) if c.get("id") == utils.POST_REACTIONS_ID]
+        [line] = [c for c in self.of_type(container, 10) if c.get("id") == board_post.POST_REACTIONS_ID]
 
         self.assertEqual("😭 4 · 🔥 2 · 👀 1", line["content"])
 
@@ -428,7 +429,7 @@ class PostViewTests(EmbedTestCase):
         """Such as total reactions, or the author's own reaction left out."""
         reactions = [FakeReaction("🔥", [1, 2]), FakeReaction("👀", [5])]
         container = await self.payload(FakeEmbedMessage(reactions=reactions), counted=3)
-        [line] = [c for c in self.of_type(container, 10) if c.get("id") == utils.POST_REACTIONS_ID]
+        [line] = [c for c in self.of_type(container, 10) if c.get("id") == board_post.POST_REACTIONS_ID]
 
         self.assertEqual("🔥 2 · 👀 1\n-# " + messages.POST_COUNTED.format(count=3), line["content"])
 
@@ -458,7 +459,7 @@ class PostViewTests(EmbedTestCase):
     async def test_keeps_up_to_two_thousand_characters(self):
         container = await self.payload(FakeEmbedMessage("a" * 3000))
 
-        self.assertEqual(utils.post_text_limit, len(self.texts(container)[1]))
+        self.assertEqual(board_post.post_text_limit, len(self.texts(container)[1]))
 
     async def test_quotes_a_long_replied_to_message_briefly(self):
         replied = FakeEmbedMessage("b" * 900, author_name="jonas")
@@ -466,7 +467,7 @@ class PostViewTests(EmbedTestCase):
         [section] = self.of_type(await self.payload(message), 9)
 
         quote = section["components"][1]["content"].split(">>> ")[1]
-        self.assertEqual(utils.post_quote_limit, len(quote))
+        self.assertEqual(board_post.post_quote_limit, len(quote))
 
     async def test_says_when_the_replied_to_message_was_deleted(self):
         message = FakeEmbedMessage("what did they say", reference_message_id=9, channel=FakeChannel(None))
@@ -526,7 +527,7 @@ class PostViewTests(EmbedTestCase):
         self.assertNotIn("tenor.com/view", " ".join(self.texts(container)))
 
     def test_a_gif_from_elsewhere_keeps_its_video(self):
-        self.assertEqual("https://media.giphy.example/clip.mp4", utils.gif_url("https://media.giphy.example/clip.mp4"))
+        self.assertEqual("https://media.giphy.example/clip.mp4", board_post.gif_url("https://media.giphy.example/clip.mp4"))
 
     async def test_a_reply_to_a_gif_shows_the_gif_and_not_its_link(self):
         replied = self.gif_message()
@@ -581,7 +582,7 @@ class PostViewTests(EmbedTestCase):
     async def test_counts_the_emojis_that_did_not_fit(self):
         reactions = [FakeReaction(chr(0x1F600 + index), [index]) for index in range(1, 12)]
         container = await self.payload(FakeEmbedMessage("chaos", reactions=reactions), counted=1)
-        [line] = [c for c in self.of_type(container, 10) if c.get("id") == utils.POST_REACTIONS_ID]
+        [line] = [c for c in self.of_type(container, 10) if c.get("id") == board_post.POST_REACTIONS_ID]
 
         self.assertTrue(line["content"].endswith(" · +3"))
 

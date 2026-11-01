@@ -181,7 +181,7 @@ class PostingTests(PostsTestCase):
         async def seven(*_args, **_kwargs):
             return 7
 
-        channel = types.SimpleNamespace(send=send)
+        channel = types.SimpleNamespace(id=100, send=send)
         bot = types.SimpleNamespace(get_channel=lambda _channel_id: channel)
         message = types.SimpleNamespace(id=message_id, channel=types.SimpleNamespace(id=CHANNEL),
                                         guild=types.SimpleNamespace(id=GUILD), author=types.SimpleNamespace(id=author))

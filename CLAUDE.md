@@ -22,7 +22,8 @@ troubleshooting are in the `dev-environment` skill.
 |---|---|
 | `src/main.py` | Startup, event handlers, every slash command (`@tree.command`), `update_setting`, `send_error` |
 | `src/events.py` | Reaction and message events, the daily task |
-| `src/utils.py` | Posting to the board, embeds, `validate_message`, leaderboards, logging |
+| `src/utils.py` | Posting to the board, the old embed posts, `validate_message`, leaderboards, logging |
+| `src/board_post.py` | What a Components V2 board post shows, every kind of media included; `tests/test_post_matrix.py` crosses them all |
 | `src/message_reactions.py` | Reaction counting methods and the emoji whitelist |
 | `src/commands.py` | `/help` and `/get_server_config` embeds, command helpers |
 | `src/repositories/` | All SQL, one module per table. `server_config_repo.py` owns the settings table |

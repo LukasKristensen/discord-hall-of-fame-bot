@@ -1,56 +1,70 @@
-"""Every kind of featured message crossed with every kind of message it can reply to, as a board post.
+"""Every kind of media a message can carry, alone, mixed and in replies, as a board post.
 
 Listing cases one by one missed the crossings: a reply to a GIF quoted its raw link because replies and link
-previews were only ever tested apart. So each kind of message below is crossed with every reply target, and
-each post is checked against what must hold for all of them: the message and the one it answers can be
-recognised, a link is never shown next to the picture that stands in for it, nothing of a member who asked
-not to be featured appears, and the post stays inside Discord's limits.
+previews were only ever tested apart, and a message with an attachment dropped its link preview. So every kind
+of message below is crossed with every reply target, every two kinds of media are mixed into one message, and
+each post is checked against what must hold for all of them: every piece of the message and the one it answers
+can be recognised, a link never shows next to the picture standing in for it, spoilers stay covered, media
+Discord flagged is never shown from a reply, nothing of a member who asked not to be featured appears, and the
+post stays inside Discord's limits.
 
-What only Discord's rendering can show, such as a GIF looping rather than playing as a video, is not
-checked here. RELEASE_TEST_PLAN.md lists those.
+What only Discord's rendering shows, such as a GIF looping rather than playing as a video, is not checked
+here. RELEASE_TEST_PLAN.md lists those.
 """
 
 import asyncio
+import itertools
 import types
 import unittest
 from unittest import mock
 
 import discord
 
+import board_post
 import utils
 
 OPTED_OUT_ID = 66
 TENOR_PAGE = "https://tenor.com/view/the-big-leagues-gif-1592824968"
 TENOR_MP4 = "https://media.tenor.com/8d3ZrTvq4f0AAAPo/the-big-leagues.mp4"
+TENOR_GIF = "the-big-leagues.gif"
 CONFIG = {"custom_emoji_check_logic": False, "whitelisted_emojis": []}
 # Discord's limits on one Components V2 message
 MAX_COMPONENTS = 40
 MAX_TEXT = 4000
 
 
-def attachment(name, content_type, spoiler=False):
-    item = types.SimpleNamespace(url=f"https://cdn.example/{name}?ex=1", content_type=content_type, filename=name)
+def attachment(name, content_type, spoiler=False, flags=0):
+    item = types.SimpleNamespace(url=f"https://cdn.example/{name}?ex=1&hm=abcdef", content_type=content_type,
+                                 filename=name, flags=types.SimpleNamespace(value=flags))
     item.is_spoiler = lambda: spoiler
     return item
 
 
 def embed(kind, url=None, image=None, thumbnail=None, video=None):
     wrap = lambda link: types.SimpleNamespace(url=link) if link else None  # noqa: E731
-    return types.SimpleNamespace(type=kind, url=url, image=wrap(image), thumbnail=wrap(thumbnail), video=wrap(video))
+    return types.SimpleNamespace(type=kind, url=url, image=wrap(image), thumbnail=wrap(thumbnail), video=wrap(video),
+                                 flags=None)
+
+
+def sticker(name, lottie=False):
+    return types.SimpleNamespace(name=name, url=f"https://media.example/{name.lower()}.{'json' if lottie else 'png'}",
+                                 format=discord.StickerFormatType.lottie if lottie else discord.StickerFormatType.png)
 
 
 class Message:
-    def __init__(self, content="", attachments=(), stickers=(), embeds=(), author_id=1, name="Mia"):
+    def __init__(self, content="", attachments=(), stickers=(), embeds=(), author_id=1, name="Mia", voice=False):
         self.id = author_id * 100
         self.content = content
         self.attachments = list(attachments)
         self.stickers = list(stickers)
         self.embeds = list(embeds)
+        self.flags = types.SimpleNamespace(voice=voice)
         self.author = types.SimpleNamespace(id=author_id, name=name.lower(), display_name=name,
                                             display_avatar=types.SimpleNamespace(url=f"https://cdn.example/{name}.png"))
         self.guild = types.SimpleNamespace(id=9)
         self.reference = None
-        self.reactions = [types.SimpleNamespace(emoji="\U0001F525", count=7)]
+        self.reactions = [types.SimpleNamespace(emoji="<:pepe_laughing_really_hard:123456789012345678>", count=7),
+                          types.SimpleNamespace(emoji="\U0001F525", count=3)]
         self.jump_url = "https://discord.com/channels/9/500/1"
         self.channel = Channel()
 
@@ -71,73 +85,104 @@ def forward(**kwargs):
     message = Message(**kwargs)
     message.reference = types.SimpleNamespace(message_id=5, type=discord.MessageReferenceType.forward)
     message.message_snapshots = [types.SimpleNamespace(
-        content="forwarded words", attachments=[attachment("forwarded.png", "image/png")], embeds=[], stickers=[])]
+        content="forwarded words", attachments=[attachment("forwarded.png", "image/png")], embeds=[], stickers=[],
+        flags=types.SimpleNamespace(voice=False))]
     return message
 
 
 def poll(**kwargs):
     message = Message(**kwargs)
-    message.poll = types.SimpleNamespace(question="Best topping?", answers=[types.SimpleNamespace(text="Pineapple", vote_count=3)])
+    message.poll = types.SimpleNamespace(question="Best topping?", answers=[
+        types.SimpleNamespace(text="Pineapple", emoji=None, vote_count=3),
+        types.SimpleNamespace(text="", emoji="\U0001F355", vote_count=1)])
     return message
 
 
-# Each kind: how to build it, and what of it must show on a post: a picture's link, or words
+LONG_NAMES = [attachment(f"{'very-long-file-name-' * 9}{index}.pdf", "application/pdf") for index in range(7)]
+
+# Each kind: how to build it, then what of it must show on a post: links of the gallery, and words
 KINDS = {
-    "text": (lambda **k: Message("a joke worth keeping", **k), "words", "a joke worth keeping"),
-    "long text": (lambda **k: Message("long " * 500, **k), "words", "long long long"),
-    "image": (lambda **k: Message(attachments=[attachment("cat.png", "image/png")], **k), "media", "cat.png"),
-    "captioned image": (lambda **k: Message("look", attachments=[attachment("dog.png", "image/png")], **k), "media", "dog.png"),
-    "video": (lambda **k: Message(attachments=[attachment("jump.mp4", "video/mp4")], **k), "media", "jump.mp4"),
+    "text": (lambda **k: Message("a joke worth keeping", **k), [], ["a joke worth keeping"]),
+    "long text": (lambda **k: Message("long " * 500, **k), [], ["long long long"]),
+    "image": (lambda **k: Message(attachments=[attachment("cat.png", "image/png")], **k), ["cat.png"], []),
+    "gif file": (lambda **k: Message(attachments=[attachment("party.gif", "image/gif")], **k), ["party.gif"], []),
+    "video": (lambda **k: Message(attachments=[attachment("jump.mp4", "video/mp4")], **k), ["jump.mp4"], []),
+    "mov video": (lambda **k: Message(attachments=[attachment("phone.mov", "video/quicktime")], **k), ["phone.mov"], []),
     "spoilered image": (lambda **k: Message(attachments=[attachment("finale.png", "image/png", spoiler=True)], **k),
-                        "media", "finale.png"),
-    "file": (lambda **k: Message(attachments=[attachment("rules.pdf", "application/pdf")], **k), "words", "rules.pdf"),
-    "sticker": (lambda **k: Message(stickers=[types.SimpleNamespace(name="Wave", url="https://media.example/wave.png",
-                                                                    format=discord.StickerFormatType.png)], **k),
-                "media", "wave.png"),
-    "animated sticker": (lambda **k: Message(stickers=[types.SimpleNamespace(
-        name="Wumpus", url="https://media.example/wumpus.json", format=discord.StickerFormatType.lottie)], **k),
-                         "words", "Wumpus"),
+                        ["finale.png"], []),
+    "file": (lambda **k: Message(attachments=[attachment("rules.pdf", "application/pdf")], **k), [], ["rules.pdf"]),
+    "long file names": (lambda **k: Message("text " * 380, attachments=LONG_NAMES, **k), [], ["text text"]),
+    "audio": (lambda **k: Message(attachments=[attachment("song.mp3", "audio/mpeg")], **k), [], ["song.mp3"]),
+    "voice message": (lambda **k: Message(attachments=[attachment("voice-message.ogg", "audio/ogg")], voice=True, **k),
+                      [], ["Voice message"]),
+    "sticker": (lambda **k: Message(stickers=[sticker("Wave")], **k), ["wave.png"], []),
+    "animated sticker": (lambda **k: Message(stickers=[sticker("Wumpus", lottie=True)], **k), [], ["Wumpus"]),
+    "three stickers": (lambda **k: Message(stickers=[sticker("Wave"), sticker("Clap"), sticker("Wumpus", lottie=True)], **k),
+                       ["wave.png", "clap.png"], ["Wumpus"]),
     "image link": (lambda **k: Message("https://i.example/meme.png", embeds=[embed("image", url="https://i.example/meme.png")], **k),
-                   "media", "meme.png"),
+                   ["meme.png"], []),
+    "two image links": (lambda **k: Message("https://i.example/a.png https://i.example/b.png", embeds=[
+        embed("image", url="https://i.example/a.png"), embed("image", url="https://i.example/b.png")], **k), ["a.png", "b.png"], []),
     "gif": (lambda **k: Message(TENOR_PAGE, embeds=[embed("gifv", url=TENOR_PAGE, thumbnail="https://media.tenor.com/x.png",
-                                                          video=TENOR_MP4)], **k), "media", "the-big-leagues.gif"),
+                                                          video=TENOR_MP4)], **k), [TENOR_GIF], []),
     "gif with words": (lambda **k: Message(f"so true {TENOR_PAGE}", embeds=[embed(
-        "gifv", url=TENOR_PAGE, thumbnail="https://media.tenor.com/x.png", video=TENOR_MP4)], **k), "media", "the-big-leagues.gif"),
-    "video link": (lambda **k: Message("https://youtu.be/abc", embeds=[embed("video", url="https://youtu.be/abc",
-                                                                           thumbnail="https://i.ytimg.example/abc.jpg")], **k),
-                   "media", "abc.jpg"),
+        "gifv", url=TENOR_PAGE, thumbnail="https://media.tenor.com/x.png", video=TENOR_MP4)], **k), [TENOR_GIF], ["so true"]),
+    "video file link": (lambda **k: Message("https://files.example/clip.webm", embeds=[embed(
+        "video", url="https://files.example/clip.webm", thumbnail="https://files.example/clip.jpg",
+        video="https://files.example/clip.webm")], **k), ["clip.webm"], []),
+    "youtube link": (lambda **k: Message("https://youtu.be/abc", embeds=[embed(
+        "video", url="https://youtu.be/abc", thumbnail="https://i.ytimg.example/abc.jpg",
+        video="https://www.youtube.com/embed/abc")], **k), ["abc.jpg"], ["youtu.be/abc"]),
     "article": (lambda **k: Message("we made the news https://news.example/a", embeds=[embed(
-        "rich", url="https://news.example/a", image="https://news.example/hero.jpg")], **k), "media", "hero.jpg"),
-    "forward": (forward, "media", "forwarded.png"),
-    "poll": (poll, "words", "Best topping?"),
+        "rich", url="https://news.example/a", image="https://news.example/hero.jpg")], **k), ["hero.jpg"], ["we made the news"]),
+    "multi-image preview": (lambda **k: Message("https://social.example/post/1", embeds=[
+        embed("rich", url="https://social.example/post/1", image=f"https://social.example/{index}.jpg") for index in range(4)], **k),
+                            [f"{index}.jpg" for index in range(4)], []),
+    "image and article": (lambda **k: Message("source https://news.example/a", attachments=[attachment("shot.png", "image/png")],
+                                              embeds=[embed("rich", url="https://news.example/a", image="https://news.example/hero.jpg")], **k),
+                          ["shot.png", "hero.jpg"], ["source"]),
+    "forward": (forward, ["forwarded.png"], ["forwarded words", board_post.messages.POST_FORWARDED]),
+    "poll": (poll, [], ["Best topping?", "Pineapple", "\U0001F355"]),
 }
-# What a featured message can reply to, besides every kind above
-REPLY_STATES = ("no reply", "deleted", "opted out")
+# Kinds that are a whole message in their own right, never mixed with others. Long text is cut at 2,000
+# characters, which would cut the other kind's words; it is crossed with every reply on its own
+WHOLE_MESSAGES = ("forward", "poll", "long file names", "voice message", "long text")
+REPLY_STATES = ("no reply", "deleted", "opted out", "flagged image")
+FLAGGED = "flagged.png"
 
 
-def build(kind, reply):
-    make, _, _ = KINDS[kind]
+def build(make, reply):
     message = make()
-    if reply == "no reply" or kind == "forward":
+    if reply == "no reply" or getattr(message, "message_snapshots", None):
         return message, None
     message.reference = types.SimpleNamespace(message_id=8)
     if reply == "deleted":
         message.channel = Channel(deleted=True)
         return message, None
     if reply == "opted out":
-        replied = KINDS["captioned image"][0](author_id=OPTED_OUT_ID, name="Private")
+        replied = Message("my words", attachments=[attachment("private.png", "image/png")], author_id=OPTED_OUT_ID, name="Private")
+    elif reply == "flagged image":
+        replied = Message(attachments=[attachment(FLAGGED, "image/png", flags=board_post.GORE_CONTENT)], author_id=2, name="Jonas")
     else:
         replied = KINDS[reply][0](author_id=2, name="Jonas")
     message.channel = Channel(replied)
     return message, replied
 
 
+def mixed(first, second):
+    """One message carrying both kinds: their words, attachments, stickers and link previews together"""
+    def make(**kwargs):
+        one, two = KINDS[first][0](**kwargs), KINDS[second][0](**kwargs)
+        return Message(" ".join(part for part in (one.content, two.content) if part),
+                       attachments=one.attachments + two.attachments, stickers=one.stickers + two.stickers,
+                       embeds=one.embeds + two.embeds, **kwargs)
+    return make, KINDS[first][1] + KINDS[second][1], KINDS[first][2] + KINDS[second][2]
+
+
 def walk(components):
     for component in components:
         yield component
         yield from walk(component.get("components", []))
-        if "component" in component:
-            yield from walk([component["component"]])
         if "accessory" in component:
             yield component["accessory"]
 
@@ -146,8 +191,8 @@ def texts(payload):
     return [component["content"] for component in walk(payload) if component["type"] == 10]
 
 
-def gallery_links(payload):
-    return [item["media"]["url"] for component in walk(payload) if component["type"] == 12 for item in component["items"]]
+def gallery_items(payload):
+    return [item for component in walk(payload) if component["type"] == 12 for item in component["items"]]
 
 
 class PostMatrixTests(unittest.TestCase):
@@ -157,59 +202,71 @@ class PostMatrixTests(unittest.TestCase):
         self.addCleanup(patcher.stop)
 
     def payload(self, message):
-        return asyncio.run(utils.create_post_view(message, None, CONFIG, 7)).to_components()
+        return asyncio.run(board_post.create_post_view(message, None, CONFIG, 7)).to_components()
 
-    def test_every_crossing(self):
-        for kind in KINDS:
+    def test_every_kind_with_every_reply(self):
+        for kind, (make, links, words) in KINDS.items():
             for reply in (*REPLY_STATES, *KINDS):
                 with self.subTest(featured=kind, replies_to=reply):
-                    message, replied = build(kind, reply)
-                    self.check(kind, reply, message, replied, self.payload(message))
+                    message, replied = build(make, reply)
+                    self.check(message, replied, reply, links, words)
 
-    def check(self, kind, reply, message, replied, payload):
+    def test_every_two_kinds_mixed_in_one_message(self):
+        mixable = [kind for kind in KINDS if kind not in WHOLE_MESSAGES]
+        for first, second in itertools.combinations(mixable, 2):
+            make, links, words = mixed(first, second)
+            for reply in ("no reply", "image", "gif"):
+                with self.subTest(mixes=f"{first} + {second}", replies_to=reply):
+                    message, replied = build(make, reply)
+                    self.check(message, replied, reply, links, words)
+
+    def check(self, message, replied, reply, links, words):
+        payload = self.payload(message)
         all_text = "\n".join(texts(payload))
-        links = gallery_links(payload)
+        items = gallery_items(payload)
+        shown = [item["media"]["url"] for item in items]
 
         # Inside Discord's limits, and no section left with only the name beside the avatar
         self.assertLessEqual(sum(1 for _ in walk(payload)), MAX_COMPONENTS)
         self.assertLessEqual(len(all_text), MAX_TEXT)
-        for section in (c for c in walk(payload) if c["type"] == 9):
-            self.assertGreaterEqual(len(section["components"]), 2, "a name alone beside the avatar")
+        for component in walk(payload):
+            if component["type"] == 12:
+                self.assertLessEqual(len(component["items"]), board_post.post_media_limit)
+            if component["type"] == 9:
+                self.assertGreaterEqual(len(component["components"]), 2, "a name alone beside the avatar")
 
-        # The featured message can be recognised
-        _, shows, mark = KINDS[kind]
-        if shows == "media":
-            self.assertTrue(any(mark in link for link in links), f"{mark} is not shown")
-        else:
-            self.assertIn(mark, all_text)
-        if kind == "spoilered image":
-            spoilers = [item["spoiler"] for c in walk(payload) if c["type"] == 12 for item in c["items"]
-                        if "finale.png" in item["media"]["url"]]
-            self.assertEqual([True], spoilers)
+        # Every piece of the message can be recognised: in the gallery, or counted in a note when it did not fit
+        own_media = [link for link in links if any(link in url for url in shown)]
+        if len(own_media) < len(links):
+            self.assertIn("more in the original message", all_text, f"{set(links) - set(own_media)} vanished")
+        for word in words:
+            self.assertIn(word, all_text)
+        for item in items:
+            if "finale.png" in item["media"]["url"]:
+                self.assertTrue(item["spoiler"], "a spoiler shown uncovered")
 
-        # A link that is the whole message never shows on a line of its own: its picture stands in for it. A
-        # link among words keeps its words, and so its link
+        # A link that is the whole message never shows on a line of its own: its picture stands in for it
         lines = [line.removeprefix(">>> ").strip() for text in texts(payload) for line in text.split("\n")]
         for source in (message, replied):
             if source is not None and source.content.startswith("https://") and " " not in source.content \
-                    and source.embeds and source.embeds[0].type in utils.PREVIEWS_REPLACING_LINK:
+                    and source.embeds and all(e.type in board_post.PREVIEWS_REPLACING_LINK for e in source.embeds):
                 self.assertNotIn(source.content, lines)
 
-        # The message it answers
-        if reply in ("no reply",) or kind == "forward":
+        # The message it answers. A forward is never a reply, and nothing of a member who opted out shows
+        is_forward = bool(getattr(message, "message_snapshots", None))
+        if reply in ("no reply", "opted out") or is_forward:
             self.assertNotIn("Replying to", all_text)
-        elif reply == "deleted":
-            self.assertIn(utils.messages.POST_REPLYING_TO_DELETED, all_text)
-        elif reply == "opted out":
-            self.assertNotIn("Replying to", all_text)
+            self.assertFalse(any("private.png" in url for url in shown))
             self.assertNotIn("Private", all_text)
-            self.assertFalse(any("dog.png" in link for link in links if kind != "captioned image"))
+            self.assertNotIn("my words", all_text)
+        elif reply == "deleted":
+            self.assertIn(board_post.messages.POST_REPLYING_TO_DELETED, all_text)
         else:
-            self.assertIn("Replying to Jonas", all_text)
             reply_line = next(text for text in texts(payload) if "Replying to Jonas" in text)
-            _, reply_shows, reply_mark = KINDS[reply]
-            identified = reply_line.strip() != "-# Replying to Jonas" or \
-                (reply_shows == "media" and any(reply_mark in link for link in links))
+            self.assertFalse(any(FLAGGED in url for url in shown), "flagged media shown from a reply")
+            answered = KINDS[reply][1] if reply in KINDS else []
+            identified = reply_line.strip() != "-# Replying to Jonas" or any(
+                link in url for link in answered for url in shown)
             self.assertTrue(identified, "nothing says what was replied to")
 
 

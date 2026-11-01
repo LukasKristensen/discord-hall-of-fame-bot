@@ -162,6 +162,10 @@ and reply from the payload:
 - [ ] A reply with a picture of its own to a sticker, a file and a GIF says *Sticker: name*, *File: name* and
       *GIF* in the quote
 - [ ] A file link on a post that is a day old still opens the file
+- [ ] A MOV from a phone plays in the gallery, a voice message is linked as Voice message, and a message
+      with three stickers shows the two pictures and names the animated one
+- [ ] A link to a post with four images, and a message with a screenshot and an article link, show every
+      picture in one gallery
 
 ## Wrapped
 

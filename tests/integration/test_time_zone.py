@@ -53,7 +53,7 @@ class TimeZoneTests(DatabaseTestCase):
             def now(cls, tz=None):
                 return featured if tz is not None else featured.replace(tzinfo=None)
 
-        channel = types.SimpleNamespace(send=send)
+        channel = types.SimpleNamespace(id=100, send=send)
         bot = types.SimpleNamespace(get_channel=lambda _channel_id: channel)
         message = types.SimpleNamespace(id=message_id, channel=types.SimpleNamespace(id=500),
                                         guild=types.SimpleNamespace(id=9001), author=types.SimpleNamespace(id=101))
