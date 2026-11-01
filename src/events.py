@@ -323,10 +323,13 @@ async def clean_up_departed_guilds(bot: discord.Client, connection, server_class
                                          f"{since:%Y-%m-%d}, but Discord still gives the bot access to it. "
                                          f"Not deleting it")
                 continue
-            utils.delete_database_context(guild_id, connection)
-            # Dated when the server was first found missing rather than today, so the statistics count
-            # the departure in the month it happened instead of after the grace period
-            record_guild_leave(connection, guild_id, since)
+            # Under the database's own timeout, since psycopg2 holds the event loop while a delete waits on a
+            # lock, and no asyncio timeout can interrupt it. A server that times out is tried again tomorrow
+            with utils.statement_timeout(connection, daily_task_statement_timeout_ms):
+                utils.delete_database_context(guild_id, connection)
+                # Dated when the server was first found missing rather than today, so the statistics count
+                # the departure in the month it happened instead of after the grace period
+                record_guild_leave(connection, guild_id, since)
         except Exception as e:
             connection.rollback()
             await utils.logging(bot, f"Could not clean up departed server {guild_id}: {e}", guild_id)

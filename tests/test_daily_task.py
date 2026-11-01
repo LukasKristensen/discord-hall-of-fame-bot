@@ -712,6 +712,17 @@ class DepartedGuildCleanupTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual([(self.departed, "LEAVE", self.missing_since[self.departed])], self.lifecycle)
 
+    async def test_deletes_under_the_database_statement_timeout(self):
+        """psycopg2 holds the event loop while a delete waits, so only the database can stop it."""
+        timeouts = []
+        self.patch(utils, "delete_database_context",
+                   lambda guild_id, _connection: timeouts.append(list(self.connection.queries)))
+        await self.clean_up()
+
+        [queries] = timeouts
+        self.assertIn("SET statement_timeout = %s", queries)
+        self.assertEqual("RESET statement_timeout", self.connection.queries[-1])
+
     async def test_does_not_record_a_second_leave(self):
         self.latest_event = "LEAVE"
         await self.clean_up()
@@ -813,7 +824,8 @@ class DepartedGuildCleanupTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual([self.departed], await self.clean_up())
         self.assertIn(other, self.server_classes)
-        self.assertEqual(1, self.connection.rollbacks)
+        # Rolled back by the statement timeout's block and again by the clean-up, which does no harm
+        self.assertGreaterEqual(self.connection.rollbacks, 1)
 
     async def test_the_daily_task_skips_the_cleanup_on_the_development_bot(self):
         cleanups = []
