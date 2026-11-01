@@ -52,8 +52,9 @@ message under a "test cases" category so each post names what it tests.
   cause it: so far only repeated videos have failed.
 - **System messages reach the board as empty posts.** The message Discord posts when a poll closes was
   featured as a reply to the poll with no words of its own, as its result sits in an embed the post does not
-  read. The bot never checks a message's type, so a member joining, a boost, a pin or a new thread could be
-  featured the same way once reacted to enough.
+  read. The bot never checked a message's type, so a member joining, a boost, a pin or a new thread could be
+  featured the same way once reacted to enough. Fixed: only messages, replies and bots' answers to commands
+  are featured now (`FEATURED_MESSAGE_TYPES` in `src/utils.py`).
 - **A poll cannot be forwarded.** Discord's menu offers no Forward on a poll, so a forwarded poll cannot be
   tested, and the code's handling of one is never reached from the app.
 - **A user mention can read as unknown user.** A new second account, in a browser, saw `@Lukas` on the board

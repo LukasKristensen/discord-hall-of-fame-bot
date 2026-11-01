@@ -55,6 +55,8 @@ def rule_text(rule: str, server_config) -> str:
         return messages.WHY_AGE_RESTRICTED
     if rule == utils.RULE_FLAGGED_MEDIA:
         return messages.WHY_FLAGGED_MEDIA
+    if rule == utils.RULE_SYSTEM_MESSAGE:
+        return messages.WHY_SYSTEM_MESSAGE
     return messages.WHY_NO_MEDIA.format(command=command_refs.REQUIRE_IMAGE_OR_VIDEO)
 
 

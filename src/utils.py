@@ -50,9 +50,16 @@ RULE_BOT_MESSAGE = "bot_message"
 RULE_NO_MEDIA = "no_media"
 RULE_AGE_RESTRICTED = "age_restricted"
 RULE_FLAGGED_MEDIA = "flagged_media"
+RULE_SYSTEM_MESSAGE = "system_message"
 # Rules that keep a message off the board for safety rather than by the server's choice. A post already on
 # the board that breaks one is hidden, and comes back once the rule stops applying
 SAFETY_RULES = (RULE_AGE_RESTRICTED, RULE_FLAGGED_MEDIA)
+
+# What a member writes: a message, a reply, and a bot's answer to a command. Every other type is one Discord
+# posts on its own, such as a member joining, a boost, a pin or a poll closing. Those have no words of their
+# own for a post to show, so they are never featured
+FEATURED_MESSAGE_TYPES = (discord.MessageType.default, discord.MessageType.reply,
+                          discord.MessageType.chat_input_command, discord.MessageType.context_menu_command)
 
 # Discord's content scanning results on media in components on media in components, which have bits of their own, paired with the ones above
 COMPONENT_SCAN_BITS = ((1 << 0, EXPLICIT_CONTENT), (1 << 1, GORE_CONTENT), (1 << 2, SELF_HARM_CONTENT))
@@ -149,6 +156,8 @@ def rule_blocking_post(source_message: discord.Message, db_message, server_confi
     body, _ = featured_body(source_message)
     if has_flagged_media(body, board):
         return RULE_FLAGGED_MEDIA
+    if getattr(source_message, "type", discord.MessageType.default) not in FEATURED_MESSAGE_TYPES:
+        return RULE_SYSTEM_MESSAGE
     # A post already on the board keeps being updated however old the message gets
     if (now - source_message.created_at).days > server_config.post_due_date and not db_message:
         return RULE_TOO_OLD

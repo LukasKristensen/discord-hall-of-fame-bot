@@ -528,6 +528,8 @@ WHY_BOT_MESSAGE = ("**Messages from bots are not posted here.** Someone with the
                    "change that with {command}.")
 WHY_NO_MEDIA = ("**Only messages with an image or video are posted here.** Someone with the Manage Server "
                 "permission can change that with {command}.")
+WHY_SYSTEM_MESSAGE = ("**Messages Discord posts on its own are not featured**, such as a member joining, a boost, "
+                      "a pin or a poll closing, as they have no words of their own to show.")
 WHY_AGE_RESTRICTED = ("**This message is in an age-restricted channel and the board is not**, so it is kept off "
                       "the board. Someone with the Manage Server permission can mark the board age-restricted in "
                       "its channel settings to feature these.")

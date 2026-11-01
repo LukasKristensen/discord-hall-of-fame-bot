@@ -15,6 +15,8 @@ import datetime
 import types
 import unittest
 from datetime import timezone
+
+import discord
 from unittest import mock
 
 import utils
@@ -394,6 +396,29 @@ class PostDueDateTests(GateTestCase):
         self.build(age_days=7)
         await self.run_gate(server_config(post_due_date=7))
         self.assertTrue(self.post.called)
+
+
+class SystemMessageTests(GateTestCase):
+    """A poll closing was featured as an empty reply to the poll. Messages Discord posts itself never are"""
+
+    async def test_a_system_message_is_never_posted(self):
+        for message_type in (discord.MessageType.new_member, discord.MessageType.premium_guild_subscription,
+                             discord.MessageType.pins_add, discord.MessageType.poll_result):
+            with self.subTest(message_type=message_type):
+                self.build()
+                self.source_message.type = message_type
+                await self.run_gate()
+                self.assertDidNothing()
+
+    async def test_messages_members_write_are_posted(self):
+        for message_type in (discord.MessageType.default, discord.MessageType.reply,
+                             discord.MessageType.chat_input_command):
+            with self.subTest(message_type=message_type):
+                self.post.calls.clear()
+                self.build()
+                self.source_message.type = message_type
+                await self.run_gate()
+                self.assertTrue(self.post.called)
 
 
 class BotAuthorTests(GateTestCase):
