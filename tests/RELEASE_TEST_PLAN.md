@@ -167,6 +167,15 @@ and reply from the payload:
 - [ ] A link to a post with four images, and a message with a screenshot and an article link, show every
       picture in one gallery
 
+## Feedback screenshots
+
+- [ ] `/feedback` shows Screenshots (optional) with its note, and the picker offers images only
+- [ ] Send a bug report with two screenshots and the contact box ticked: the thank-you comes after a short
+      wait, and the feedback channel gets both images with the report, Screenshots "2 attached" and May
+      contact "Yes"
+- [ ] Send one without screenshots: it is answered at once, May contact "No"
+- [ ] A day later the screenshots in the feedback channel still open, since they were uploaded again
+
 ## Wrapped
 
 Only if Wrapped can be generated on the development bot.

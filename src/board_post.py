@@ -406,37 +406,47 @@ async def create_post_view(message: discord.Message, connection, config: dict = 
     poll = getattr(message, "poll", None)
     if poll is not None and not text:
         text = poll_text(poll)
+    # A sticker no gallery can show is named where the words go when there are none, so it is seen
+    if not text and sticker_note:
+        text, sticker_note = f"*{messages.POST_STICKER.format(name=', '.join(unshown_stickers))}*", None
 
-    # Beside the avatar: the author and where it was said, the reply, and text short enough to read in the
-    # narrow column. A section holds at most three of these
+    # A reply comes first, as in Discord's own reply view: who and what was answered, then the poster's name
+    # above their own words, so every piece of text sits under the name of whoever wrote it
+    reply_block = None
+    if reference_message is not None:
+        replying = "-# " + messages.POST_REPLYING_TO.format(name=display_name(reference_message.author))
+        reply_block = f"{replying}\n>>> {quote}" if quote else replying
+    elif reply_deleted:
+        reply_block = "-# " + messages.POST_REPLYING_TO_DELETED
+
+    # Beside the avatar: the poster's name and where it was said, then text short enough for the narrow column
     where = messages.POST_IN_CHANNEL.format(channel=message.channel.mention)
     if forwarded:
         where += " · " + messages.POST_FORWARDED
     heading = [f"**{display_name(message.author)}**\n-# {where}"]
-    if reference_message is not None:
-        replying = "-# " + messages.POST_REPLYING_TO.format(name=display_name(reference_message.author))
-        heading.append(f"{replying}\n>>> {quote}" if quote else replying)
-    elif reply_deleted:
-        heading.append("-# " + messages.POST_REPLYING_TO_DELETED)
-    text_beside = bool(text) and len(text) <= post_text_beside_limit and not reference_media
+    text_beside = bool(text) and len(text) <= post_text_beside_limit
     if text_beside:
         heading.append(text)
 
     overflow = more_note(len(media) - post_media_limit) if len(media) > post_media_limit else None
     reactions = reactions_line(message, config, corrected_reactions)
     # Everything but the file links, which take what is left of Discord's limit on a message's text
-    text_used = sum(len(part) for part in (*heading, text if not text_beside else "", overflow or "",
-                                           sticker_note or "", reactions))
+    text_used = sum(len(part) for part in (reply_block or "", *heading, text if not text_beside else "",
+                                           overflow or "", sticker_note or "", reactions))
     files = file_lines(body, post_text_budget - text_used)
 
     container = discord.ui.Container(accent_colour=discord.Colour.gold())
+    if reply_block:
+        container.add_item(discord.ui.TextDisplay(reply_block))
+        if reference_media:
+            container.add_item(discord.ui.MediaGallery(*reference_media[:post_media_limit]))
+        # Space between the message answered and the answer, so the two read as two people
+        container.add_item(discord.ui.Separator(visible=False))
     if len(heading) > 1:
         container.add_item(discord.ui.Section(*heading, accessory=discord.ui.Thumbnail(message.author.display_avatar.url)))
     else:
         # A lone name beside the tall avatar left a gap above the picture, so without text it stands alone
         container.add_item(discord.ui.TextDisplay(heading[0]))
-    if reference_media:
-        container.add_item(discord.ui.MediaGallery(*reference_media[:post_media_limit]))
     if text and not text_beside:
         container.add_item(discord.ui.TextDisplay(text))
     if media:

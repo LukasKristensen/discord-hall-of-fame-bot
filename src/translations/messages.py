@@ -36,7 +36,7 @@ SUPPORT_SERVER_BUTTON = "Support server"
 POST_FOOTER = "Hall of Fame"
 # Components V2 posts
 POST_JUMP = "Jump to message"
-POST_REPLYING_TO = "Replying to {name}"
+POST_REPLYING_TO = "Replying to **{name}**"
 POST_IN_CHANNEL = "in {channel}"
 POST_COUNTED = "{count} counted toward the " + POST_FOOTER
 POST_MORE_EMOJIS = "+{count}"
@@ -102,8 +102,8 @@ BOT_LOADING = "Please wait while the bot is loading..."
 COMMAND_ON_COOLDOWN = "This command is on a daily cooldown. Please try again later."
 FEEDBACK_ON_COOLDOWN = ("You have sent {limit} pieces of feedback today, the most allowed in a day. Try again "
                         f"tomorrow, or ask in the support server: <{SUPPORT_SERVER_URL}>")
-# /feedback. The topic is a choice on the command itself, since a modal on discord.py 2.5 holds text inputs
-# only, and it shapes the form: its title, and what its two fields ask for
+# /feedback. The topic is a choice on the command itself, since it shapes the form before it opens: its title,
+# and what its two text fields ask for
 FEEDBACK_TOPICS = {
     "bug": "Bug report",
     "idea": "Idea or feature request",
@@ -128,6 +128,13 @@ FEEDBACK_FORMS = {
 }
 # Private, since a thank-you is of no use to the rest of the channel
 FEEDBACK_SENT = "✅ Thanks, your feedback reached the developer."
+FEEDBACK_SENT_SOME_LEFT_OUT = ("✅ Thanks, your feedback reached the developer. {count} of your files could not be "
+                              "added: only images are kept, up to {max}, and each must fit Discord's upload limit.")
+# The optional fields every feedback form ends with. Discord allows 45 characters for a label and 100 for a
+# description, which the feedback tests check
+FEEDBACK_SCREENSHOTS_LABEL = "Screenshots (optional)"
+FEEDBACK_SCREENSHOTS_DESCRIPTION = "Up to 3 images. Crop out other members' names and messages where you can."
+FEEDBACK_CONTACT_LABEL = "The developer may message me about this"
 SETTING_CHANGED = "✅ {label}: **{value}**"
 SETTING_UNCHANGED = "ℹ️ {label} is already **{value}**, so nothing changed."
 REACTION_THRESHOLD_NOTE = ("A message reaches the Hall of Fame once it has {threshold} reaction{plural}, "

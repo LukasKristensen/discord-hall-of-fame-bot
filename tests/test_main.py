@@ -9,6 +9,7 @@ opened when the bot starts rather than when the module loads.
 """
 
 import asyncio
+import io
 import types
 import unittest
 from unittest import mock
@@ -1457,6 +1458,12 @@ class FeedbackCooldownTests(MainTestCase):
                          self.refusals[-1](77))
 
 
+def feedback_bot(channel, filesize_limit=10 * 1024 * 1024):
+    """A bot whose support server holds the feedback channel, and lets the bot upload files that large"""
+    guild = types.SimpleNamespace(get_channel=lambda _id: channel, filesize_limit=filesize_limit)
+    return types.SimpleNamespace(get_guild=lambda _id: guild)
+
+
 class FeedbackFormTests(unittest.IsolatedAsyncioTestCase):
     """The form reports the send back only once the feedback reached the developer channel."""
 
@@ -1473,12 +1480,14 @@ class FeedbackFormTests(unittest.IsolatedAsyncioTestCase):
 
     def setUp(self):
         self.posted = []
+        self.files = []
 
-        async def post(embed=None):
+        async def post(embed=None, files=()):
             self.posted.append(embed)
+            self.files.append(list(files))
 
         channel = types.SimpleNamespace(send=post)
-        self.bot = types.SimpleNamespace(get_guild=lambda _id: types.SimpleNamespace(get_channel=lambda _id: channel))
+        self.bot = feedback_bot(channel)
 
     def submitter(self, guild_id=None):
         async def nothing(*_args, **_kwargs):
@@ -1493,11 +1502,11 @@ class FeedbackFormTests(unittest.IsolatedAsyncioTestCase):
     async def test_the_use_is_counted_before_the_send_so_forms_sent_together_cannot_both_pass(self):
         order = []
 
-        async def post(embed=None):
+        async def post(embed=None, files=()):
             order.append("sent")
 
         channel = types.SimpleNamespace(send=post)
-        self.bot = types.SimpleNamespace(get_guild=lambda _id: types.SimpleNamespace(get_channel=lambda _id: channel))
+        self.bot = feedback_bot(channel)
         modal = await self.open_form(lambda _user_id: order.append("counted"))
         modal.fb_title._value = "Title"
         modal.message._value = "Body"
@@ -1511,11 +1520,11 @@ class FeedbackFormTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(["counted", "sent"], order)
 
     async def test_a_form_that_could_not_be_sent_does_not_count(self):
-        async def broken(embed=None):
+        async def broken(embed=None, files=()):
             raise RuntimeError("Discord went away")
 
         channel = types.SimpleNamespace(send=broken)
-        self.bot = types.SimpleNamespace(get_guild=lambda _id: types.SimpleNamespace(get_channel=lambda _id: channel))
+        self.bot = feedback_bot(channel)
         counted, taken_back = [], []
         modals = []
         interaction = types.SimpleNamespace(response=types.SimpleNamespace())
@@ -1601,10 +1610,107 @@ class FeedbackFormTests(unittest.IsolatedAsyncioTestCase):
         modal = await self.open_form(None, topic="bug")
         components = modal.to_components()
 
-        self.assertEqual([discord.ComponentType.label.value] * 2, [component["type"] for component in components])
-        self.assertEqual(["What went wrong?", messages.FEEDBACK_FORMS["bug"][3]],
-                         [component["label"] for component in components])
+        self.assertEqual([discord.ComponentType.label.value] * 4, [component["type"] for component in components])
+        self.assertEqual(["What went wrong?", messages.FEEDBACK_FORMS["bug"][3], messages.FEEDBACK_SCREENSHOTS_LABEL,
+                          messages.FEEDBACK_CONTACT_LABEL], [component["label"] for component in components])
         self.assertTrue(all(component["component"].get("label") is None for component in components))
+
+    async def test_the_screenshots_are_optional_images_only(self):
+        modal = await self.open_form(None, topic="bug")
+        upload = modal.to_components()[2]["component"]
+
+        self.assertEqual(discord.ComponentType.file_upload.value, upload["type"])
+        self.assertFalse(upload["required"])
+        self.assertEqual(utils.feedback_max_screenshots, upload["max_values"])
+        self.assertEqual(["image"], upload["file_types"])
+
+    def test_the_optional_fields_fit_discords_limits(self):
+        for text in (messages.FEEDBACK_SCREENSHOTS_LABEL, messages.FEEDBACK_CONTACT_LABEL):
+            self.assertLessEqual(len(text), 45)
+        self.assertLessEqual(len(messages.FEEDBACK_SCREENSHOTS_DESCRIPTION), 100)
+        self.assertIn(str(utils.feedback_max_screenshots), messages.FEEDBACK_SCREENSHOTS_DESCRIPTION)
+
+    @staticmethod
+    def screenshot(name, content_type="image/png", size=1000):
+        async def to_file():
+            return discord.File(io.BytesIO(b"png"), filename=name)
+
+        return types.SimpleNamespace(filename=name, content_type=content_type, size=size, to_file=to_file)
+
+    async def submit_with(self, uploads, may_contact=False):
+        """
+        Send a bug report with these uploads
+        :return: The submitter, whose answers hold (content, ephemeral) for each reply, deferred or not
+        """
+        modal = await self.open_form(None, topic="bug")
+        modal.fb_title._value = "Title"
+        modal.message._value = "Body"
+        modal.screenshots._values = uploads
+        modal.may_contact._value = may_contact
+        submitter = self.submitter()
+        submitter.answers, submitter.deferred = [], []
+
+        async def answer(content=None, ephemeral=False):
+            submitter.answers.append((content, ephemeral))
+
+        async def defer(ephemeral=False, thinking=False):
+            submitter.deferred.append((ephemeral, thinking))
+
+        submitter.response.send_message = answer
+        submitter.response.defer = defer
+        submitter.followup = types.SimpleNamespace(send=answer)
+        await modal.on_submit(submitter)
+        return submitter
+
+    async def test_screenshots_go_with_the_feedback_after_a_private_wait(self):
+        """Downloading them can outlast the three seconds Discord gives, so the answer is deferred first."""
+        submitter = await self.submit_with([self.screenshot("one.png"), self.screenshot("two.jpg", "image/jpeg")])
+
+        self.assertEqual([["one.png", "two.jpg"]], [[file.filename for file in sent] for sent in self.files])
+        self.assertEqual([(True, True)], submitter.deferred)
+        self.assertEqual([(messages.FEEDBACK_SENT, True)], submitter.answers)
+        self.assertEqual("2 attached", self.field(self.posted[0], "Screenshots"))
+
+    async def test_feedback_without_screenshots_is_answered_at_once(self):
+        submitter = await self.submit_with([])
+
+        self.assertEqual([[]], self.files)
+        self.assertEqual([], submitter.deferred)
+        self.assertNotIn("Screenshots", [field.name for field in self.posted[0].fields])
+
+    async def test_files_that_are_not_images_or_too_large_are_left_out_and_the_member_told(self):
+        """The picker's filter goes by the file name, so a renamed file can still arrive."""
+        too_large = self.screenshot("huge.png", size=11 * 1024 * 1024)
+        not_an_image = self.screenshot("notes.png", content_type="text/plain")
+        submitter = await self.submit_with([self.screenshot("ok.png"), too_large, not_an_image])
+
+        self.assertEqual([["ok.png"]], [[file.filename for file in sent] for sent in self.files])
+        self.assertEqual("1 attached, 2 left out", self.field(self.posted[0], "Screenshots"))
+        self.assertEqual([(messages.FEEDBACK_SENT_SOME_LEFT_OUT.format(count=2, max=utils.feedback_max_screenshots),
+                           True)], submitter.answers)
+
+    async def test_uploads_all_left_out_are_answered_at_once(self):
+        submitter = await self.submit_with([self.screenshot("notes.txt", content_type="text/plain")])
+
+        self.assertEqual([[]], self.files)
+        self.assertEqual([], submitter.deferred)
+        self.assertEqual("0 attached, 1 left out", self.field(self.posted[0], "Screenshots"))
+
+    def test_screenshots_together_stay_within_one_upload(self):
+        """One message carries them all, so together they must fit what the bot may upload."""
+        limit = 10 * 1024 * 1024
+        uploads = [self.screenshot(f"{index}.png", size=4 * 1024 * 1024) for index in range(3)]
+
+        kept, left_out = utils.feedback_screenshots(uploads, limit)
+
+        self.assertEqual(["0.png", "1.png"], [upload.filename for upload in kept])
+        self.assertEqual(1, left_out)
+
+    async def test_the_developer_copy_says_whether_the_member_may_be_contacted(self):
+        await self.submit_with([], may_contact=True)
+        await self.submit_with([])
+
+        self.assertEqual(["Yes", "No"], [self.field(embed, "May contact") for embed in self.posted])
 
     async def test_an_unknown_topic_gets_the_plain_form(self):
         modal = await self.open_form(None, topic="not a topic")

@@ -175,7 +175,7 @@ Open to everyone.
 | `/get_server_config` | | Show every setting for this server, with the command that changes it, and a **Troubleshoot** button for when something is not working. |
 | `/invite` | | Buttons for adding the bot to another server or to your own account. |
 | `/vote` | | A button for voting for the bot on top.gg. |
-| `/feedback` | `topic` (Bug report, Idea or feature request, Question or Something else) | Send a bug report, an idea or a question to the developer through a short form that asks for what helps with the topic. Only you see the thank-you. Up to three a day. |
+| `/feedback` | `topic` (Bug report, Idea or feature request, Question or Something else) | Send a bug report, an idea or a question to the developer through a short form that asks for what helps with the topic, with up to three screenshots if you like. Only you see the thank-you. Up to three a day. |
 
 <br>
 

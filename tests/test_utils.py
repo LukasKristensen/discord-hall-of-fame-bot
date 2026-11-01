@@ -374,10 +374,20 @@ class PostViewTests(EmbedTestCase):
     async def test_quotes_the_message_it_replies_to(self):
         replied = FakeEmbedMessage("nobody spoil it", author_name="jonas")
         message = FakeEmbedMessage("covered it", reference_message_id=9, channel=FakeChannel(replied))
-        [section] = self.of_type(await self.payload(message), 9)
+        container = await self.payload(message)
 
-        self.assertEqual("-# Replying to jonas\n>>> nobody spoil it", section["components"][1]["content"])
-        self.assertEqual("covered it", section["components"][2]["content"])
+        self.assertEqual("-# Replying to **jonas**\n>>> nobody spoil it", container["components"][0]["content"])
+        [section] = self.of_type(container, 9)
+        self.assertEqual(["**author**\n-# in <#2>", "covered it"], [c["content"] for c in section["components"]])
+
+    async def test_the_reply_comes_before_the_name_of_who_answered(self):
+        """With the quote under the poster's name, the answer did not read as theirs."""
+        replied = FakeEmbedMessage("nobody spoil it", author_name="jonas")
+        message = FakeEmbedMessage("covered it", reference_message_id=9, channel=FakeChannel(replied))
+        container = await self.payload(message)
+
+        self.assertEqual([10, 14, 9], [component["type"] for component in container["components"]][:3])
+        self.assertFalse(container["components"][1]["divider"])
 
     async def test_shows_the_replied_to_video_before_the_reply(self):
         """Below the reply text, the video looked like the reply's own."""
@@ -386,12 +396,12 @@ class PostViewTests(EmbedTestCase):
         container = await self.payload(message)
         order = [component["type"] for component in container["components"]]
 
-        [section] = self.of_type(container, 9)
-        self.assertEqual(["**author**\n-# in <#2>", "-# Replying to lukas"],
-                         [component["content"] for component in section["components"]])
-        self.assertEqual([9, 12, 10], order[:3])
+        self.assertEqual("-# Replying to **lukas**", container["components"][0]["content"])
+        self.assertEqual([10, 12, 14, 9], order[:4])
         self.assertEqual("https://cdn/clip.mp4", container["components"][1]["items"][0]["media"]["url"])
-        self.assertEqual("test reply to a video", container["components"][2]["content"])
+        [section] = self.of_type(container, 9)
+        self.assertEqual(["**author**\n-# in <#2>", "test reply to a video"],
+                         [component["content"] for component in section["components"]])
 
     async def test_a_reply_with_pictures_of_its_own_shows_only_those(self):
         replied = FakeEmbedMessage("", attachments=[FakeAttachment("https://cdn/theirs.png", "image/png")])
@@ -464,16 +474,16 @@ class PostViewTests(EmbedTestCase):
     async def test_quotes_a_long_replied_to_message_briefly(self):
         replied = FakeEmbedMessage("b" * 900, author_name="jonas")
         message = FakeEmbedMessage("short", reference_message_id=9, channel=FakeChannel(replied))
-        [section] = self.of_type(await self.payload(message), 9)
+        container = await self.payload(message)
 
-        quote = section["components"][1]["content"].split(">>> ")[1]
+        quote = container["components"][0]["content"].split(">>> ")[1]
         self.assertEqual(board_post.post_quote_limit, len(quote))
 
     async def test_says_when_the_replied_to_message_was_deleted(self):
         message = FakeEmbedMessage("what did they say", reference_message_id=9, channel=FakeChannel(None))
-        [section] = self.of_type(await self.payload(message), 9)
+        container = await self.payload(message)
 
-        self.assertEqual("-# " + messages.POST_REPLYING_TO_DELETED, section["components"][1]["content"])
+        self.assertEqual("-# " + messages.POST_REPLYING_TO_DELETED, container["components"][0]["content"])
 
     async def test_a_forward_shows_the_message_it_forwards(self):
         message = FakeEmbedMessage("")
@@ -534,20 +544,19 @@ class PostViewTests(EmbedTestCase):
         replied.author = FakeAuthor(3, "Lukas")
         message = FakeEmbedMessage("BIG", reference_message_id=9, channel=FakeChannel(replied))
         container = await self.payload(message)
-        [section] = self.of_type(container, 9)
 
-        self.assertEqual(["**author**\n-# in <#2>", "-# Replying to Lukas"],
-                         [component["content"] for component in section["components"]])
+        self.assertEqual("-# Replying to **Lukas**", container["components"][0]["content"])
         self.assertEqual("https://media.tenor.com/8d3ZrTvq4f0AAAAC/the-big-leagues.gif",
                          container["components"][1]["items"][0]["media"]["url"])
-        self.assertEqual("BIG", container["components"][2]["content"])
+        [section] = self.of_type(container, 9)
+        self.assertEqual("BIG", section["components"][1]["content"])
 
     async def test_a_reply_to_a_link_with_words_quotes_the_words(self):
         replied = self.gif_message("look at this https://tenor.com/view/the-big-leagues-gif-1592824968")
         message = FakeEmbedMessage("BIG", reference_message_id=9, channel=FakeChannel(replied))
-        [section] = self.of_type(await self.payload(message), 9)
+        container = await self.payload(message)
 
-        self.assertIn(">>> look at this", section["components"][1]["content"])
+        self.assertIn(">>> look at this", container["components"][0]["content"])
 
     async def test_a_link_with_words_keeps_its_text(self):
         message = FakeEmbedMessage("we made the news https://news.example/story")
@@ -565,7 +574,15 @@ class PostViewTests(EmbedTestCase):
         container = await self.payload(message)
 
         self.assertEqual([], self.of_type(container, 12))
-        self.assertIn("-# " + messages.POST_STICKER.format(name="Wumpus"), self.texts(container))
+        [section] = self.of_type(container, 9)
+        self.assertEqual("*" + messages.POST_STICKER.format(name="Wumpus") + "*", section["components"][1]["content"])
+
+    async def test_an_animated_sticker_with_words_is_named_under_them(self):
+        message = FakeEmbedMessage("hello")
+        message.stickers = [types.SimpleNamespace(name="Wumpus", url="https://media/w.json",
+                                                  format=discord.StickerFormatType.lottie)]
+
+        self.assertIn("-# " + messages.POST_STICKER.format(name="Wumpus"), self.texts(await self.payload(message)))
 
     async def test_says_how_many_pictures_and_files_did_not_fit(self):
         pictures = [FakeAttachment(f"https://cdn/{index}.png", "image/png") for index in range(12)]

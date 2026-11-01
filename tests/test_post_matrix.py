@@ -265,12 +265,24 @@ class PostMatrixTests(unittest.TestCase):
         elif reply == "deleted":
             self.assertIn(board_post.messages.POST_REPLYING_TO_DELETED, all_text)
         else:
-            reply_line = next(text for text in texts(payload) if "Replying to Jonas" in text)
+            reply_line = next(text for text in texts(payload) if "Replying to **Jonas**" in text)
             self.assertFalse(any(FLAGGED in url for url in shown), "flagged media shown from a reply")
             answered = KINDS[reply][1] if reply in KINDS else []
-            identified = reply_line.strip() != "-# Replying to Jonas" or any(
+            identified = reply_line.strip() != "-# Replying to **Jonas**" or any(
                 link in url for link in answered for url in shown)
             self.assertTrue(identified, "nothing says what was replied to")
+
+        # Who wrote what: the message answered comes first, then the poster's name above their own words
+        ordered = texts(payload)
+        name_at = next(index for index, text in enumerate(ordered) if text.startswith("**Mia**"))
+        for index, text in enumerate(ordered):
+            if "Replying to" in text:
+                self.assertLess(index, name_at, "the reply sits under the poster's name")
+        for word in words:
+            # The quote above may hold the same words when a message answers one of its own kind
+            if word != board_post.messages.POST_FORWARDED:
+                self.assertTrue(any(word in text for text in ordered[name_at:]),
+                                f"{word!r} is not under the name of who wrote it")
 
 
 if __name__ == "__main__":
