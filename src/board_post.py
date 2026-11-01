@@ -27,7 +27,7 @@ GORE_CONTENT = 1 << 6
 SELF_HARM_CONTENT = 1 << 7
 
 # New posts are one Components V2 message, which holds every image and video of a message, keeps spoilers
-# covered and lists every counted emoji. Posts made before keep their embed, and are updated and hidden as
+# covered and lists the most used counted emojis. Posts made before keep their embed, and are updated and hidden as
 # embeds, since a message cannot change between the two once sent
 
 # A media gallery holds at most ten items
