@@ -11,6 +11,8 @@ They need HOF_TEST_DATABASE_URL, see tests/integration/database.py, and are skip
 
 import copy
 import datetime
+import psycopg2
+import threading
 import json
 import types
 import unittest
@@ -26,7 +28,7 @@ from repositories import (
     server_user_repo,
 )
 
-from tests.integration.database import DatabaseTestCase, SingleConnectionPool, skip_without_database
+from tests.integration.database import database_url, DatabaseTestCase, SingleConnectionPool, skip_without_database
 
 # Members, as Discord snowflakes. FAN's ID begins with every digit of DELETED's, so a removal that
 # matched IDs as text without their quotes would take FAN out of the fan lists too
@@ -410,6 +412,7 @@ class StopFeaturingTests(MemberDataDeletionTestCase):
     def setUp(self):
         super().setUp()
         self.sent = []
+        self.taken_down = []
 
     async def post(self, author_id, message_id=900, while_sending=None):
         """
@@ -420,7 +423,11 @@ class StopFeaturingTests(MemberDataDeletionTestCase):
             self.sent.append(message_id)
             if while_sending is not None:
                 await while_sending()
-            return types.SimpleNamespace(id=message_id + 5000)
+
+            async def delete():
+                self.taken_down.append(message_id)
+
+            return types.SimpleNamespace(id=message_id + 5000, delete=delete)
 
         async def no_embed(*_args, **_kwargs):
             return None
@@ -461,14 +468,15 @@ class StopFeaturingTests(MemberDataDeletionTestCase):
 
         self.assertEqual([], self.sent)
 
-    async def test_a_member_who_opts_out_while_their_post_is_sent_is_not_credited(self):
+    async def test_a_member_who_opts_out_while_their_post_is_sent_gets_the_repost_taken_down(self):
         """Sending the repost lets other events run, so the request can land between the check and the store."""
         before = self.posts_by(DELETED)
 
         async def opt_out():
             self.stop_featuring()
 
-        self.assertEqual(hall_of_fame_message_repo.NO_AUTHOR_ID, await self.post(DELETED, while_sending=opt_out))
+        self.assertIsNone(await self.post(DELETED, message_id=905, while_sending=opt_out))
+        self.assertEqual([905], self.taken_down)
         self.assertEqual(before, self.posts_by(DELETED))
 
     async def test_stopping_keeps_the_earlier_posts_credited(self):
@@ -638,6 +646,7 @@ class OptOutGuardPerMethodTests(MemberDataDeletionTestCase):
         ("hall_of_fame_message_repo", "remove_author"),
         ("hof_wrapped_repo", "insert_hof_wrapped"),
         ("hof_wrapped_repo", "remove_from_fan_lists"),
+        ("hof_wrapped_repo", "delete_hof_wrapped_for_user_in_guild"),
         ("server_user_repo", "rebuild_user_stats_for_guild"),
         ("global_profile_repo", "set_hidden"),
         ("opt_out_repo", "set_opted_out"),
@@ -678,6 +687,25 @@ class OptOutGuardPerMethodTests(MemberDataDeletionTestCase):
 
     def test_storing_a_post_by_anyone_else_credits_them(self):
         self.assertEqual(OTHER, self.store(981, OTHER))
+
+    def store_capped(self, message_id, author, limit):
+        return hall_of_fame_message_repo.insert_hall_of_fame_message(
+            self.connection, message_id, 501, SHARED, message_id + 5000, 9, author, NOW - datetime.timedelta(days=1),
+            author_post_limit=limit)
+
+    def test_a_post_past_the_cap_is_stored_without_its_author(self):
+        """The count is taken in the INSERT itself, under the author's lock."""
+        credited = len(self.posts_by(OTHER))
+
+        self.assertEqual(hall_of_fame_message_repo.NO_AUTHOR_ID, self.store_capped(982, OTHER, credited))
+        self.assertEqual(OTHER, self.store_capped(983, OTHER, credited + 1))
+
+    def test_storing_a_post_they_already_have_again_keeps_it_credited_at_the_cap(self):
+        """Their other posts are counted, so an update never pushes an existing post over the cap."""
+        message_id = self.posts_by(OTHER)[0][0]
+        credited = len(self.posts_by(OTHER))
+
+        self.assertEqual(OTHER, self.store_capped(message_id, OTHER, credited))
 
     # insert_hof_wrapped
 
@@ -726,6 +754,26 @@ class OptOutGuardPerMethodTests(MemberDataDeletionTestCase):
         hof_wrapped_repo.remove_from_fan_lists(self.connection, DELETED)
 
         self.assertIsNotNone(self.wrapped_row(SHARED, DELETED))
+
+    # delete_hof_wrapped_for_user_in_guild
+
+    def test_wrappeds_own_cleanup_takes_them_out_of_that_server_only(self):
+        """Wrapped's cleanup after a deletion mid-run: the deletion already handled every other server."""
+        hof_wrapped_repo.delete_hof_wrapped_for_user_in_guild(self.connection, DELETED, SHARED, 2025)
+
+        self.assertIsNone(self.wrapped_row(SHARED, DELETED))
+        _reactions, fan_of_users, users_fans = self.wrapped_row(SHARED, OTHER)
+        self.assertNotIn(str(DELETED), json.loads(fan_of_users))
+        self.assertNotIn(str(DELETED), json.loads(users_fans))
+        _reactions, other_server_fans, _users_fans = self.wrapped_row(SECOND, OTHER)
+        self.assertIn(str(DELETED), json.loads(other_server_fans))
+
+    def test_wrappeds_own_cleanup_keeps_everyone_else_in_that_server(self):
+        """FAN's ID starts with DELETED's, so a match on the text alone would remove them too."""
+        hof_wrapped_repo.delete_hof_wrapped_for_user_in_guild(self.connection, DELETED, SHARED, 2025)
+        _reactions, fan_of_users, _users_fans = self.wrapped_row(SHARED, OTHER)
+
+        self.assertEqual({str(FAN): 4, str(THIRD): 2}, json.loads(fan_of_users))
 
     # remove_author
 
@@ -845,6 +893,54 @@ class CoverageGuardTests(MemberDataDeletionTestCase):
 
         self.assertEqual(TABLES_WITH_MEMBER_IDS, found)
 
+
+
+@skip_without_database
+class MemberLockTests(MemberDataDeletionTestCase):
+    """A post stored while the author's data is being deleted or opted out, on a second connection."""
+
+    def setUp(self):
+        super().setUp()
+        self.other = psycopg2.connect(database_url(), options=f"-c search_path={self.schema} -c TimeZone=UTC")
+        self.addCleanup(self.other.close)
+
+    def store_aside(self, message_id):
+        """Store a post by DELETED on the other connection; say whether it was still waiting a moment later"""
+        def store():
+            hall_of_fame_message_repo.insert_hall_of_fame_message(
+                self.other, message_id, 501, SHARED, message_id + 5000, 9, DELETED, NOW)
+
+        thread = threading.Thread(target=store)
+        thread.start()
+        thread.join(timeout=1)
+        return thread
+
+    def author_of(self, message_id):
+        return self.rows("SELECT author_id FROM hall_of_fame_message WHERE message_id = %s", (message_id,))[0][0]
+
+    def test_a_post_stored_during_a_deletion_waits_and_lands_after_it(self):
+        """Without the lock it could slip in after remove_author and keep the member's ID past the deletion."""
+        hall_of_fame_message_repo.lock_member(self.connection, DELETED)
+        hall_of_fame_message_repo.remove_author(self.connection, DELETED, commit=False)
+
+        thread = self.store_aside(990)
+        self.assertTrue(thread.is_alive(), "the post did not wait for the deletion")
+        self.connection.commit()
+        thread.join(timeout=10)
+
+        # Stored after the deletion, so it is a new post, credited as usual, and every earlier one is detached
+        self.assertEqual(DELETED, self.author_of(990))
+        self.assertEqual([(990,)], self.posts_by(DELETED))
+
+    def test_a_post_stored_during_an_opt_out_waits_and_sees_it(self):
+        opt_out_repo.set_opted_out(self.connection, DELETED, True, commit=False)
+
+        thread = self.store_aside(991)
+        self.assertTrue(thread.is_alive(), "the post did not wait for the opt-out")
+        self.connection.commit()
+        thread.join(timeout=10)
+
+        self.assertEqual(hall_of_fame_message_repo.NO_AUTHOR_ID, self.author_of(991))
 
 if __name__ == "__main__":
     unittest.main()

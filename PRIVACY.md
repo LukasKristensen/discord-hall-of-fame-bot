@@ -103,8 +103,9 @@ Nothing else is shared.
 - Other data is kept while the bot is in the server, and deleted on request as described in section 6.
 - Deleting your data on `/my_data` immediately deletes your member statistics, Wrapped data and your
   choice to hide your totals, removes you from other members' Wrapped, and removes your user ID from
-  your featured messages. The reposts stay in each server's Hall of Fame channel, since they belong to
-  that server, but are no longer linked to you. Your choice not to be featured, if you made it, is
+  your featured messages in our database. The reposts themselves stay in each server's Hall of Fame
+  channel as they are, since they belong to that server: they still show your name, avatar and message,
+  and link to the original. Ask that server's admins to have one removed. Your choice not to be featured, if you made it, is
   deleted too, so messages of yours featured after that are stored again as usual, unless you press
   "Stop featuring me", which is offered right after deleting.
 

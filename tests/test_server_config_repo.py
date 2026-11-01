@@ -198,18 +198,39 @@ class FailingAlterCursor:
         pass
 
 
+class LastAlterFailsCursor(FailingAlterCursor):
+    """Adds every column but the last, the way a refused ALTER after successful ones looks"""
+
+    def execute(self, query, params=None):
+        self.executed.append(query)
+        if "missing_since" in query:
+            raise RuntimeError("permission denied")
+
+
 class CreateTableMigrationTests(unittest.TestCase):
-    def test_a_column_that_cannot_be_added_does_not_stop_the_others(self):
-        """Each change is tried on its own and rolled back, so one refusal leaves the rest to run."""
+    def test_a_column_that_cannot_be_added_stops_startup(self):
+        """Reading the configuration needs every column, so the bot must not run without one."""
         connection = FakeConnection()
         cursor = FailingAlterCursor()
         connection.cursor = lambda: cursor
-        server_config_repo.create_server_config_table(connection)
 
+        with self.assertRaises(RuntimeError):
+            server_config_repo.create_server_config_table(connection)
+        self.assertEqual(1, connection.rollbacks)
+
+    def test_a_failing_column_does_not_undo_the_ones_added_before_it(self):
+        """Each column is committed on its own, so a later refusal cannot roll an earlier one back."""
+        connection = FakeConnection()
+        cursor = LastAlterFailsCursor()
+        connection.cursor = lambda: cursor
+
+        with self.assertRaises(RuntimeError):
+            server_config_repo.create_server_config_table(connection)
         altered = [query for query in cursor.executed if "ADD COLUMN IF NOT EXISTS" in query]
         self.assertTrue(any("count_in_global_profiles" in query for query in altered))
-        self.assertTrue(any("missing_since" in query for query in altered))
-        self.assertEqual(len(altered), connection.rollbacks)
+        # The table, then each of the two columns before the one that failed
+        self.assertEqual(3, connection.commits)
+        self.assertEqual(1, connection.rollbacks)
 
 
 

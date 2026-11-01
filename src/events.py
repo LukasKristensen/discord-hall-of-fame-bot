@@ -298,6 +298,9 @@ async def clean_up_departed_guilds(bot: discord.Client, connection, server_class
         return []
 
     if not bot_guild_ids or len(missing) > len(server_classes) * departed_guild_max_missing_share:
+        # The servers the bot does see are still recorded, so one that came back cannot keep an old missing
+        # date through the outage and be deleted early when it goes missing again
+        server_config_repo.clear_missing_for_present_guilds(connection, bot_guild_ids)
         await utils.logging(bot, f"{len(missing)} of {len(server_classes)} servers are missing from the bot's "
                                  f"guilds, which looks like Discord leaving them out rather than servers "
                                  f"removing the bot. Not cleaning up any server today")

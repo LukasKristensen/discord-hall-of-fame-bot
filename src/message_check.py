@@ -158,8 +158,10 @@ async def post_is_shown(board, post_id) -> bool | None:
         return None
     try:
         post = await board.fetch_message(int(post_id))
-    except discord.HTTPException:
-        # Not in this board: it was moved since, or the post was deleted
+    except discord.NotFound:
+        # Not in this board: it was moved since, or the post was deleted. Any other failure, such as a
+        # missing permission or an outage, says nothing about where the post is, so it goes to the error
+        # handler rather than becoming a wrong answer
         return None
     return utils.post_shows(post)
 

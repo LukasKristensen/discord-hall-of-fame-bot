@@ -31,6 +31,8 @@ class User:
         self.mostUsedEmojis = {}
         # Every message the member sent in the server that year, for the fame rate. None when not counted
         self.messagesSent = None
+        # The posts counted for this member, so Wrapped can tell when they deleted their data while it ran
+        self.credited_posts = []
         self.id = user_id
 
     def get_hof_status(self):
@@ -139,6 +141,7 @@ async def process_hof_messages_from_db(guild: discord.Guild, connection):
         if message.created_at.year != version.WRAPPED_YEAR:
             continue
         user = users[message.author.id]
+        user.credited_posts.append(message_id)
         await process_message_reactions(message, connection)
         # Most used channels
         if channel.id not in user.mostUsedChannels:
@@ -371,12 +374,17 @@ async def main(guild_id: int, bot: commands.Bot, get_reaction_threshold: int, co
 
     initialize_users(connection, guild_id)
     await process_hof_messages_from_db(guild, connection)
-    # Deleting data detaches the member's posts, so whoever is no longer an author here deleted their
-    # data while the posts were being read. A member who asked not to be featured keeps their earlier
-    # posts, but Wrapped records whose posts they reacted to, which is new data about them, so they are
-    # left out too. Checked after the posts were read, so asking while Wrapped runs counts
-    authors = set(hall_of_fame_message_repo.find_members_for_guild(connection, guild_id))
-    leave_out_members_who_are_gone(authors - opt_out_repo.find_opted_out(connection, users))
+    # The bot was removed while the posts were read. Its posts are gone with the server, which says nothing
+    # about the members, so nothing is saved rather than treating every one of them as having left
+    if not server_config_repo.check_if_guild_exists(connection, guild_id):
+        print(f"The server left while its Wrapped was prepared, so none was saved")
+        return
+    # A member who deleted their data while the posts were read is left out. A member who asked not to be
+    # featured keeps their earlier posts, but Wrapped records whose posts they reacted to, which is new data
+    # about them, so they are left out too. Checked after the posts were read, so asking while Wrapped runs
+    # counts
+    leave_out_members_who_are_gone(members_still_credited(connection, guild_id)
+                                   - opt_out_repo.find_opted_out(connection, users))
 
     rankings = rank_stats(users)
 
@@ -419,18 +427,44 @@ async def count_messages_sent(bot, guild_id: int, user_id: int, year: int) -> in
     return None
 
 
+def members_still_credited(connection, guild_id: int) -> set:
+    """
+    The members whose posts are still theirs. Deleting data credits a member's posts to nobody, so a
+    member is gone when any post counted for them now has another author, even if a post featured after
+    the deletion makes them an author here again. A member none of whose posts were counted this year is
+    gone when they are no longer an author here at all
+    :param connection: The database connection
+    :param guild_id: The server Wrapped is for
+    :return: The IDs of the members still credited
+    """
+    authors = set(hall_of_fame_message_repo.find_members_for_guild(connection, guild_id))
+    counted = [message_id for user in users.values() for message_id in user.credited_posts]
+    current = hall_of_fame_message_repo.get_authors_of_messages(connection, guild_id, counted)
+    # A post no longer stored has nobody to compare with, so it says nothing on its own
+    detached = {user.id for user in users.values()
+                if any(current.get(message_id, user.id) != user.id for message_id in user.credited_posts)}
+    return authors - detached
+
+
 def forget_members_who_deleted_meanwhile(connection, guild_id: int):
     """
     Delete the Wrapped of members who deleted their data while the rows above were being saved, which
     would otherwise give them their own row and their place in other members' fan lists back. Checked
     once every row is saved: a deletion before this check is finished here, and one after it removes the
-    saved rows itself. Members who asked not to be featured were left out of users before saving
+    saved rows itself. Members who asked not to be featured were left out of users before saving.
+
+    Only this server's Wrapped for the year is touched: the deletion itself removed the member everywhere
+    else, and a member missing here for another reason has data in other servers that must stay
     :param connection: The database connection
     :param guild_id: The server whose Wrapped was just saved
     """
-    still_authors = set(hall_of_fame_message_repo.find_members_for_guild(connection, guild_id))
-    for user_id in set(users) - still_authors:
-        hof_wrapped_repo.delete_hof_wrapped_for_user(connection, user_id)
+    if not server_config_repo.check_if_guild_exists(connection, guild_id):
+        # The bot was removed while the rows were saved, after the server's data was deleted, so the rows
+        # saved since are this server's alone and go the same way
+        hof_wrapped_repo.delete_hof_wrapped_for_guild(connection, guild_id)
+        return
+    for user_id in set(users) - members_still_credited(connection, guild_id):
+        hof_wrapped_repo.delete_hof_wrapped_for_user_in_guild(connection, user_id, guild_id, version.WRAPPED_YEAR)
 
 def create_server_embed(guild, users):
     user_list = list(users)

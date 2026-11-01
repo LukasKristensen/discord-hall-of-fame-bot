@@ -191,14 +191,18 @@ class PostingTestCase(unittest.IsolatedAsyncioTestCase):
     def patch_repo(self, insert=None, credited_posts=0):
         self.inserted = []
 
-        def record_insert(*args):
-            self.inserted.append(args)
+        def record_insert(*args, author_post_limit=None):
+            """Stores like the real INSERT: nobody credited once the author is at the limit"""
             if insert:
                 insert()
+            author = args[6]
+            if author_post_limit is not None and credited_posts >= author_post_limit:
+                author = 0
+            self.inserted.append(args[:6] + (author,) + args[7:])
+            return author
 
         repo = mock.Mock()
         repo.insert_hall_of_fame_message = record_insert
-        repo.count_messages_by_author = lambda *_args: credited_posts
         repo.NO_AUTHOR_ID = 0
         self.patch(utils, "hall_of_fame_message_repo", repo)
         return repo
@@ -333,6 +337,16 @@ class PostHallOfFameMessageTests(PostingTestCase):
         alerts = [entry for entry in self.logged if "the most allowed" in entry]
         self.assertEqual(1, len(alerts))
         self.assertIn(str(AUTHOR_ID), alerts[0])
+
+    async def test_a_member_who_opts_out_while_the_repost_is_sent_gets_it_taken_down(self):
+        """They asked not to be reposted, so the repost sent a moment before goes and nothing is stored."""
+        self.patch_repo()
+        answers = iter([False, True])
+        self.patch(utils.opt_out_repo, "is_opted_out", lambda *_args: next(answers))
+        await self.post(FakeSourceMessage(attachments=[FakeAttachment("https://cdn.example/clip.mp4")]))
+
+        self.assertTrue(all(message.deleted for message in self.target_channel.sent))
+        self.assertEqual([], self.inserted)
 
     async def test_reports_a_failed_write(self):
         self.patch_repo(insert=lambda: (_ for _ in ()).throw(RuntimeError("write failed")))

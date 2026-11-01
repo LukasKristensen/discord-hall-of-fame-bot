@@ -68,6 +68,9 @@ def set_opted_out(connection, user_id, opted_out: bool, commit: bool = True):
     """
     cursor = connection.cursor()
     if opted_out:
+        # The same lock storing a post takes, so a post stored at this moment either lands before and is
+        # an earlier post, or waits and sees the opt-out
+        cursor.execute("SELECT pg_advisory_xact_lock(%s)", (int(user_id),))
         cursor.execute("INSERT INTO opted_out_member (user_id) VALUES (%s) ON CONFLICT (user_id) DO NOTHING",
                        (user_id,))
     else:

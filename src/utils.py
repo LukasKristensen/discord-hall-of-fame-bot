@@ -44,21 +44,6 @@ member_post_limit = 10_000
 members_at_post_limit_logged = set()
 
 
-def author_to_store(connection, author_id: int) -> tuple[int, bool]:
-    """
-    Who a new post is credited to: the member, or nobody when they already have member_post_limit posts
-    credited to them. Checked when a post is stored rather than on every reaction, and counted from the
-    author index, so it costs one lookup per new post. A member who asked not to be featured is left out
-    by insert_hall_of_fame_message itself, in the same statement, so it is not looked up again here
-    :param connection: The database connection
-    :param author_id: The member who wrote the message
-    :return: The author ID to store, and whether the member is at the post limit
-    """
-    if hall_of_fame_message_repo.count_messages_by_author(connection, author_id) >= member_post_limit:
-        return hall_of_fame_message_repo.NO_AUTHOR_ID, True
-    return author_id, False
-
-
 # The server's rules about which messages qualify, as rule_blocking_post names them
 RULE_TOO_OLD = "too_old"
 RULE_BOT_MESSAGE = "bot_message"
@@ -547,25 +532,33 @@ async def post_hall_of_fame_message(message: discord.Message, bot: discord.Clien
     view = await create_post_view(message, connection, config)
     hall_of_fame_message = await target_channel.send(view=view, allowed_mentions=NO_MENTIONS)
 
+    opted_out_meanwhile = False
     try:
-        # The opt-out is checked again here, since sending the repost gave the member time to ask not to
-        # be featured. The post is on the board by now, so it is kept there, credited to nobody
-        author_id, at_post_limit = author_to_store(connection, int(message.author.id))
-        hall_of_fame_message_repo.insert_hall_of_fame_message(connection,
-                                                              int(message.id),
-                                                              int(message.channel.id),
-                                                              int(message.guild.id),
-                                                              int(hall_of_fame_message.id),
-                                                              int(await reaction_count(message, connection, config)),
-                                                              author_id,
-                                                              datetime.datetime.now(timezone.utc),
-                                                              # Videos play inside the post, so new posts
-                                                              # have no video link message
-                                                              None)
+        count = int(await reaction_count(message, connection, config))
+        # Checked again, since sending the repost gave the member time to ask not to be featured. It is the
+        # last thing before storing, with no await in between: the bot runs as one process, so nothing can
+        # handle an opt-out between this check and the store
+        if opt_out_repo.is_opted_out(connection, message.author.id):
+            opted_out_meanwhile = True
+        else:
+            # Videos play inside the post, so new posts have no video link message
+            stored_author = hall_of_fame_message_repo.insert_hall_of_fame_message(
+                connection, int(message.id), int(message.channel.id), int(message.guild.id),
+                int(hall_of_fame_message.id), count, int(message.author.id), datetime.datetime.now(timezone.utc),
+                None, author_post_limit=member_post_limit)
     except Exception as e:
         await hall_of_fame_message.delete()
         await logging(bot, e, message.guild.id, log_level=log_type.CRITICAL)
         return
+
+    if opted_out_meanwhile:
+        # They asked not to be reposted, so the repost sent a moment before goes, and nothing is stored
+        await hall_of_fame_message.delete()
+        return
+
+    # Nobody credited although the member had not opted out: they are at member_post_limit, which the store
+    # checks under the author's lock so two posts at once cannot both slip under it
+    at_post_limit = stored_author == hall_of_fame_message_repo.NO_AUTHOR_ID
 
     # Checked once stored, so a post taken down here can still be restored. A Components V2 post carries its
     # media's scanning results only in its raw components, which discord.py does not keep, so they are read

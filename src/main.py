@@ -1392,6 +1392,9 @@ async def delete_member_data(user_id: int) -> int:
         # One transaction, committed by statement_timeout once every step worked. A step that fails
         # rolls back the rest, so a member is never left with only part of their data deleted
         with utils.statement_timeout(connection, data_command_statement_timeout_ms):
+            # Held to the end of the transaction, so a post being stored waits and lands after the deletion
+            # instead of slipping in after remove_author with the member's ID
+            hall_of_fame_message_repo.lock_member(connection, user_id)
             # The posts before the statistics: the daily rebuild recreates server_user from them, so
             # deleting the statistics alone would undo itself overnight
             detached = hall_of_fame_message_repo.remove_author(connection, user_id, commit=False)

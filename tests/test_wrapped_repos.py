@@ -115,21 +115,29 @@ class InsertHofWrappedTests(unittest.TestCase):
         connection = FakeConnection()
         hof_wrapped_repo.insert_hof_wrapped(connection, **insert_arguments())
 
-        self.assertEqual(insert_arguments(), connection.parameters[0])
+        self.assertEqual(insert_arguments(), connection.parameters[1])
+
+    def test_takes_the_fan_lists_lock_first(self):
+        """So an opt-out committing meanwhile is seen, and its cleanup cannot be overwritten."""
+        connection = FakeConnection()
+        hof_wrapped_repo.insert_hof_wrapped(connection, **insert_arguments())
+
+        self.assertIn("pg_advisory_xact_lock", connection.queries[0])
+        self.assertEqual((hof_wrapped_repo.FAN_LISTS_LOCK,), connection.parameters[0])
 
     def test_the_member_is_both_looked_up_and_stored(self):
         """Once to check whether they opted out, once as the row's member."""
         connection = FakeConnection()
         hof_wrapped_repo.insert_hof_wrapped(connection, **insert_arguments())
 
-        self.assertEqual(2, connection.queries[0].count("%(user_id)s"))
+        self.assertEqual(2, connection.queries[1].count("%(user_id)s"))
 
     def test_replaces_a_wrapped_that_was_generated_before(self):
         """Generation can be run again for a year, and must not leave two rows for one member."""
         connection = FakeConnection()
         hof_wrapped_repo.insert_hof_wrapped(connection, **insert_arguments())
 
-        self.assertIn("ON CONFLICT (guild_id, user_id, year) DO UPDATE", connection.queries[0])
+        self.assertIn("ON CONFLICT (guild_id, user_id, year) DO UPDATE", connection.queries[1])
 
     def test_commits(self):
         connection = FakeConnection()
@@ -143,8 +151,10 @@ class DeleteHofWrappedForGuildTests(unittest.TestCase):
         connection = FakeConnection()
         hof_wrapped_repo.delete_hof_wrapped_for_guild(connection, 200)
 
-        self.assertIn("WHERE guild_id = %s", connection.queries[0])
-        self.assertEqual([(200,)], connection.parameters)
+        # After the fan lists lock, like every other Wrapped write
+        self.assertIn("pg_advisory_xact_lock", connection.queries[0])
+        self.assertIn("WHERE guild_id = %s", connection.queries[1])
+        self.assertEqual([(hof_wrapped_repo.FAN_LISTS_LOCK,), (200,)], connection.parameters)
 
 
 class WrappedProgressTests(unittest.TestCase):
@@ -202,7 +212,9 @@ class RemoveFromFanListsTests(unittest.TestCase):
         hof_wrapped_repo.remove_from_fan_lists(connection, 77)
 
         self.assertEqual(1, connection.commits)
-        self.assertEqual(2, len(connection.queries))
+        # The fan lists lock, then one update per list
+        self.assertEqual(3, len(connection.queries))
+        self.assertIn("pg_advisory_xact_lock", connection.queries[0])
 
     def test_leaves_the_commit_to_a_larger_transaction(self):
         connection = FakeConnection()
