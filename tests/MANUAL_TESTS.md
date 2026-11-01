@@ -25,6 +25,7 @@ message under a "test cases" category so each post names what it tests.
 | long-text | About 1,970 characters | Shown whole. Did not reach the 2,000 cut, see below |
 | multi-media | 4 images, 10 images | Laid out as in Discord, 2 by 2 and 1 over 3 by 3, order kept |
 | multi-media | Images, a spoiler and a video together | The spoiler covered, the video playing, order kept |
+| multi-media | 10 copies of one image and an image link | The first 10 in the gallery and "1 more in the original message" under it. All 10 copies loaded |
 | mixed | Text and an image | Text beside the avatar, the image full width below |
 | mixed | A reply to a poll | The quote reads *Poll: question*. The app cannot send text and a poll in one message |
 | link | A YouTube link alone | The link kept as text, the video's thumbnail as a still picture in the gallery |
@@ -46,7 +47,8 @@ message under a "test cases" category so each post names what it tests.
 - **One gallery item can fail to load for good** ([#104](https://github.com/LukasKristensen/discord-hall-of-fame-bot/issues/104)).
   The same video attached four times failed on its first item in 4 of 5 posts, on desktop and mobile.
   Holding the post until the message was 10 seconds old did not help and was reverted. Different files
-  in one gallery have always loaded so far.
+  in one gallery have always loaded so far, and so did 10 copies of one image, so duplicates alone do not
+  cause it: so far only repeated videos have failed.
 - **A user mention can read as unknown user.** A new second account, in a browser, saw `@Lukas` on the board
   as "@unknown-user" (in Danish, "@ukendt-bruger"). A post does not carry the users it mentions, so the
   name only shows once the reader's app has loaded that member. After opening the member's profile it
@@ -93,8 +95,6 @@ Not bugs, and nothing decided yet:
 ### Still to run
 
 - **The 2,000 character cut:** needs Nitro, or a lower `post_text_limit` on the development bot.
-- **More than 10 media:** 10 attachments plus an image link or a sticker, for the "more in the original"
-  note.
 - **A member who opted out:** check that their message posted after opting out does not reach the board.
   In this run their message was on the board, possibly reacted to before they opted out.
 - **file:** whether a file link still opens a day after posting.
