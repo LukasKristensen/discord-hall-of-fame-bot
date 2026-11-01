@@ -268,11 +268,13 @@
 
   /* Closing */
   /* Screenshots of the bot, served from main on GitHub, as Top.gg hosts no images for a description */
+  /* One per row at full width: each image carries its own caption, which is too small to read in columns */
   #hof-description-block .shots {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-    gap: 14px;
+    grid-template-columns: 1fr;
+    gap: 16px;
     margin-top: 22px;
+    max-width: 820px;
   }
   #hof-description-block .shots a { display: block; border-radius: 10px; overflow: hidden; border: 1px solid var(--hof-line); }
   #hof-description-block .shots img { display: block; width: 100%; height: auto; }
