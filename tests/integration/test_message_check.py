@@ -89,7 +89,7 @@ class MatchesTheReactionPathTests(MessageCheckTestCase):
         await self.unreact(FANS[0])
         verdict = await self.explain()
 
-        self.assertEqual([], self.board.posts[self.stored()["hall_of_fame_message_id"]].embeds)
+        self.assertFalse(utils.post_shows(self.board.posts[self.stored()["hall_of_fame_message_id"]]))
         self.assertEqual(message_check.HIDDEN, verdict.reason)
 
     async def test_an_opted_out_author_is_neither_posted_nor_named(self):

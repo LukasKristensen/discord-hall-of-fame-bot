@@ -256,8 +256,11 @@ yourself if your membership changes a lot.
 
 ### Does it repost images and videos?
 
-Yes. Images, videos and stickers are carried over into the hall of fame post, and videos are posted so
-that they stay playable rather than becoming a bare link.
+Yes. A post is one message with up to ten of the message's images and videos, which play in place.
+Spoilered images stay covered until someone opens them, stickers and link previews are shown when there
+is no attachment, and other files are linked. The post lists every counted emoji with its count, and
+mentions in the message are shown without pinging anyone again. Posts made before version 2.2 keep their
+old layout.
 
 ### What about age-restricted channels and sensitive images?
 

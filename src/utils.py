@@ -2,8 +2,10 @@ import discord
 import datetime
 from datetime import timezone
 import asyncio
+import re
+import urllib.parse
 from contextlib import contextmanager
-from message_reactions import most_reacted_emoji, reaction_count
+from message_reactions import filter_whitelisted_reactions, most_reacted_emoji, reaction_count
 from classes import server_class
 from enums import command_refs, log_type, calculation_method_type
 from repositories import (server_config_repo, hall_of_fame_message_repo, server_user_repo, hof_wrapped_repo,
@@ -70,6 +72,8 @@ SAFETY_RULES = (RULE_AGE_RESTRICTED, RULE_FLAGGED_MEDIA)
 EXPLICIT_CONTENT = 1 << 4
 GORE_CONTENT = 1 << 6
 SELF_HARM_CONTENT = 1 << 7
+# The same results on media in components, which have bits of their own, paired with the ones above
+COMPONENT_SCAN_BITS = ((1 << 0, EXPLICIT_CONTENT), (1 << 1, GORE_CONTENT), (1 << 2, SELF_HARM_CONTENT))
 
 
 def has_image_or_video(message: discord.Message) -> bool:
@@ -103,15 +107,40 @@ def content_scan_flags(message) -> int:
     return flags & (EXPLICIT_CONTENT | GORE_CONTENT | SELF_HARM_CONTENT)
 
 
-def has_flagged_media(message, board) -> bool:
+def component_scan_flags(raw_components) -> int:
+    """
+    The content scanning results on the media of a Components V2 message, read from the components as
+    Discord sent them, since discord.py does not read them yet. They use bits of their own, which are
+    turned into the attachment ones
+    :param raw_components: The message's components as Discord sent them
+    :return: The EXPLICIT_CONTENT, GORE_CONTENT and SELF_HARM_CONTENT bits that are set
+    """
+    flags = 0
+    pending = list(raw_components or [])
+    while pending:
+        item = pending.pop()
+        if isinstance(item, list):
+            pending.extend(item)
+        elif isinstance(item, dict):
+            scan = item.get("content_scan_metadata")
+            if isinstance(scan, dict):
+                for component_bit, attachment_bit in COMPONENT_SCAN_BITS:
+                    if (scan.get("flags") or 0) & component_bit:
+                        flags |= attachment_bit
+            pending.extend(item.values())
+    return flags
+
+
+def has_flagged_media(message, board, raw_components=None) -> bool:
     """
     Whether a message carries media Discord flagged that may not go on this board. Gore and self-harm are
     never reposted, since a repost puts them in front of members who did not choose to see them. Explicit
     media may go where Discord allows it: a board that is age-restricted itself
     :param message: The message, or a post on the board
     :param board: The board channel, None when it is missing
+    :param raw_components: The message's components as Discord sent them, for a Components V2 post
     """
-    flags = content_scan_flags(message)
+    flags = content_scan_flags(message) | component_scan_flags(raw_components)
     if flags & (GORE_CONTENT | SELF_HARM_CONTENT):
         return True
     return bool(flags & EXPLICIT_CONTENT) and not setup_check.is_age_restricted(board)
@@ -225,7 +254,7 @@ async def validate_message(reaction_event: discord.RawReactionActionEvent, bot: 
 
     if db_message:
         message_to_update = await target_channel.fetch_message(db_message["hall_of_fame_message_id"])
-        if len(message_to_update.embeds) > 0:
+        if post_shows(message_to_update):
             hall_of_fame_message_repo.update_field_for_message(connection, guild_id, channel_id, message_id, "reaction_count", corrected_reactions)
             await update_reaction_counter(db_message, bot, target_channel_id, reaction_threshold, connection,
                                           source_message, corrected_reactions, reaction_config)
@@ -234,7 +263,8 @@ async def validate_message(reaction_event: discord.RawReactionActionEvent, bot: 
             # The post was hidden and is now back over the threshold, so it is restored with its current
             # count, which the leaderboards and profiles read from the database
             hall_of_fame_message_repo.update_field_for_message(connection, guild_id, channel_id, message_id, "reaction_count", corrected_reactions)
-            await message_to_update.edit(embed=await create_embed(source_message, reaction_threshold, connection, reaction_config))
+            await show_post(message_to_update, source_message, reaction_threshold, connection, reaction_config,
+                            corrected_reactions)
             # The column is present and null for every post that is not a video, so the id itself
             # is what decides whether there is a link message to restore
             video_link_message_id = db_message.get("video_link_message_id")
@@ -270,9 +300,9 @@ async def update_reaction_counter(db_message, bot: discord.Client, target_channe
         return
     hall_of_fame_message = await target_channel.fetch_message(hall_of_fame_message_id)
 
-    if not hall_of_fame_message.embeds:
+    if not post_shows(hall_of_fame_message):
         # Post the message in the Hall of Fame channel if it was removed
-        await hall_of_fame_message.edit(embed=await create_embed(discord_message, reaction_threshold, connection, config))
+        await show_post(hall_of_fame_message, discord_message, reaction_threshold, connection, config, corrected_reactions)
         return
 
     guild_id = discord_message.guild.id
@@ -282,9 +312,13 @@ async def update_reaction_counter(db_message, bot: discord.Client, target_channe
             and now - hall_of_fame_message.created_at >= old_message_age):
         return
 
-    embed = hall_of_fame_message.embeds[0]
     if corrected_reactions is None:
         corrected_reactions = await reaction_count(discord_message, connection, config)
+    if is_components_v2(hall_of_fame_message):
+        await update_post_view(hall_of_fame_message, discord_message, connection, config, corrected_reactions, now)
+        return
+
+    embed = hall_of_fame_message.embeds[0]
     top_reaction = most_reacted_emoji(discord_message.reactions, guild_id, connection, config)
     reactions_field_value = format_reactions_field_value(corrected_reactions, top_reaction)
 
@@ -304,8 +338,29 @@ async def update_reaction_counter(db_message, bot: discord.Client, target_channe
             )
             break
 
+    await edit_old_post(hall_of_fame_message, guild_id, now, embed=embed)
+
+
+async def update_post_view(post, message: discord.Message, connection, config: dict, counted: int,
+                           now: datetime.datetime):
+    """
+    Bring a Components V2 post's counts up to date. The new reactions line is compared with the one shown
+    first, so a reaction that changes nothing costs no edit and no fetch of the message replied to
+    """
+    config = config if config is not None else server_config_repo.get_reaction_config(connection, message.guild.id)
+    if posted_reactions_line(post) == reactions_line(message, config, counted):
+        return
+    await edit_old_post(post, message.guild.id, now, view=await create_post_view(message, connection, config, counted),
+                        allowed_mentions=NO_MENTIONS)
+
+
+async def edit_old_post(post, guild_id: int, now: datetime.datetime, **changes):
+    """
+    Edit a board post, pausing the server's edits to old posts when Discord says too many were made
+    :param changes: What to edit, as message.edit takes it
+    """
     try:
-        await hall_of_fame_message.edit(embed=embed)
+        await post.edit(**changes)
     except discord.HTTPException as error:
         if error.code != OLD_MESSAGE_EDIT_LIMIT_CODE:
             raise
@@ -330,7 +385,8 @@ async def hide_post(db_message, bot: discord.Client, target_channel, source_mess
         await video_link_message.edit(content="** **", embed=None)
 
 
-async def take_down_flagged_post(post: discord.Message, board, bot: discord.Client, guild_id: int) -> bool:
+async def take_down_flagged_post(post: discord.Message, board, bot: discord.Client, guild_id: int,
+                                 raw_components=None) -> bool:
     """
     Blank one of the bot's own messages on the board when Discord's content scanning flagged its media, such
     as the image of the message a post replies to. Scanning can finish after a message is sent, so Discord
@@ -339,12 +395,14 @@ async def take_down_flagged_post(post: discord.Message, board, bot: discord.Clie
     :param board: The board channel
     :param bot: The Discord bot
     :param guild_id: The server, for the log
+    :param raw_components: The post's components as Discord sent them, where a Components V2 post carries the
+        scanning results of its media. discord.py does not read those yet
     :return: True when the post was taken down
     """
-    if not has_flagged_media(post, board):
+    if not has_flagged_media(post, board, raw_components):
         return False
     try:
-        await post.edit(content="** **", embed=None)
+        await blank_post(post)
     except discord.NotFound:
         # Deleted meanwhile, which takes it down just as well
         return False
@@ -368,7 +426,7 @@ async def remove_embed(message, bot: discord.Client, target_channel_id: int):
     if target_channel is None:
         return
     hall_of_fame_message = await target_channel.fetch_message(hall_of_fame_message_id)
-    await hall_of_fame_message.edit(content="** **", embed=None)
+    await blank_post(hall_of_fame_message)
 
 
 async def update_leaderboard(connection, bot: discord.Client, server_config: server_class.Server):
@@ -480,14 +538,8 @@ async def post_hall_of_fame_message(message: discord.Message, bot: discord.Clien
     if target_channel is None:
         await report_missing_hall_of_fame_channel(bot, message.guild.id, target_channel_id)
         return
-    video_link = check_video_extension(message)
-    video_message = None
-
-    if video_link:
-        video_message = await target_channel.send(video_link)
-
-    embed = await create_embed(message, reaction_threshold, connection, config)
-    hall_of_fame_message = await target_channel.send(embed=embed)
+    view = await create_post_view(message, connection, config)
+    hall_of_fame_message = await target_channel.send(view=view, allowed_mentions=NO_MENTIONS)
 
     try:
         # The opt-out is checked again here, since sending the repost gave the member time to ask not to
@@ -501,11 +553,11 @@ async def post_hall_of_fame_message(message: discord.Message, bot: discord.Clien
                                                               int(await reaction_count(message, connection, config)),
                                                               author_id,
                                                               datetime.datetime.now(timezone.utc),
-                                                              int(video_message.id) if video_link else None)
+                                                              # Videos play inside the post, so new posts
+                                                              # have no video link message
+                                                              None)
     except Exception as e:
         await hall_of_fame_message.delete()
-        if video_message:
-            await video_message.delete()
         await logging(bot, e, message.guild.id, log_level=log_type.CRITICAL)
         return
 
@@ -594,17 +646,7 @@ async def build_post_embed(message: discord.Message, connection, config: dict = 
     """
     # handle 1024 character limit on embed description
     content = truncate_content(message.content)
-    reference_message = None
-    if message.reference and message.reference.message_id:
-        try:
-            reference_message = await message.channel.fetch_message(message.reference.message_id)
-        except discord.HTTPException:
-            # The message that was replied to is gone, so the reply is embedded on its own
-            reference_message = None
-    # A member who asked not to be featured is left off the board in replies too: their name, words and
-    # image would otherwise go up with the reply. The reply is embedded on its own instead
-    if reference_message is not None and opt_out_repo.is_opted_out(connection, reference_message.author.id):
-        reference_message = None
+    reference_message = await fetch_reply_context(message, connection)
     reference_content = truncate_content(reference_message.content) if reference_message else ""
     if corrected_reactions is None:
         corrected_reactions = await reaction_count(message, connection, config)
@@ -717,38 +759,391 @@ async def build_post_embed(message: discord.Message, connection, config: dict = 
             embed.set_image(url=message.attachments[0].url)
         else:
             # Check for embedded images if there are no attachments
-            for message_embed in message.embeds:
-                if message_embed.type == 'image' and message_embed.url:
-                    embed.set_image(url=message_embed.url)
-                    break
-                # Sometimes images from links are in the thumbnail or image attribute of a generic embed type
-                elif message_embed.image:
-                    embed.set_image(url=message_embed.image.url)
-                    break
-                elif message_embed.thumbnail:
-                    embed.set_image(url=message_embed.thumbnail.url)
-                    break
+            image_url = linked_image_url(message)
+            if image_url:
+                embed.set_image(url=image_url)
 
         embed.add_field(name="Reactions", value=reactions_field_value, inline=True)
         embed.add_field(name="Jump to Message", value=message.jump_url, inline=False)
         return embed
 
 
-def check_video_extension(message):
+async def reply_context(message: discord.Message, connection):
     """
-    Checks if the message contains a video attachment
-    :param message: The payload of the event
-    :return: The URL of the video attachment if it exists, otherwise None
+    The message a featured message replies to, shown with it so the moment still makes sense later
+    :param message: The featured message
+    :param connection: The database connection
+    :return: The replied-to message, or None when there is none, it is gone, or its author asked not to be
+        featured, and whether it was deleted
     """
-    if not message.attachments:
-        return None
-    url = message.attachments[0].url
+    if not (message.reference and message.reference.message_id):
+        return None, False
+    # A forward carries a reference too, to the message it forwards, which is not a reply
+    if getattr(message.reference, "type", None) == discord.MessageReferenceType.forward:
+        return None, False
+    try:
+        reference_message = await message.channel.fetch_message(message.reference.message_id)
+    except discord.NotFound:
+        return None, True
+    except discord.HTTPException:
+        # The message that was replied to cannot be read, so the reply is posted on its own
+        return None, False
+    # A member who asked not to be featured is left off the board in replies too: their name, words and
+    # image would otherwise go up with the reply. The reply is posted on its own, with no sign of them
+    if opt_out_repo.is_opted_out(connection, reference_message.author.id):
+        return None, False
+    return reference_message, False
 
-    for extension in ['.mp4', '.mov', '.avi', '.mkv', '.webm']:
-        if extension in url:
-            video_url = url.split(extension)[0] + extension
-            return video_url
+
+async def fetch_reply_context(message: discord.Message, connection):
+    """The message a featured message replies to, as reply_context finds it, without whether it was deleted"""
+    reference_message, _deleted = await reply_context(message, connection)
+    return reference_message
+
+
+def linked_image_url(message: discord.Message) -> str | None:
+    """The image of a link preview in a message, used when the message has no attachments of its own"""
+    for message_embed in message.embeds:
+        if message_embed.type == 'image' and message_embed.url:
+            return message_embed.url
+        # Sometimes images from links are in the thumbnail or image attribute of a generic embed type
+        if message_embed.image:
+            return message_embed.image.url
+        if message_embed.thumbnail:
+            return message_embed.thumbnail.url
     return None
+
+
+# New posts are one Components V2 message, which holds every image and video of a message, keeps spoilers
+# covered and lists every counted emoji. Posts made before keep their embed, and are updated and hidden as
+# embeds, since a message cannot change between the two once sent
+
+# A media gallery holds at most ten items
+post_media_limit = 10
+# The most emojis listed on a post, most used first, so a message with dozens keeps a short line
+post_reactions_listed = 8
+# Files that are not images or videos are linked under the text, up to this many
+post_files_listed = 5
+# Text up to this long sits beside the avatar. Longer text goes under the header at full width, where it reads
+post_text_beside_limit = 300
+# A post holds 4,000 characters of text, so a message keeps up to this much of its own
+post_text_limit = 2000
+# The replied-to message is quoted this far, as Discord's own reply preview is a single line
+post_quote_limit = 200
+# A message that is nothing but a link
+BARE_LINK = re.compile(r"^<?https?://\S+>?$")
+# Link previews Discord shows in place of their link when the link is the whole message
+PREVIEWS_REPLACING_LINK = ("image", "gifv")
+# A Tenor GIF's MP4, whose path ends its ID with the format code AAAPo. The GIF of the same ID ends in AAAAC
+TENOR_MP4 = re.compile(r"^(https://media\d*\.tenor\.com/[\w-]+?)AAAPo/([^/?#]+)\.mp4$")
+# The ID given to a post's reactions line, so a new count is compared with the post without rebuilding it
+POST_REACTIONS_ID = 50
+VIDEO_EXTENSIONS = ('.mp4', '.mov', '.avi', '.mkv', '.webm')
+MEDIA_EXTENSIONS = ('.png', '.jpg', '.jpeg', '.gif', '.webp') + VIDEO_EXTENSIONS
+# A post repeats the words of the message it features. An embed never pinged its mentions, but text in
+# components does, so every post is sent and edited without mentions
+NO_MENTIONS = discord.AllowedMentions.none()
+
+
+def is_components_v2(post) -> bool:
+    """Whether a board post was sent as a Components V2 message rather than an embed"""
+    return bool(getattr(getattr(post, "flags", None), "components_v2", False))
+
+
+def walk_components(components):
+    """Every component of a message, nested ones and section accessories included"""
+    for component in components or []:
+        yield component
+        yield from walk_components(getattr(component, "children", None))
+        accessory = getattr(component, "accessory", None)
+        if accessory is not None:
+            yield accessory
+
+
+def post_shows(post) -> bool:
+    """
+    Whether a board post shows its message: an embed post with its embed, or a Components V2 post with
+    its container. A hidden post keeps neither, so it can be restored in place
+    """
+    if getattr(post, "embeds", None):
+        return True
+    return any(getattr(component, "type", None) == discord.ComponentType.container
+               for component in getattr(post, "components", None) or [])
+
+
+def posted_reactions_line(post) -> str | None:
+    """The reactions line a Components V2 post shows now, None when it has none"""
+    for component in walk_components(getattr(post, "components", None)):
+        if getattr(component, "id", None) == POST_REACTIONS_ID:
+            return getattr(component, "content", None)
+    return None
+
+
+def attachment_is_spoiler(attachment) -> bool:
+    is_spoiler = getattr(attachment, "is_spoiler", None)
+    return bool(is_spoiler()) if callable(is_spoiler) else False
+
+
+def is_media_attachment(attachment) -> bool:
+    """Whether an attachment is an image or a video a media gallery can show"""
+    content_type = getattr(attachment, "content_type", None) or ""
+    if content_type.startswith(("image/", "video/")):
+        return True
+    return attachment.url.split("?")[0].lower().endswith(MEDIA_EXTENSIONS)
+
+
+def ascii_url(url: str) -> str:
+    """
+    A link with characters outside ASCII percent-encoded. Discord keeps a file's name as written in its link,
+    such as ødelagt.mp4, and a media item with such a link fails to load in a post. Characters a link may
+    already hold, the % of an existing encoding included, are left as they are
+    """
+    return urllib.parse.quote(url, safe=":/?#[]@!$&'()*+,;=%~")
+
+
+def media_items(attachments) -> list[discord.MediaGalleryItem]:
+    return [discord.MediaGalleryItem(ascii_url(attachment.url), spoiler=attachment_is_spoiler(attachment))
+            for attachment in attachments if is_media_attachment(attachment)]
+
+
+def gif_url(video_url: str) -> str:
+    """
+    A GIF preview's animation as a GIF. Discord gives the GIF picker's previews as an MP4, which a gallery
+    shows as a video player with controls. Tenor serves the same animation as a GIF, at a link that differs
+    only in its format code, so that is used for Tenor. Others keep the MP4, which at least plays
+    """
+    match = TENOR_MP4.match(video_url)
+    if match is None:
+        return video_url
+    return f"{match.group(1)}AAAAC/{match.group(2)}.gif"
+
+
+def linked_media(source):
+    """
+    The picture or GIF of a link preview, and the preview's type. A GIF from the picker is a gifv preview,
+    whose thumbnail is only a still frame
+    """
+    for message_embed in source.embeds:
+        video = getattr(message_embed, "video", None)
+        if message_embed.type == "gifv" and video is not None and video.url:
+            return gif_url(video.url), "gifv"
+    image_url = linked_image_url(source)
+    if image_url is None:
+        return None, None
+    return image_url, next((message_embed.type for message_embed in source.embeds), None)
+
+
+def link_preview_media(source):
+    """
+    The picture or GIF of a message's link preview, and whether it stands in for the message's text, as
+    Discord shows it when the link is the whole message
+    :return: The gallery items, empty without a preview, and whether to leave the text out
+    """
+    link_url, kind = linked_media(source)
+    if link_url is None:
+        return [], False
+    return ([discord.MediaGalleryItem(ascii_url(link_url))],
+            kind in PREVIEWS_REPLACING_LINK and bool(BARE_LINK.match((source.content or "").strip())))
+
+
+def is_video_attachment(attachment) -> bool:
+    content_type = getattr(attachment, "content_type", None) or ""
+    return content_type.startswith("video/") or attachment.url.split("?")[0].lower().endswith(VIDEO_EXTENSIONS)
+
+
+def message_media(source):
+    """
+    The pictures and videos a message shows: its own, else its sticker, else its link preview
+    :return: The gallery items, the name of a sticker no gallery can show, and whether a link preview stands
+        in for the message's text
+    """
+    items = media_items(source.attachments)
+    if items:
+        return items, None, False
+    if source.stickers:
+        sticker = source.stickers[0]
+        # Animated Lottie stickers are JSON, which a gallery cannot show, so they are named instead
+        if getattr(sticker, "format", None) == discord.StickerFormatType.lottie:
+            return [], discord.utils.escape_markdown(sticker.name), False
+        return [discord.MediaGalleryItem(ascii_url(sticker.url))], None, False
+    items, link_replaces_text = link_preview_media(source)
+    return items, None, link_replaces_text
+
+
+def quote_placeholder(source, poll) -> str:
+    """What a replied-to message holds when it has no words to quote, named as Discord's reply preview does"""
+    if poll is not None:
+        return messages.POST_QUOTE_POLL.format(question=discord.utils.escape_markdown(poll.question))
+    for attachment in source.attachments:
+        if not is_media_attachment(attachment):
+            return messages.POST_QUOTE_FILE.format(name=discord.utils.escape_markdown(attachment.filename))
+        return messages.POST_QUOTE_VIDEO if is_video_attachment(attachment) else messages.POST_QUOTE_IMAGE
+    if source.stickers:
+        return messages.POST_STICKER.format(name=discord.utils.escape_markdown(source.stickers[0].name))
+    link_url, kind = linked_media(source)
+    if link_url is not None:
+        return {"gifv": messages.POST_QUOTE_GIF, "video": messages.POST_QUOTE_VIDEO}.get(kind, messages.POST_QUOTE_IMAGE)
+    return ""
+
+
+def featured_body(message: discord.Message):
+    """
+    What a featured message shows: its own text and attachments, or for a forward, those of the message it
+    forwards, which Discord keeps in a snapshot
+    :return: The message or its snapshot, and whether it is a forward
+    """
+    snapshots = getattr(message, "message_snapshots", None) or []
+    if snapshots and not message.content and not message.attachments:
+        return snapshots[0], True
+    return message, False
+
+
+def poll_text(poll) -> str:
+    """A poll's question and answers with their votes, since a post cannot carry the poll itself"""
+    lines = ["-# " + messages.POST_POLL, f"**{discord.utils.escape_markdown(poll.question)}**"]
+    for answer in poll.answers:
+        votes = messages.POST_POLL_VOTE if answer.vote_count == 1 else messages.POST_POLL_VOTES
+        lines.append(f"- {discord.utils.escape_markdown(answer.text or '')} · " + votes.format(count=answer.vote_count))
+    return "\n".join(lines)
+
+
+def more_note(hidden: int) -> str:
+    return "-# " + messages.POST_MORE_IN_ORIGINAL.format(count=hidden)
+
+
+def display_name(user) -> str:
+    """The name members see for someone in the server, their nickname when they have one"""
+    return discord.utils.escape_markdown(getattr(user, "display_name", None) or user.name)
+
+
+def reactions_line(message: discord.Message, config: dict, counted: int) -> str:
+    """
+    Every counted emoji with its count, most used first. How many the server's counting method counted is
+    added only when it differs from the top emoji's count, for example with total reactions or when the
+    author's own reaction is left out, so the usual post does not show the same number twice
+    """
+    reactions = sorted(filter_whitelisted_reactions(message.reactions, config), key=lambda reaction: reaction.count,
+                       reverse=True)
+    listed = " · ".join(f"{reaction.emoji} {reaction.count}" for reaction in reactions[:post_reactions_listed])
+    if len(reactions) > post_reactions_listed:
+        listed += " · " + messages.POST_MORE_EMOJIS.format(count=len(reactions) - post_reactions_listed)
+    if reactions and reactions[0].count == counted:
+        return listed
+    footer = "-# " + messages.POST_COUNTED.format(count=counted)
+    return f"{listed}\n{footer}" if listed else footer
+
+
+async def create_post_view(message: discord.Message, connection, config: dict = None,
+                           corrected_reactions: int = None) -> discord.ui.LayoutView:
+    """
+    A Hall of Fame post as a Components V2 message: the author with the reply they answered, the text, every
+    image and video, the counted emojis and a button back to the message
+    :param message: The featured message
+    :param connection: The database connection
+    :param config: The reaction related server configuration, fetched when not supplied
+    :param corrected_reactions: The already calculated reaction count, recalculated when not supplied
+    :return: The view to send or edit the post with
+    """
+    config = config if config is not None else server_config_repo.get_reaction_config(connection, message.guild.id)
+    reference_message, reply_deleted = await reply_context(message, connection)
+    if corrected_reactions is None:
+        corrected_reactions = await reaction_count(message, connection, config)
+    body, forwarded = featured_body(message)
+    media, unshown_sticker, link_replaces_text = message_media(body)
+    sticker_note = "-# " + messages.POST_STICKER.format(name=unshown_sticker) if unshown_sticker else None
+
+    # The message it answers goes through the same steps, a forward and a sticker included. A reply without
+    # pictures of its own shows those of the message it answers, between the two as in Discord's own reply
+    # view, or they would look like the reply's
+    reference_media, quote = [], ""
+    if reference_message is not None:
+        reference_body, _ = featured_body(reference_message)
+        answered_media, _, link_replaces_quote = message_media(reference_body)
+        if not media:
+            reference_media = answered_media
+        quote = "" if link_replaces_quote else truncate_content(reference_body.content, post_quote_limit)
+        if not quote and not reference_media:
+            # Nothing to quote and no picture shown: name what it was, as Discord's reply preview does
+            placeholder = quote_placeholder(reference_body, getattr(reference_message, "poll", None))
+            quote = f"*{placeholder}*" if placeholder else ""
+
+    text = "" if link_replaces_text else truncate_content(body.content, post_text_limit)
+    poll = getattr(message, "poll", None)
+    if poll is not None and not text:
+        text = poll_text(poll)
+
+    # Beside the avatar: the author and where it was said, the reply, and text short enough to read in the
+    # narrow column. A section holds at most three of these
+    where = messages.POST_IN_CHANNEL.format(channel=message.channel.mention)
+    if forwarded:
+        where += " · " + messages.POST_FORWARDED
+    heading = [f"**{display_name(message.author)}**\n-# {where}"]
+    if reference_message is not None:
+        replying = "-# " + messages.POST_REPLYING_TO.format(name=display_name(reference_message.author))
+        heading.append(f"{replying}\n>>> {quote}" if quote else replying)
+    elif reply_deleted:
+        heading.append("-# " + messages.POST_REPLYING_TO_DELETED)
+    text_beside = bool(text) and len(text) <= post_text_beside_limit and not reference_media
+    if text_beside:
+        heading.append(text)
+
+    container = discord.ui.Container(accent_colour=discord.Colour.gold())
+    if len(heading) > 1:
+        container.add_item(discord.ui.Section(*heading, accessory=discord.ui.Thumbnail(message.author.display_avatar.url)))
+    else:
+        # A lone name beside the tall avatar left a gap above the picture, so without text it stands alone
+        container.add_item(discord.ui.TextDisplay(heading[0]))
+
+    if reference_media:
+        container.add_item(discord.ui.MediaGallery(*reference_media[:post_media_limit]))
+    if text and not text_beside:
+        container.add_item(discord.ui.TextDisplay(text))
+    if media:
+        container.add_item(discord.ui.MediaGallery(*media[:post_media_limit]))
+        if len(media) > post_media_limit:
+            container.add_item(discord.ui.TextDisplay(more_note(len(media) - post_media_limit)))
+    if sticker_note:
+        container.add_item(discord.ui.TextDisplay(sticker_note))
+    files = [attachment for attachment in body.attachments if not is_media_attachment(attachment)]
+    if files:
+        listed = [f"[{discord.utils.escape_markdown(attachment.filename)}]({ascii_url(attachment.url)})"
+                  for attachment in files[:post_files_listed]]
+        if len(files) > post_files_listed:
+            listed.append(more_note(len(files) - post_files_listed))
+        container.add_item(discord.ui.TextDisplay("\n".join(listed)))
+
+    container.add_item(discord.ui.Separator())
+    container.add_item(discord.ui.TextDisplay(reactions_line(message, config, corrected_reactions), id=POST_REACTIONS_ID))
+    container.add_item(discord.ui.ActionRow(discord.ui.Button(style=discord.ButtonStyle.link, label=messages.POST_JUMP,
+                                                              url=message.jump_url)))
+    view = discord.ui.LayoutView(timeout=None)
+    view.add_item(container)
+    return view
+
+
+def hidden_post_view() -> discord.ui.LayoutView:
+    """What a hidden Components V2 post shows. A message keeps its Components V2 flag, so it is blanked this way"""
+    view = discord.ui.LayoutView(timeout=None)
+    view.add_item(discord.ui.TextDisplay("** **"))
+    return view
+
+
+async def blank_post(post):
+    """Hide a board post in place, so it can be restored with the same message"""
+    if is_components_v2(post):
+        await post.edit(view=hidden_post_view(), allowed_mentions=NO_MENTIONS)
+    else:
+        await post.edit(content="** **", embed=None)
+
+
+async def show_post(post, message: discord.Message, reaction_threshold: int, connection, config: dict = None,
+                    corrected_reactions: int = None):
+    """Show a hidden board post again, in the format it was first posted in"""
+    if is_components_v2(post):
+        await post.edit(view=await create_post_view(message, connection, config, corrected_reactions),
+                        allowed_mentions=NO_MENTIONS)
+    else:
+        await post.edit(embed=await create_embed(message, reaction_threshold, connection, config))
 
 
 def board_topic_is_ours(topic) -> bool:

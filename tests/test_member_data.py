@@ -1441,7 +1441,7 @@ class OptingOutWhileAPostIsSentTests(unittest.IsolatedAsyncioTestCase):
                 unittest.mock.patch.object(hall_of_fame_message_repo, "insert_hall_of_fame_message", record), \
                 unittest.mock.patch.object(utils, "create_embed", no_embed), \
                 unittest.mock.patch.object(utils, "reaction_count", count), \
-                unittest.mock.patch.object(utils, "check_video_extension", lambda _m: None):
+                unittest.mock.patch.object(utils, "create_post_view", no_embed):
             await utils.post_hall_of_fame_message(message, bot, FakeConnection(), 100, 5)
 
         # The sixth value stored is the author
@@ -1506,7 +1506,7 @@ class NotFeaturedPostingTests(unittest.IsolatedAsyncioTestCase):
                 unittest.mock.patch.object(hall_of_fame_message_repo, "insert_hall_of_fame_message", record), \
                 unittest.mock.patch.object(utils, "create_embed", no_embed), \
                 unittest.mock.patch.object(utils, "reaction_count", count), \
-                unittest.mock.patch.object(utils, "check_video_extension", lambda _m: None):
+                unittest.mock.patch.object(utils, "create_post_view", no_embed):
             await utils.post_hall_of_fame_message(message, bot, FakeConnection(), 100, 5)
 
         self.assertEqual([], sent)

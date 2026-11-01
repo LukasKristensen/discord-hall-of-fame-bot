@@ -161,7 +161,7 @@ async def post_is_shown(board, post_id) -> bool | None:
     except discord.HTTPException:
         # Not in this board: it was moved since, or the post was deleted
         return None
-    return bool(post.embeds)
+    return utils.post_shows(post)
 
 
 async def at_daily_limit(connect, guild_id: int) -> bool:

@@ -140,6 +140,29 @@ Restart the Discord client if the picker still shows the old list.
 - [ ] A friend who pressed Stop featuring me reaches the threshold: you are told only that it cannot be
       featured, and they are told it is their choice, with `/my_data`
 
+## Board posts
+
+- [ ] A reply with a spoilered image, a video and a second image, that @mentions someone, reaches the
+      board: one post shows the author, the quoted reply, all three in a gallery with the spoiler covered
+      and the video playing in place, every emoji with its count and a Jump to message button that works.
+      Nobody is pinged
+- [ ] More reactions update the count on that post. Removing reactions below the threshold hides it, and
+      reacting again brings it back as the same message
+- [ ] A post made before the upgrade still updates its count as an embed, hides and comes back
+- [ ] A message with a text file and one with only a sticker are posted with the file linked and the
+      sticker shown
+
+What only Discord's rendering shows. `tests/test_post_matrix.py` checks every other combination of message
+and reply from the payload:
+
+- [ ] A Tenor GIF, on its own and as the message replied to, loops as a GIF with no player controls. A GIF
+      from another site plays as a video
+- [ ] A forwarded message, a poll and a message over 300 characters look right: the forward labelled, the
+      poll's votes listed, the long text full width under the header
+- [ ] A reply with a picture of its own to a sticker, a file and a GIF says *Sticker: name*, *File: name* and
+      *GIF* in the quote
+- [ ] A file link on a post that is a day old still opens the file
+
 ## Wrapped
 
 Only if Wrapped can be generated on the development bot.

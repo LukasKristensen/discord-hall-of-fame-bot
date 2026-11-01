@@ -34,6 +34,25 @@ SUPPORT_SERVER_BUTTON = "Support server"
 # Footer on every Hall of Fame post: the brand only, since the board is the server's showcase and an ask on
 # every post would read as an ad. The ask goes on replies a member asked for instead
 POST_FOOTER = "Hall of Fame"
+# Components V2 posts
+POST_JUMP = "Jump to message"
+POST_REPLYING_TO = "Replying to {name}"
+POST_IN_CHANNEL = "in {channel}"
+POST_COUNTED = "{count} counted toward the " + POST_FOOTER
+POST_MORE_EMOJIS = "+{count}"
+POST_MORE_IN_ORIGINAL = "{count} more in the original message"
+POST_REPLYING_TO_DELETED = "Replying to a deleted message"
+POST_FORWARDED = "Forwarded"
+POST_STICKER = "Sticker: {name}"
+# What a quoted reply holds when it has no words, as Discord's reply preview names it
+POST_QUOTE_IMAGE = "Image"
+POST_QUOTE_VIDEO = "Video"
+POST_QUOTE_GIF = "GIF"
+POST_QUOTE_FILE = "File: {name}"
+POST_QUOTE_POLL = "Poll: {question}"
+POST_POLL = "Poll"
+POST_POLL_VOTE = "{count} vote"
+POST_POLL_VOTES = "{count} votes"
 # Footers render plain text only, so the command is named rather than a clickable command_refs mention
 INVITE_FOOTER = "Run a server? Add Hall of Fame with /invite"
 # The server Wrapped, which lands on every board in the same few days of December. It is the one post a

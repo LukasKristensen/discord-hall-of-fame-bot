@@ -66,6 +66,7 @@ class FakeGuild:
 class FakeChannelStub:
     def __init__(self, channel_id=SOURCE_CHANNEL_ID):
         self.id = channel_id
+        self.mention = f"<#{channel_id}>"
 
 
 class FakeSourceMessage:
@@ -80,10 +81,15 @@ class FakeSourceMessage:
 
 
 class FakePostedMessage:
-    def __init__(self, message_id, embeds=(), content=""):
+    def __init__(self, message_id, embeds=(), content="", view=None, allowed_mentions=None):
         self.id = message_id
         self.embeds = list(embeds)
         self.content = content
+        self.view = view
+        self.allowed_mentions = allowed_mentions
+        # A message sent with a Components V2 view carries the flag, and its components
+        self.flags = types.SimpleNamespace(components_v2=view is not None)
+        self.components = list(getattr(view, "children", []))
         self.edits = []
         self.deleted = False
         # Old enough by default for its edits to count toward Discord's limit on edits to old messages
@@ -107,8 +113,9 @@ class FakeTargetChannel:
         self.sent = []
         self.next_id = next_id
 
-    async def send(self, content=None, embed=None):
-        message = FakePostedMessage(self.next_id, embeds=[embed] if embed else [], content=content or "")
+    async def send(self, content=None, embed=None, view=None, allowed_mentions=None):
+        message = FakePostedMessage(self.next_id, embeds=[embed] if embed else [], content=content or "", view=view,
+                                    allowed_mentions=allowed_mentions)
         self.next_id += 1
         self.sent.append(message)
         return message
@@ -130,6 +137,16 @@ class FakeBot:
         return self.channels.get(channel_id)
 
 
+def post_view(text, reactions_line=None):
+    """A Components V2 post as create_post_view lays it out: a container, with the reactions line by its ID"""
+    container = discord.ui.Container(discord.ui.TextDisplay(text))
+    if reactions_line is not None:
+        container.add_item(discord.ui.TextDisplay(reactions_line, id=utils.POST_REACTIONS_ID))
+    view = discord.ui.LayoutView()
+    view.add_item(container)
+    return view
+
+
 class PostingTestCase(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.logged = []
@@ -147,9 +164,15 @@ class PostingTestCase(unittest.IsolatedAsyncioTestCase):
         async def build_embed(*_args, **_kwargs):
             return self.embed
 
+        self.view = post_view("a post")
+
+        async def build_view(*_args, **_kwargs):
+            return self.view
+
         self.patch(utils, "logging", record_log)
         self.patch(utils, "reaction_count", count_reactions)
         self.patch(utils, "create_embed", build_embed)
+        self.patch(utils, "create_post_view", build_view)
         self.patch(utils, "missing_channels_logged", set())
         self.patch(utils, "old_message_edits_paused_until", {})
 
@@ -191,12 +214,21 @@ class PostHallOfFameMessageTests(PostingTestCase):
         await utils.post_hall_of_fame_message(
             message or FakeSourceMessage(), self.bot, FakeConnection(), TARGET_CHANNEL_ID, 5)
 
-    async def test_posts_the_embed_to_the_hall_of_fame_channel(self):
+    async def test_posts_one_components_v2_message_to_the_hall_of_fame_channel(self):
         self.patch_repo()
         await self.post()
 
         self.assertEqual(1, len(self.target_channel.sent))
-        self.assertEqual([self.embed], self.target_channel.sent[0].embeds)
+        self.assertIs(self.view, self.target_channel.sent[0].view)
+        self.assertEqual([], self.target_channel.sent[0].embeds)
+
+    async def test_posts_without_pinging_anyone_the_message_mentions(self):
+        """Unlike an embed, text in components pings, so the message's mentions would go off again."""
+        self.patch_repo()
+        await self.post()
+
+        mentions = self.target_channel.sent[0].allowed_mentions
+        self.assertFalse(mentions.everyone or mentions.users or mentions.roles or mentions.replied_user)
 
     async def test_records_the_message_on_the_board(self):
         self.patch_repo()
@@ -214,33 +246,27 @@ class PostHallOfFameMessageTests(PostingTestCase):
         self.assertEqual(9, self.inserted[0][5])
         self.assertEqual(AUTHOR_ID, self.inserted[0][6])
 
-    async def test_posts_a_video_as_its_own_message_so_it_stays_playable(self):
+    async def test_a_video_plays_inside_the_post_with_no_message_of_its_own(self):
         self.patch_repo()
         await self.post(FakeSourceMessage(attachments=[FakeAttachment("https://cdn.example/clip.mp4")]))
 
-        self.assertEqual(2, len(self.target_channel.sent))
-        self.assertEqual("https://cdn.example/clip.mp4", self.target_channel.sent[0].content)
-
-    async def test_records_the_video_message_alongside_the_post(self):
-        self.patch_repo()
-        await self.post(FakeSourceMessage(attachments=[FakeAttachment("https://cdn.example/clip.mp4")]))
-
-        self.assertEqual(self.target_channel.sent[0].id, self.inserted[0][8])
-
-    async def test_records_no_video_message_for_an_image(self):
-        self.patch_repo()
-        await self.post(FakeSourceMessage(attachments=[FakeAttachment("https://cdn.example/photo.png")]))
-
+        self.assertEqual(1, len(self.target_channel.sent))
         self.assertIsNone(self.inserted[0][8])
 
-    async def test_takes_down_a_post_discord_flags_as_it_is_sent(self):
+    async def test_checks_the_sent_post_for_flagged_media(self):
         """Such as the image of the message it replies to, which the message itself does not carry."""
         self.patch_repo()
-        self.embed = discord.Embed.from_dict({"title": "an embed", "flags": utils.GORE_CONTENT})
+        checked = []
+
+        async def take_down(post, *_args, **_kwargs):
+            checked.append(post)
+            return False
+
+        self.patch(utils, "take_down_flagged_post", take_down)
         await self.post()
 
-        self.assertEqual([{"content": "** **", "embed": None}], self.target_channel.sent[0].edits)
-        self.assertEqual(1, len(self.inserted), "the post is still recorded, so it can be restored")
+        self.assertEqual(self.target_channel.sent, checked)
+        self.assertEqual(1, len(self.inserted), "a post taken down is still recorded, so it can be restored")
 
     async def test_leaves_a_post_without_flags_alone(self):
         self.patch_repo()
@@ -254,12 +280,6 @@ class PostHallOfFameMessageTests(PostingTestCase):
         await self.post()
 
         self.assertTrue(self.target_channel.sent[0].deleted)
-
-    async def test_takes_the_video_message_down_too(self):
-        self.patch_repo(insert=lambda: (_ for _ in ()).throw(RuntimeError("write failed")))
-        await self.post(FakeSourceMessage(attachments=[FakeAttachment("https://cdn.example/clip.mp4")]))
-
-        self.assertTrue(all(message.deleted for message in self.target_channel.sent))
 
     async def test_a_member_at_the_post_limit_still_gets_on_the_board_but_is_not_credited(self):
         self.patch(utils, "members_at_post_limit_logged", set())
@@ -451,6 +471,90 @@ class RemoveEmbedTests(PostingTestCase):
                                  FakeBot({}), TARGET_CHANNEL_ID)
 
         self.assertEqual([], self.posted.edits)
+
+
+REACTION_CONFIG = {"custom_emoji_check_logic": False, "whitelisted_emojis": []}
+
+
+class ComponentsV2PostTests(PostingTestCase):
+    """Posts sent as Components V2 messages: updated, hidden and restored with views, never embeds."""
+
+    def setUp(self):
+        super().setUp()
+        self.source = FakeSourceMessage()
+        self.posted = FakePostedMessage(HALL_OF_FAME_MESSAGE_ID,
+                                        view=post_view("a post", utils.reactions_line(self.source, REACTION_CONFIG, 5)))
+        self.target_channel = FakeTargetChannel(messages={HALL_OF_FAME_MESSAGE_ID: self.posted})
+        self.bot = FakeBot({TARGET_CHANNEL_ID: self.target_channel})
+
+    async def update(self, counted):
+        await utils.update_reaction_counter({"hall_of_fame_message_id": HALL_OF_FAME_MESSAGE_ID}, self.bot,
+                                            TARGET_CHANNEL_ID, 5, FakeConnection(), self.source, counted,
+                                            REACTION_CONFIG)
+
+    async def test_a_reaction_that_changes_nothing_costs_no_edit(self):
+        """Nor a fetch of the message replied to, which rebuilding the post would take."""
+        built = []
+
+        async def build_view(*_args, **_kwargs):
+            built.append(True)
+            return self.view
+
+        self.patch(utils, "create_post_view", build_view)
+        await self.update(5)
+
+        self.assertEqual([], self.posted.edits)
+        self.assertEqual([], built)
+
+    async def test_a_new_count_rebuilds_the_post_without_mentions(self):
+        await self.update(20)
+
+        [edit] = self.posted.edits
+        self.assertIs(self.view, edit["view"])
+        self.assertNotIn("embed", edit)
+        self.assertFalse(edit["allowed_mentions"].everyone or edit["allowed_mentions"].users)
+
+    async def test_hiding_keeps_the_message_and_shows_nothing(self):
+        await utils.remove_embed({"hall_of_fame_message_id": HALL_OF_FAME_MESSAGE_ID}, self.bot, TARGET_CHANNEL_ID)
+
+        [edit] = self.posted.edits
+        self.assertNotIn("embed", edit)
+        self.assertFalse(utils.post_shows(types.SimpleNamespace(embeds=[], components=edit["view"].children)))
+
+    async def test_a_hidden_post_is_restored_as_a_view(self):
+        self.posted.components = utils.hidden_post_view().children
+        await self.update(20)
+
+        self.assertIs(self.view, self.posted.edits[-1]["view"])
+
+    async def test_an_old_post_that_discord_refuses_to_edit_pauses_the_server(self):
+        self.posted.edit_error = old_message_edit_limit()
+        await self.update(20)
+
+        self.assertIn(GUILD_ID, utils.old_message_edits_paused_until)
+
+    async def test_media_discord_flags_after_sending_takes_the_post_down(self):
+        """A Components V2 post carries the scanning results only in its raw components."""
+        raw = [{"type": 17, "components": [{"type": 12, "items": [
+            {"media": {"url": "https://cdn.example/a.png", "content_scan_metadata": {"flags": 1 << 1}}}]}]}]
+        taken_down = await utils.take_down_flagged_post(self.posted, self.target_channel, self.bot, GUILD_ID, raw)
+
+        self.assertTrue(taken_down)
+        self.assertNotIn("embed", self.posted.edits[-1])
+
+
+class ComponentScanFlagTests(unittest.TestCase):
+    def media(self, flags):
+        return [{"type": 9, "accessory": {"type": 11, "media": {"url": "u", "content_scan_metadata": {"flags": flags}}}}]
+
+    def test_turns_the_component_bits_into_the_attachment_ones(self):
+        self.assertEqual(utils.EXPLICIT_CONTENT, utils.component_scan_flags(self.media(1 << 0)))
+        self.assertEqual(utils.GORE_CONTENT, utils.component_scan_flags(self.media(1 << 1)))
+        self.assertEqual(utils.SELF_HARM_CONTENT, utils.component_scan_flags(self.media(1 << 2)))
+
+    def test_media_without_results_has_none(self):
+        self.assertEqual(0, utils.component_scan_flags([{"type": 12, "items": [{"media": {"url": "u"}}]}]))
+        self.assertEqual(0, utils.component_scan_flags(None))
 
 
 class UpdateLeaderboardTests(PostingTestCase):

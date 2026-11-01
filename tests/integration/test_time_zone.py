@@ -59,7 +59,7 @@ class TimeZoneTests(DatabaseTestCase):
                                         guild=types.SimpleNamespace(id=9001), author=types.SimpleNamespace(id=101))
         with mock.patch.object(utils, "create_embed", no_embed), \
                 mock.patch.object(utils, "reaction_count", five), \
-                mock.patch.object(utils, "check_video_extension", lambda _message: None), \
+                mock.patch.object(utils, "create_post_view", no_embed), \
                 mock.patch.object(utils.datetime, "datetime", FixedDatetime):
             await utils.post_hall_of_fame_message(message, bot, connection, 600, 5)
 

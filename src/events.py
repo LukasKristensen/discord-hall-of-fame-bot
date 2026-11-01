@@ -151,7 +151,9 @@ async def on_raw_message_edit(payload: discord.RawMessageUpdateEvent, bot: disco
     post = payload.message
     if post.author.id != bot.user.id:
         return
-    await utils.take_down_flagged_post(post, bot.get_channel(payload.channel_id), bot, payload.guild_id)
+    # A Components V2 post carries the scanning results of its media only in the raw components
+    raw_components = (getattr(payload, "data", None) or {}).get("components")
+    await utils.take_down_flagged_post(post, bot.get_channel(payload.channel_id), bot, payload.guild_id, raw_components)
 
 
 async def on_message(message: discord.Message, bot: discord.Client, server_config):

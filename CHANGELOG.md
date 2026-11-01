@@ -44,6 +44,8 @@ version, so 2.2 covers 2.2.0 and every 2.2.x after it. For how the bot works tod
 - [x] Production credentials and the production database are only loaded in production, so a development run cannot reach them.
 - [x] Message locks are recreated on each run, so none stays bound to a closed event loop.
 - [x] Upgraded discord.py from 2.5.0 to 2.7.1. The /feedback form asks its questions through Discord's newer form labels, which look the same to members.
+- [x] New Hall of Fame posts are one Components V2 message instead of an embed: up to ten images and videos in a gallery with videos playing in place, spoilered images kept covered, the replied-to message quoted, every counted emoji with its count and a Jump to message button. A video no longer needs a message of its own, and mentions in the message do not ping anyone again. Posts made before keep their embed and are updated as before.
+- [x] Board posts show forwarded messages, labelled Forwarded, and polls with their votes, which used to arrive empty. A message that is only an image or GIF link shows the picture alone, and Tenor GIFs loop as GIFs. Long messages sit under the author at full width and keep up to 2,000 characters, a reply quotes a short preview of what it answers and names a picture, sticker, file or poll it cannot show, and a reply to a deleted message says so. Members are named as the server shows them.
 - [x] Removed the MongoDB-era tooling, the unused manual sweep and the Google Drive backup script.
 - [x] Added integration tests that run the reaction path, joins, the daily task, Wrapped, data deletion, schema upgrades and the stats queries against a real PostgreSQL, which CI now starts for them.
 - [x] Added project skills and an expanded CLAUDE.md for development.

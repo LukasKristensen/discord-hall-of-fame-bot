@@ -18,6 +18,7 @@ class Author:
         self.bot = bot
         self.name = f"member-{user_id}"
         self.mention = f"<@{user_id}>"
+        self.display_avatar = types.SimpleNamespace(url=f"https://cdn.example/avatars/{user_id}.png")
 
 
 class Guild:
@@ -112,21 +113,27 @@ class SourceChannel(discord.TextChannel):
 
 
 class Post:
-    """A message the bot sent to the board"""
+    """A message the bot sent to the board, as an embed or as a Components V2 view"""
 
-    def __init__(self, message_id, content=None, embed=None):
+    def __init__(self, message_id, content=None, embed=None, view=None):
         self.id = message_id
         self.content = content or ""
         self.embeds = [embed] if embed is not None else []
+        # A message keeps the Components V2 flag it was sent with, and shows its view's components
+        self.flags = types.SimpleNamespace(components_v2=view is not None)
+        self.components = list(view.children) if view is not None else []
         self.edits = []
         self.deleted = False
+        self.created_at = datetime.datetime.now(datetime.timezone.utc)
 
-    async def edit(self, content=None, embed=..., **_kwargs):
-        self.edits.append({"content": content, "embed": embed})
+    async def edit(self, content=None, embed=..., view=..., **_kwargs):
+        self.edits.append({"content": content, "embed": embed, "view": view})
         if content is not None:
             self.content = content
         if embed is not ...:
             self.embeds = [embed] if embed is not None else []
+        if view is not ...:
+            self.components = list(view.children) if view is not None else []
 
     async def delete(self):
         self.deleted = True
@@ -159,9 +166,9 @@ class Board:
     def is_nsfw(self):
         return self.nsfw
 
-    async def send(self, content=None, embed=None, **_kwargs):
+    async def send(self, content=None, embed=None, view=None, **_kwargs):
         self.next_id += 1
-        post = Post(self.next_id, content, embed)
+        post = Post(self.next_id, content, embed, view)
         self.posts[post.id] = post
         self.sent.append(post)
         return post
