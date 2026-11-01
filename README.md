@@ -54,6 +54,12 @@ and how many are needed.
 `/user_profile` shows a member's all time and monthly standing, and `/hof_wrapped` gives each member
 their year in review. That is the half a plain message archive does not have.
 
+<p>
+  <a href="Assets/listing_1_board_post.png"><img src="Assets/listing_1_board_post.png" width="32%" alt="A Hall of Fame post with an image, the message it replied to and its reactions"></a>
+  <a href="Assets/listing_2_leaderboard.png"><img src="Assets/listing_2_leaderboard.png" width="32%" alt="The /leaderboard command, ranking members by posts and reactions"></a>
+  <a href="Assets/listing_3_user_profile.png"><img src="Assets/listing_3_user_profile.png" width="32%" alt="The /user_profile command, with ranks, badges and totals across servers"></a>
+</p>
+
 <br>
 
 

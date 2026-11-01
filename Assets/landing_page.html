@@ -267,6 +267,16 @@
   #hof-description-block .faq p { color: var(--hof-muted); font-size: 0.92em; }
 
   /* Closing */
+  /* Screenshots of the bot, served from main on GitHub, as Top.gg hosts no images for a description */
+  #hof-description-block .shots {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 14px;
+    margin-top: 22px;
+  }
+  #hof-description-block .shots a { display: block; border-radius: 10px; overflow: hidden; border: 1px solid var(--hof-line); }
+  #hof-description-block .shots img { display: block; width: 100%; height: auto; }
+
   #hof-description-block .closing {
     text-align: center;
     background: radial-gradient(circle at 50% 0%, rgba(232, 184, 74, 0.25), transparent 60%), var(--hof-ink);
@@ -324,10 +334,21 @@
   <!-- Numbers -->
   <div class="section stats">
     <div class="stat"><b>600+</b><span>servers</span></div>
-    <div class="stat"><b>260k+</b><span>members</span></div>
+    <div class="stat"><b>250k+</b><span>members</span></div>
     <div class="stat"><b>Every</b><span>emoji counts</span></div>
     <div class="stat"><b>3</b><span>ways to count</span></div>
     <div class="stat"><b>Free</b><span>and open source</span></div>
+  </div>
+
+  <!-- In Discord -->
+  <div class="section">
+    <p class="eyebrow">In Discord</p>
+    <h2>What your server gets</h2>
+    <div class="shots">
+      <a href="https://raw.githubusercontent.com/LukasKristensen/discord-hall-of-fame-bot/main/Assets/listing_1_board_post.png"><img src="https://raw.githubusercontent.com/LukasKristensen/discord-hall-of-fame-bot/main/Assets/listing_1_board_post.png" alt="A Hall of Fame post with an image, the message it replied to and its reactions"></a>
+      <a href="https://raw.githubusercontent.com/LukasKristensen/discord-hall-of-fame-bot/main/Assets/listing_2_leaderboard.png"><img src="https://raw.githubusercontent.com/LukasKristensen/discord-hall-of-fame-bot/main/Assets/listing_2_leaderboard.png" alt="The /leaderboard command, ranking members by posts and reactions"></a>
+      <a href="https://raw.githubusercontent.com/LukasKristensen/discord-hall-of-fame-bot/main/Assets/listing_3_user_profile.png"><img src="https://raw.githubusercontent.com/LukasKristensen/discord-hall-of-fame-bot/main/Assets/listing_3_user_profile.png" alt="The /user_profile command, with ranks, badges and totals across servers"></a>
+    </div>
   </div>
 
   <!-- The board -->
