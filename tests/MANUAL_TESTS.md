@@ -28,7 +28,7 @@ message under a "test cases" category so each post names what it tests.
 | mixed | Text and an image | Text beside the avatar, the image full width below |
 | mixed | A reply to a poll | The quote reads *Poll: question*. The app cannot send text and a poll in one message |
 | link | A YouTube link alone | The link kept as text, the video's thumbnail as a still picture in the gallery |
-| link | A GIF link alone | The link replaced by the GIF, as Discord shows it |
+| link | A GIF link alone | The link replaced by the GIF, as Discord shows it. Loops as a GIF, no player controls |
 | sticker | An animated (Lottie) sticker | Named in italics where the text goes, *Sticker: name* |
 | sticker | A picture sticker, two different reactions | Shown in the gallery. The reactions line lists both emojis with their counts |
 | reply | A reply to an image, a reply to a video | The quote, then the answered image or playable video full width, then the reply under its poster's name |
