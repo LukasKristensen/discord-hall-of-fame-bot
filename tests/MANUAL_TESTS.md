@@ -41,7 +41,7 @@ message under a "test cases" category so each post names what it tests.
 | sticker | A picture sticker, two different reactions | Shown in the gallery. The reactions line lists both emojis with their counts |
 | reply | A reply to an image, a reply to a video | The quote, then the answered image or playable video full width, then the reply under its poster's name |
 | reply | A reply to a deleted message | "Replying to a deleted message" above the poster's name, no quote |
-| opt-out | A new message from a member who pressed Stop featuring me, reacted to | Not posted. Why isn't this on the board?, asked by another member, answered only that it cannot be featured, without naming the choice |
+| opt-out | A new message from a member who pressed Stop featuring me, reacted to | Not posted. Why isn't this on the board?, asked by another member, answered only that it cannot be featured, without naming the choice. Asked by the member, it said they asked not to be featured and pointed to `/my_data` |
 | reply | A reply to a member who pressed Stop featuring me | Posted with no "Replying to" line and no quote, so the member is not named |
 
 ### Found
@@ -101,8 +101,6 @@ Not bugs, and nothing decided yet:
 ### Still to run
 
 - **The 2,000 character cut:** needs Nitro, or a lower `post_text_limit` on the development bot.
-- **A member who opted out:** Why isn't this on the board? asked by the member themselves should say they
-  asked not to be featured.
 - **file:** whether a file link still opens a day after posting.
 
 ## 21 October 2026: member data, the post limit and the export (3.0, then called 2.2)
