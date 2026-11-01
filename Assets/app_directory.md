@@ -120,16 +120,36 @@ crowded place to be found but still costs nothing to keep.
 
 Upload in this order. The first image is the one most people see.
 
-| Order | What it should show | Source |
+| Order | What it shows | File |
 |:---|:---|:---|
-| 1 | A current hall of fame post with an image and a reply, in the present layout | New screenshot |
-| 2 | `/leaderboard` in a real server | New screenshot, or `Assets/all_time_most_hall_of_fame_posts.png` |
-| 3 | `/user_profile` for an active member | New screenshot |
-| 4 | `/hof_wrapped` | New screenshot |
+| 1 | The video: a message gets reactions and appears on the board | [YouTube](https://www.youtube.com/watch?v=D4onxYa7Ikw) |
+| 2 | A hall of fame post with an image and a reply, in the present layout | `Assets/listing_1_board_post.png` |
+| 3 | `/leaderboard` | `Assets/listing_2_leaderboard.png` |
+| 4 | `/user_profile` with badges and totals across servers | `Assets/listing_3_user_profile.png` |
 | 5 | The three counting methods side by side | `Assets/reaction_calculation_methods_wide.jpg` |
-| 6 | A short clip: a message gets reactions and appears on the board | New recording, under 30 seconds |
+| 6 | `/hof_wrapped` | Not made yet. Add it after the December Wrapped run |
 
-Replace the current screenshot that shows the old "has surpassed 7 reactions" layout.
+Remove the old screenshots that show the "has surpassed 7 reactions" layout.
+
+<p>
+  <img src="listing_1_board_post.png" width="32%" alt="A hall of fame post with an image and the message it replied to">
+  <img src="listing_2_leaderboard.png" width="32%" alt="The /leaderboard command">
+  <img src="listing_3_user_profile.png" width="32%" alt="The /user_profile command">
+</p>
+
+How they are made, so they can be redone the same way when the layout changes:
+
+- Screenshots of the dev bot in a test server, with its header (name, avatar, verified APP badge) replaced
+  by the live bot's, since the dev bot has its own name and a default avatar.
+- The profile and leaderboard use example history: posts added to the development database only, and
+  example names for members who have no Discord account. Nothing from a real server or member is shown
+  apart from the developer's own account.
+- Each one is placed on a 1280×720 black canvas with a short caption on the left (Inter, the landing
+  page's gold `#e8b84a` for the label), so the carousel shows them all at the same size.
+
+Still to redo: rename the test server before the screenshots, since "Lukas's server 2" shows in the
+leaderboard title and the profile, and give the board post more than one reaction. The profile should
+also be retaken from the seeded history, so it shows the full set of badges.
 
 <br>
 
