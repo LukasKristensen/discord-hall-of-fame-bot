@@ -30,6 +30,7 @@ message under a "test cases" category so each post names what it tests.
 | link | A YouTube link alone | The link kept as text, the video's thumbnail as a still picture in the gallery |
 | link | A GIF link alone | The link replaced by the GIF, as Discord shows it. Loops as a GIF, no player controls |
 | file | Text and an audio file | Text beside the avatar, the file linked by its name under it. No player, unlike the original |
+| file | A zip file alone | The file linked by its name under the header, no avatar as there is no text |
 | mentions | `@user`, `@role`, `@here`, `@everyone` | Shown as mentions. A second account in the server got no notification and no mention badge |
 | sticker | An animated (Lottie) sticker | Named in italics where the text goes, *Sticker: name* |
 | sticker | A picture sticker, two different reactions | Shown in the gallery. The reactions line lists both emojis with their counts |
@@ -80,6 +81,9 @@ Not bugs, and nothing decided yet:
   Components V2 `File` component plays audio, but only for a file uploaded with the post itself, so the bot
   would have to download and upload it again, within the board's upload size limit.
 
+- **A file line that says what it is.** A file shows only as its name, so a post of just a zip reads bare.
+  A size, or a 📎 in front, would make it read as a file rather than a stray link.
+
 ### Still to run
 
 - **The 2,000 character cut:** needs Nitro, or a lower `post_text_limit` on the development bot.
@@ -87,7 +91,7 @@ Not bugs, and nothing decided yet:
   note.
 - **A member who opted out:** check that their message posted after opting out does not reach the board.
   In this run their message was on the board, possibly reacted to before they opted out.
-- **file:** a PDF or zip and a voice message, and whether a file link still opens a day after posting.
+- **file:** a voice message, and whether a file link still opens a day after posting.
 - **link:** an image URL alone, text with a link.
 - **forward:** a forwarded poll, and a forward from a channel the bot cannot see.
 
