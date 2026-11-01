@@ -129,7 +129,7 @@ class CreateDatabaseContextTests(SetupTestCase):
         self.patch(server_config_repo, "insert_server_with_parameters",
                    lambda *args: self.inserted.append(args))
         self.patch(server_config_repo, "delete_server_config",
-                   lambda _connection, guild_id: self.deleted.append(guild_id))
+                   lambda _connection, guild_id, commit=True: self.deleted.append(guild_id))
 
     async def join(self, guild=None, custom_channel=None):
         guild = guild if guild is not None else FakeJoinedGuild()

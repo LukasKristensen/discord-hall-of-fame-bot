@@ -96,6 +96,7 @@ async def explain(message: discord.Message, asked_by_id: int, bot: discord.Clien
     """
     guild = message.guild
     board_id = server_config.hall_of_fame_channel_id
+    # Only the bot's own posts are the board. Members' messages there can be featured like any other
     if message.channel.id == board_id and message.author.id == bot.user.id:
         return Verdict(IS_BOARD, messages.WHY_IS_BOARD)
 

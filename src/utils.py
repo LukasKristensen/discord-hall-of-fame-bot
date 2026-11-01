@@ -177,9 +177,9 @@ async def validate_message(reaction_event: discord.RawReactionActionEvent, bot: 
     target_channel_id = server_config.hall_of_fame_channel_id
     hide_hof_post_below_threshold = server_config.hide_hof_post_below_threshold
 
-    # The bot's own posts on the board are never featured, or reactions on a post would repost it onto the board
-    # it is on. Members' messages there are featured as anywhere else, for servers that chat in their board. A
-    # reaction add says who wrote the message, which spares the fetch for most reactions on the board
+    # The board's own posts are never featured, or reactions on a post would repost it once they reached the
+    # threshold. Members' messages there still are, for servers that chat in the board channel. Reaction adds
+    # say who wrote the message, which spares fetching it for every reaction on a post
     in_board = channel_id == target_channel_id
     if in_board and getattr(reaction_event, "message_author_id", None) == bot.user.id:
         return
@@ -971,12 +971,13 @@ async def create_database_context(bot, server, connection, custom_channel=None) 
 
 def delete_database_context(server_id: int, connection):
     """
-    Delete the database context for the server, all or nothing. A failure part way, such as a statement
-    timeout, rolls back every table, so the server keeps its settings row and the daily clean-up tries again
+    Delete the database context for the server
     :param server_id: The ID of the server
-    :param connection: The database connection
+    :param connection: MySQL connection
     :return: None
     """
+    # Committed once at the end, so a failure part way leaves the server whole and the daily task can
+    # find it again tomorrow instead of losing its config with its Wrapped still stored
     try:
         hall_of_fame_message_repo.delete_hall_of_fame_messages_for_guild(connection, server_id, commit=False)
         server_user_repo.delete_server_users(connection, server_id, commit=False)
