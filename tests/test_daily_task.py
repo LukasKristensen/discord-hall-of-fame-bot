@@ -712,14 +712,18 @@ class DepartedGuildCleanupTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual([(self.departed, "LEAVE", self.missing_since[self.departed])], self.lifecycle)
 
-    async def test_records_no_leave_without_a_join_to_match_it(self):
-        for latest_event in (None, "LEAVE"):
-            self.lifecycle.clear()
-            self.server_classes[self.departed] = build_server(guild_id=self.departed)
-            self.latest_event = latest_event
-            await self.clean_up()
+    async def test_does_not_record_a_second_leave(self):
+        self.latest_event = "LEAVE"
+        await self.clean_up()
 
-            self.assertEqual([], self.lifecycle)
+        self.assertEqual([], self.lifecycle)
+
+    async def test_records_the_leave_of_a_server_from_before_the_log(self):
+        """It has no join to match, but without its leave the statistics would count it as still installed."""
+        self.latest_event = None
+        await self.clean_up()
+
+        self.assertEqual(1, len(self.lifecycle))
 
     async def test_keeps_a_server_that_has_not_been_missing_long_enough(self):
         self.missing_since[self.departed] = self.NOW - datetime.timedelta(

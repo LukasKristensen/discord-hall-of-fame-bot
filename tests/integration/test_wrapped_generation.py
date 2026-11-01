@@ -327,6 +327,24 @@ class OptedOutFriendTests(WrappedTestCase):
         self.assertIn(ALICE.id, searched)
         self.assertIsNone(self.wrapped(FIRST, BOB.id))
 
+    async def test_the_posts_of_a_member_who_opted_out_are_not_fetched(self):
+        """Their posts and the reactions on them are not read from Discord at all, not only left out after."""
+        opt_out_repo.set_opted_out(self.connection, BOB.id, True)
+        fetched = []
+        fetch = self.first_channel.fetch_message
+
+        async def record(message_id):
+            fetched.append(message_id)
+            return await fetch(message_id)
+
+        with mock.patch.object(self.first_channel, "fetch_message", record):
+            await self.generate(FIRST)
+
+        self.assertNotIn(3, fetched)
+        self.assertNotIn(4, fetched)
+        self.assertIn(1, fetched)
+        self.assertIsNone(self.wrapped(FIRST, BOB.id))
+
     async def test_a_friend_who_opted_out_is_left_out_in_every_server(self):
         """Alice reacted to Dave's post in the second server, where she never posted herself."""
         await self.generate(SECOND)

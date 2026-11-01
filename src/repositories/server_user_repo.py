@@ -17,8 +17,24 @@ def create_server_user_table(connection):
         )
         """
     )
-    cursor.execute("ALTER TABLE server_user DROP CONSTRAINT IF EXISTS server_user_pkey CASCADE;")
-    cursor.execute("ALTER TABLE server_user ADD PRIMARY KEY (user_id, guild_id);")
+    # Older databases keyed the table differently, so the key is replaced when it is not (user_id, guild_id).
+    # Once it is, nothing is done: dropping and adding it on every start rebuilt its index under an exclusive lock
+    cursor.execute("""
+        DO $$
+        DECLARE
+            key_columns text[];
+        BEGIN
+            SELECT array_agg(attribute.attname::text ORDER BY attribute.attname) INTO key_columns
+            FROM pg_index index
+            JOIN pg_attribute attribute
+              ON attribute.attrelid = index.indrelid AND attribute.attnum = ANY(index.indkey)
+            WHERE index.indrelid = 'server_user'::regclass AND index.indisprimary;
+            IF key_columns IS DISTINCT FROM ARRAY['guild_id', 'user_id'] THEN
+                ALTER TABLE server_user DROP CONSTRAINT IF EXISTS server_user_pkey CASCADE;
+                ALTER TABLE server_user ADD PRIMARY KEY (user_id, guild_id);
+            END IF;
+        END $$;
+    """)
     # The primary key starts with user_id, so it cannot serve the per-guild reads: the rank lookups and
     # leaderboards of /user_profile, which otherwise scan every member of every server
     cursor.execute("CREATE INDEX IF NOT EXISTS server_user_guild_idx ON server_user (guild_id)")

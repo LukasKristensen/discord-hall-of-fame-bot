@@ -88,11 +88,12 @@ def record_guild_join(connection, guild):
 
 def record_guild_leave(connection, guild_id, occurred_at):
     """
-    Record a leave unless the last recorded event is not a join. Discord can send the remove event for a
-    server more than once, and a leave without a matching join would leave the server below zero in the
-    activity statistics
+    Record a leave unless the last recorded event is already a leave, since Discord can send the remove event
+    for a server more than once
     """
-    if guild_lifecycle_event_repo.get_latest_event_type(connection, guild_id) == "JOIN":
+    # A server with no events at all was installed before the log began, and its leave is still recorded: the
+    # statistics count a first event that is a leave without inventing when it joined
+    if guild_lifecycle_event_repo.get_latest_event_type(connection, guild_id) != "LEAVE":
         guild_lifecycle_event_repo.insert_guild_lifecycle_event(connection, guild_id, "LEAVE", occurred_at)
 
 
