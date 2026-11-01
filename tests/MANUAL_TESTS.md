@@ -27,6 +27,8 @@ message under a "test cases" category so each post names what it tests.
 | multi-media | Images, a spoiler and a video together | The spoiler covered, the video playing, order kept |
 | mixed | Text and an image | Text beside the avatar, the image full width below |
 | mixed | A reply to a poll | The quote reads *Poll: question*. The app cannot send text and a poll in one message |
+| sticker | An animated (Lottie) sticker | Named in italics where the text goes, *Sticker: name* |
+| sticker | A picture sticker, two different reactions | Shown in the gallery. The reactions line lists both emojis with their counts |
 | reply | A reply to an image, a reply to a video | The quote, then the answered image or playable video full width, then the reply under its poster's name |
 | reply | A reply to a deleted message | "Replying to a deleted message" above the poster's name, no quote |
 | reply | A reply to a member who pressed Stop featuring me | Posted with no "Replying to" line and no quote, so the member is not named |
@@ -50,7 +52,6 @@ message under a "test cases" category so each post names what it tests.
   note.
 - **A member who opted out:** check that their message posted after opting out does not reach the board.
   In this run their message was on the board, possibly reacted to before they opted out.
-- **sticker:** a normal one and an animated (Lottie) one, which is named instead of shown.
 - **file:** a PDF or zip, an audio file and a voice message.
 - **link:** a Tenor GIF link alone, an image URL alone, a YouTube link, text with a link.
 - **mentions:** `@user`, `@role` and `@everyone`, with nobody pinged.
