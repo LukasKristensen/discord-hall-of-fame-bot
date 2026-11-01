@@ -127,6 +127,9 @@ async def process_hof_messages_from_db(guild: discord.Guild, connection):
         # even though Discord still knows who wrote it
         if message['author_id'] == hall_of_fame_message_repo.NO_AUTHOR_ID:
             continue
+        # Not fetched at all for a member who is left out, such as one who asked not to be featured
+        if message['author_id'] not in users:
+            continue
         channel_id = message['channel_id']
         message_id = message['message_id']
         channel = guild.get_channel(channel_id)
@@ -373,6 +376,10 @@ async def main(guild_id: int, bot: commands.Bot, get_reaction_threshold: int, co
     guild = bot.get_guild(guild_id)
 
     initialize_users(connection, guild_id)
+    # A member who asked not to be featured is left out before anything is read from Discord, so their posts are
+    # not fetched and their reactions are not counted. Asking while Wrapped runs is caught again below
+    for user_id in opt_out_repo.find_opted_out(connection, users):
+        users.pop(user_id, None)
     await process_hof_messages_from_db(guild, connection)
     # The bot was removed while the posts were read. Its posts are gone with the server, which says nothing
     # about the members, so nothing is saved rather than treating every one of them as having left

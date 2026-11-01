@@ -169,6 +169,19 @@ class ProductionUpgradeTests(SchemaUpgradeTestCase):
         self.assertEqual(once, self.data())
         self.assertEqual(shape, self.shape(self.schema))
 
+    def test_a_second_start_keeps_the_member_and_server_key_as_it_is(self):
+        """Dropping and adding it again on every start rebuilt its index under an exclusive lock."""
+        key_index = """
+            SELECT index.indexrelid FROM pg_index index
+            JOIN pg_class class ON class.oid = index.indrelid
+            JOIN pg_namespace namespace ON namespace.oid = class.relnamespace
+            WHERE namespace.nspname = %s AND class.relname = 'server_user' AND index.indisprimary
+        """
+        before = self.rows(key_index, (self.schema,))
+        self.setup_databases()
+
+        self.assertEqual(before, self.rows(key_index, (self.schema,)))
+
     def test_ends_with_the_same_tables_and_columns_as_a_new_database(self):
         self.assertEqual(self.fresh_schema_shape(), self.shape(self.schema))
 

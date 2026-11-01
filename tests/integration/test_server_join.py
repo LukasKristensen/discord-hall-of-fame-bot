@@ -227,7 +227,13 @@ class ServerJoinTests(DatabaseTestCase):
         events.record_guild_leave(self.connection, 4242, left)
 
         self.assertEqual(["JOIN", "LEAVE"], [event for event, _ in self.lifecycle(9002)])
-        self.assertEqual([], self.lifecycle(4242))
+        self.assertEqual(["LEAVE"], [event for event, _ in self.lifecycle(4242)])
+
+    def test_a_server_from_before_the_log_has_its_leave_recorded(self):
+        """It has no join to match, and without its leave the statistics would count it as still installed."""
+        events.record_guild_leave(self.connection, 4242, datetime.datetime(2026, 6, 1, tzinfo=datetime.timezone.utc))
+
+        self.assertEqual(["LEAVE"], [event for event, _ in self.lifecycle(4242)])
 
 
 if __name__ == "__main__":
