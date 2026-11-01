@@ -35,6 +35,7 @@ message under a "test cases" category so each post names what it tests.
 | forward | A forward of a message from this server | "Forwarded" in the header and the forwarded words |
 | forward | A forward from another server | *The forwarded message is not shown*, none of its words |
 | forward | A forward of a message by a member who opted out | *The forwarded message is not shown*, none of their words |
+| forward | A forward of a forward | Discord forwards the original instead, so the post shows the original's words, checked against its real author |
 | forward | A forward from a channel the bot cannot see | "Forwarded" in the header and *The forwarded message is not shown*, none of its words |
 | file | A voice message | Linked as "Voice message" under the header. No player, like an audio file |
 | mentions | `@user`, `@role`, `@here`, `@everyone` | Shown as mentions. A second account in the server got no notification and no mention badge |
@@ -66,9 +67,11 @@ message under a "test cases" category so each post names what it tests.
   reactions needed, while `/get_server_config` the same minute said 1 is needed. Both read the same setting
   in memory, so either the threshold changed in between, or two copies of the development bot were running,
   each with its own settings. A second copy would also explain a video posted twice early in this run.
-- **A forward of a forward was posted empty**: "Forwarded" in the header and nothing under it, without
-  *The forwarded message is not shown*. Discord's snapshot of it was empty. Fixed: a forward whose snapshot
-  has nothing to show is left out with that note (`snapshot_shows_anything` in `src/board_post.py`).
+- **A forward with an empty snapshot was posted empty**: "Forwarded" in the header and nothing under it,
+  without *The forwarded message is not shown*. Likely a forward of a message with only components or
+  embeds, such as a board post. Fixed: a forward whose snapshot has nothing to show is left out with that
+  note (`snapshot_shows_anything` in `src/board_post.py`). A forward of a forward is not this case: Discord
+  forwards the original instead.
 - **A poll cannot be forwarded.** Discord's menu offers no Forward on a poll, so a forwarded poll cannot be
   tested, and the code's handling of one is never reached from the app.
 - **A user mention can read as unknown user.** A new second account, in a browser, saw `@Lukas` on the board
@@ -113,7 +116,7 @@ Not bugs, and nothing decided yet:
 
 ### Still to run
 
-- **forward:** a forward of a forward again with the fix, expected *not shown*.
+- **forward:** a forward of a board post, expected *not shown* with the fix.
 - **file:** whether a file link still opens a day after posting.
 
 ## 21 October 2026: member data, the post limit and the export (3.0, then called 2.2)
