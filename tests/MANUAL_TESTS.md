@@ -33,6 +33,7 @@ message under a "test cases" category so each post names what it tests.
 | file | A zip file alone | The file linked by its name under the header, no avatar as there is no text |
 | mentions | `@user`, `@role`, `@here`, `@everyone` | Shown as mentions. A second account in the server got no notification and no mention badge |
 | link | An image URL alone | The link replaced by the image, as Discord shows it |
+| link | Text with an image link | Text and link kept beside the avatar, the image previewed below |
 | sticker | An animated (Lottie) sticker | Named in italics where the text goes, *Sticker: name* |
 | sticker | A picture sticker, two different reactions | Shown in the gallery. The reactions line lists both emojis with their counts |
 | reply | A reply to an image, a reply to a video | The quote, then the answered image or playable video full width, then the reply under its poster's name |
@@ -93,7 +94,6 @@ Not bugs, and nothing decided yet:
 - **A member who opted out:** check that their message posted after opting out does not reach the board.
   In this run their message was on the board, possibly reacted to before they opted out.
 - **file:** a voice message, and whether a file link still opens a day after posting.
-- **link:** text with a link.
 - **forward:** a forwarded poll, and a forward from a channel the bot cannot see.
 
 ## 21 October 2026: member data, the post limit and the export (3.0, then called 2.2)
