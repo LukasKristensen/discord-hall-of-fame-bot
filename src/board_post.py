@@ -143,9 +143,16 @@ async def shown_body(message: discord.Message, connection):
     :return: The body, whether it is a forward, and whether the forwarded message was left out
     """
     body, forwarded = featured_body(message)
-    if forwarded and not await forward_may_show(message, connection):
+    # A snapshot with nothing in it, as a forward of a forward has, would leave an empty post, so it is left
+    # out with the note that says so
+    if forwarded and (not snapshot_shows_anything(body) or not await forward_may_show(message, connection)):
         return message, True, True
     return body, forwarded, False
+
+
+def snapshot_shows_anything(snapshot) -> bool:
+    """Whether a forwarded message's snapshot carries words, files, link previews or stickers"""
+    return any(getattr(snapshot, name, None) for name in ("content", "attachments", "embeds", "stickers"))
 
 
 async def fetch_reply_context(message: discord.Message, connection):

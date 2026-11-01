@@ -534,6 +534,14 @@ class PostViewTests(EmbedTestCase):
         self.assertNotIn("the original words", shown)
         self.assertIn(messages.POST_FORWARD_NOT_SHOWN, shown)
 
+    async def test_a_forward_with_an_empty_snapshot_says_it_is_not_shown(self):
+        """A forward of a forward reached the board as a name over nothing, without saying why."""
+        message = self.forward_of(FakeEmbedMessage("the original words", author_name="someone"))
+        message.message_snapshots = [types.SimpleNamespace(content="", attachments=[], embeds=[], stickers=[])]
+        shown = json.dumps(await self.payload(message), ensure_ascii=False)
+
+        self.assertIn(messages.POST_FORWARD_NOT_SHOWN, shown)
+
     async def test_a_forward_whose_original_cannot_be_read_leaves_it_out(self):
         """Nobody can tell whose it is, so it is treated like a member who opted out."""
         shown = json.dumps(await self.payload(self.forward_of(None)), ensure_ascii=False)
