@@ -251,7 +251,15 @@ async def validate_message(reaction_event: discord.RawReactionActionEvent, bot: 
         return
 
     if db_message:
-        message_to_update = await target_channel.fetch_message(db_message["hall_of_fame_message_id"])
+        try:
+            message_to_update = await target_channel.fetch_message(db_message["hall_of_fame_message_id"])
+        except discord.NotFound:
+            # Not on this board: the board was moved since it was posted, or a moderator deleted the post. It
+            # is not posted again, but its count is still stored, since the leaderboards and profiles read it.
+            # The error used to end the reaction quietly, so these counts stopped for good
+            hall_of_fame_message_repo.update_field_for_message(connection, guild_id, channel_id, message_id,
+                                                              "reaction_count", corrected_reactions)
+            return
         if post_shows(message_to_update):
             hall_of_fame_message_repo.update_field_for_message(connection, guild_id, channel_id, message_id, "reaction_count", corrected_reactions)
             await update_reaction_counter(db_message, bot, target_channel_id, reaction_threshold, connection,
