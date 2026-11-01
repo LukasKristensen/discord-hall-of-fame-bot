@@ -348,6 +348,27 @@ class PostHallOfFameMessageTests(PostingTestCase):
         self.assertTrue(all(message.deleted for message in self.target_channel.sent))
         self.assertEqual([], self.inserted)
 
+    async def test_a_member_who_opts_out_while_the_store_waits_on_their_lock_gets_it_taken_down(self):
+        """The store sees the opt-out and credits nobody, which must not be mistaken for the post limit."""
+        repo = self.patch_repo(credited_posts=utils.member_post_limit)
+        removed = []
+        repo.delete_hall_of_fame_message = lambda _connection, *key: removed.append(key)
+        # Not opted out until the store has run, which is when the store saw the opt-out
+        self.patch(utils.opt_out_repo, "is_opted_out", lambda *_args: bool(self.inserted))
+        await self.post()
+
+        self.assertTrue(self.target_channel.sent[0].deleted)
+        self.assertEqual(1, len(removed))
+        self.assertFalse(any("the most allowed" in entry for entry in self.logged))
+
+    async def test_a_member_at_the_post_limit_who_has_not_opted_out_keeps_the_repost(self):
+        self.patch(utils, "members_at_post_limit_logged", set())
+        self.patch_repo(credited_posts=utils.member_post_limit)
+        self.patch(utils.opt_out_repo, "is_opted_out", lambda *_args: False)
+        await self.post()
+
+        self.assertFalse(self.target_channel.sent[0].deleted)
+
     async def test_reports_a_failed_write(self):
         self.patch_repo(insert=lambda: (_ for _ in ()).throw(RuntimeError("write failed")))
         await self.post()

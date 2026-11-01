@@ -1846,7 +1846,7 @@ class GuildJoinAndRemoveTests(MainTestCase):
         self.patch(main, "connection_pool", FakePool())
         self.patch(main, "post_api_bot_stats", nothing)
         self.patch(main.utils, "post_server_perms", nothing)
-        self.patch(main.guild_lifecycle_event_repo, "insert_guild_lifecycle_event", lambda *_args: None)
+        self.patch(main.guild_lifecycle_event_repo, "insert_guild_lifecycle_event", lambda *_args, **_kwargs: None)
         self.patch(main.server_config_repo, "insert_server_config", lambda *_args: None)
         self.patch(main, "total_member_count", 100)
         self.set_server_classes([GUILD_ID])

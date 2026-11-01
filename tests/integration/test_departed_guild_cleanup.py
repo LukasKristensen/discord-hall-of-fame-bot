@@ -103,7 +103,10 @@ class CleanUpDepartedGuildsTests(DatabaseTestCase):
         self.assertIn(DEPARTED, self.configured_guilds())
 
         later = NOW + datetime.timedelta(days=events.departed_guild_grace_days)
-        self.assertEqual([DEPARTED], await self.clean_up(later))
+        # The first confirmation from Discord only marks it, and the one a day later deletes it
+        self.assertEqual([], await self.clean_up(later))
+        self.assertIn(DEPARTED, self.configured_guilds())
+        self.assertEqual([DEPARTED], await self.clean_up(later + events.departed_guild_confirmation_gap))
 
         self.assertEqual(set(PRESENT), self.configured_guilds())
         self.assertEqual("LEAVE", guild_lifecycle_event_repo.get_latest_event_type(self.connection, DEPARTED))

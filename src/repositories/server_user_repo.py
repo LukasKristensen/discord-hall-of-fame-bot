@@ -24,12 +24,14 @@ def create_server_user_table(connection):
         DECLARE
             key_columns text[];
         BEGIN
-            SELECT array_agg(attribute.attname::text ORDER BY attribute.attname) INTO key_columns
+            -- In the key's own column order, which an alphabetical order would hide
+            SELECT array_agg(attribute.attname::text ORDER BY array_position(index.indkey::int2[], attribute.attnum))
+              INTO key_columns
             FROM pg_index index
             JOIN pg_attribute attribute
               ON attribute.attrelid = index.indrelid AND attribute.attnum = ANY(index.indkey)
             WHERE index.indrelid = 'server_user'::regclass AND index.indisprimary;
-            IF key_columns IS DISTINCT FROM ARRAY['guild_id', 'user_id'] THEN
+            IF key_columns IS DISTINCT FROM ARRAY['user_id', 'guild_id'] THEN
                 ALTER TABLE server_user DROP CONSTRAINT IF EXISTS server_user_pkey CASCADE;
                 ALTER TABLE server_user ADD PRIMARY KEY (user_id, guild_id);
             END IF;

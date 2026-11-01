@@ -23,9 +23,10 @@ daily_task_statement_timeout_ms = 20_000
 
 # Removing the bot while it is offline sends no remove event, which leaves the server's data behind.
 # The daily task deletes it, but only once the server has been missing for this many days in a row,
-# Discord confirms the bot has no access to it, and few enough servers are missing at once that it
-# cannot be Discord leaving servers out of the guild list
+# Discord has confirmed twice, a day or more apart, that the bot has no access to it, and few enough
+# servers are missing at once that it cannot be Discord leaving servers out of the guild list
 departed_guild_grace_days = 7
+departed_guild_confirmation_gap = datetime.timedelta(hours=24)
 departed_guild_max_missing_share = 0.1
 departed_guild_fetch_timeout_seconds = 30
 
@@ -86,7 +87,7 @@ def record_guild_join(connection, guild):
     guild_lifecycle_event_repo.insert_guild_lifecycle_event(connection, guild.id, "JOIN", joined_at)
 
 
-def record_guild_leave(connection, guild_id, occurred_at):
+def record_guild_leave(connection, guild_id, occurred_at, commit: bool = True):
     """
     Record a leave unless the last recorded event is already a leave, since Discord can send the remove event
     for a server more than once
@@ -94,7 +95,7 @@ def record_guild_leave(connection, guild_id, occurred_at):
     # A server with no events at all was installed before the log began, and its leave is still recorded: the
     # statistics count a first event that is a leave without inventing when it joined
     if guild_lifecycle_event_repo.get_latest_event_type(connection, guild_id) != "LEAVE":
-        guild_lifecycle_event_repo.insert_guild_lifecycle_event(connection, guild_id, "LEAVE", occurred_at)
+        guild_lifecycle_event_repo.insert_guild_lifecycle_event(connection, guild_id, "LEAVE", occurred_at, commit=commit)
 
 
 async def bot_login(bot: discord.Client, tree):
@@ -319,17 +320,27 @@ async def clean_up_departed_guilds(bot: discord.Client, connection, server_class
             continue
         try:
             if not await bot_has_left_guild(bot, guild_id):
+                server_config_repo.clear_departure_confirmation(connection, guild_id)
                 await utils.logging(bot, f"Server {guild_id} has been missing from the bot's guilds since "
                                          f"{since:%Y-%m-%d}, but Discord still gives the bot access to it. "
                                          f"Not deleting it")
                 continue
+            # One answer could be a passing error on Discord's side, and deleting cannot be undone, so the data
+            # goes only when a second check a day or more after the first gives the same answer
+            first_confirmed = server_config_repo.confirm_departure(connection, guild_id, now)
+            if now - first_confirmed < departed_guild_confirmation_gap:
+                await utils.logging(bot, f"Discord confirmed the bot has left server {guild_id}. Its data is "
+                                         f"deleted if the next check, a day or more from now, confirms it again")
+                continue
             # Under the database's own timeout, since psycopg2 holds the event loop while a delete waits on a
             # lock, and no asyncio timeout can interrupt it. A server that times out is tried again tomorrow
+            # The deletion and the leave are one transaction, committed when the block ends, so the data is never
+            # gone without its departure recorded
             with utils.statement_timeout(connection, daily_task_statement_timeout_ms):
-                utils.delete_database_context(guild_id, connection)
+                utils.delete_database_context(guild_id, connection, commit=False)
                 # Dated when the server was first found missing rather than today, so the statistics count
                 # the departure in the month it happened instead of after the grace period
-                record_guild_leave(connection, guild_id, since)
+                record_guild_leave(connection, guild_id, since, commit=False)
         except Exception as e:
             connection.rollback()
             await utils.logging(bot, f"Could not clean up departed server {guild_id}: {e}", guild_id)

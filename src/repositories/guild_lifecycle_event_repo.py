@@ -26,7 +26,7 @@ def create_guild_lifecycle_event_table(connection):
     cursor.close()
 
 
-def insert_guild_lifecycle_event(connection, guild_id, event_type, occurred_at):
+def insert_guild_lifecycle_event(connection, guild_id, event_type, occurred_at, commit: bool = True):
     if event_type not in ("JOIN", "LEAVE"):
         raise ValueError(f"Unsupported event_type: {event_type}")
 
@@ -38,7 +38,8 @@ def insert_guild_lifecycle_event(connection, guild_id, event_type, occurred_at):
         """,
         (guild_id, event_type, occurred_at),
     )
-    connection.commit()
+    if commit:
+        connection.commit()
     cursor.close()
 
 

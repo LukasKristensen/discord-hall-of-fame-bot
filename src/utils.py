@@ -588,6 +588,14 @@ async def post_hall_of_fame_message(message: discord.Message, bot: discord.Clien
         await hall_of_fame_message.delete()
         return
 
+    if stored_author == hall_of_fame_message_repo.NO_AUTHOR_ID and opt_out_repo.is_opted_out(connection, message.author.id):
+        # The member opted out between the check above and the store, which waited on their lock and then saw it.
+        # The repost goes and nothing is kept, the same as when the check above catches it
+        hall_of_fame_message_repo.delete_hall_of_fame_message(connection, int(message.guild.id), int(message.channel.id),
+                                                              int(message.id))
+        await hall_of_fame_message.delete()
+        return
+
     # Nobody credited although the member had not opted out: they are at member_post_limit, which the store
     # checks under the author's lock so two posts at once cannot both slip under it
     at_post_limit = stored_author == hall_of_fame_message_repo.NO_AUTHOR_ID
@@ -969,11 +977,12 @@ async def create_database_context(bot, server, connection, custom_channel=None) 
     return new_server_class
 
 
-def delete_database_context(server_id: int, connection):
+def delete_database_context(server_id: int, connection, commit: bool = True):
     """
     Delete the database context for the server
     :param server_id: The ID of the server
     :param connection: MySQL connection
+    :param commit: False to leave the commit to the caller, so more can go in the same transaction
     :return: None
     """
     # Committed once at the end, so a failure part way leaves the server whole and the daily task can
@@ -986,7 +995,8 @@ def delete_database_context(server_id: int, connection):
         # Left behind, a guild that rejoins stays marked as done for the year and never gets its wrapped again
         hof_wrapped_guild_status_repo.delete_progress_for_guild(connection, server_id, commit=False)
         permission_warning_repo.delete_permission_warnings(connection, [server_id], commit=False)
-        connection.commit()
+        if commit:
+            connection.commit()
     except Exception:
         connection.rollback()
         raise

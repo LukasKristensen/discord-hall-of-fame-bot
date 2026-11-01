@@ -59,6 +59,9 @@ def create_server_config_table(connection):
         # When the daily task first found the server missing from the bot's guilds, so a server is only
         # cleaned up after it has stayed missing for a while. NULL while the bot is in the server
         "ALTER TABLE server_configs ADD COLUMN IF NOT EXISTS missing_since TIMESTAMPTZ",
+        # When Discord first confirmed the bot has no access to a missing server. Its data is deleted only on a
+        # second confirmation a day or more later. NULL until then, and again whenever the server is seen
+        "ALTER TABLE server_configs ADD COLUMN IF NOT EXISTS departure_confirmed_at TIMESTAMPTZ",
     )
     for migration in migrations:
         try:
@@ -82,7 +85,7 @@ def record_missing_guilds(connection, missing_guild_ids, now) -> dict:
     missing_guild_ids = [int(guild_id) for guild_id in missing_guild_ids]
     cursor = connection.cursor()
     cursor.execute("""
-        UPDATE server_configs SET missing_since = NULL
+        UPDATE server_configs SET missing_since = NULL, departure_confirmed_at = NULL
         WHERE missing_since IS NOT NULL AND NOT (guild_id = ANY(%s::bigint[]))
     """, (missing_guild_ids,))
     cursor.execute("""
@@ -105,9 +108,35 @@ def clear_missing_for_present_guilds(connection, present_guild_ids):
     """
     cursor = connection.cursor()
     cursor.execute("""
-        UPDATE server_configs SET missing_since = NULL
+        UPDATE server_configs SET missing_since = NULL, departure_confirmed_at = NULL
         WHERE missing_since IS NOT NULL AND guild_id = ANY(%s::bigint[])
     """, ([int(guild_id) for guild_id in present_guild_ids],))
+    connection.commit()
+    cursor.close()
+
+def confirm_departure(connection, guild_id, now):
+    """
+    Remember that Discord confirmed the bot has no access to a missing server, keeping the first such time
+    :param connection: The database connection
+    :param guild_id: The server
+    :param now: The time of this confirmation
+    :return: When the departure was first confirmed
+    """
+    cursor = connection.cursor()
+    cursor.execute("""
+        UPDATE server_configs SET departure_confirmed_at = COALESCE(departure_confirmed_at, %s)
+        WHERE guild_id = %s
+        RETURNING departure_confirmed_at
+    """, (now, int(guild_id)))
+    row = cursor.fetchone()
+    connection.commit()
+    cursor.close()
+    return row[0] if row else now
+
+def clear_departure_confirmation(connection, guild_id):
+    """Forget a confirmed departure, for a server Discord says the bot is still in"""
+    cursor = connection.cursor()
+    cursor.execute("UPDATE server_configs SET departure_confirmed_at = NULL WHERE guild_id = %s", (int(guild_id),))
     connection.commit()
     cursor.close()
 

@@ -97,6 +97,15 @@ def delete_hall_of_fame_messages_for_guild(connection, guild_id, commit: bool = 
         connection.commit()
     cursor.close()
 
+def delete_hall_of_fame_message(connection, guild_id, channel_id, message_id):
+    """Forget one stored post, for a repost taken down because its author asked not to be featured as it was stored"""
+    cursor = connection.cursor()
+    cursor.execute("""
+        DELETE FROM hall_of_fame_message WHERE guild_id = %s AND channel_id = %s AND message_id = %s
+    """, (guild_id, channel_id, message_id))
+    connection.commit()
+    cursor.close()
+
 def get_all_hall_of_fame_messages_for_guild(connection, guild_id):
     cursor = connection.cursor()
     cursor.execute("""

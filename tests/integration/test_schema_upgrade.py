@@ -223,6 +223,37 @@ class ProductionUpgradeTests(SchemaUpgradeTestCase):
         self.assertEqual([(2,)], self.rows("SELECT COUNT(*) FROM server_user WHERE user_id = %s", (MEMBER,)))
 
 
+def server_user_key(test):
+    """server_user's primary key columns, in the key's own order"""
+    return test.rows("""
+        SELECT array_agg(attribute.attname::text ORDER BY array_position(index.indkey::int2[], attribute.attnum))
+        FROM pg_index index
+        JOIN pg_class class ON class.oid = index.indrelid
+        JOIN pg_namespace namespace ON namespace.oid = class.relnamespace
+        JOIN pg_attribute attribute ON attribute.attrelid = class.oid AND attribute.attnum = ANY(index.indkey)
+        WHERE namespace.nspname = %s AND class.relname = 'server_user' AND index.indisprimary
+    """, (test.schema,))[0][0]
+
+
+class ReversedKeyUpgradeTests(SchemaUpgradeTestCase):
+    """A server_user keyed (guild_id, user_id): the same columns in the order that cannot serve a member lookup."""
+
+    def setUp(self):
+        super().setUp()
+        self.build([statement.replace("PRIMARY KEY (user_id, guild_id)", "PRIMARY KEY (guild_id, user_id)")
+                    for statement in PRODUCTION_TABLES])
+        self.execute("INSERT INTO server_user (user_id, guild_id, total_hall_of_fame_messages) VALUES (%s, %s, 4)",
+                     (MEMBER, GUILD))
+        self.setup_databases()
+
+    def test_switches_to_the_member_first_key(self):
+        self.assertEqual(["user_id", "guild_id"], server_user_key(self))
+
+    def test_keeps_the_existing_standing(self):
+        self.assertEqual([(MEMBER, GUILD, 4)], self.rows(
+            "SELECT user_id, guild_id, total_hall_of_fame_messages FROM server_user"))
+
+
 class OlderSchemaUpgradeTests(SchemaUpgradeTestCase):
     """Servers set up before require_image_or_video, and server_user from before its composite key."""
 
@@ -241,16 +272,7 @@ class OlderSchemaUpgradeTests(SchemaUpgradeTestCase):
         self.assertEqual([(False,)], self.rows("SELECT require_image_or_video FROM server_configs"))
 
     def test_switches_server_user_to_the_member_and_server_key(self):
-        key = self.rows("""
-            SELECT array_agg(attribute.attname::text ORDER BY attribute.attname)
-            FROM pg_index index
-            JOIN pg_class class ON class.oid = index.indrelid
-            JOIN pg_namespace namespace ON namespace.oid = class.relnamespace
-            JOIN pg_attribute attribute ON attribute.attrelid = class.oid AND attribute.attnum = ANY(index.indkey)
-            WHERE namespace.nspname = %s AND class.relname = 'server_user' AND index.indisprimary
-        """, (self.schema,))[0][0]
-
-        self.assertEqual(["guild_id", "user_id"], key)
+        self.assertEqual(["user_id", "guild_id"], server_user_key(self))
 
     def test_keeps_the_existing_standing(self):
         self.assertEqual([(MEMBER, GUILD, 4)], self.rows(

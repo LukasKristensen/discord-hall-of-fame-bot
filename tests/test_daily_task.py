@@ -663,11 +663,18 @@ class DepartedGuildCleanupTests(unittest.IsolatedAsyncioTestCase):
         self.addCleanup(self.restore_cache)
 
         self.patch(server_config_repo, "record_missing_guilds", self.record_missing)
-        self.patch(utils, "delete_database_context", lambda guild_id, _connection: self.deleted.append(guild_id))
+        # Confirmed gone by Discord a day before, so the check now is the second one, unless a test says not
+        self.first_confirmed = {self.departed: self.NOW - events.departed_guild_confirmation_gap}
+        self.cleared_confirmations = []
+        self.patch(server_config_repo, "confirm_departure",
+                   lambda _connection, guild_id, now: self.first_confirmed.setdefault(guild_id, now))
+        self.patch(server_config_repo, "clear_departure_confirmation",
+                   lambda _connection, guild_id: self.cleared_confirmations.append(guild_id))
+        self.patch(utils, "delete_database_context", lambda guild_id, _connection, commit=True: self.deleted.append(guild_id))
         self.patch(guild_lifecycle_event_repo, "get_latest_event_type",
                    lambda _connection, _guild_id: self.latest_event)
         self.patch(guild_lifecycle_event_repo, "insert_guild_lifecycle_event",
-                   lambda _connection, guild_id, event_type, occurred_at:
+                   lambda _connection, guild_id, event_type, occurred_at, commit=True:
                    self.lifecycle.append((guild_id, event_type, occurred_at)))
 
     def restore_cache(self):
@@ -712,11 +719,32 @@ class DepartedGuildCleanupTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual([(self.departed, "LEAVE", self.missing_since[self.departed])], self.lifecycle)
 
+    async def test_a_first_confirmation_deletes_nothing(self):
+        """One answer could be a passing error on Discord's side, and deleting cannot be undone."""
+        self.first_confirmed.clear()
+
+        self.assertEqual([], await self.clean_up())
+        self.assertEqual([], self.deleted)
+        self.assertEqual(self.NOW, self.first_confirmed[self.departed])
+        self.assertIn(self.departed, self.server_classes)
+
+    async def test_a_second_confirmation_less_than_a_day_later_deletes_nothing(self):
+        self.first_confirmed[self.departed] = self.NOW - events.departed_guild_confirmation_gap + datetime.timedelta(minutes=1)
+
+        self.assertEqual([], await self.clean_up())
+        self.assertEqual([], self.deleted)
+
+    async def test_a_server_discord_says_the_bot_is_in_forgets_its_confirmation(self):
+        self.fetch_results[self.departed] = object()
+
+        self.assertEqual([], await self.clean_up())
+        self.assertEqual([self.departed], self.cleared_confirmations)
+
     async def test_deletes_under_the_database_statement_timeout(self):
         """psycopg2 holds the event loop while a delete waits, so only the database can stop it."""
         timeouts = []
         self.patch(utils, "delete_database_context",
-                   lambda guild_id, _connection: timeouts.append(list(self.connection.queries)))
+                   lambda guild_id, _connection, commit=True: timeouts.append(list(self.connection.queries)))
         await self.clean_up()
 
         [queries] = timeouts
@@ -814,8 +842,9 @@ class DepartedGuildCleanupTests(unittest.IsolatedAsyncioTestCase):
         other = 998
         self.server_classes[other] = build_server(guild_id=other)
         self.missing_since[other] = self.missing_since[self.departed]
+        self.first_confirmed[other] = self.first_confirmed[self.departed]
 
-        def fail_on_one(guild_id, _connection):
+        def fail_on_one(guild_id, _connection, commit=True):
             if guild_id == other:
                 raise RuntimeError("database went away")
             self.deleted.append(guild_id)

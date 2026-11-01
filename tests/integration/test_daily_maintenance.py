@@ -203,6 +203,55 @@ class DailyMaintenanceTests(DatabaseTestCase):
 
         self.assertEqual(once, (self.stored_counts(), self.rows("SELECT * FROM server_user ORDER BY user_id, guild_id")))
 
+    def start_departed(self):
+        """The departed server, missing since a fixed day, past its grace period and gone from Discord"""
+        self.first_missing = datetime.datetime(2026, 10, 1, tzinfo=datetime.timezone.utc)
+        server_config_repo.record_missing_guilds(self.connection, [DEPARTED], self.first_missing)
+        self.after_grace = self.first_missing + datetime.timedelta(days=events.departed_guild_grace_days)
+
+    async def clean_up_departed(self, now):
+        return await events.clean_up_departed_guilds(self.bot, self.connection, self.server_classes, now=now)
+
+    def departed_posts(self):
+        return self.rows("SELECT COUNT(*) FROM hall_of_fame_message WHERE guild_id = %s", (DEPARTED,))[0][0]
+
+    def leaves(self):
+        return self.rows("SELECT occurred_at FROM guild_lifecycle_event WHERE guild_id = %s AND event_type = 'LEAVE'",
+                         (DEPARTED,))
+
+    async def test_is_deleted_only_on_a_second_confirmation_a_day_later(self):
+        self.start_departed()
+        self.assertEqual([], await self.clean_up_departed(self.after_grace))
+        self.assertEqual(1, self.departed_posts())
+        self.assertEqual([], await self.clean_up_departed(self.after_grace + datetime.timedelta(hours=12)))
+        self.assertEqual(1, self.departed_posts())
+
+        self.assertEqual([DEPARTED], await self.clean_up_departed(self.after_grace + events.departed_guild_confirmation_gap))
+        self.assertEqual(0, self.departed_posts())
+        self.assertEqual([(self.first_missing,)], self.leaves())
+
+    async def test_a_server_that_comes_back_starts_its_confirmations_over(self):
+        self.start_departed()
+        await self.clean_up_departed(self.after_grace)
+        server_config_repo.record_missing_guilds(self.connection, [], self.after_grace)
+
+        self.assertEqual([(None,)], self.rows(
+            "SELECT departure_confirmed_at FROM server_configs WHERE guild_id = %s", (DEPARTED,)))
+
+    async def test_a_failure_recording_the_leave_keeps_the_data(self):
+        """The deletion and the leave are one transaction, so the data is never gone without its departure."""
+        self.start_departed()
+        await self.clean_up_departed(self.after_grace)
+
+        def fail(*_args, **_kwargs):
+            raise RuntimeError("could not record the leave")
+
+        with mock.patch.object(events, "record_guild_leave", fail):
+            self.assertEqual([], await self.clean_up_departed(self.after_grace + events.departed_guild_confirmation_gap))
+
+        self.assertEqual(1, self.departed_posts())
+        self.assertIn(DEPARTED, self.server_classes)
+
 
 if __name__ == "__main__":
     unittest.main()
