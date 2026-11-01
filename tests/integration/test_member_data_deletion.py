@@ -435,14 +435,14 @@ class StopFeaturingTests(MemberDataDeletionTestCase):
         async def five(*_args, **_kwargs):
             return 5
 
-        channel = types.SimpleNamespace(send=send)
+        channel = types.SimpleNamespace(id=100, send=send)
         bot = types.SimpleNamespace(get_channel=lambda _channel_id: channel)
         message = types.SimpleNamespace(id=message_id, channel=types.SimpleNamespace(id=501),
                                         guild=types.SimpleNamespace(id=SHARED),
                                         author=types.SimpleNamespace(id=author_id))
         with mock.patch.object(utils, "create_embed", no_embed), \
                 mock.patch.object(utils, "reaction_count", five), \
-                mock.patch.object(utils, "check_video_extension", lambda _message: None):
+                mock.patch.object(utils, "create_post_view", no_embed):
             await utils.post_hall_of_fame_message(message, bot, self.connection, SHARED * 10, 5)
         stored = self.rows("SELECT author_id FROM hall_of_fame_message WHERE message_id = %s", (message_id,))
         return stored[0][0] if stored else None

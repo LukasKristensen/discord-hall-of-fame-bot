@@ -1466,7 +1466,7 @@ class OptingOutWhileAPostIsSentTests(unittest.IsolatedAsyncioTestCase):
         async def count(*_args, **_kwargs):
             return 5
 
-        channel = types.SimpleNamespace(send=send)
+        channel = types.SimpleNamespace(id=100, send=send)
         bot = types.SimpleNamespace(get_channel=lambda _id: channel)
         message = types.SimpleNamespace(id=1, channel=types.SimpleNamespace(id=2), guild=types.SimpleNamespace(id=3),
                                         author=types.SimpleNamespace(id=77))
@@ -1475,7 +1475,7 @@ class OptingOutWhileAPostIsSentTests(unittest.IsolatedAsyncioTestCase):
                 unittest.mock.patch.object(hall_of_fame_message_repo, "insert_hall_of_fame_message", record), \
                 unittest.mock.patch.object(utils, "create_embed", no_embed), \
                 unittest.mock.patch.object(utils, "reaction_count", count), \
-                unittest.mock.patch.object(utils, "check_video_extension", lambda _m: None):
+                unittest.mock.patch.object(utils, "create_post_view", no_embed):
             await utils.post_hall_of_fame_message(message, bot, FakeConnection(), 100, 5)
 
         self.assertEqual([], stored)
@@ -1573,7 +1573,7 @@ class NotFeaturedPostingTests(unittest.IsolatedAsyncioTestCase):
                 unittest.mock.patch.object(hall_of_fame_message_repo, "insert_hall_of_fame_message", record), \
                 unittest.mock.patch.object(utils, "create_embed", no_embed), \
                 unittest.mock.patch.object(utils, "reaction_count", count), \
-                unittest.mock.patch.object(utils, "check_video_extension", lambda _m: None):
+                unittest.mock.patch.object(utils, "create_post_view", no_embed):
             await utils.post_hall_of_fame_message(message, bot, FakeConnection(), 100, 5)
 
         self.assertEqual([], sent)

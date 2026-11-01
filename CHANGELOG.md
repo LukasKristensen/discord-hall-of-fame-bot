@@ -1,15 +1,17 @@
 # Changelog
 
 What changed in each version of Hall of Fame, newest first. Patch releases are folded into their minor
-version, so 2.2 covers 2.2.0 and every 2.2.x after it. For how the bot works today, see the
+version, so 3.0 covers 3.0.0 and every 3.0.x after it. For how the bot works today, see the
 [README](README.md).
 
-## 2.2
+## 3.0
 - [x] Added /troubleshoot and a Troubleshoot button on the welcome message and under /get_server_config, which check the board's permissions, how many channels the bot can read and which ones members see but the bot cannot (with the role that would open most of them), an empty emoji whitelist, a threshold above the member count, the daily post limit and the last post.
 - [x] /troubleshoot keeps working once Discord hides channels from bots that cannot view them, from 16 November 2026. Discord no longer tells the bot who can see those channels, so they are listed apart with a note to give the bot the role members have, and only warned about when they are most of the server.
 - [x] Messages from age-restricted channels are only featured when the board is age-restricted too, as Discord keeps such content inside age-restricted channels. /troubleshoot lists the age-restricted channels the board leaves out. A post already on a board that is not age-restricted is hidden at its next reaction, and comes back if the board is made age-restricted.
 - [x] Media that Discord's content scanning flags is kept off the board: explicit media unless the board is age-restricted, gore and self-harm always. A post already on the board is hidden at its next reaction, and the bot takes down its own posts when Discord flags them after they were sent.
 - [x] Why isn't this on the board? explains both rules.
+- [x] /hof_wrapped is a story only the member sees: posts featured, their fame rate, their best moment, their people and a title, ending on a one-page summary. Show to others posts the summary in the channel, with Year in squares and Top 10 buttons any member can open privately, and Get my Wrapped for their own. The buttons keep working after a restart.
+- [x] Wrapped counts how many messages each member sent that year with Discord's message search, keeping only the number, so the fame rate is one in how many of their messages reached the board. A Wrapped made before this has no fame rate and skips that page.
 - [x] In a Discoverable server, /troubleshoot notes that Discord can show the board on the server's public web page from 16 November 2026, and points admins to Web Presence to choose whether it takes part.
 - [x] Added the Why isn't this on the board? message command, which tells any member why one message is or is not on the board, using the same checks the bot applies when a message is reacted to.
 - [x] When the bot joins, it runs the board and channel checks and, if something is wrong, posts a short note with a Troubleshoot button on the board instead of the full report, since the board is public.
@@ -45,6 +47,11 @@ version, so 2.2 covers 2.2.0 and every 2.2.x after it. For how the bot works tod
 - [x] Logs in the developer channels carry the command and the server ID, never a member's or a server's name.
 - [x] Production credentials and the production database are only loaded in production, so a development run cannot reach them.
 - [x] Message locks are recreated on each run, so none stays bound to a closed event loop.
+- [x] Upgraded discord.py from 2.5.0 to 2.7.1. The /feedback form asks its questions through Discord's newer form labels, which look the same to members.
+- [x] /feedback can carry up to three screenshots, and has a box to tick if the developer may message you about it.
+- [x] Change settings under /get_server_config, and Set up on the welcome message, open one form with the board channel, the reaction threshold, the post age, the counting method and every on/off rule. It saves everything at once or nothing, and the setting commands stay for those who know them.
+- [x] New Hall of Fame posts are one Components V2 message instead of an embed: up to ten images and videos in a gallery with videos playing in place, spoilered images kept covered, the replied-to message quoted, the eight most used counted emojis with their counts (and "+N" for the rest) and a Jump to message button. A video no longer needs a message of its own, and mentions in the message do not ping anyone again. Posts made before keep their embed and are updated as before.
+- [x] Board posts show forwarded messages, labelled Forwarded, and polls with their votes, which used to arrive empty. A forward shows the message it forwards only when the bot can read it and its author has not asked not to be featured; otherwise the post says the forwarded message is not shown, which includes most forwards from another server. A message that is only an image or GIF link shows the picture alone, and Tenor GIFs loop as GIFs. Long messages sit under the author at full width and keep up to 2,000 characters, a reply quotes a short preview of what it answers and names a picture, sticker, file or poll it cannot show, and a reply to a deleted message says so. Members are named as the server shows them.
 - [x] Removed the MongoDB-era tooling, the unused manual sweep and the Google Drive backup script.
 - [x] Added integration tests that run the reaction path, joins, the daily task, Wrapped, data deletion, schema upgrades and the stats queries against a real PostgreSQL, which CI now starts for them.
 - [x] Added project skills and an expanded CLAUDE.md for development.

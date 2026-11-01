@@ -23,6 +23,9 @@ def create_hof_wrapped_table(connection):
     # The unique key starts with the guild, so looking a member up across guilds (/my_data and
     # deleting a member's data) would otherwise scan the whole table
     cursor.execute("CREATE INDEX IF NOT EXISTS hof_wrapped_user_idx ON hof_wrapped (user_id)")
+    # How many messages the member sent in the server that year, as Discord's message search counts them,
+    # for the fame rate. Null for a Wrapped made before it existed, or when the search gave no answer
+    cursor.execute("ALTER TABLE hof_wrapped ADD COLUMN IF NOT EXISTS messages_sent INTEGER")
     connection.commit()
     cursor.close()
 
@@ -37,7 +40,7 @@ def lock_fan_lists(cursor):
     cursor.execute("SELECT pg_advisory_xact_lock(%s)", (FAN_LISTS_LOCK,))
 
 
-def insert_hof_wrapped(connection, guild_id, user_id, year, reaction_count, hof_message_posts, most_used_channels, most_used_emojis, most_reacted_post_message_id, most_reacted_post_channel_id, most_reacted_post_reaction_count, fan_of_users, users_fans, user_ranks):
+def insert_hof_wrapped(connection, guild_id, user_id, year, reaction_count, hof_message_posts, most_used_channels, most_used_emojis, most_reacted_post_message_id, most_reacted_post_channel_id, most_reacted_post_reaction_count, fan_of_users, users_fans, user_ranks, messages_sent=None):
     """
     Save a member's Wrapped for a guild and year. Nothing is saved for a member who asked not to be
     featured, and they are taken out of the fan lists, whoever calls this, since a Wrapped records whose
@@ -48,14 +51,14 @@ def insert_hof_wrapped(connection, guild_id, user_id, year, reaction_count, hof_
     lock_fan_lists(cursor)
     cursor.execute("""
         INSERT INTO hof_wrapped (
-            guild_id, user_id, year, reaction_count, hof_message_posts, most_used_channels, most_used_emojis, most_reacted_post_message_id, most_reacted_post_channel_id, most_reacted_post_reaction_count, fan_of_users, users_fans, user_ranks
+            guild_id, user_id, year, reaction_count, hof_message_posts, most_used_channels, most_used_emojis, most_reacted_post_message_id, most_reacted_post_channel_id, most_reacted_post_reaction_count, fan_of_users, users_fans, user_ranks, messages_sent
         )
         SELECT %(guild_id)s, %(user_id)s, %(year)s, %(reaction_count)s, %(hof_message_posts)s,
                %(most_used_channels)s, %(most_used_emojis)s, %(most_reacted_post_message_id)s,
                %(most_reacted_post_channel_id)s, %(most_reacted_post_reaction_count)s,
                (%(fan_of_users)s::jsonb - ARRAY(SELECT user_id::text FROM opted_out_member))::text,
                (%(users_fans)s::jsonb - ARRAY(SELECT user_id::text FROM opted_out_member))::text,
-               %(user_ranks)s
+               %(user_ranks)s, %(messages_sent)s
         WHERE NOT EXISTS (SELECT 1 FROM opted_out_member WHERE user_id = %(user_id)s)
         ON CONFLICT (guild_id, user_id, year) DO UPDATE SET
             reaction_count=EXCLUDED.reaction_count,
@@ -68,6 +71,7 @@ def insert_hof_wrapped(connection, guild_id, user_id, year, reaction_count, hof_
             fan_of_users=EXCLUDED.fan_of_users,
             users_fans=EXCLUDED.users_fans,
             user_ranks=EXCLUDED.user_ranks,
+            messages_sent=EXCLUDED.messages_sent,
             created_at=CURRENT_TIMESTAMP
     """,
     {"guild_id": guild_id, "user_id": user_id, "year": year, "reaction_count": reaction_count,
@@ -75,7 +79,7 @@ def insert_hof_wrapped(connection, guild_id, user_id, year, reaction_count, hof_
      "most_used_emojis": most_used_emojis, "most_reacted_post_message_id": most_reacted_post_message_id,
      "most_reacted_post_channel_id": most_reacted_post_channel_id,
      "most_reacted_post_reaction_count": most_reacted_post_reaction_count, "fan_of_users": fan_of_users,
-     "users_fans": users_fans, "user_ranks": user_ranks})
+     "users_fans": users_fans, "user_ranks": user_ranks, "messages_sent": messages_sent})
     connection.commit()
     cursor.close()
 
@@ -92,6 +96,26 @@ def get_hof_wrapped(connection, guild_id, user_id, year):
     result = dict(zip(columns, row))
     cursor.close()
     return result
+
+def get_guild_wrapped_totals(connection, guild_id, year) -> dict:
+    """
+    What a member's Wrapped is measured against: how many members have one, and the messages sent and posts
+    featured of those whose messages were counted, for the server's average fame rate. Members who asked not
+    to be featured are left out, as everywhere in the server's Wrapped
+    """
+    cursor = connection.cursor()
+    cursor.execute("""
+        SELECT COUNT(*),
+               COALESCE(SUM(messages_sent) FILTER (WHERE messages_sent IS NOT NULL AND hof_message_posts > 0), 0),
+               COALESCE(SUM(hof_message_posts) FILTER (WHERE messages_sent IS NOT NULL AND hof_message_posts > 0), 0)
+        FROM hof_wrapped
+        WHERE guild_id = %s AND year = %s
+          AND NOT EXISTS (SELECT 1 FROM opted_out_member WHERE opted_out_member.user_id = hof_wrapped.user_id)
+    """, (guild_id, year))
+    members, messages_sent, posts = cursor.fetchone()
+    cursor.close()
+    return {"members": members, "messages_sent": messages_sent, "posts": posts}
+
 
 def get_all_hof_wrapped_for_guild(connection, guild_id, year):
     """

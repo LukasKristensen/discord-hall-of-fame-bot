@@ -210,7 +210,7 @@ class CreateDatabaseContextTests(SetupTestCase):
         guild, _ = await self.join()
 
         view = guild.created_channels[0].views[0]
-        self.assertEqual([(messages.TROUBLESHOOT_BUTTON, None),
+        self.assertEqual([(messages.TROUBLESHOOT_BUTTON, None), (messages.SETTINGS_SET_UP_BUTTON, None),
                           (messages.SUPPORT_SERVER_BUTTON, messages.SUPPORT_SERVER_URL),
                           (messages.VOTE_BUTTON, messages.VOTE_URL)],
                          [(button.label, button.url) for button in view.children])

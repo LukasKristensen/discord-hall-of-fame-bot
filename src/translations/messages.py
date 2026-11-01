@@ -34,6 +34,27 @@ SUPPORT_SERVER_BUTTON = "Support server"
 # Footer on every Hall of Fame post: the brand only, since the board is the server's showcase and an ask on
 # every post would read as an ad. The ask goes on replies a member asked for instead
 POST_FOOTER = "Hall of Fame"
+# Components V2 posts
+POST_JUMP = "Jump to message"
+POST_REPLYING_TO = "Replying to **{name}**"
+POST_IN_CHANNEL = "in {channel}"
+POST_COUNTED = "{count} counted toward the " + POST_FOOTER
+POST_MORE_EMOJIS = "+{count}"
+POST_MORE_IN_ORIGINAL = "{count} more in the original message"
+POST_REPLYING_TO_DELETED = "Replying to a deleted message"
+POST_FORWARDED = "Forwarded"
+POST_FORWARD_NOT_SHOWN = "The forwarded message is not shown"
+POST_STICKER = "Sticker: {name}"
+# What a quoted reply holds when it has no words, as Discord's reply preview names it
+POST_QUOTE_IMAGE = "Image"
+POST_QUOTE_VIDEO = "Video"
+POST_QUOTE_GIF = "GIF"
+POST_QUOTE_FILE = "File: {name}"
+POST_QUOTE_POLL = "Poll: {question}"
+POST_VOICE_MESSAGE = "Voice message"
+POST_POLL = "Poll"
+POST_POLL_VOTE = "{count} vote"
+POST_POLL_VOTES = "{count} votes"
 # Footers render plain text only, so the command is named rather than a clickable command_refs mention
 INVITE_FOOTER = "Run a server? Add Hall of Fame with /invite"
 # The server Wrapped, which lands on every board in the same few days of December. It is the one post a
@@ -82,8 +103,8 @@ BOT_LOADING = "Please wait while the bot is loading..."
 COMMAND_ON_COOLDOWN = "This command is on a daily cooldown. Please try again later."
 FEEDBACK_ON_COOLDOWN = ("You have sent {limit} pieces of feedback today, the most allowed in a day. Try again "
                         f"tomorrow, or ask in the support server: <{SUPPORT_SERVER_URL}>")
-# /feedback. The topic is a choice on the command itself, since a modal on discord.py 2.5 holds text inputs
-# only, and it shapes the form: its title, and what its two fields ask for
+# /feedback. The topic is a choice on the command itself, since it shapes the form before it opens: its title,
+# and what its two text fields ask for
 FEEDBACK_TOPICS = {
     "bug": "Bug report",
     "idea": "Idea or feature request",
@@ -108,6 +129,13 @@ FEEDBACK_FORMS = {
 }
 # Private, since a thank-you is of no use to the rest of the channel
 FEEDBACK_SENT = "✅ Thanks, your feedback reached the developer."
+FEEDBACK_SENT_SOME_LEFT_OUT = ("✅ Thanks, your feedback reached the developer. {count} of your files could not be "
+                              "added: only images are kept, up to {max}, and each must fit Discord's upload limit.")
+# The optional fields every feedback form ends with. Discord allows 45 characters for a label and 100 for a
+# description, which the feedback tests check
+FEEDBACK_SCREENSHOTS_LABEL = "Screenshots (optional)"
+FEEDBACK_SCREENSHOTS_DESCRIPTION = "Up to 3 images. Crop out other members' names and messages where you can."
+FEEDBACK_CONTACT_LABEL = "The developer may message me about this"
 SETTING_CHANGED = "✅ {label}: **{value}**"
 SETTING_UNCHANGED = "ℹ️ {label} is already **{value}**, so nothing changed."
 REACTION_THRESHOLD_NOTE = ("A message reaches the Hall of Fame once it has {threshold} reaction{plural}, "
@@ -131,11 +159,58 @@ TROUBLESHOOT_BUTTON = "Troubleshoot"
 # Closes /get_server_config, which is most often looked up because something is not working
 CONFIG_TROUBLESHOOT_HINT = (f"Something not working? Press **{TROUBLESHOOT_BUTTON}** below, or ask about one message "
                             f"with Apps > **{WHY_MENU_NAME}**")
+# The one form for a board's settings, opened by a button under /get_server_config and the welcome message.
+# Discord allows 45 characters for a form title, a label or an option, and 100 for a description, which the
+# settings form tests check
+SETTINGS_BUTTON = "Change settings"
+SETTINGS_SET_UP_BUTTON = "Set up"
+SETTINGS_FORM_TITLE = "Hall of Fame settings"
+SETTINGS_CHANNEL_LABEL = "Board channel"
+SETTINGS_CHANNEL_DESCRIPTION = "Where Hall of Fame posts go"
+SETTINGS_THRESHOLD_LABEL = "Reaction threshold"
+SETTINGS_THRESHOLD_DESCRIPTION = "How many reactions a message needs, {minimum} to {maximum}"
+SETTINGS_DUE_DATE_LABEL = "Oldest message that can qualify"
+SETTINGS_DUE_DATE_DESCRIPTION = "In days, {minimum} to {maximum}"
+SETTINGS_METHOD_LABEL = "How reactions are counted"
+# Per counting method: the option and what it means
+SETTINGS_METHOD_OPTIONS = {
+    "most_reactions_on_emoji": ("Most reactions on one emoji", "Recommended. One reaction should carry a message"),
+    "total_reactions": ("Total reactions", "Every emoji added together"),
+    "unique_users": ("How many members reacted", "Each member counts once"),
+}
+SETTINGS_RULES_LABEL = "Rules"
+SETTINGS_RULES_DESCRIPTION = "Ticked rules are on. The emoji whitelist keeps its own commands"
+# The on/off settings: the box in the form, then how the answer names it, the same as the setting's own command
+SETTING_AUTHOR_REACTION = "Author's own reaction counts toward the threshold"
+SETTING_REQUIRE_MEDIA = "Only posts with an image or video can reach the Hall of Fame"
+SETTING_HIDE_BELOW_THRESHOLD = "Hide Hall of Fame posts that drop below the threshold"
+SETTING_IGNORE_BOTS = "Ignore messages from bots"
+SETTING_CHAT_IN_BOARD = "Members can chat in the Hall of Fame channel"
+SETTING_GLOBAL_PROFILES = "Posts here count toward members' totals across servers"
+SETTINGS_RULE_OPTIONS = {
+    "include_author_in_reaction_calculation": ("Count the author's own reaction", SETTING_AUTHOR_REACTION),
+    "require_image_or_video": ("Only messages with an image or video", SETTING_REQUIRE_MEDIA),
+    "hide_hof_post_below_threshold": ("Hide posts that drop below the threshold", SETTING_HIDE_BELOW_THRESHOLD),
+    "ignore_bot_messages": ("Leave out messages from other bots", SETTING_IGNORE_BOTS),
+    "allow_messages_in_hof_channel": ("Allow chat in the board channel", SETTING_CHAT_IN_BOARD),
+    "count_in_global_profiles": ("Count toward members' totals across servers", SETTING_GLOBAL_PROFILES),
+}
+CHAT_IN_BOARD_OFF_NOTE = "Messages members post in the Hall of Fame channel will be removed."
+HIDE_BELOW_THRESHOLD_ON_NOTE = "They show again once they are back above it."
+# The answer to the form, only for the admin who sent it
+SETTINGS_SAVED = "✅ Settings saved:"
+SETTINGS_CHANGED_LINE = "• {label}: **{value}**"
+SETTINGS_NOTHING_CHANGED = "ℹ️ Nothing changed, every setting already had the value you sent."
+SETTINGS_NOT_A_NUMBER = "{label} must be a whole number from {minimum} to {maximum}, but got \"{value}\"."
+SETTINGS_NOT_SAVED = "Nothing was saved. Press the button again to fix it."
+SETTINGS_ANNOUNCEMENT_FAILED = ("The bot could not post its announcement in {channel}. Check that it can send "
+                                "messages there.")
 # The first message in a board the bot created when it joined
 HOF_WELCOME = ("🎉 **Welcome to the Hall of Fame!** 🎉\n"
                "When a message receives **{threshold} or more (default threshold) of the same reaction**, it’s "
                "automatically **reposted here** to celebrate its popularity.\n\n"
                "🔧 **Customize your setup** (needs the Manage Server permission)**:**\n"
+               f"   • Press **{SETTINGS_SET_UP_BUTTON}** below to change every setting in one form\n"
                f"   • Change the reaction threshold with {command_refs.SET_REACTION_THRESHOLD}\n"
                f"   • View your current settings with {command_refs.GET_SERVER_CONFIG}\n\n"
                "✨ **Want to only track specific emojis?**\n"
@@ -311,6 +386,61 @@ WRAPPED_NONE_FOR_MEMBER = ("**You are not in this server's Hall of Fame Wrapped 
 # Wrapped leaves out members who asked not to be featured, so promising them the next one would not be true
 WRAPPED_NONE_OPTED_OUT = ("**You asked not to be featured**, so no Hall of Fame Wrapped is made for you. You can "
                           "change that with {command}.")
+
+# The /hof_wrapped story, the plaque it shares and the two cards the plaque opens
+WRAPPED_PAGE = "Page {page} of {pages}"
+WRAPPED_BACK = "Back"
+WRAPPED_NEXT = "Next"
+WRAPPED_SKIP = "Skip to summary"
+WRAPPED_SHARE = "Show to others"
+WRAPPED_SHARED = "Shown in the channel"
+WRAPPED_JUMP = "Jump to it"
+WRAPPED_SQUARES_BUTTON = "Year in squares"
+WRAPPED_TOP_BUTTON = "Top 10"
+WRAPPED_MINE_BUTTON = "Get my Wrapped"
+WRAPPED_INTRO_KICKER = "Your {year} in the Hall of Fame"
+WRAPPED_INTRO_TEXT = "Here is how much you made this server react."
+WRAPPED_POSTS_KICKER = "Posts featured"
+WRAPPED_POSTS_TEXT = "of your messages reached the board."
+WRAPPED_POSTS_RANK = "#{rank} of {members} members in this server."
+WRAPPED_FAME_KICKER = "Your fame rate"
+WRAPPED_FAME_TEXT = "You sent {sent:,} messages this year, and one in every {rate:,} reached the board."
+WRAPPED_FAME_AVERAGE = "The server average is 1 in {average:,}."
+WRAPPED_BEST_KICKER = "Your best moment"
+WRAPPED_BEST_TEXT = "reactions on one message."
+WRAPPED_PEOPLE_KICKER = "Your people"
+WRAPPED_TOP_FAN = "{fan} reacted to your posts {count} times."
+WRAPPED_FAN_OF = "You reacted to {member} the most, {count} times."
+WRAPPED_EMOJI = "Your signature emoji: {emoji}"
+WRAPPED_TITLE_KICKER = "Your title"
+WRAPPED_SUMMARY_KICKER = "Your summary"
+WRAPPED_PLAQUE_KICKER = "Hall of Fame Wrapped {year}"
+WRAPPED_PLAQUE_RANK = "#{rank} of {members} members"
+WRAPPED_PLAQUE_FAME = "## 1 in {rate:,}\n-# of {sent:,} messages reached the board"
+WRAPPED_PLAQUE_FAME_AVERAGE = " · server average 1 in {average:,}"
+WRAPPED_PLAQUE_STATS = "**{posts}** posts featured · **{received}** reactions earned · **{given}** given"
+WRAPPED_PLAQUE_BEST = "**Best moment** · {count} reactions"
+WRAPPED_PLAQUE_FAN = "**Biggest fan** · {fan}, {count} reactions"
+WRAPPED_PLAQUE_EMOJI = "**Signature emoji** · {emoji}"
+WRAPPED_PLAQUE_CHANNEL = "**Home turf** · {channel}"
+WRAPPED_SHARED_BY = "-# {member} shared their Wrapped"
+WRAPPED_SQUARES_TITLE = "### {member}'s {year}, one square per day"
+WRAPPED_SQUARES_LEGEND = "-# · none   ▒ one   ▓ two   █ three or more posts featured that day"
+WRAPPED_SQUARES_STREAK = "**Longest run** · {days} in a row"
+WRAPPED_SQUARES_WEEKDAY = "**Best day** · {weekday}"
+WRAPPED_SQUARES_HOUR = "**Best hour** · {hour:02d}:00 UTC"
+WRAPPED_SQUARES_MONTH = "**Busiest month** · {month}"
+WRAPPED_TOP_TITLE = "### {member}'s top {count} of {year}"
+WRAPPED_TOP_LINE = "**{rank}.** {count} reactions · {channel} · {date} · [Jump]({link})"
+WRAPPED_CARD_GONE = "This Wrapped is no longer available."
+WRAPPED_CARD_EMPTY = "No posts from {year} to show."
+# A title for each Wrapped, the first that fits, in this order: the name, then why it was earned
+WRAPPED_TITLE_HEADLINER = ("The Headliner", "The most featured member of the server this year.")
+WRAPPED_TITLE_SHARPSHOOTER = ("The Sharpshooter", "One in every {rate:,} of your messages reached the board.")
+WRAPPED_TITLE_REGULAR = ("The Regular", "{posts} posts on the board this year.")
+WRAPPED_TITLE_HYPE = ("The Hype Crew", "You gave more reactions than you got.")
+WRAPPED_TITLE_EXPLORER = ("The Explorer", "Featured from {channels} different channels.")
+WRAPPED_TITLE_RISING = ("The Rising Star", "On the board, and only getting started.")
 
 # /troubleshoot, the Troubleshoot button (TROUBLESHOOT_BUTTON above), and the report sent when the bot joins
 CHECK_TITLE = "🩺 Hall of Fame setup check"

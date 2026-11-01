@@ -53,13 +53,13 @@ class TimeZoneTests(DatabaseTestCase):
             def now(cls, tz=None):
                 return featured if tz is not None else featured.replace(tzinfo=None)
 
-        channel = types.SimpleNamespace(send=send)
+        channel = types.SimpleNamespace(id=100, send=send)
         bot = types.SimpleNamespace(get_channel=lambda _channel_id: channel)
         message = types.SimpleNamespace(id=message_id, channel=types.SimpleNamespace(id=500),
                                         guild=types.SimpleNamespace(id=9001), author=types.SimpleNamespace(id=101))
         with mock.patch.object(utils, "create_embed", no_embed), \
                 mock.patch.object(utils, "reaction_count", five), \
-                mock.patch.object(utils, "check_video_extension", lambda _message: None), \
+                mock.patch.object(utils, "create_post_view", no_embed), \
                 mock.patch.object(utils.datetime, "datetime", FixedDatetime):
             await utils.post_hall_of_fame_message(message, bot, connection, 600, 5)
 

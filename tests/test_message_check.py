@@ -6,6 +6,7 @@ as the gate's own tests, and the rules both share are checked from both sides.
 
 import contextlib
 import datetime
+import types
 import unittest
 
 import discord
@@ -417,6 +418,22 @@ class RuleBlockingPostTests(unittest.TestCase):
         message = self.message(channel_nsfw=True)
         self.assertEqual(utils.RULE_AGE_RESTRICTED,
                          utils.rule_blocking_post(message, None, server_config(), board=None))
+
+    def forward(self, attachment):
+        message = self.message()
+        message.content = ""
+        message.attachments = []
+        message.message_snapshots = [types.SimpleNamespace(content="", attachments=[attachment], embeds=[], stickers=[])]
+        return message
+
+    def test_a_forward_is_judged_by_the_media_it_forwards(self):
+        """The post shows the snapshot, so a flagged picture in it must keep the forward off the board."""
+        flagged = FakeAttachment(flags=utils.GORE_CONTENT)
+        self.assertEqual(utils.RULE_FLAGGED_MEDIA, utils.rule_blocking_post(self.forward(flagged), None, server_config()))
+
+    def test_a_forwarded_image_counts_as_an_image(self):
+        message = self.forward(FakeAttachment(content_type="image/png"))
+        self.assertIsNone(utils.rule_blocking_post(message, None, server_config(require_image_or_video=True)))
 
     def test_an_age_restricted_board_takes_them(self):
         message = self.message(channel_nsfw=True)

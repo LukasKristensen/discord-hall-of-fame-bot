@@ -36,6 +36,7 @@ from repositories import (
     permission_warning_repo,
 )
 import hof_wrapped
+import wrapped_story
 from contextlib import asynccontextmanager
 from scripts import monthly_guild_snapshot
 import asyncio
@@ -331,8 +332,14 @@ async def on_ready():
         # Answers Troubleshoot on every welcome message ever sent, including those from before this boot.
         # Registering again after a reconnect only replaces the same entry
         commands.setup_check_handler = run_setup_check
+        commands.settings_form_handler = open_settings_form
         # Registered running, not as the stopped copies that are sent, and matched on the button's custom_id
         bot.add_view(commands.SetupCheckView(commands.SUPPORT_SERVER_LINK, commands.VOTE_LINK))
+        # The buttons on every plaque a member shared with /hof_wrapped, matched on the server, member and
+        # year in their custom_id, so plaques from before this boot keep answering
+        wrapped_story.connect = lambda: get_db_connection(connection_pool)
+        wrapped_story.open_wrapped_handler = open_wrapped
+        bot.add_dynamic_items(*wrapped_story.DYNAMIC_ITEMS)
 
         if bot_loaded:
             # on_ready fires again when Discord drops the session and the bot logs in anew, which is
@@ -708,7 +715,7 @@ async def include_author_own_reaction_in_threshold(interaction: discord.Interact
     if not await check_if_user_has_manage_server_permission(interaction):
         return
     await update_setting(interaction, "include_author_in_reaction_calculation", include,
-                         "Author's own reaction counts toward the threshold")
+                         messages.SETTING_AUTHOR_REACTION)
     await utils.logging(bot, f"Include author's own reaction in threshold command used in a server",
                         interaction.guild.id, include, log_level=log_type.COMMAND)
 
@@ -721,9 +728,9 @@ async def allow_messages_in_hof_channel(interaction: discord.Interaction, allow:
     if not await check_if_user_has_manage_server_permission(interaction):
         return
 
-    note = "" if allow else "Messages members post in the Hall of Fame channel will be removed."
+    note = "" if allow else messages.CHAT_IN_BOARD_OFF_NOTE
     await update_setting(interaction, "allow_messages_in_hof_channel", allow,
-                         "Members can chat in the Hall of Fame channel", note=note)
+                         messages.SETTING_CHAT_IN_BOARD, note=note)
     await utils.logging(bot, f"Allow messages in Hall of Fame channel command used in a server",
                         interaction.guild.id, allow, log_level=log_type.COMMAND)
 
@@ -737,7 +744,7 @@ async def require_image_or_video(interaction: discord.Interaction, require: bool
         return
 
     await update_setting(interaction, "require_image_or_video", require,
-                         "Only posts with an image or video can reach the Hall of Fame")
+                         messages.SETTING_REQUIRE_MEDIA)
     await utils.logging(bot, f"Require image or video command used in a server",
                         interaction.guild.id, str(require), log_level=log_type.COMMAND)
 
@@ -956,6 +963,113 @@ async def run_setup_check(interaction: discord.Interaction):
 async def troubleshoot(interaction: discord.Interaction):
     await run_setup_check(interaction)
 
+async def open_settings_form(interaction: discord.Interaction):
+    """
+    Open the form with every board setting, from the button under /get_server_config and the welcome
+    message. Only for admins, the same as the commands it stands in for
+    :param interaction: The button press
+    """
+    if not await ensure_bot_is_loaded(interaction):
+        return
+    if not await check_if_user_has_manage_server_permission(interaction, False):
+        return
+    server_class = server_classes.get(interaction.guild_id)
+    if server_class is None:
+        await send_error(interaction, messages.ERROR_SERVER_NOT_SETUP)
+        return
+    # noinspection PyUnresolvedReferences
+    await interaction.response.send_modal(commands.SettingsForm(interaction.guild, server_class, save_settings))
+
+def describe_setting(name: str, value) -> tuple[str, str, str]:
+    """
+    How the answer to the settings form names a change, in the words the setting's own command uses
+    :return: The setting's label, its new value as shown, and a note on what it means, or ""
+    """
+    if name == "hall_of_fame_channel_id":
+        return "Hall of Fame channel", f"<#{value}>", ""
+    if name == "reaction_threshold":
+        return "Reaction threshold", str(value), ""
+    if name == "post_due_date":
+        return ("Post due date", f"{value} day{plural(value)}",
+                messages.POST_DUE_DATE_NOTE.format(days=value, plural=plural(value)))
+    if name == "reaction_count_calculation_method":
+        return "Reactions are counted as", commands.calculation_method_labels.get(value, str(value)), ""
+    notes = {
+        ("allow_messages_in_hof_channel", False): messages.CHAT_IN_BOARD_OFF_NOTE,
+        ("hide_hof_post_below_threshold", True): messages.HIDE_BELOW_THRESHOLD_ON_NOTE,
+        ("count_in_global_profiles", True): messages.GLOBAL_PROFILE_COUNTING_ON_NOTE,
+        ("count_in_global_profiles", False): messages.GLOBAL_PROFILE_COUNTING_OFF_NOTE,
+    }
+    return messages.SETTINGS_RULE_OPTIONS[name][1], on_off(value), notes.get((name, value), "")
+
+async def save_settings(interaction: discord.Interaction, chosen: dict, errors: list[str]):
+    """
+    Store what the settings form sent, all of it or nothing, and tell the admin what changed. Checked
+    the way the commands check each setting, and answered privately, since it is one admin's form
+    :param interaction: The form being sent
+    :param chosen: The value of every setting in the form by column
+    :param errors: Why a value was refused, in which case nothing is stored
+    """
+    if not await ensure_bot_is_loaded(interaction):
+        return
+    # Asked again, since the admin may have lost the permission while the form was open
+    if not await check_if_user_has_manage_server_permission(interaction, False):
+        return
+    server_class = server_classes.get(interaction.guild_id)
+    if server_class is None:
+        await send_error(interaction, messages.ERROR_SERVER_NOT_SETUP)
+        return
+    if errors:
+        await send_error(interaction, "\n".join(errors + [messages.SETTINGS_NOT_SAVED]))
+        return
+
+    changes = {name: value for name, value in chosen.items() if getattr(server_class, name, None) != value}
+    if not changes:
+        # noinspection PyUnresolvedReferences
+        await interaction.response.send_message(messages.SETTINGS_NOTHING_CHANGED, ephemeral=True)
+        return
+
+    channel = None
+    if "hall_of_fame_channel_id" in changes:
+        channel = interaction.guild.get_channel(changes["hall_of_fame_channel_id"])
+        missing_permissions = (setup_check.missing_board_permissions(channel.permissions_for(interaction.guild.me))
+                               if channel is not None else ["View Channel"])
+        if missing_permissions:
+            mention = channel.mention if channel is not None else f"<#{changes['hall_of_fame_channel_id']}>"
+            await send_error(interaction, messages.HOF_CHANNEL_MISSING_PERMISSIONS.format(
+                channel=mention, missing_permissions=", ".join(missing_permissions)) + "\n" + messages.SETTINGS_NOT_SAVED)
+            return
+
+    # Posting the announcement in a new board can outlast the three seconds Discord waits for an answer
+    # noinspection PyUnresolvedReferences
+    await interaction.response.defer(ephemeral=True, thinking=True)
+    async with get_db_connection(connection_pool) as connection:
+        server_config_repo.update_server_config_params(interaction.guild_id, changes, connection)
+    # Only once it is stored, so a failed write does not leave reactions on settings the database does not hold
+    for name, value in changes.items():
+        setattr(server_class, name, value)
+
+    lines = [messages.SETTINGS_SAVED]
+    for name, value in changes.items():
+        label, shown, note = describe_setting(name, value)
+        lines.append(messages.SETTINGS_CHANGED_LINE.format(label=label, value=shown))
+        if note:
+            lines.append(f"-# {note}")
+    if channel is not None:
+        try:
+            await channel.send(messages.HOF_CHANNEL_MOVED_ANNOUNCEMENT.format(
+                user=interaction.user.mention, threshold=server_class.reaction_threshold,
+                threshold_command=command_refs.SET_REACTION_THRESHOLD, config_command=command_refs.GET_SERVER_CONFIG),
+                allowed_mentions=discord.AllowedMentions.none())
+        except discord.HTTPException as e:
+            # The board has moved either way, so the admin still hears that it worked
+            lines.append(messages.SETTINGS_ANNOUNCEMENT_FAILED.format(channel=channel.mention))
+            await utils.logging(bot, f"Could not post the Hall of Fame channel announcement: {e}",
+                                interaction.guild_id, str(channel.id), log_level=log_type.COMMAND)
+    await interaction.followup.send("\n".join(lines), ephemeral=True)
+    await utils.logging(bot, f"Settings form used in a server: {', '.join(changes)}",
+                        interaction.guild_id, log_level=log_type.COMMAND)
+
 @tree.context_menu(name=messages.WHY_MENU_NAME)
 async def why_not_on_board(interaction: discord.Interaction, message: discord.Message):
     """
@@ -1031,7 +1145,7 @@ async def ignore_bot_messages(interaction: discord.Interaction, should_ignore_bo
         return
 
     await update_setting(interaction, "ignore_bot_messages", should_ignore_bot_messages,
-                         "Ignore messages from bots")
+                         messages.SETTING_IGNORE_BOTS)
     await utils.logging(bot, f"Ignore bot messages command used in a server",
                         interaction.guild.id, should_ignore_bot_messages, log_level=log_type.COMMAND)
 
@@ -1105,9 +1219,9 @@ async def hide_hall_of_fame_posts_when_they_are_below_threshold(interaction: dis
     if not await check_if_user_has_manage_server_permission(interaction):
         return
 
-    note = "They show again once they are back above it." if hide else ""
+    note = messages.HIDE_BELOW_THRESHOLD_ON_NOTE if hide else ""
     await update_setting(interaction, "hide_hof_post_below_threshold", hide,
-                         "Hide Hall of Fame posts that drop below the threshold", note=note)
+                         messages.SETTING_HIDE_BELOW_THRESHOLD, note=note)
     await utils.logging(bot, f"Hide hall of fame posts command used in a server",
                         interaction.guild.id, str(hide), log_level=log_type.COMMAND)
 
@@ -1219,7 +1333,7 @@ async def count_in_global_profiles(interaction: discord.Interaction, count: bool
 
     note = messages.GLOBAL_PROFILE_COUNTING_ON_NOTE if count else messages.GLOBAL_PROFILE_COUNTING_OFF_NOTE
     await update_setting(interaction, "count_in_global_profiles", count,
-                         "Posts here count toward members' totals across servers", note=note)
+                         messages.SETTING_GLOBAL_PROFILES, note=note)
     await utils.logging(bot, f"Count in global profiles command used in a server",
                         interaction.guild.id, str(count), log_level=log_type.COMMAND)
 
@@ -1670,6 +1784,14 @@ async def set_hall_of_fame_channel(interaction: discord.Interaction, channel: di
 
 @tree.command(name="hof_wrapped", description="Get your Hall of Fame Wrapped for the year")
 async def hof_wrapped_command(interaction: discord.Interaction):
+    await open_wrapped(interaction)
+
+
+async def open_wrapped(interaction: discord.Interaction):
+    """
+    The member's Wrapped story, privately. Shared by /hof_wrapped and the Get my Wrapped button on a plaque
+    someone else shared
+    """
     if not await ensure_bot_is_loaded(interaction):
         return
     if await refuse_in_closed_board(interaction):
@@ -1681,11 +1803,16 @@ async def hof_wrapped_command(interaction: discord.Interaction):
 
     async with get_db_connection(connection_pool) as connection:
         user_wrapped = hof_wrapped_repo.get_hof_wrapped(connection, interaction.guild_id, interaction.user.id, version.WRAPPED_YEAR)
+        # Checked on every open, as a Wrapped made before the member asked not to be featured is kept, and
+        # must not be shown or shared again, just as a plaque's buttons refuse it
+        opted_out = opt_out_repo.is_opted_out(connection, interaction.user.id)
+        if opted_out:
+            user_wrapped = None
         if user_wrapped is None:
-            # Only looked up when there is nothing to show, to tell the member which of the reasons applies
-            opted_out = opt_out_repo.is_opted_out(connection, interaction.user.id)
             server_has_wrapped = hof_wrapped_repo.check_if_guild_wrapped_data_exists(
                 connection, interaction.guild_id, version.WRAPPED_YEAR)
+        else:
+            totals = hof_wrapped_repo.get_guild_wrapped_totals(connection, interaction.guild_id, version.WRAPPED_YEAR)
     if user_wrapped is None:
         # Private, as it is about the member alone and of no use to the rest of the channel
         # noinspection PyUnresolvedReferences
@@ -1695,9 +1822,8 @@ async def hof_wrapped_command(interaction: discord.Interaction):
                             interaction.guild.id, log_level=log_type.COMMAND)
         return
 
-    embed = await hof_wrapped.create_embed(interaction.user, user_wrapped, bot)
-    # noinspection PyUnresolvedReferences
-    await interaction.response.send_message(embed=embed)
+    # A private story first. The member chooses whether to show the summary to the channel
+    await wrapped_story.send_story(interaction, user_wrapped, totals)
 
     await utils.logging(bot, f"HOF Wrapped command used in a server",
                         interaction.guild.id, log_level=log_type.COMMAND)

@@ -7,6 +7,7 @@ from constants import version
 from enums import command_refs, calculation_method_type
 from repositories import server_config_repo, server_user_repo, hall_of_fame_message_repo
 from caches import ExpiringSet
+import validation
 from translations import messages
 
 INVITE_LINK = (messages.INVITE_BUTTON, messages.INVITE_URL)
@@ -54,26 +55,37 @@ def build_server_wrapped_view() -> discord.ui.View:
 
 
 CHECK_SETUP_CUSTOM_ID = "hof:check_setup"
+SETTINGS_CUSTOM_ID = "hof:settings"
 # Set by main at startup to the coroutine that answers a press of Troubleshoot
 setup_check_handler = None
+# Set by main at startup to the coroutine that opens the settings form
+settings_form_handler = None
 
 
 class SetupCheckView(discord.ui.View):
     """
-    The Troubleshoot button, then the given links, under the welcome message and /get_server_config.
+    The Troubleshoot button, the button that opens the settings form, then the given links, under the
+    welcome message and /get_server_config.
 
-    The welcome message stays in the board for good, so the button has a fixed custom_id and main
-    registers this view with bot.add_view on startup. That keeps it working after a restart, where a
-    plain view would answer "This interaction failed". Link buttons need no callback, so they can sit
-    in a persistent view as they are.
+    The welcome message stays in the board for good, so the buttons have fixed custom_ids and main
+    registers this view with bot.add_view on startup. That keeps them working after a restart, where a
+    plain view would answer "This interaction failed". A press is matched on the custom_id alone, so the
+    settings button can be labelled differently on the welcome message. Link buttons need no callback, so
+    they can sit in a persistent view as they are.
     """
 
-    def __init__(self, *links: tuple[str, str]):
+    def __init__(self, *links: tuple[str, str], settings_label: str | None = messages.SETTINGS_BUTTON):
         super().__init__(timeout=None)
         button = discord.ui.Button(style=discord.ButtonStyle.secondary, label=messages.TROUBLESHOOT_BUTTON,
                                    custom_id=CHECK_SETUP_CUSTOM_ID)
         button.callback = self.check_setup
         self.add_item(button)
+        # Left out with no label, where the settings are not what the message is about
+        if settings_label is not None:
+            settings = discord.ui.Button(style=discord.ButtonStyle.primary, label=settings_label,
+                                         custom_id=SETTINGS_CUSTOM_ID)
+            settings.callback = self.open_settings
+            self.add_item(settings)
         for label, url in links:
             self.add_item(discord.ui.Button(style=discord.ButtonStyle.link, label=label, url=url))
 
@@ -81,6 +93,117 @@ class SetupCheckView(discord.ui.View):
     async def check_setup(interaction: discord.Interaction):
         if setup_check_handler is not None:
             await setup_check_handler(interaction)
+
+    @staticmethod
+    async def open_settings(interaction: discord.Interaction):
+        if settings_form_handler is not None:
+            await settings_form_handler(interaction)
+
+
+# The channels a board can be in, the same ones /set_hall_of_fame_channel offers
+board_channel_types = [discord.ChannelType.text, discord.ChannelType.news]
+
+
+def read_whole_number(text: str, label: str, minimum: int, maximum: int) -> tuple[int | None, str | None]:
+    """
+    A number typed in the settings form, which Discord sends as text
+    :return: The number, or None with why it was refused
+    """
+    text = (text or "").strip()
+    if not (text.isascii() and text.isdigit()):
+        return None, messages.SETTINGS_NOT_A_NUMBER.format(label=label, minimum=minimum, maximum=maximum,
+                                                           value=text[:20])
+    number = int(text)
+    error = validation.out_of_range_message(label, number, minimum, maximum)
+    return (number, None) if error is None else (None, error)
+
+
+def settings_from_form(channel_values, threshold: str, due_date: str, method: str | None, rules: list,
+                       server_config) -> tuple[dict, list[str]]:
+    """
+    What the settings form asks to store, checked with the same bounds as the commands
+    :param channel_values: What the channel select returned, one channel or nothing
+    :param threshold: The reaction threshold as typed
+    :param due_date: The post due date as typed
+    :param method: The counting method picked, or None when none came back
+    :param rules: The configuration columns of the ticked rules
+    :param server_config: The server's configuration, for anything the form did not send
+    :return: The value of every setting in the form by column, and why any was refused
+    """
+    errors = []
+    chosen = {}
+    if channel_values:
+        chosen["hall_of_fame_channel_id"] = int(getattr(channel_values[0], "id", channel_values[0]))
+    reaction_threshold, error = read_whole_number(threshold, "The reaction threshold",
+                                                  validation.REACTION_THRESHOLD_MIN, validation.REACTION_THRESHOLD_MAX)
+    errors += [error] if error else []
+    chosen["reaction_threshold"] = reaction_threshold
+    post_due_date, error = read_whole_number(due_date, "The post due date",
+                                             validation.POST_DUE_DATE_MIN, validation.POST_DUE_DATE_MAX)
+    errors += [error] if error else []
+    chosen["post_due_date"] = post_due_date
+    chosen["reaction_count_calculation_method"] = (
+        method if method in messages.SETTINGS_METHOD_OPTIONS else server_config.reaction_count_calculation_method)
+    for column in messages.SETTINGS_RULE_OPTIONS:
+        chosen[column] = column in rules
+    return chosen, errors
+
+
+class SettingsForm(discord.ui.Modal):
+    """
+    Every board setting but the emoji whitelist in one form, filled in with what the server has now.
+    A form holds at most five questions, so the whitelist, which is a list of its own, keeps its commands.
+    What is sent goes to on_save, which main gives, so the form and the commands store settings the same way
+    """
+
+    def __init__(self, guild, server_config, on_save):
+        super().__init__(title=messages.SETTINGS_FORM_TITLE)
+        self.server_config = server_config
+        self.on_save = on_save
+        # What the form showed when it opened, so only what this admin changed is stored. Another admin may
+        # change a setting while it is open, and storing every field would quietly put theirs back
+        self.opened_with = {column: getattr(server_config, column, None) for column in (
+            "hall_of_fame_channel_id", "reaction_threshold", "post_due_date", "reaction_count_calculation_method",
+            *messages.SETTINGS_RULE_OPTIONS)}
+        # A channel that was deleted cannot be offered as the current one
+        board = guild.get_channel(server_config.hall_of_fame_channel_id) if server_config.hall_of_fame_channel_id else None
+        self.channel = discord.ui.ChannelSelect(channel_types=board_channel_types, required=True,
+                                                default_values=[discord.Object(id=board.id, type=discord.abc.GuildChannel)]
+                                                if board is not None else [])
+        self.threshold = discord.ui.TextInput(default=str(server_config.reaction_threshold), required=True,
+                                              max_length=len(str(validation.REACTION_THRESHOLD_MAX)))
+        self.due_date = discord.ui.TextInput(default=str(server_config.post_due_date), required=True,
+                                             max_length=len(str(validation.POST_DUE_DATE_MAX)))
+        method = server_config.reaction_count_calculation_method
+        self.method = discord.ui.RadioGroup(options=[
+            discord.RadioGroupOption(label=label, value=value, description=description, default=value == method)
+            for value, (label, description) in messages.SETTINGS_METHOD_OPTIONS.items()])
+        self.rules = discord.ui.CheckboxGroup(required=False, min_values=0,
+                                              max_values=len(messages.SETTINGS_RULE_OPTIONS), options=[
+            discord.CheckboxGroupOption(label=label, value=column, default=bool(getattr(server_config, column)))
+            for column, (label, _answer) in messages.SETTINGS_RULE_OPTIONS.items()])
+
+        self.add_item(discord.ui.Label(text=messages.SETTINGS_CHANNEL_LABEL,
+                                       description=messages.SETTINGS_CHANNEL_DESCRIPTION, component=self.channel))
+        self.add_item(discord.ui.Label(text=messages.SETTINGS_THRESHOLD_LABEL,
+                                       description=messages.SETTINGS_THRESHOLD_DESCRIPTION.format(
+                                           minimum=validation.REACTION_THRESHOLD_MIN,
+                                           maximum=validation.REACTION_THRESHOLD_MAX),
+                                       component=self.threshold))
+        self.add_item(discord.ui.Label(text=messages.SETTINGS_DUE_DATE_LABEL,
+                                       description=messages.SETTINGS_DUE_DATE_DESCRIPTION.format(
+                                           minimum=validation.POST_DUE_DATE_MIN, maximum=validation.POST_DUE_DATE_MAX),
+                                       component=self.due_date))
+        self.add_item(discord.ui.Label(text=messages.SETTINGS_METHOD_LABEL, component=self.method))
+        self.add_item(discord.ui.Label(text=messages.SETTINGS_RULES_LABEL,
+                                       description=messages.SETTINGS_RULES_DESCRIPTION, component=self.rules))
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        chosen, errors = settings_from_form(self.channel.values, self.threshold.value, self.due_date.value,
+                                            self.method.value, self.rules.values, self.server_config)
+        chosen = {column: value for column, value in chosen.items()
+                  if column not in self.opened_with or value != self.opened_with[column]}
+        await self.on_save(interaction, chosen, errors)
 
 
 def sent_copy(view: discord.ui.View) -> discord.ui.View:
@@ -93,14 +216,14 @@ def sent_copy(view: discord.ui.View) -> discord.ui.View:
     return view
 
 
-def build_check_setup_view() -> discord.ui.View:
-    # The same button as on the welcome message, so the view main registers answers it too
-    return sent_copy(SetupCheckView())
+def build_check_setup_view(with_settings: bool = True) -> discord.ui.View:
+    # The same buttons as on the welcome message, so the view main registers answers them too
+    return sent_copy(SetupCheckView(settings_label=messages.SETTINGS_BUTTON if with_settings else None))
 
 
 def build_welcome_view() -> discord.ui.View:
     # The server has just installed the bot, so there is nothing to invite it to yet
-    return sent_copy(SetupCheckView(SUPPORT_SERVER_LINK, VOTE_LINK))
+    return sent_copy(SetupCheckView(SUPPORT_SERVER_LINK, VOTE_LINK, settings_label=messages.SETTINGS_SET_UP_BUTTON))
 
 
 def build_help_embed() -> discord.Embed:
@@ -141,7 +264,8 @@ def build_help_embed() -> discord.Embed:
         value=f"{command_refs.SET_HALL_OF_FAME_CHANNEL} the channel posts go to\n"
               f"{command_refs.SET_REACTION_THRESHOLD} reactions needed\n"
               f"{command_refs.CALCULATION_METHOD} how reactions are counted\n"
-              f"{command_refs.GET_SERVER_CONFIG} every current setting\n"
+              f"{command_refs.GET_SERVER_CONFIG} every current setting, and **{messages.SETTINGS_BUTTON}** to "
+              f"change them in one form\n"
               f"{command_refs.TROUBLESHOOT} health check: find what stops posts, and how to fix it",
         inline=False)
 
@@ -1128,7 +1252,8 @@ def build_server_config_embed(guild, server_config) -> discord.Embed:
     # Discord rejects an empty field name, so a zero-width space keeps the spacer without a heading
     embed.add_field(
         name="​",
-        value=f"Change any setting with its own command · {command_refs.HELP}\n"
+        value=f"Change them all at once with **{messages.SETTINGS_BUTTON}** below, or each with its own "
+              f"command · {command_refs.HELP}\n"
               f"{messages.CONFIG_TROUBLESHOOT_HINT}",
         inline=False)
     embed.set_footer(text=f"Hall of Fame {version.VERSION}")

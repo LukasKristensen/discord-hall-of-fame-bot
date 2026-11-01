@@ -168,7 +168,7 @@ class DailyLimitTests(PostsTestCase):
 class PostingTests(PostsTestCase):
     """The bot's own posting code, with the Discord side faked and the database real."""
 
-    async def post(self, message_id=1, author=MEMBER, video_link=None):
+    async def post(self, message_id=1, author=MEMBER):
         sent = []
 
         async def send(content=None, **_kwargs):
@@ -181,13 +181,13 @@ class PostingTests(PostsTestCase):
         async def seven(*_args, **_kwargs):
             return 7
 
-        channel = types.SimpleNamespace(send=send)
+        channel = types.SimpleNamespace(id=100, send=send)
         bot = types.SimpleNamespace(get_channel=lambda _channel_id: channel)
         message = types.SimpleNamespace(id=message_id, channel=types.SimpleNamespace(id=CHANNEL),
                                         guild=types.SimpleNamespace(id=GUILD), author=types.SimpleNamespace(id=author))
         with mock.patch.object(utils, "create_embed", no_embed), \
                 mock.patch.object(utils, "reaction_count", seven), \
-                mock.patch.object(utils, "check_video_extension", lambda _message: video_link):
+                mock.patch.object(utils, "create_post_view", no_embed):
             await utils.post_hall_of_fame_message(message, bot, self.connection, 600, 5)
         return sent
 
@@ -206,12 +206,11 @@ class PostingTests(PostsTestCase):
         created_at = self.rows("SELECT created_at FROM hall_of_fame_message")[0][0]
         self.assertTrue(before - datetime.timedelta(seconds=1) <= created_at <= after + datetime.timedelta(seconds=1))
 
-    async def test_a_video_post_stores_both_messages(self):
-        sent = await self.post(video_link="https://example.com/clip.mp4")
+    async def test_a_post_is_one_message_with_no_video_link(self):
+        sent = await self.post()
 
-        # The video goes first, so it gets the first message ID (5002) and the embed the second (5003)
-        self.assertEqual("https://example.com/clip.mp4", sent[0])
-        self.assertEqual([(5003, 5002)], self.rows(
+        self.assertEqual(1, len(sent))
+        self.assertEqual([(5002, None)], self.rows(
             "SELECT hall_of_fame_message_id, video_link_message_id FROM hall_of_fame_message"))
 
     async def test_a_new_post_counts_toward_todays_limit(self):

@@ -34,6 +34,7 @@ def insert_arguments(**overrides):
         "most_reacted_post_channel_id": 100,
         "most_reacted_post_reaction_count": 55,
         "fan_of_users": "88",
+        "messages_sent": 8132,
         "users_fans": "99",
         "user_ranks": "1",
     }

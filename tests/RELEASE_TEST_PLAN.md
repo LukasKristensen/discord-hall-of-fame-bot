@@ -1,6 +1,6 @@
-# Release test plan: 2.2
+# Release test plan: 3.0
 
-Every flow to check by hand on the development bot before 2.2 goes to production. Tick each box as you
+Every flow to check by hand on the development bot before 3.0 goes to production. Tick each box as you
 go, and note anything that looks wrong next to it. Results worth keeping go in
 [MANUAL_TESTS.md](MANUAL_TESTS.md).
 
@@ -140,10 +140,68 @@ Restart the Discord client if the picker still shows the old list.
 - [ ] A friend who pressed Stop featuring me reaches the threshold: you are told only that it cannot be
       featured, and they are told it is their choice, with `/my_data`
 
+## Board posts
+
+- [ ] A reply with a spoilered image, a video and a second image, that @mentions someone, reaches the
+      board: one post shows the author, the quoted reply, all three in a gallery with the spoiler covered
+      and the video playing in place, every emoji with its count and a Jump to message button that works.
+      Nobody is pinged
+- [ ] More reactions update the count on that post. Removing reactions below the threshold hides it, and
+      reacting again brings it back as the same message
+- [ ] A post made before the upgrade still updates its count as an embed, hides and comes back
+- [ ] A message with a text file and one with only a sticker are posted with the file linked and the
+      sticker shown
+
+What only Discord's rendering shows. `tests/test_post_matrix.py` checks every other combination of message
+and reply from the payload:
+
+- [ ] A Tenor GIF, on its own and as the message replied to, loops as a GIF with no player controls. A GIF
+      from another site plays as a video
+- [ ] A forwarded message, a poll and a message over 300 characters look right: the forward labelled, the
+      poll's votes listed, the long text full width under the header
+- [ ] A forward of a message from this server shows the message it forwards. A forward from another
+      server, a forward of a forward, and a forward of a member who pressed Stop featuring me each show
+      *The forwarded message is not shown* and none of the forwarded words or media
+- [ ] A reply with a picture of its own to a sticker, a file and a GIF says *Sticker: name*, *File: name* and
+      *GIF* in the quote
+- [ ] A file link on a post that is a day old still opens the file
+- [ ] A MOV from a phone plays in the gallery, a voice message is linked as Voice message, and a message
+      with three stickers shows the two pictures and names the animated one
+- [ ] A link to a post with four images, and a message with a screenshot and an article link, show every
+      picture in one gallery
+
+## Settings form
+
+- [ ] `/get_server_config` has Change settings next to Troubleshoot. As an admin it opens Hall of Fame settings
+      with the current channel, threshold, post age, counting method and ticked rules filled in
+- [ ] A member without Manage Server who presses it is refused privately, and no form opens
+- [ ] Change the threshold and two rules and send it: one private answer lists exactly those three, and
+      `/get_server_config` shows them
+- [ ] Send it unchanged: it says nothing changed
+- [ ] Type 0 or "five" as the threshold along with another change: it is refused, and nothing is stored
+- [ ] Pick another channel: the board moves, the new channel gets the announcement with nobody pinged, and the
+      next post lands there. A channel the bot cannot post in is refused with the missing permissions
+- [ ] A new server's welcome message has Set up, which opens the same form, also after the bot restarts
+- [ ] The join note about hidden channels still has only Troubleshoot
+
+## Feedback screenshots
+
+- [ ] `/feedback` shows Screenshots (optional) with its note, and the picker offers images only
+- [ ] Send a bug report with two screenshots and the contact box ticked: the thank-you comes after a short
+      wait, and the feedback channel gets both images with the report, Screenshots "2 attached" and May
+      contact "Yes"
+- [ ] Send one without screenshots: it is answered at once, May contact "No"
+- [ ] A day later the screenshots in the feedback channel still open, since they were uploaded again
+
 ## Wrapped
 
 Only if Wrapped can be generated on the development bot.
 
+- [ ] `/hof_wrapped` opens a story only you see: Next, Back and Skip to summary work, the fame rate page
+      shows "1 in N" with the server average, and the summary offers Show to others
+- [ ] Show to others posts the summary in the channel once, without pinging anyone it names. Another member
+      presses Year in squares and Top 10 and sees them privately, and Get my Wrapped opens their own story
+- [ ] After a restart, the buttons on a summary posted before it still answer
 - [ ] A member who asked not to be featured gets no Wrapped and appears in nobody's fan lists
 - [ ] A member who deleted their data while Wrapped ran is left out the same way
 - [ ] After Wrapped is generated, a friend presses Stop featuring me: they vanish from your
@@ -154,13 +212,13 @@ Only if Wrapped can be generated on the development bot.
 
 - [ ] `PRIVACY.md` and `TERMS.md` carry the effective date you mean to publish (`PRIVACY.md` currently
       says 10 November 2026)
-- [ ] CHANGELOG.md and the 2.2 announcement name `/my_data` and not the removed commands,
+- [ ] CHANGELOG.md and the 3.0 announcement name `/my_data` and not the removed commands,
       and mention the 10,000 post limit
 - [ ] Clear the test rows from the development database again
 
 ## After deploying
 
-The command IDs only exist once the live bot has synced 2.2, so this is a second, small deploy.
+The command IDs only exist once the live bot has synced 3.0, so this is a second, small deploy.
 
 - [ ] Copy the IDs of `/my_data`, `/count_in_global_profiles` and `/troubleshoot` (Developer Mode on, Server
       Settings > Integrations > Hall of Fame) and replace the plain-text `MY_DATA`,

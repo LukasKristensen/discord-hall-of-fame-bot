@@ -93,7 +93,7 @@ class ReachingTheBoardTests(ReactionPathTestCase):
         await self.react(*FANS[:3])
         await self.react(*FANS[3:5])
 
-        self.assertIn("5", self.board_post().embeds[0].fields[0].value)
+        self.assertEqual("🔥 5", utils.posted_reactions_line(self.board_post()))
 
     async def test_counts_the_most_used_emoji_by_default(self):
         """With the default method, three different emojis from three members are not three of one."""
@@ -131,7 +131,7 @@ class HidingAndRestoringTests(ReactionPathTestCase):
         await self.react(*FANS[:3])
         await self.unreact(FANS[0])
 
-        self.assertEqual([], self.board_post().embeds)
+        self.assertFalse(utils.post_shows(self.board_post()))
         self.assertIsNotNone(self.stored())
 
     async def test_without_hiding_the_post_stays_up(self):
@@ -139,7 +139,7 @@ class HidingAndRestoringTests(ReactionPathTestCase):
         await self.react(*FANS[:3])
         await self.unreact(FANS[0])
 
-        self.assertEqual(1, len(self.board_post().embeds))
+        self.assertTrue(utils.post_shows(self.board_post()))
 
     async def test_climbing_back_restores_the_same_post(self):
         await self.react(*FANS[:3])
@@ -147,7 +147,7 @@ class HidingAndRestoringTests(ReactionPathTestCase):
         await self.react(FANS[0], FANS[3])
 
         self.assertEqual(1, len(self.board.sent))
-        self.assertEqual(1, len(self.board_post().embeds))
+        self.assertTrue(utils.post_shows(self.board_post()))
 
     async def test_a_restored_post_stores_its_new_count(self):
         """The board and the leaderboards read the stored count, so it must follow the restored post."""
@@ -214,7 +214,7 @@ class AgeRestrictedChannelTests(ReactionPathTestCase):
         self.channel.nsfw = True
         await self.react(FANS[3])
 
-        self.assertEqual([], self.board_post().embeds)
+        self.assertFalse(utils.post_shows(self.board_post()))
         self.assertIsNotNone(self.stored())
 
     async def test_making_the_board_age_restricted_brings_it_back_with_its_count(self):
@@ -225,7 +225,7 @@ class AgeRestrictedChannelTests(ReactionPathTestCase):
         await self.react(FANS[4])
 
         self.assertEqual(1, len(self.board.sent))
-        self.assertEqual(1, len(self.board_post().embeds))
+        self.assertTrue(utils.post_shows(self.board_post()))
         self.assertEqual(5, self.stored()["reaction_count"])
 
 

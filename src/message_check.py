@@ -164,7 +164,7 @@ async def post_is_shown(board, post_id) -> bool | None:
         # missing permission or an outage, says nothing about where the post is, so it goes to the error
         # handler rather than becoming a wrong answer
         return None
-    return bool(post.embeds)
+    return utils.post_shows(post)
 
 
 async def at_daily_limit(connect, guild_id: int) -> bool:

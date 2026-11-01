@@ -3,7 +3,7 @@ import datetime
 from datetime import timezone
 import asyncio
 from contextlib import contextmanager
-from message_reactions import most_reacted_emoji, reaction_count
+from message_reactions import filter_whitelisted_reactions, most_reacted_emoji, reaction_count
 from classes import server_class
 from enums import command_refs, log_type, calculation_method_type
 from repositories import (server_config_repo, hall_of_fame_message_repo, server_user_repo, hof_wrapped_repo,
@@ -12,6 +12,10 @@ from caches import ExpiringSet
 from constants import version
 from translations import messages
 import setup_check
+from board_post import (EXPLICIT_CONTENT, GORE_CONTENT, SELF_HARM_CONTENT, NO_MENTIONS, POST_REACTIONS_ID,
+                        content_scan_flags, create_post_view, featured_body, fetch_reply_context, hidden_post_view,
+                        is_components_v2, linked_image_url, post_media_limit, post_shows, posted_reactions_line,
+                        reactions_line, reply_context, truncate_content, walk_components)
 
 daily_post_limit = 100
 duplicate_log_window_seconds = 600
@@ -50,11 +54,8 @@ RULE_FLAGGED_MEDIA = "flagged_media"
 # the board that breaks one is hidden, and comes back once the rule stops applying
 SAFETY_RULES = (RULE_AGE_RESTRICTED, RULE_FLAGGED_MEDIA)
 
-# Set by Discord's content scanning on attachments and embeds, with the same bits on both. discord.py 2.5
-# names only the explicit one, so all three are read from the raw flags value
-EXPLICIT_CONTENT = 1 << 4
-GORE_CONTENT = 1 << 6
-SELF_HARM_CONTENT = 1 << 7
+# Discord's content scanning results on media in components on media in components, which have bits of their own, paired with the ones above
+COMPONENT_SCAN_BITS = ((1 << 0, EXPLICIT_CONTENT), (1 << 1, GORE_CONTENT), (1 << 2, SELF_HARM_CONTENT))
 
 
 def has_image_or_video(message: discord.Message) -> bool:
@@ -73,30 +74,53 @@ def has_image_or_video(message: discord.Message) -> bool:
     return False
 
 
-def content_scan_flags(message) -> int:
+def component_scan_flags(raw_components) -> int:
     """
-    The content scanning flags Discord set on any of a message's attachments and embeds, combined. Scanning
-    can finish after a message is sent, so a message fetched later can carry flags it did not have at first
-    :param message: The message to look at
+    The content scanning results on the media of a Components V2 message, read from the components as
+    Discord sent them, since discord.py does not read them yet. They use bits of their own, which are
+    turned into the attachment ones
+    :param raw_components: The message's components as Discord sent them
     :return: The EXPLICIT_CONTENT, GORE_CONTENT and SELF_HARM_CONTENT bits that are set
     """
     flags = 0
-    for item in [*(getattr(message, "attachments", None) or []), *(getattr(message, "embeds", None) or [])]:
-        item_flags = getattr(item, "flags", None)
-        if item_flags is not None:
-            flags |= item_flags.value
-    return flags & (EXPLICIT_CONTENT | GORE_CONTENT | SELF_HARM_CONTENT)
+    pending = list(raw_components or [])
+    while pending:
+        item = pending.pop()
+        if isinstance(item, list):
+            pending.extend(item)
+        elif isinstance(item, dict):
+            scan = item.get("content_scan_metadata")
+            if isinstance(scan, dict):
+                for component_bit, attachment_bit in COMPONENT_SCAN_BITS:
+                    if (scan.get("flags") or 0) & component_bit:
+                        flags |= attachment_bit
+            pending.extend(item.values())
+    return flags
 
 
-def has_flagged_media(message, board) -> bool:
+async def fetch_raw_components(bot, channel_id: int, message_id: int):
+    """
+    A message's components as Discord sends them, where a Components V2 post carries the scanning results of
+    its media. One request, made once per new post
+    :return: The raw components, or None when they cannot be read
+    """
+    try:
+        data = await bot.http.get_message(channel_id, message_id)
+    except (discord.HTTPException, AttributeError):
+        return None
+    return data.get("components") if isinstance(data, dict) else None
+
+
+def has_flagged_media(message, board, raw_components=None) -> bool:
     """
     Whether a message carries media Discord flagged that may not go on this board. Gore and self-harm are
     never reposted, since a repost puts them in front of members who did not choose to see them. Explicit
     media may go where Discord allows it: a board that is age-restricted itself
     :param message: The message, or a post on the board
     :param board: The board channel, None when it is missing
+    :param raw_components: The message's components as Discord sent them, for a Components V2 post
     """
-    flags = content_scan_flags(message)
+    flags = content_scan_flags(message) | component_scan_flags(raw_components)
     if flags & (GORE_CONTENT | SELF_HARM_CONTENT):
         return True
     return bool(flags & EXPLICIT_CONTENT) and not setup_check.is_age_restricted(board)
@@ -120,14 +144,17 @@ def rule_blocking_post(source_message: discord.Message, db_message, server_confi
     # another rule applies too. Discord keeps age-restricted content inside age-restricted channels
     if setup_check.is_age_restricted(source_message.channel) and not setup_check.is_age_restricted(board):
         return RULE_AGE_RESTRICTED
-    if has_flagged_media(source_message, board):
+    # A forward shows the message it forwards, so its media is what is judged, while the author, channel
+    # and age stay the forwarding message's
+    body, _ = featured_body(source_message)
+    if has_flagged_media(body, board):
         return RULE_FLAGGED_MEDIA
     # A post already on the board keeps being updated however old the message gets
     if (now - source_message.created_at).days > server_config.post_due_date and not db_message:
         return RULE_TOO_OLD
     if source_message.author.bot and server_config.ignore_bot_messages:
         return RULE_BOT_MESSAGE
-    if server_config.require_image_or_video and not has_image_or_video(source_message):
+    if server_config.require_image_or_video and not has_image_or_video(body):
         return RULE_NO_MEDIA
     return None
 
@@ -213,8 +240,16 @@ async def validate_message(reaction_event: discord.RawReactionActionEvent, bot: 
         return
 
     if db_message:
-        message_to_update = await target_channel.fetch_message(db_message["hall_of_fame_message_id"])
-        if len(message_to_update.embeds) > 0:
+        try:
+            message_to_update = await target_channel.fetch_message(db_message["hall_of_fame_message_id"])
+        except discord.NotFound:
+            # Not on this board: the board was moved since it was posted, or a moderator deleted the post. It
+            # is not posted again, but its count is still stored, since the leaderboards and profiles read it.
+            # The error used to end the reaction quietly, so these counts stopped for good
+            hall_of_fame_message_repo.update_field_for_message(connection, guild_id, channel_id, message_id,
+                                                              "reaction_count", corrected_reactions)
+            return
+        if post_shows(message_to_update):
             hall_of_fame_message_repo.update_field_for_message(connection, guild_id, channel_id, message_id, "reaction_count", corrected_reactions)
             await update_reaction_counter(db_message, bot, target_channel_id, reaction_threshold, connection,
                                           source_message, corrected_reactions, reaction_config)
@@ -223,10 +258,11 @@ async def validate_message(reaction_event: discord.RawReactionActionEvent, bot: 
             # The post was hidden and is now back over the threshold, so it is restored with its current
             # count, which the leaderboards and profiles read from the database. While edits to old posts are
             # paused it stays hidden, and so does its count, until a reaction after the pause restores it
-            restored = await edit_board_message(
-                message_to_update, guild_id,
-                embed=await create_embed(source_message, reaction_threshold, connection, reaction_config))
+            restored = await show_post(message_to_update, source_message, reaction_threshold, connection,
+                                       reaction_config, corrected_reactions, guild_id=guild_id)
             if not restored:
+                return
+            if await recheck_shown_post(message_to_update, bot, target_channel, guild_id):
                 return
             hall_of_fame_message_repo.update_field_for_message(connection, guild_id, channel_id, message_id, "reaction_count", corrected_reactions)
             # The column is present and null for every post that is not a video, so the id itself
@@ -263,7 +299,7 @@ async def edit_board_message(message: discord.Message, guild_id, *, always: bool
     try:
         await message.edit(**fields)
     except discord.HTTPException as error:
-        if error.code != OLD_MESSAGE_EDIT_LIMIT_CODE:
+        if getattr(error, "code", None) != OLD_MESSAGE_EDIT_LIMIT_CODE:
             raise
         # Every further edit to an old post would be refused too, and each refusal was logged as an error.
         # The stored counts keep updating meanwhile, and the next reaction after the pause catches up
@@ -301,15 +337,20 @@ async def update_reaction_counter(db_message, bot: discord.Client, target_channe
     if old_message_edits_paused(guild_id, hall_of_fame_message):
         return
 
-    if not hall_of_fame_message.embeds:
+    if not post_shows(hall_of_fame_message):
         # Post the message in the Hall of Fame channel if it was removed
-        await edit_board_message(hall_of_fame_message, guild_id,
-                                 embed=await create_embed(discord_message, reaction_threshold, connection, config))
+        if await show_post(hall_of_fame_message, discord_message, reaction_threshold, connection, config,
+                           corrected_reactions, guild_id=guild_id):
+            await recheck_shown_post(hall_of_fame_message, bot, target_channel, guild_id)
+        return
+
+    if corrected_reactions is None:
+        corrected_reactions = await reaction_count(discord_message, connection, config)
+    if is_components_v2(hall_of_fame_message):
+        await update_post_view(hall_of_fame_message, discord_message, connection, config, corrected_reactions)
         return
 
     embed = hall_of_fame_message.embeds[0]
-    if corrected_reactions is None:
-        corrected_reactions = await reaction_count(discord_message, connection, config)
     top_reaction = most_reacted_emoji(discord_message.reactions, guild_id, connection, config)
     reactions_field_value = format_reactions_field_value(corrected_reactions, top_reaction)
 
@@ -332,6 +373,18 @@ async def update_reaction_counter(db_message, bot: discord.Client, target_channe
     await edit_board_message(hall_of_fame_message, guild_id, embed=embed)
 
 
+async def update_post_view(post, message: discord.Message, connection, config: dict, counted: int):
+    """
+    Bring a Components V2 post's counts up to date. The new reactions line is compared with the one shown
+    first, so a reaction that changes nothing costs no edit and no fetch of the message replied to
+    """
+    config = config if config is not None else server_config_repo.get_reaction_config(connection, message.guild.id)
+    if posted_reactions_line(post) == reactions_line(message, config, counted):
+        return
+    await edit_board_message(post, message.guild.id, view=await create_post_view(message, connection, config, counted),
+                             allowed_mentions=NO_MENTIONS)
+
+
 async def hide_post(db_message, bot: discord.Client, target_channel, source_message: discord.Message,
                     for_safety: bool = False):
     """
@@ -352,7 +405,8 @@ async def hide_post(db_message, bot: discord.Client, target_channel, source_mess
         await edit_board_message(video_link_message, guild_id, always=for_safety, content="** **", embed=None)
 
 
-async def take_down_flagged_post(post: discord.Message, board, bot: discord.Client, guild_id: int) -> bool:
+async def take_down_flagged_post(post: discord.Message, board, bot: discord.Client, guild_id: int,
+                                 raw_components=None) -> bool:
     """
     Blank one of the bot's own messages on the board when Discord's content scanning flagged its media, such
     as the image of the message a post replies to. Scanning can finish after a message is sent, so Discord
@@ -361,12 +415,15 @@ async def take_down_flagged_post(post: discord.Message, board, bot: discord.Clie
     :param board: The board channel
     :param bot: The Discord bot
     :param guild_id: The server, for the log
+    :param raw_components: The post's components as Discord sent them, where a Components V2 post carries the
+        scanning results of its media. discord.py does not read those yet
     :return: True when the post was taken down
     """
-    if not has_flagged_media(post, board):
+    if not has_flagged_media(post, board, raw_components):
         return False
     try:
-        await post.edit(content="** **", embed=None)
+        if not await blank_post(post):
+            return False
     except discord.NotFound:
         # Deleted meanwhile, which takes it down just as well
         return False
@@ -392,7 +449,7 @@ async def remove_embed(message, bot: discord.Client, target_channel_id: int, gui
     if target_channel is None:
         return
     hall_of_fame_message = await target_channel.fetch_message(hall_of_fame_message_id)
-    await edit_board_message(hall_of_fame_message, guild_id, always=always, content="** **", embed=None)
+    await blank_post(hall_of_fame_message, guild_id=guild_id, always=always)
 
 
 async def update_leaderboard(connection, bot: discord.Client, server_config: server_class.Server):
@@ -504,14 +561,8 @@ async def post_hall_of_fame_message(message: discord.Message, bot: discord.Clien
     if target_channel is None:
         await report_missing_hall_of_fame_channel(bot, message.guild.id, target_channel_id)
         return
-    video_link = check_video_extension(message)
-    video_message = None
-
-    if video_link:
-        video_message = await target_channel.send(video_link)
-
-    embed = await create_embed(message, reaction_threshold, connection, config)
-    hall_of_fame_message = await target_channel.send(embed=embed)
+    view = await create_post_view(message, connection, config)
+    hall_of_fame_message = await target_channel.send(view=view, allowed_mentions=NO_MENTIONS)
 
     opted_out_meanwhile = False
     try:
@@ -522,31 +573,30 @@ async def post_hall_of_fame_message(message: discord.Message, bot: discord.Clien
         if opt_out_repo.is_opted_out(connection, message.author.id):
             opted_out_meanwhile = True
         else:
+            # Videos play inside the post, so new posts have no video link message
             stored_author = hall_of_fame_message_repo.insert_hall_of_fame_message(
                 connection, int(message.id), int(message.channel.id), int(message.guild.id),
                 int(hall_of_fame_message.id), count, int(message.author.id), datetime.datetime.now(timezone.utc),
-                int(video_message.id) if video_link else None, author_post_limit=member_post_limit)
+                None, author_post_limit=member_post_limit)
     except Exception as e:
         await hall_of_fame_message.delete()
-        if video_message:
-            await video_message.delete()
         await logging(bot, e, message.guild.id, log_level=log_type.CRITICAL)
         return
 
     if opted_out_meanwhile:
         # They asked not to be reposted, so the repost sent a moment before goes, and nothing is stored
         await hall_of_fame_message.delete()
-        if video_message:
-            await video_message.delete()
         return
 
     # Nobody credited although the member had not opted out: they are at member_post_limit, which the store
     # checks under the author's lock so two posts at once cannot both slip under it
     at_post_limit = stored_author == hall_of_fame_message_repo.NO_AUTHOR_ID
 
-    # Checked once stored, so a post taken down here can still be restored. Results that arrive later come
-    # through events.on_raw_message_edit
-    await take_down_flagged_post(hall_of_fame_message, target_channel, bot, message.guild.id)
+    # Checked once stored, so a post taken down here can still be restored. A Components V2 post carries its
+    # media's scanning results only in its raw components, which discord.py does not keep, so they are read
+    # back. Results that arrive later come through events.on_raw_message_edit
+    raw_components = await fetch_raw_components(bot, target_channel.id, hall_of_fame_message.id)
+    await take_down_flagged_post(hall_of_fame_message, target_channel, bot, message.guild.id, raw_components)
 
     if at_post_limit and message.author.id not in members_at_post_limit_logged:
         members_at_post_limit_logged.add(message.author.id)
@@ -565,18 +615,6 @@ def format_reactions_field_value(count: int, top_reaction) -> str:
     """
     emoji = str(top_reaction).strip() if top_reaction else ""
     return f"{count} {emoji}" if emoji else f"{count} reactions"
-
-
-def truncate_content(content: str, limit: int = 1024) -> str:
-    """
-    Truncate message content so that it fits within the 1024 character limit of an embed field
-    :param content: The content of a message
-    :param limit: The most characters the result may have, lower when the field holds other text too
-    :return: The truncated content
-    """
-    if not content:
-        return ""
-    return content[:limit - 3] + "..." if len(content) > limit else content
 
 
 def embed_field_value(content: str) -> str:
@@ -629,17 +667,7 @@ async def build_post_embed(message: discord.Message, connection, config: dict = 
     """
     # handle 1024 character limit on embed description
     content = truncate_content(message.content)
-    reference_message = None
-    if message.reference and message.reference.message_id:
-        try:
-            reference_message = await message.channel.fetch_message(message.reference.message_id)
-        except discord.HTTPException:
-            # The message that was replied to is gone, so the reply is embedded on its own
-            reference_message = None
-    # A member who asked not to be featured is left off the board in replies too: their name, words and
-    # image would otherwise go up with the reply. The reply is embedded on its own instead
-    if reference_message is not None and opt_out_repo.is_opted_out(connection, reference_message.author.id):
-        reference_message = None
+    reference_message = await fetch_reply_context(message, connection)
     reference_content = truncate_content(reference_message.content) if reference_message else ""
     if corrected_reactions is None:
         corrected_reactions = await reaction_count(message, connection, config)
@@ -752,38 +780,54 @@ async def build_post_embed(message: discord.Message, connection, config: dict = 
             embed.set_image(url=message.attachments[0].url)
         else:
             # Check for embedded images if there are no attachments
-            for message_embed in message.embeds:
-                if message_embed.type == 'image' and message_embed.url:
-                    embed.set_image(url=message_embed.url)
-                    break
-                # Sometimes images from links are in the thumbnail or image attribute of a generic embed type
-                elif message_embed.image:
-                    embed.set_image(url=message_embed.image.url)
-                    break
-                elif message_embed.thumbnail:
-                    embed.set_image(url=message_embed.thumbnail.url)
-                    break
+            image_url = linked_image_url(message)
+            if image_url:
+                embed.set_image(url=image_url)
 
         embed.add_field(name="Reactions", value=reactions_field_value, inline=True)
         embed.add_field(name="Jump to Message", value=message.jump_url, inline=False)
         return embed
 
 
-def check_video_extension(message):
+async def blank_post(post, guild_id=None, always: bool = True) -> bool:
     """
-    Checks if the message contains a video attachment
-    :param message: The payload of the event
-    :return: The URL of the video attachment if it exists, otherwise None
+    Hide a board post in place, so it can be restored with the same message
+    :param guild_id: The server, so the edit keeps to the pause on edits to old posts. None skips the pause
+    :param always: Try even during that pause. The default, since a take-down for safety must not wait
+    :return: True when the post was hidden
     """
-    if not message.attachments:
-        return None
-    url = message.attachments[0].url
+    if is_components_v2(post):
+        return await edit_board_message(post, guild_id, always=always, view=hidden_post_view(),
+                                        allowed_mentions=NO_MENTIONS)
+    return await edit_board_message(post, guild_id, always=always, content="** **", embed=None)
 
-    for extension in ['.mp4', '.mov', '.avi', '.mkv', '.webm']:
-        if extension in url:
-            video_url = url.split(extension)[0] + extension
-            return video_url
-    return None
+
+async def show_post(post, message: discord.Message, reaction_threshold: int, connection, config: dict = None,
+                    corrected_reactions: int = None, guild_id=None) -> bool:
+    """
+    Show a hidden board post again, in the format it was first posted in
+    :param guild_id: The server, so the edit keeps to the pause on edits to old posts. None skips the pause
+    :return: True when the post was shown, False when the pause or the limit held it back
+    """
+    if is_components_v2(post):
+        return await edit_board_message(post, guild_id,
+                                        view=await create_post_view(message, connection, config, corrected_reactions),
+                                        allowed_mentions=NO_MENTIONS)
+    return await edit_board_message(post, guild_id,
+                                    embed=await create_embed(message, reaction_threshold, connection, config))
+
+
+async def recheck_shown_post(post, bot: discord.Client, board, guild_id: int) -> bool:
+    """
+    Read a Components V2 post's scanning results back once it is shown again, as after it is first sent. The
+    source message is checked before, but media only the post carries, such as the image of the message it
+    replies to, is flagged on the post alone, and a hidden post shows none
+    :return: True when the post was taken down again
+    """
+    if not is_components_v2(post):
+        return False
+    raw_components = await fetch_raw_components(bot, board.id, post.id)
+    return await take_down_flagged_post(post, board, bot, guild_id, raw_components)
 
 
 def board_topic_is_ours(topic) -> bool:
@@ -812,7 +856,8 @@ async def refresh_board_topic(channel, permissions) -> bool:
 def check_setup_view():
     # Imported here, as commands imports this module
     import commands
-    return commands.build_check_setup_view()
+    # The note on join is about what stops posts, which the settings form cannot fix
+    return commands.build_check_setup_view(with_settings=False)
 
 
 def welcome_view():
@@ -996,10 +1041,43 @@ feedback_title_max_length = 150
 feedback_message_max_length = 1000
 # The developer's copy is coloured by topic, so a bug report stands out in the channel. Other topics are gold
 feedback_topic_colors = {"bug": discord.Color.red(), "idea": discord.Color.green(), "question": discord.Color.blue()}
+# The most screenshots one piece of feedback can carry
+feedback_max_screenshots = 3
+
+
+class ImageUpload(discord.ui.FileUpload):
+    """
+    A file upload in a form that offers only images. Discord can filter the picker by file type since
+    5 August 2026, which discord.py 2.7 has no option for, so the filter is added to what is sent
+    """
+
+    def to_component_dict(self):
+        payload = super().to_component_dict()
+        payload["file_types"] = ["image"]
+        return payload
+
+
+def feedback_screenshots(attachments, size_limit: int) -> tuple[list, int]:
+    """
+    The uploads that can go to the feedback channel. Discord's filter only checks the file name, so the
+    content type is checked too. They are sent in one message, so an upload that would take them past what
+    the bot may upload there is left out
+    :param attachments: What the member uploaded in the form
+    :param size_limit: The most bytes the bot can upload in the feedback channel
+    :return: The screenshots to forward, and how many uploads were left out
+    """
+    kept, total = [], 0
+    for attachment in attachments:
+        if (len(kept) < feedback_max_screenshots and (attachment.content_type or "").startswith("image/")
+                and total + attachment.size <= size_limit):
+            kept.append(attachment)
+            total += attachment.size
+    return kept, len(attachments) - len(kept)
 
 
 def build_feedback_embed(user, guild_id, topic: str, title_field: tuple[str, str],
-                         message_field: tuple[str, str]) -> discord.Embed:
+                         message_field: tuple[str, str], may_contact: bool = False, screenshots: int = 0,
+                         left_out: int = 0) -> discord.Embed:
     """
     The developer's copy of a piece of feedback, only ever posted in the private feedback channel
     :param user: The member who sent it
@@ -1008,6 +1086,9 @@ def build_feedback_embed(user, guild_id, topic: str, title_field: tuple[str, str
     :param topic: The topic picked on /feedback, a key of messages.FEEDBACK_TOPICS
     :param title_field: The short field's label and what the member wrote in it
     :param message_field: The long field's label and what the member wrote in it
+    :param may_contact: Whether the member ticked that the developer may message them about it
+    :param screenshots: How many screenshots are attached to the message the embed is sent in
+    :param left_out: How many uploads were left out, for not being images or being too large
     :return: The embed
     """
     embed = discord.Embed(title=f"New feedback: {messages.FEEDBACK_TOPICS.get(topic, topic)}",
@@ -1017,6 +1098,10 @@ def build_feedback_embed(user, guild_id, topic: str, title_field: tuple[str, str
     embed.set_author(name=user.name, icon_url=user.avatar.url if user.avatar else None)
     embed.add_field(name="Guild", value=guild_id or "None (user install)", inline=True)
     embed.add_field(name="UserId", value=user.id, inline=True)
+    embed.add_field(name="May contact", value="Yes" if may_contact else "No", inline=True)
+    if screenshots or left_out:
+        value = f"{screenshots} attached" + (f", {left_out} left out" if left_out else "")
+        embed.add_field(name="Screenshots", value=value, inline=True)
     # The version the member was on, so a bug report can be checked against what was fixed since
     embed.set_footer(text=f"Hall of Fame {version.VERSION}")
     return embed
@@ -1045,20 +1130,30 @@ async def create_feedback_form(interaction: discord.Interaction, bot, topic: str
             super().__init__(title=form_title)
             self.fb_title = discord.ui.TextInput(
                 style=discord.TextStyle.short,
-                label=title_label,
                 placeholder=title_placeholder,
                 required=True,
                 max_length=feedback_title_max_length
             )
             self.message = discord.ui.TextInput(
                 style=discord.TextStyle.paragraph,
-                label=message_label,
                 placeholder=message_placeholder,
                 required=True,
                 max_length=feedback_message_max_length
             )
-            self.add_item(self.fb_title)
-            self.add_item(self.message)
+            # Each question sits on a Label around its input. Discord does not allow a label on the input
+            # itself inside one, and discord.py 2.6 deprecated reading it there
+            self.fb_title_label = discord.ui.Label(text=title_label, component=self.fb_title)
+            self.message_label = discord.ui.Label(text=message_label, component=self.message)
+            self.screenshots = ImageUpload(required=False, max_values=feedback_max_screenshots)
+            self.screenshots_label = discord.ui.Label(text=messages.FEEDBACK_SCREENSHOTS_LABEL,
+                                                      description=messages.FEEDBACK_SCREENSHOTS_DESCRIPTION,
+                                                      component=self.screenshots)
+            self.may_contact = discord.ui.Checkbox()
+            self.may_contact_label = discord.ui.Label(text=messages.FEEDBACK_CONTACT_LABEL, component=self.may_contact)
+            self.add_item(self.fb_title_label)
+            self.add_item(self.message_label)
+            self.add_item(self.screenshots_label)
+            self.add_item(self.may_contact_label)
 
         async def on_submit(self, feedback_interaction) -> None:
             refused = refusal(feedback_interaction.user.id) if refusal is not None else None
@@ -1067,19 +1162,32 @@ async def create_feedback_form(interaction: discord.Interaction, bot, topic: str
                 return
             target_guild = bot.get_guild(1180006529575960616)
             target_channel = target_guild.get_channel(1345558910836412456)
+            screenshots, left_out = feedback_screenshots(self.screenshots.values, target_guild.filesize_limit)
             embed = build_feedback_embed(feedback_interaction.user, feedback_interaction.guild_id, topic,
-                                         (self.fb_title.label, self.fb_title.value),
-                                         (self.message.label, self.message.value))
+                                         (self.fb_title_label.text, self.fb_title.value),
+                                         (self.message_label.text, self.message.value),
+                                         may_contact=self.may_contact.value, screenshots=len(screenshots),
+                                         left_out=left_out)
             if on_sent is not None:
                 on_sent(feedback_interaction.user.id)
             try:
-                await target_channel.send(embed=embed)
+                if screenshots:
+                    # Downloading them can take longer than the three seconds Discord waits for an answer
+                    await feedback_interaction.response.defer(ephemeral=True, thinking=True)
+                # Uploaded again rather than linked, since the links Discord gives a form expire
+                files = [await screenshot.to_file() for screenshot in screenshots]
+                await target_channel.send(embed=embed, files=files)
             except Exception:
                 # A form that failed does not count toward the member's daily limit
                 if on_unsent is not None:
                     on_unsent(feedback_interaction.user.id)
                 raise
-            await feedback_interaction.response.send_message(messages.FEEDBACK_SENT, ephemeral=True)
+            answer = (messages.FEEDBACK_SENT_SOME_LEFT_OUT.format(count=left_out, max=feedback_max_screenshots)
+                      if left_out else messages.FEEDBACK_SENT)
+            if screenshots:
+                await feedback_interaction.followup.send(answer, ephemeral=True)
+            else:
+                await feedback_interaction.response.send_message(answer, ephemeral=True)
 
     # noinspection PyUnresolvedReferences
     await interaction.response.send_modal(FeedbackModal())
@@ -1096,20 +1204,18 @@ async def create_custom_profile_picture_and_cover_form(interaction: discord.Inte
     :return:
     """
     class CustomProfilePictureAndCoverModal(discord.ui.Modal, title="Custom Bot Profile For Server"):
-        profile_picture_url_input = discord.ui.TextInput(
+        profile_picture_url_input = discord.ui.Label(text="Custom Profile Picture URL", component=discord.ui.TextInput(
             style=discord.TextStyle.short,
             placeholder="Enter the URL of the profile picture for the bot",
             required=False,
-            label="Custom Profile Picture URL",
             default=default_profile_url
-        )
-        cover_url_input = discord.ui.TextInput(
+        ))
+        cover_url_input = discord.ui.Label(text="Custom Cover Image URL", component=discord.ui.TextInput(
             style=discord.TextStyle.short,
             placeholder="Enter the URL of the cover image for the bot",
             required=False,
-            label="Custom Cover Image URL",
             default=default_cover_url
-        )
+        ))
 
         async def on_submit(self, custom_profile_interaction) -> None:
             target_guild = bot.get_guild(1180006529575960616)
@@ -1118,8 +1224,8 @@ async def create_custom_profile_picture_and_cover_form(interaction: discord.Inte
                 title="New Custom Profile Picture and Cover Request",
                 color=discord.Color.gold()
             )
-            embed.add_field(name=self.profile_picture_url_input.label, value=self.profile_picture_url_input.value, inline=False)
-            embed.add_field(name=self.cover_url_input.label, value=self.cover_url_input.value, inline=False)
+            embed.add_field(name=self.profile_picture_url_input.text, value=self.profile_picture_url_input.component.value, inline=False)
+            embed.add_field(name=self.cover_url_input.text, value=self.cover_url_input.component.value, inline=False)
             embed.set_author(name=custom_profile_interaction.user.name, icon_url=custom_profile_interaction.user.avatar.url if custom_profile_interaction.user.avatar else None)
             embed.add_field(name="Guild", value=custom_profile_interaction.guild.id, inline=True)
             embed.add_field(name="UserId", value=custom_profile_interaction.user.id, inline=True)

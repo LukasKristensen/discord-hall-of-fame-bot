@@ -1,3 +1,4 @@
+import asyncio
 import discord as discord
 import message_reactions
 from discord.ext import commands
@@ -28,6 +29,8 @@ class User:
         self.mostUsedChannels = {}
         self.mostReactedPost = {"post": None, "reaction_count": 0}
         self.mostUsedEmojis = {}
+        # Every message the member sent in the server that year, for the fame rate. None when not counted
+        self.messagesSent = None
         # The posts counted for this member, so Wrapped can tell when they deleted their data while it ran
         self.credited_posts = []
         self.id = user_id
@@ -347,7 +350,8 @@ def save_user_wrapped_to_db(guild_id, user, year):
         most_reacted_post_reaction_count=user.mostReactedPost["reaction_count"],
         fan_of_users=json.dumps(user.fanOfUsers),
         users_fans=json.dumps(user.usersFans),
-        user_ranks=json.dumps(user_ranks)
+        user_ranks=json.dumps(user_ranks),
+        messages_sent=user.messagesSent
     )
     connection.commit()
     cursor.close()
@@ -385,8 +389,47 @@ async def main(guild_id: int, bot: commands.Bot, get_reaction_threshold: int, co
     rankings = rank_stats(users)
 
     for user in users.values():
+        # Asked again before each search, which reads from Discord, so a member who opts out while Wrapped runs
+        # is not searched for. Their row is then left out when it is saved
+        if opt_out_repo.is_opted_out(connection, user.id):
+            continue
+        user.messagesSent = await count_messages_sent(bot, guild_id, user.id, version.WRAPPED_YEAR)
+    for user in users.values():
         save_user_wrapped_to_db(guild.id, user, version.WRAPPED_YEAR)
     forget_members_who_deleted_meanwhile(connection, guild_id)
+
+
+# Discord's message search, which counts a member's messages. It also sends the one result asked for, which is
+# never used, since the search allows no fewer
+SEARCH_ROUTE = "/guilds/{guild_id}/messages/search"
+# How often a server that is not indexed yet is asked again, and the longest wait between the tries
+search_attempts = 3
+search_wait_limit_seconds = 10
+
+
+async def count_messages_sent(bot, guild_id: int, user_id: int, year: int) -> int | None:
+    """
+    How many messages a member sent in a server during a year, for the fame rate. Discord's message search
+    answers with the count and the one result asked for, the fewest it allows; only the count is read, and the
+    result is dropped. discord.py does not have the endpoint, so it is called directly
+    :return: The count, or None when Discord gave no answer, which leaves the fame rate out
+    """
+    start = datetime.datetime(year, 1, 1, tzinfo=datetime.timezone.utc)
+    end = datetime.datetime(year + 1, 1, 1, tzinfo=datetime.timezone.utc)
+    params = {"author_id": user_id, "min_id": discord.utils.time_snowflake(start),
+              "max_id": discord.utils.time_snowflake(end), "limit": 1}
+    route = discord.http.Route("GET", SEARCH_ROUTE, guild_id=guild_id)
+    for _ in range(search_attempts):
+        try:
+            data = await bot.http.request(route, params=params)
+        except discord.HTTPException:
+            return None
+        if isinstance(data, dict) and isinstance(data.get("total_results"), int):
+            return data["total_results"]
+        # A server Discord has not indexed yet is answered with how long to wait instead
+        retry_after = data.get("retry_after") if isinstance(data, dict) else None
+        await asyncio.sleep(min(float(retry_after or 2), search_wait_limit_seconds))
+    return None
 
 
 def members_still_credited(connection, guild_id: int) -> set:
