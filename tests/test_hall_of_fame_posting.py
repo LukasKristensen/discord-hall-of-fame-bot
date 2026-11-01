@@ -370,6 +370,80 @@ class PostHallOfFameMessageTests(PostingTestCase):
         self.assertTrue(any("Could not find the Hall of Fame channel" in entry for entry in self.logged))
 
 
+class YoungMessageTests(PostingTestCase):
+    """A message posted moments after it was sent had a file fail to load on the board for good, since Discord
+    fetched it before it was ready and kept the failure. Such a message is held until it is old enough"""
+
+    def setUp(self):
+        super().setUp()
+        self.target_channel = FakeTargetChannel()
+        self.bot = FakeBot({TARGET_CHANNEL_ID: self.target_channel})
+        self.slept = []
+
+        async def record_sleep(seconds):
+            self.slept.append(seconds)
+
+        self.patch(utils.asyncio, "sleep", record_sleep)
+        self.built_from = []
+
+        async def build_view(message, *_args, **_kwargs):
+            self.built_from.append(message)
+            return self.view
+
+        self.patch(utils, "create_post_view", build_view)
+        self.patch_repo()
+
+    def message(self, age_seconds, attachments=(FakeAttachment(),), fetched=None):
+        message = FakeSourceMessage(attachments=attachments)
+        message.created_at = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(seconds=age_seconds)
+        message.embeds, message.stickers = [], []
+        message.content = "no link here"
+        message.channel = FakeTargetChannel(messages={MESSAGE_ID: fetched if fetched is not None else message})
+        return message
+
+    async def post(self, message):
+        await utils.post_hall_of_fame_message(message, self.bot, FakeConnection(), TARGET_CHANNEL_ID, 5)
+
+    async def test_a_message_with_files_sent_moments_ago_waits_until_it_is_old_enough(self):
+        await self.post(self.message(age_seconds=2))
+
+        self.assertEqual(1, len(self.slept))
+        self.assertAlmostEqual(utils.post_minimum_message_age_seconds - 2, self.slept[0], delta=1)
+        self.assertEqual(1, len(self.target_channel.sent))
+
+    async def test_the_post_is_built_from_the_message_as_it_is_after_the_wait(self):
+        """Fetched again, so link previews that arrived while waiting are shown"""
+        fetched = FakeSourceMessage(attachments=[FakeAttachment()])
+        await self.post(self.message(age_seconds=1, fetched=fetched))
+
+        self.assertIs(fetched, self.built_from[0])
+
+    async def test_a_message_old_enough_posts_at_once(self):
+        await self.post(self.message(age_seconds=utils.post_minimum_message_age_seconds + 5))
+
+        self.assertEqual([], self.slept)
+        self.assertEqual(1, len(self.target_channel.sent))
+
+    async def test_a_young_message_with_only_text_posts_at_once(self):
+        await self.post(self.message(age_seconds=1, attachments=()))
+
+        self.assertEqual([], self.slept)
+        self.assertEqual(1, len(self.target_channel.sent))
+
+    async def test_a_young_message_with_a_link_waits_for_its_preview(self):
+        message = self.message(age_seconds=1, attachments=())
+        message.content = "look https://example.com/clip.gif"
+        await self.post(message)
+
+        self.assertEqual(1, len(self.slept))
+
+    async def test_a_message_deleted_while_waiting_is_not_posted(self):
+        await self.post(self.message(age_seconds=1, fetched=unknown_message()))
+
+        self.assertEqual([], self.target_channel.sent)
+        self.assertEqual([], self.inserted)
+
+
 class UpdateReactionCounterTests(PostingTestCase):
     def setUp(self):
         super().setUp()

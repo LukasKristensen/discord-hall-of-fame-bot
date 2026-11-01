@@ -42,6 +42,10 @@ old_message_edits_paused_until = {}
 member_post_limit = 10_000
 # Members whose reaching member_post_limit has been logged, so each is reported once per boot
 members_at_post_limit_logged = set()
+# Discord makes a message's files ready a moment after it is sent. A post made sooner has Discord fetch them too
+# early, and a file that fails then is cached as failed, so it stays broken on the board even after an edit. A
+# message with files or links that qualifies within seconds of being sent is held until it is this old
+post_minimum_message_age_seconds = 10
 
 
 # The server's rules about which messages qualify, as rule_blocking_post names them
@@ -540,6 +544,34 @@ async def report_missing_hall_of_fame_channel(bot: discord.Client, guild_id: int
     await logging(bot, f"Could not find the Hall of Fame channel {channel_id}", guild_id)
 
 
+def may_show_media(message) -> bool:
+    """Whether a message has files, stickers, a forward or links, whose media a post shows"""
+    return bool(getattr(message, "attachments", None) or getattr(message, "stickers", None)
+                or getattr(message, "message_snapshots", None) or getattr(message, "embeds", None)
+                or "http" in (getattr(message, "content", None) or ""))
+
+
+async def settled_message(message: discord.Message, now=None):
+    """
+    The message once its media is ready to show. One with media sent less than post_minimum_message_age_seconds
+    ago is waited for and fetched again, which also picks up link previews that came in meanwhile
+    :param message: The message about to be posted
+    :param now: The current time, taken from the clock when not supplied
+    :return: The message, or None when it was deleted or hidden from the bot while waiting
+    """
+    created_at = getattr(message, "created_at", None)
+    if created_at is None or not may_show_media(message):
+        return message
+    age = ((now or datetime.datetime.now(timezone.utc)) - created_at).total_seconds()
+    if age >= post_minimum_message_age_seconds:
+        return message
+    await asyncio.sleep(post_minimum_message_age_seconds - age)
+    try:
+        return await message.channel.fetch_message(message.id)
+    except (discord.NotFound, discord.Forbidden):
+        return None
+
+
 async def post_hall_of_fame_message(message: discord.Message, bot: discord.Client, connection, target_channel_id: int,
                                     reaction_threshold: int, config: dict = None):
     """
@@ -560,6 +592,9 @@ async def post_hall_of_fame_message(message: discord.Message, bot: discord.Clien
     target_channel = bot.get_channel(target_channel_id)
     if target_channel is None:
         await report_missing_hall_of_fame_channel(bot, message.guild.id, target_channel_id)
+        return
+    message = await settled_message(message)
+    if message is None:
         return
     view = await create_post_view(message, connection, config)
     hall_of_fame_message = await target_channel.send(view=view, allowed_mentions=NO_MENTIONS)
