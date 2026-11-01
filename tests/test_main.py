@@ -1980,7 +1980,7 @@ class SetupCheckCommandTests(CommandTestCase):
 
 
 class NotLoadedYetTests(CommandTestCase):
-    """Commands added in 2.2 answer nothing more until the bot has loaded its servers."""
+    """Commands added in 3.0 answer nothing more until the bot has loaded its servers."""
 
     async def test_they_stop_before_doing_anything(self):
         self.patch(main, "bot_loaded", False)

@@ -1,6 +1,6 @@
-# Release test plan: 2.2
+# Release test plan: 3.0
 
-Every flow to check by hand on the development bot before 2.2 goes to production. Tick each box as you
+Every flow to check by hand on the development bot before 3.0 goes to production. Tick each box as you
 go, and note anything that looks wrong next to it. Results worth keeping go in
 [MANUAL_TESTS.md](MANUAL_TESTS.md).
 
@@ -204,13 +204,13 @@ Only if Wrapped can be generated on the development bot.
 
 - [ ] `PRIVACY.md` and `TERMS.md` carry the effective date you mean to publish (`PRIVACY.md` currently
       says 10 November 2026)
-- [ ] CHANGELOG.md and the 2.2 announcement name `/my_data` and not the removed commands,
+- [ ] CHANGELOG.md and the 3.0 announcement name `/my_data` and not the removed commands,
       and mention the 10,000 post limit
 - [ ] Clear the test rows from the development database again
 
 ## After deploying
 
-The command IDs only exist once the live bot has synced 2.2, so this is a second, small deploy.
+The command IDs only exist once the live bot has synced 3.0, so this is a second, small deploy.
 
 - [ ] Copy the IDs of `/my_data`, `/count_in_global_profiles` and `/troubleshoot` (Developer Mode on, Server
       Settings > Integrations > Hall of Fame) and replace the plain-text `MY_DATA`,

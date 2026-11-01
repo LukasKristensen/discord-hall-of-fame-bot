@@ -1,10 +1,10 @@
 # Changelog
 
 What changed in each version of Hall of Fame, newest first. Patch releases are folded into their minor
-version, so 2.2 covers 2.2.0 and every 2.2.x after it. For how the bot works today, see the
+version, so 3.0 covers 3.0.0 and every 3.0.x after it. For how the bot works today, see the
 [README](README.md).
 
-## 2.2
+## 3.0
 - [x] Added /troubleshoot and a Troubleshoot button on the welcome message and under /get_server_config, which check the board's permissions, how many channels the bot can read and which ones members see but the bot cannot (with the role that would open most of them), an empty emoji whitelist, a threshold above the member count, the daily post limit and the last post.
 - [x] /troubleshoot keeps working once Discord hides channels from bots that cannot view them, from 16 November 2026. Discord no longer tells the bot who can see those channels, so they are listed apart with a note to give the bot the role members have, and only warned about when they are most of the server.
 - [x] Messages from age-restricted channels are only featured when the board is age-restricted too, as Discord keeps such content inside age-restricted channels. /troubleshoot lists the age-restricted channels the board leaves out. A post already on a board that is not age-restricted is hidden at its next reaction, and comes back if the board is made age-restricted.

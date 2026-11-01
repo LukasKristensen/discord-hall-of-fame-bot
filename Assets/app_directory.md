@@ -3,7 +3,7 @@
 Copy for the Hall of Fame page in the Discord App Directory. Paste each block into the matching field in
 the Developer Portal. Keep this file in step with the README when commands or defaults change.
 
-Last checked against the bot: 2.2.0.
+Last checked against the bot: 3.0.0.
 
 <br>
 
