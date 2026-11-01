@@ -32,7 +32,9 @@ described here. Contact: githublukas@gmail.com, or the
 - **Not featured:** if you press "Stop featuring me" on `/my_data` (it is also offered right after you
   delete your data), your user ID is stored with the date, so the bot remembers not to repost or store
   new messages of yours. When someone else's reply to one of your messages reaches the board, it is
-  reposted without your message. Without the record, the bot would have no way to know to leave your
+  reposted without your message, and when someone forwards one of your messages, the forward is reposted
+  without it. To check this, the bot reads who wrote a forwarded message; if it cannot read it, the
+  forwarded message is left out too. Without the record, the bot would have no way to know to leave your
   future messages out. What is already stored about you stays until you delete it, but nothing new is stored about you:
   no new posts, and no Wrapped, since a Wrapped also records whose posts you reacted to. You are left out
   of other members' Wrapped too. Choosing "Feature me again" or deleting your data deletes this record.

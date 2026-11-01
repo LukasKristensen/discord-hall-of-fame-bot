@@ -43,6 +43,7 @@ POST_MORE_EMOJIS = "+{count}"
 POST_MORE_IN_ORIGINAL = "{count} more in the original message"
 POST_REPLYING_TO_DELETED = "Replying to a deleted message"
 POST_FORWARDED = "Forwarded"
+POST_FORWARD_NOT_SHOWN = "The forwarded message is not shown"
 POST_STICKER = "Sticker: {name}"
 # What a quoted reply holds when it has no words, as Discord's reply preview names it
 POST_QUOTE_IMAGE = "Image"

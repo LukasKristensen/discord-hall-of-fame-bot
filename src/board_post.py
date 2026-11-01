@@ -100,6 +100,50 @@ async def reply_context(message: discord.Message, connection):
     return reference_message, False
 
 
+async def forward_may_show(message: discord.Message, connection) -> bool:
+    """
+    Whether a forward may show the message it forwards. Discord's snapshot of it carries no author, so the
+    original is fetched to keep a member who asked not to be featured off the board, as replies do. When it
+    cannot be fetched, such as from another server or a channel the bot cannot read, it is not shown either,
+    since nobody can tell whose it is
+    :param message: A message that forwards another
+    :param connection: The database connection
+    :return: True when the original was found and its author has not opted out
+    """
+    reference = getattr(message, "reference", None)
+    if reference is None or not reference.message_id:
+        return False
+    guild = getattr(message, "guild", None)
+    reference_guild = getattr(reference, "guild_id", None)
+    if reference_guild is not None and (guild is None or reference_guild != guild.id):
+        return False
+    channel_id = getattr(reference, "channel_id", None)
+    if channel_id is None or channel_id == message.channel.id:
+        channel = message.channel
+    else:
+        get_channel = getattr(guild, "get_channel_or_thread", None)
+        channel = get_channel(channel_id) if get_channel is not None else None
+    if channel is None:
+        return False
+    try:
+        original = await channel.fetch_message(reference.message_id)
+    except discord.HTTPException:
+        return False
+    return not opt_out_repo.is_opted_out(connection, original.author.id)
+
+
+async def shown_body(message: discord.Message, connection):
+    """
+    What a post shows of a message: featured_body, except that a forward whose original may not be shown
+    shows the forwarding message itself, which carries no words or media of its own
+    :return: The body, whether it is a forward, and whether the forwarded message was left out
+    """
+    body, forwarded = featured_body(message)
+    if forwarded and not await forward_may_show(message, connection):
+        return message, True, True
+    return body, forwarded, False
+
+
 async def fetch_reply_context(message: discord.Message, connection):
     """The message a featured message replies to, as reply_context finds it, without whether it was deleted"""
     reference_message, _deleted = await reply_context(message, connection)
@@ -382,7 +426,7 @@ async def create_post_view(message: discord.Message, connection, config: dict = 
     reference_message, reply_deleted = await reply_context(message, connection)
     if corrected_reactions is None:
         corrected_reactions = await reaction_count(message, connection, config)
-    body, forwarded = featured_body(message)
+    body, forwarded, forward_left_out = await shown_body(message, connection)
     media, unshown_stickers, link_replaces_text = message_media(body)
     sticker_note = "-# " + messages.POST_STICKER.format(name=", ".join(unshown_stickers)) if unshown_stickers else None
 
@@ -391,7 +435,7 @@ async def create_post_view(message: discord.Message, connection, config: dict = 
     # view, or they would look like the reply's
     reference_media, quote = [], ""
     if reference_message is not None:
-        reference_body, _ = featured_body(reference_message)
+        reference_body, _, _ = await shown_body(reference_message, connection)
         answered_media, _, link_replaces_quote = message_media(reference_body)
         # Its media is only checked here, never for posting, so media Discord flagged is named, never shown
         if not media and not content_scan_flags(reference_body):
@@ -409,6 +453,8 @@ async def create_post_view(message: discord.Message, connection, config: dict = 
     if poll is not None:
         # Under the words when the message has both, so neither is lost. Counted in the text budget below
         text = f"{text}\n\n{poll_text(poll)}" if text else poll_text(poll)
+    if forward_left_out:
+        text = f"*{messages.POST_FORWARD_NOT_SHOWN}*"
     # A sticker no gallery can show is named where the words go when there are none, so it is seen
     if not text and sticker_note:
         text, sticker_note = f"*{messages.POST_STICKER.format(name=', '.join(unshown_stickers))}*", None

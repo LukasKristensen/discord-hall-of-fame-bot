@@ -486,12 +486,35 @@ class PostViewTests(EmbedTestCase):
 
         self.assertEqual("-# " + messages.POST_REPLYING_TO_DELETED, container["components"][0]["content"])
 
-    async def test_a_forward_shows_the_message_it_forwards(self):
-        message = FakeEmbedMessage("")
+    def forward_of(self, original):
+        """A forward from the same channel, whose original is fetched to see who wrote it"""
+        message = FakeEmbedMessage("", channel=FakeChannel(original))
         message.reference = types.SimpleNamespace(message_id=9, type=discord.MessageReferenceType.forward)
         message.message_snapshots = [types.SimpleNamespace(
             content="the original words", attachments=[FakeAttachment("https://cdn/meme.png", "image/png")],
             embeds=[], stickers=[])]
+        return message
+
+    async def test_a_forward_of_a_member_who_opted_out_leaves_their_message_out(self):
+        original = FakeEmbedMessage("the original words", author_name="private")
+        original.author.id = 44
+        self.opted_out.add(44)
+        container = await self.payload(self.forward_of(original))
+        shown = json.dumps(container, ensure_ascii=False)
+
+        self.assertNotIn("the original words", shown)
+        self.assertNotIn("meme.png", shown)
+        self.assertIn(messages.POST_FORWARD_NOT_SHOWN, shown)
+
+    async def test_a_forward_whose_original_cannot_be_read_leaves_it_out(self):
+        """Nobody can tell whose it is, so it is treated like a member who opted out."""
+        shown = json.dumps(await self.payload(self.forward_of(None)), ensure_ascii=False)
+
+        self.assertNotIn("the original words", shown)
+        self.assertIn(messages.POST_FORWARD_NOT_SHOWN, shown)
+
+    async def test_a_forward_shows_the_message_it_forwards(self):
+        message = self.forward_of(FakeEmbedMessage("the original words", author_name="someone"))
         container = await self.payload(message)
         [section] = self.of_type(container, 9)
 

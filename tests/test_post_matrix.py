@@ -71,6 +71,7 @@ class Message:
 
 class Channel:
     def __init__(self, replied=None, deleted=False):
+        self.id = 500
         self.mention = "<#500>"
         self.replied = replied
         self.deleted = deleted
@@ -83,7 +84,11 @@ class Channel:
 
 def forward(**kwargs):
     message = Message(**kwargs)
-    message.reference = types.SimpleNamespace(message_id=5, type=discord.MessageReferenceType.forward)
+    message.reference = types.SimpleNamespace(message_id=5, channel_id=777, guild_id=9,
+                                              type=discord.MessageReferenceType.forward)
+    # The original is fetched to check its author has not opted out, so the matrix gives it one who has not
+    original = Message(author_id=7, name="Ola")
+    message.guild = types.SimpleNamespace(id=9, get_channel_or_thread=lambda _channel_id: Channel(replied=original))
     message.message_snapshots = [types.SimpleNamespace(
         content="forwarded words", attachments=[attachment("forwarded.png", "image/png")], embeds=[], stickers=[],
         flags=types.SimpleNamespace(voice=False))]
