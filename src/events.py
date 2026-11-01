@@ -2,6 +2,7 @@ import discord
 import asyncio
 import datetime
 import concurrency
+import setup_check
 import utils
 from caches import ExpiringSet
 from translations import messages
@@ -401,13 +402,8 @@ async def check_write_permissions_to_hall_of_fame_channel(bot: discord.Client, s
         except discord.HTTPException:
             # Tried again tomorrow, and must not cost the server its permission check today
             pass
-        missing_permissions = []
-        if not permissions.view_channel:
-            missing_permissions.append("View Channel")
-        if not permissions.send_messages:
-            missing_permissions.append("Send Messages")
-        if not permissions.read_message_history:
-            missing_permissions.append("Read Message History")
+        # The same list /troubleshoot and /set_hall_of_fame_channel use, so the daily check never disagrees with them
+        missing_permissions = setup_check.missing_board_permissions(permissions)
 
         if not missing_permissions:
             # Forgotten once fixed, so the server hears about it straight away if it breaks again

@@ -177,9 +177,11 @@ async def validate_message(reaction_event: discord.RawReactionActionEvent, bot: 
     target_channel_id = server_config.hall_of_fame_channel_id
     hide_hof_post_below_threshold = server_config.hide_hof_post_below_threshold
 
-    # The board's own posts, and messages written there, are never featured. Without this, reactions on a
-    # post would repost the bot's own post once they reached the threshold
-    if channel_id == target_channel_id:
+    # The bot's own posts on the board are never featured, or reactions on a post would repost it onto the board
+    # it is on. Members' messages there are featured as anywhere else, for servers that chat in their board. A
+    # reaction add says who wrote the message, which spares the fetch for most reactions on the board
+    in_board = channel_id == target_channel_id
+    if in_board and getattr(reaction_event, "message_author_id", None) == bot.user.id:
         return
 
     channel = bot.get_channel(channel_id)
@@ -192,6 +194,8 @@ async def validate_message(reaction_event: discord.RawReactionActionEvent, bot: 
 
     # The event only carries ids, so the message itself is fetched under a name that says what it is
     source_message = await channel.fetch_message(message_id)
+    if in_board and source_message.author.id == bot.user.id:
+        return
     db_message = hall_of_fame_message_repo.find_hall_of_fame_message(connection, guild_id, channel_id, message_id)
     target_channel = bot.get_channel(target_channel_id)
 
@@ -201,7 +205,7 @@ async def validate_message(reaction_event: discord.RawReactionActionEvent, bot: 
             # Posted before the rule existed, or Discord flagged its media since. Hidden like a post below
             # the threshold, so it is restored below once the rule stops applying, such as when the board
             # is made age-restricted too
-            await hide_post(db_message, bot, target_channel, source_message)
+            await hide_post(db_message, bot, target_channel, source_message, for_safety=True)
         return
 
     if target_channel is None:
@@ -252,19 +256,55 @@ async def validate_message(reaction_event: discord.RawReactionActionEvent, bot: 
             return
         else:
             # The post was hidden and is now back over the threshold, so it is restored with its current
-            # count, which the leaderboards and profiles read from the database
+            # count, which the leaderboards and profiles read from the database. While edits to old posts are
+            # paused it stays hidden, and so does its count, until a reaction after the pause restores it
+            restored = await show_post(message_to_update, source_message, reaction_threshold, connection,
+                                       reaction_config, corrected_reactions, guild_id=guild_id)
+            if not restored:
+                return
             hall_of_fame_message_repo.update_field_for_message(connection, guild_id, channel_id, message_id, "reaction_count", corrected_reactions)
-            await show_post(message_to_update, source_message, reaction_threshold, connection, reaction_config,
-                            corrected_reactions)
             # The column is present and null for every post that is not a video, so the id itself
             # is what decides whether there is a link message to restore
             video_link_message_id = db_message.get("video_link_message_id")
             if video_link_message_id is not None and source_message.attachments:
                 message_attachment = source_message.attachments[0]
                 video_link_message = await target_channel.fetch_message(int(video_link_message_id))
-                await video_link_message.edit(content=message_attachment.url, embed=None)
+                await edit_board_message(video_link_message, guild_id, content=message_attachment.url, embed=None)
             return
     await post_hall_of_fame_message(source_message, bot, connection, target_channel_id, reaction_threshold, reaction_config)
+
+
+def old_message_edits_paused(guild_id, message, now=None) -> bool:
+    """Whether Discord's limit on edits to old messages was reached on the server's board, and this is one"""
+    now = now or datetime.datetime.now(timezone.utc)
+    paused_until = old_message_edits_paused_until.get(guild_id)
+    return paused_until is not None and now < paused_until and now - message.created_at >= old_message_age
+
+
+async def edit_board_message(message: discord.Message, guild_id, *, always: bool = False, **fields) -> bool:
+    """
+    Edit one of the bot's messages on the board, within Discord's limit on edits to messages older than an
+    hour. Every edit to the board goes through here, so a refusal pauses all of them, not only the counter
+    :param message: The post, video link or leaderboard place to edit
+    :param guild_id: The server, whose board the pause applies to. None skips the pause
+    :param always: Try even during the pause, for edits that take something down for safety
+    :param fields: What to edit, as message.edit takes it
+    :return: True when the message was edited, False when the pause or the limit held it back
+    """
+    now = datetime.datetime.now(timezone.utc)
+    if guild_id is not None and not always and old_message_edits_paused(guild_id, message, now):
+        return False
+    try:
+        await message.edit(**fields)
+    except discord.HTTPException as error:
+        if getattr(error, "code", None) != OLD_MESSAGE_EDIT_LIMIT_CODE:
+            raise
+        # Every further edit to an old post would be refused too, and each refusal was logged as an error.
+        # The stored counts keep updating meanwhile, and the next reaction after the pause catches up
+        if guild_id is not None:
+            old_message_edits_paused_until[guild_id] = now + old_message_edit_pause
+        return False
+    return True
 
 
 async def update_reaction_counter(db_message, bot: discord.Client, target_channel_id: int, reaction_threshold: int,
@@ -291,22 +331,20 @@ async def update_reaction_counter(db_message, bot: discord.Client, target_channe
         return
     hall_of_fame_message = await target_channel.fetch_message(hall_of_fame_message_id)
 
-    if not post_shows(hall_of_fame_message):
-        # Post the message in the Hall of Fame channel if it was removed
-        await show_post(hall_of_fame_message, discord_message, reaction_threshold, connection, config, corrected_reactions)
+    guild_id = discord_message.guild.id
+    if old_message_edits_paused(guild_id, hall_of_fame_message):
         return
 
-    guild_id = discord_message.guild.id
-    now = datetime.datetime.now(timezone.utc)
-    paused_until = old_message_edits_paused_until.get(guild_id)
-    if (paused_until is not None and now < paused_until
-            and now - hall_of_fame_message.created_at >= old_message_age):
+    if not post_shows(hall_of_fame_message):
+        # Post the message in the Hall of Fame channel if it was removed
+        await show_post(hall_of_fame_message, discord_message, reaction_threshold, connection, config,
+                        corrected_reactions, guild_id=guild_id)
         return
 
     if corrected_reactions is None:
         corrected_reactions = await reaction_count(discord_message, connection, config)
     if is_components_v2(hall_of_fame_message):
-        await update_post_view(hall_of_fame_message, discord_message, connection, config, corrected_reactions, now)
+        await update_post_view(hall_of_fame_message, discord_message, connection, config, corrected_reactions)
         return
 
     embed = hall_of_fame_message.embeds[0]
@@ -329,11 +367,10 @@ async def update_reaction_counter(db_message, bot: discord.Client, target_channe
             )
             break
 
-    await edit_old_post(hall_of_fame_message, guild_id, now, embed=embed)
+    await edit_board_message(hall_of_fame_message, guild_id, embed=embed)
 
 
-async def update_post_view(post, message: discord.Message, connection, config: dict, counted: int,
-                           now: datetime.datetime):
+async def update_post_view(post, message: discord.Message, connection, config: dict, counted: int):
     """
     Bring a Components V2 post's counts up to date. The new reactions line is compared with the one shown
     first, so a reaction that changes nothing costs no edit and no fetch of the message replied to
@@ -341,25 +378,12 @@ async def update_post_view(post, message: discord.Message, connection, config: d
     config = config if config is not None else server_config_repo.get_reaction_config(connection, message.guild.id)
     if posted_reactions_line(post) == reactions_line(message, config, counted):
         return
-    await edit_old_post(post, message.guild.id, now, view=await create_post_view(message, connection, config, counted),
-                        allowed_mentions=NO_MENTIONS)
+    await edit_board_message(post, message.guild.id, view=await create_post_view(message, connection, config, counted),
+                             allowed_mentions=NO_MENTIONS)
 
 
-async def edit_old_post(post, guild_id: int, now: datetime.datetime, **changes):
-    """
-    Edit a board post, pausing the server's edits to old posts when Discord says too many were made
-    :param changes: What to edit, as message.edit takes it
-    """
-    try:
-        await post.edit(**changes)
-    except discord.HTTPException as error:
-        if error.code != OLD_MESSAGE_EDIT_LIMIT_CODE:
-            raise
-        # Every further edit to an old post would be refused too, and each refusal was logged as an error
-        old_message_edits_paused_until[guild_id] = now + old_message_edit_pause
-
-
-async def hide_post(db_message, bot: discord.Client, target_channel, source_message: discord.Message):
+async def hide_post(db_message, bot: discord.Client, target_channel, source_message: discord.Message,
+                    for_safety: bool = False):
     """
     Hide a post on the board, keeping the message so it can be restored, and blank the video link posted
     with it
@@ -367,13 +391,15 @@ async def hide_post(db_message, bot: discord.Client, target_channel, source_mess
     :param bot: The Discord bot
     :param target_channel: The board
     :param source_message: The message the post is of
+    :param for_safety: Hidden by a safety rule, which is tried even while edits to old posts are paused
     """
-    await remove_embed(db_message, bot, target_channel.id)
+    guild_id = source_message.guild.id
+    await remove_embed(db_message, bot, target_channel.id, guild_id=guild_id, always=for_safety)
     # The column is present and null for every post that is not a video
     video_link_message_id = db_message.get("video_link_message_id")
     if video_link_message_id is not None and source_message.attachments:
         video_link_message = await target_channel.fetch_message(int(video_link_message_id))
-        await video_link_message.edit(content="** **", embed=None)
+        await edit_board_message(video_link_message, guild_id, always=for_safety, content="** **", embed=None)
 
 
 async def take_down_flagged_post(post: discord.Message, board, bot: discord.Client, guild_id: int,
@@ -393,7 +419,8 @@ async def take_down_flagged_post(post: discord.Message, board, bot: discord.Clie
     if not has_flagged_media(post, board, raw_components):
         return False
     try:
-        await blank_post(post)
+        if not await blank_post(post):
+            return False
     except discord.NotFound:
         # Deleted meanwhile, which takes it down just as well
         return False
@@ -402,12 +429,14 @@ async def take_down_flagged_post(post: discord.Message, board, bot: discord.Clie
     return True
 
 
-async def remove_embed(message, bot: discord.Client, target_channel_id: int):
+async def remove_embed(message, bot: discord.Client, target_channel_id: int, guild_id=None, always: bool = False):
     """
     Remove the embed of a message in the Hall of Fame
     :param message:
     :param bot:
     :param target_channel_id:
+    :param guild_id: The server, so the edit keeps to the pause on edits to old posts
+    :param always: Try even during that pause, for a post hidden for safety
     :return:
     """
     if "hall_of_fame_message_id" not in message:
@@ -417,7 +446,7 @@ async def remove_embed(message, bot: discord.Client, target_channel_id: int):
     if target_channel is None:
         return
     hall_of_fame_message = await target_channel.fetch_message(hall_of_fame_message_id)
-    await blank_post(hall_of_fame_message)
+    await blank_post(hall_of_fame_message, guild_id=guild_id, always=always)
 
 
 async def update_leaderboard(connection, bot: discord.Client, server_config: server_class.Server):
@@ -478,16 +507,16 @@ async def update_leaderboard(connection, bot: discord.Client, server_config: ser
 
         # Edited in one request, as editing the same message several times triples the rate limit cost
         try:
-            await hall_of_fame_message.edit(
+            edited = await edit_board_message(
+                hall_of_fame_message, guild_id,
                 content=leaderboard_content,
                 embed=await create_embed(original_message, server_config.reaction_threshold, connection,
                                          reaction_config, corrected_reactions))
         except discord.Forbidden:
             return
-        except discord.HTTPException as error:
-            if error.code != OLD_MESSAGE_EDIT_LIMIT_CODE:
-                raise
-            # Every place is an old message, so the rest would be refused too. Tried again tomorrow
+        if not edited:
+            # Every place is an old message, so the rest would be refused too. Tried again tomorrow, and the
+            # pause is set, so reactions meanwhile do not spend the board's limit either
             return
 
 
@@ -757,22 +786,32 @@ async def build_post_embed(message: discord.Message, connection, config: dict = 
         return embed
 
 
-async def blank_post(post):
-    """Hide a board post in place, so it can be restored with the same message"""
+async def blank_post(post, guild_id=None, always: bool = True) -> bool:
+    """
+    Hide a board post in place, so it can be restored with the same message
+    :param guild_id: The server, so the edit keeps to the pause on edits to old posts. None skips the pause
+    :param always: Try even during that pause. The default, since a take-down for safety must not wait
+    :return: True when the post was hidden
+    """
     if is_components_v2(post):
-        await post.edit(view=hidden_post_view(), allowed_mentions=NO_MENTIONS)
-    else:
-        await post.edit(content="** **", embed=None)
+        return await edit_board_message(post, guild_id, always=always, view=hidden_post_view(),
+                                        allowed_mentions=NO_MENTIONS)
+    return await edit_board_message(post, guild_id, always=always, content="** **", embed=None)
 
 
 async def show_post(post, message: discord.Message, reaction_threshold: int, connection, config: dict = None,
-                    corrected_reactions: int = None):
-    """Show a hidden board post again, in the format it was first posted in"""
+                    corrected_reactions: int = None, guild_id=None) -> bool:
+    """
+    Show a hidden board post again, in the format it was first posted in
+    :param guild_id: The server, so the edit keeps to the pause on edits to old posts. None skips the pause
+    :return: True when the post was shown, False when the pause or the limit held it back
+    """
     if is_components_v2(post):
-        await post.edit(view=await create_post_view(message, connection, config, corrected_reactions),
-                        allowed_mentions=NO_MENTIONS)
-    else:
-        await post.edit(embed=await create_embed(message, reaction_threshold, connection, config))
+        return await edit_board_message(post, guild_id,
+                                        view=await create_post_view(message, connection, config, corrected_reactions),
+                                        allowed_mentions=NO_MENTIONS)
+    return await edit_board_message(post, guild_id,
+                                    embed=await create_embed(message, reaction_threshold, connection, config))
 
 
 def board_topic_is_ours(topic) -> bool:
@@ -916,18 +955,24 @@ async def create_database_context(bot, server, connection, custom_channel=None) 
 
 def delete_database_context(server_id: int, connection):
     """
-    Delete the database context for the server
+    Delete the database context for the server, all or nothing. A failure part way, such as a statement
+    timeout, rolls back every table, so the server keeps its settings row and the daily clean-up tries again
     :param server_id: The ID of the server
-    :param connection: MySQL connection
+    :param connection: The database connection
     :return: None
     """
-    hall_of_fame_message_repo.delete_hall_of_fame_messages_for_guild(connection, server_id)
-    server_user_repo.delete_server_users(connection, server_id)
-    server_config_repo.delete_server_config(connection, server_id)
-    hof_wrapped_repo.delete_hof_wrapped_for_guild(connection, server_id)
-    # Left behind, a guild that rejoins stays marked as done for the year and never gets its wrapped again
-    hof_wrapped_guild_status_repo.delete_progress_for_guild(connection, server_id)
-    permission_warning_repo.delete_permission_warnings(connection, [server_id])
+    try:
+        hall_of_fame_message_repo.delete_hall_of_fame_messages_for_guild(connection, server_id, commit=False)
+        server_user_repo.delete_server_users(connection, server_id, commit=False)
+        server_config_repo.delete_server_config(connection, server_id, commit=False)
+        hof_wrapped_repo.delete_hof_wrapped_for_guild(connection, server_id, commit=False)
+        # Left behind, a guild that rejoins stays marked as done for the year and never gets its wrapped again
+        hof_wrapped_guild_status_repo.delete_progress_for_guild(connection, server_id, commit=False)
+        permission_warning_repo.delete_permission_warnings(connection, [server_id], commit=False)
+        connection.commit()
+    except Exception:
+        connection.rollback()
+        raise
 
 
 async def logging(bot: discord.Client, message, server_id=None, new_value=None, log_level=log_type.ERROR,

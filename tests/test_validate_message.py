@@ -329,18 +329,46 @@ class ChannelVisibilityTests(GateTestCase):
 
 
 class BoardChannelTests(GateTestCase):
-    async def test_reactions_in_the_board_never_repost_anything(self):
-        """Otherwise a well-liked post would be reposted onto the board it is on."""
-        self.build()
-
+    def in_the_board(self, message_author_id=None):
         class InTheBoard(FakeReactionEvent):
             def __init__(self):
                 super().__init__()
                 self.channel_id = TARGET_CHANNEL_ID
+                self.message_author_id = message_author_id
+        return InTheBoard()
 
-        await utils.validate_message(InTheBoard(), self.bot, connection=object(), server_config=server_config())
+    def build_board_message(self, author_id):
+        """The message reacted to is in the board, which validate_message fetches through the board channel."""
+        self.build()
+        self.source_message.author = FakeAuthor(author_id=author_id)
+        self.source_message.channel = self.source_channel
+        self.bot.channels[TARGET_CHANNEL_ID] = self.source_channel
+        self.source_channel.id = TARGET_CHANNEL_ID
+
+    async def test_reactions_on_a_post_never_repost_it(self):
+        """Otherwise a well-liked post would be reposted onto the board it is on."""
+        self.build()
+
+        await utils.validate_message(self.in_the_board(message_author_id=BOT_USER_ID), self.bot,
+                                     connection=object(), server_config=server_config())
         self.assertDidNothing()
         self.assertEqual([], self.target_channel.fetched)
+
+    async def test_a_post_is_not_reposted_when_the_event_does_not_say_who_wrote_it(self):
+        """A reaction removal carries no author, so the post is fetched to find out."""
+        self.build_board_message(BOT_USER_ID)
+
+        await utils.validate_message(self.in_the_board(), self.bot, connection=object(),
+                                     server_config=server_config())
+        self.assertFalse(self.post.called)
+
+    async def test_a_members_message_in_the_board_is_still_featured(self):
+        """Servers that chat in their board, or use a busy channel as it, keep their messages featured."""
+        self.build_board_message(AUTHOR_ID)
+
+        await utils.validate_message(self.in_the_board(message_author_id=AUTHOR_ID), self.bot,
+                                     connection=object(), server_config=server_config())
+        self.assertTrue(self.post.called)
 
 
 class PostDueDateTests(GateTestCase):
@@ -604,6 +632,17 @@ class ExistingPostTests(GateTestCase):
         self.build(db_message=database_row(), posted_messages={HALL_OF_FAME_MESSAGE_ID: posted})
         await self.run_gate()
         self.assertEqual([{"embed": self.embed}], posted.edits)
+
+    async def test_a_hidden_post_keeps_its_count_while_edits_to_old_posts_are_paused(self):
+        """It stays hidden until a reaction after the pause, so the count it is stored with stays too."""
+        now = datetime.datetime.now(datetime.timezone.utc)
+        posted = FakePostedMessage(HALL_OF_FAME_MESSAGE_ID, embeds=[])
+        posted.created_at = now - datetime.timedelta(hours=2)
+        self.build(db_message=database_row(), posted_messages={HALL_OF_FAME_MESSAGE_ID: posted})
+        with mock.patch.object(utils, "old_message_edits_paused_until", {GUILD_ID: now + datetime.timedelta(minutes=10)}):
+            await self.run_gate()
+        self.assertEqual([], posted.edits)
+        self.assertEqual([], self.repo.updated_fields)
 
     async def test_restores_the_video_link_alongside_the_embed(self):
         posted = FakePostedMessage(HALL_OF_FAME_MESSAGE_ID, embeds=[])

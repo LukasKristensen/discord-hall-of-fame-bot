@@ -64,10 +64,11 @@ def save_permission_warnings(connection, records):
     cursor.close()
 
 
-def delete_permission_warnings(connection, guild_ids):
+def delete_permission_warnings(connection, guild_ids, commit: bool = True):
     if not guild_ids:
         return
     cursor = connection.cursor()
     cursor.execute("DELETE FROM permission_warning WHERE guild_id = ANY(%s)", (list(guild_ids),))
-    connection.commit()
+    if commit:
+        connection.commit()
     cursor.close()

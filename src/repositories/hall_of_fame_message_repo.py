@@ -87,13 +87,14 @@ def insert_hall_of_fame_message(connection, message_id, channel_id, guild_id, ha
     cursor.close()
     return row[0] if row else author_id
 
-def delete_hall_of_fame_messages_for_guild(connection, guild_id):
+def delete_hall_of_fame_messages_for_guild(connection, guild_id, commit: bool = True):
     cursor = connection.cursor()
     cursor.execute("""
         DELETE FROM hall_of_fame_message 
         WHERE guild_id = %s
     """, (guild_id,))
-    connection.commit()
+    if commit:
+        connection.commit()
     cursor.close()
 
 def get_all_hall_of_fame_messages_for_guild(connection, guild_id):

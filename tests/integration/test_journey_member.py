@@ -98,7 +98,7 @@ class BoardLifeTests(JourneyTestCase):
         [post] = self.reposts()
         # Members react to the post itself, which is never featured again
         repost = self.board.posts[post.id]
-        on_board = types.SimpleNamespace(id=repost.id, channel=self.board, guild=self.guild)
+        on_board = types.SimpleNamespace(id=repost.id, channel=self.board, guild=self.guild, author=repost.author)
         for fan in FANS[:5]:
             await main.on_raw_reaction_add(types.SimpleNamespace(channel_id=self.board.id, message_id=on_board.id,
                                                                  guild_id=GUILD, user_id=fan.id, member=fan))

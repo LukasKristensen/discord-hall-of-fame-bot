@@ -422,7 +422,7 @@ class DailyTaskPermissionSweepTests(unittest.IsolatedAsyncioTestCase):
     def restore_cache(self):
         utils.recently_logged_messages = self.original_cache
 
-    def build_bot(self, missing_permissions_for=(), hanging_for=()):
+    def build_bot(self, missing_permissions_for=(), hanging_for=(), missing_permission="send_messages"):
         checked = self.checked
         test = self
 
@@ -435,7 +435,7 @@ class DailyTaskPermissionSweepTests(unittest.IsolatedAsyncioTestCase):
             def permissions_for(self, _member):
                 from tests.fakes import FakePermissions
                 if self.guild_id in missing_permissions_for:
-                    return FakePermissions(send_messages=False)
+                    return FakePermissions(**{missing_permission: False})
                 return FakePermissions()
 
         class Guild:
@@ -473,6 +473,13 @@ class DailyTaskPermissionSweepTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_warns_every_server_that_is_missing_a_permission(self):
         bot = self.build_bot(missing_permissions_for=self.guild_ids)
+        await events.check_write_permissions_to_hall_of_fame_channel(bot, self.server_classes, FakeConnection())
+
+        self.assertEqual(self.guild_ids, sorted(self.checked))
+
+    async def test_warns_a_server_whose_board_lacks_only_embed_links(self):
+        # Every post is an embed, so this is checked just as /troubleshoot checks it
+        bot = self.build_bot(missing_permissions_for=self.guild_ids, missing_permission="embed_links")
         await events.check_write_permissions_to_hall_of_fame_channel(bot, self.server_classes, FakeConnection())
 
         self.assertEqual(self.guild_ids, sorted(self.checked))

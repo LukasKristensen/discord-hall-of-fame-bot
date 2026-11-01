@@ -11,10 +11,11 @@ They need HOF_TEST_DATABASE_URL, see tests/integration/database.py, and are skip
 import copy
 import types
 import unittest
+from unittest import mock
 
 import events
 import utils
-from repositories import global_profile_repo, opt_out_repo, server_user_repo
+from repositories import global_profile_repo, hof_wrapped_repo, opt_out_repo, server_user_repo
 
 from tests.integration.test_member_data_deletion import (
     DELETED, GUILDS, OPTED_OUT_SERVER, OTHER, SECOND, SHARED, THIRD, MemberDataDeletionTestCase, in_order,
@@ -100,6 +101,19 @@ class ServerRemovalTests(MemberDataDeletionTestCase):
 
         self.assertEqual(before["servers"] - 1, after["servers"])
         self.assertEqual(before["posts"] - 2, after["posts"])
+
+    async def test_a_failure_part_way_deletes_nothing(self):
+        """Otherwise the settings row could go while the Wrapped stays, and the server is never cleaned up again."""
+        before = self.snapshot()
+
+        def times_out(*_args, **_kwargs):
+            raise RuntimeError("statement timeout")
+
+        with mock.patch.object(hof_wrapped_repo, "delete_hof_wrapped_for_guild", times_out):
+            with self.assertRaises(RuntimeError):
+                utils.delete_database_context(SHARED, self.connection)
+
+        self.assertEqual(before, self.snapshot())
 
     async def test_removing_a_server_that_was_never_set_up_changes_nothing(self):
         before = self.snapshot()

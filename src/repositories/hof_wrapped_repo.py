@@ -134,7 +134,7 @@ def get_all_hof_wrapped_for_guild(connection, guild_id, year):
     cursor.close()
     return results
 
-def delete_hof_wrapped_for_guild(connection, guild_id):
+def delete_hof_wrapped_for_guild(connection, guild_id, commit: bool = True):
     """
     Delete a server's Wrapped, when the bot leaves it. Takes the fan lists lock like every other Wrapped
     write, so a Wrapped being saved for the server finishes first and its rows are deleted here too
@@ -144,7 +144,8 @@ def delete_hof_wrapped_for_guild(connection, guild_id):
     cursor.execute("""
         DELETE FROM hof_wrapped WHERE guild_id = %s
     """, (guild_id,))
-    connection.commit()
+    if commit:
+        connection.commit()
     cursor.close()
 
 def get_hof_wrapped_for_user(connection, user_id) -> list[dict]:

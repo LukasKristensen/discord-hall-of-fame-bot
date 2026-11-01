@@ -1019,6 +1019,29 @@ class DownloadMyDataTests(MyDataPanelTestCase):
         self.assertEqual([messages.MY_DATA_EXPORT_SEND_FAILED], sent)
         self.assertFalse(main.on_daily_cooldown(77, "my_data"))
 
+    async def test_a_failed_split_gives_the_day_back_only_once(self):
+        """A second press while the failure is being answered keeps its use, so the export cannot run twice."""
+        self.posts = [dict(SAMPLE_POST, message_id=number) for number in range(400)]
+        self.patch(commands, "EXPORT_FILES_PER_MESSAGE", 1)
+        _interaction, view = await self.open_panel()
+        pressed = FakeInteraction()
+        attempts = []
+
+        async def send(content=None, ephemeral=False, file=None, files=None, **_kwargs):
+            if not files and file is None:
+                # The second press records its use while this failure message is on its way
+                main.start_daily_cooldown(77, "my_data")
+                return
+            attempts.append(files)
+            if len(attempts) != 2:
+                response = types.SimpleNamespace(status=413, reason="Payload Too Large")
+                raise discord.HTTPException(response, {"code": 40005, "message": "Request entity too large"})
+
+        pressed.followup.send = send
+        await view.download_button.callback(pressed)
+
+        self.assertTrue(main.on_daily_cooldown(77, "my_data"))
+
     async def test_a_refusal_that_is_not_about_size_is_reported_without_splitting(self):
         _interaction, view = await self.open_panel()
         pressed, accepted = self.refusing_over(0, status=503)

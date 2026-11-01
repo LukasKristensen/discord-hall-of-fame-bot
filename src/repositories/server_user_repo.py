@@ -19,16 +19,20 @@ def create_server_user_table(connection):
     )
     cursor.execute("ALTER TABLE server_user DROP CONSTRAINT IF EXISTS server_user_pkey CASCADE;")
     cursor.execute("ALTER TABLE server_user ADD PRIMARY KEY (user_id, guild_id);")
+    # The primary key starts with user_id, so it cannot serve the per-guild reads: the rank lookups and
+    # leaderboards of /user_profile, which otherwise scan every member of every server
+    cursor.execute("CREATE INDEX IF NOT EXISTS server_user_guild_idx ON server_user (guild_id)")
     connection.commit()
     cursor.close()
 
-def delete_server_users(connection, guild_id):
+def delete_server_users(connection, guild_id, commit: bool = True):
     cursor = connection.cursor()
     cursor.execute("""
         DELETE FROM server_user 
         WHERE guild_id = %s
     """, (guild_id,))
-    connection.commit()
+    if commit:
+        connection.commit()
     cursor.close()
 
 def get_server_users_for_user(connection, user_id) -> list[dict]:

@@ -31,6 +31,8 @@ version, so 3.0 covers 3.0.0 and every 3.0.x after it. For how the bot works tod
 - [x] The bot's status rotates every ten minutes between the member count and pointers to /invite, /leaderboard and, in December and January, /hof_wrapped. The member count is kept in memory and adjusted as servers join and leave.
 - [x] The board channel topic links to the App Directory page. Topics the bot set in an earlier version are moved over by the daily check, and a topic an admin wrote is never changed.
 - [x] Servers that removed the bot while it was offline are cleaned up by the daily task after a grace period.
+- [x] The daily permission check now also looks for Embed Links on the board, as /troubleshoot does, so servers whose board lacks only that start getting the missing-permission warning.
+- [x] Reactions on the bot's own posts on the board no longer repost them onto the board. Members' messages written in the board channel are still featured as before.
 - [x] Rewrote the Privacy Policy and Terms of Service to match what the bot stores, and moved both into the repository as PRIVACY.md and TERMS.md.
 - [x] Fixed /user_profile and /leaderboard picking a different champion than the ranks when members tied, or putting an unranked member first.
 - [x] Fixed new posts being stored an hour or two off on a database not set to UTC. The daily post limit now resets at midnight UTC, as its notice says.
