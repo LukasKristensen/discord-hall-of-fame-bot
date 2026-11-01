@@ -42,6 +42,7 @@ message under a "test cases" category so each post names what it tests.
 | reply | A reply to an image, a reply to a video | The quote, then the answered image or playable video full width, then the reply under its poster's name |
 | reply | A reply to a deleted message | "Replying to a deleted message" above the poster's name, no quote |
 | old post | Embed posts from before the upgrade, reacted to again | The count updated in the same embed after counting changed to all emojis. A post below the threshold went blank, and came back as the same embed, with the footer, once over it again |
+| system message | A join message, asked about with Why isn't this on the board? | "Messages Discord posts on its own are not featured", also for a member who opted out, as the rule is checked before the choice. Before the update, a join message reached the board as an empty post |
 | opt-out | A new message from a member who pressed Stop featuring me, reacted to | Not posted. Why isn't this on the board?, asked by another member, answered only that it cannot be featured, without naming the choice. Asked by the member, it said they asked not to be featured and pointed to `/my_data` |
 | reply | A reply to a member who pressed Stop featuring me | Posted with no "Replying to" line and no quote, so the member is not named |
 

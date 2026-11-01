@@ -149,6 +149,8 @@ Restart the Discord client if the picker still shows the old list.
 - [ ] More reactions update the count on that post. Removing reactions below the threshold hides it, and
       reacting again brings it back as the same message
 - [x] A post made before the upgrade still updates its count as an embed, hides and comes back
+- [ ] A member's join message, a pin notice and a closed poll, reacted past the threshold, are not posted, and
+      Why isn't this on the board? says Discord posted them on its own
 - [ ] A message with a text file and one with only a sticker are posted with the file linked and the
       sticker shown
 
