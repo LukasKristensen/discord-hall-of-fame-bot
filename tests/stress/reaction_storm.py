@@ -130,9 +130,14 @@ class MessageStore:
 
     def insert_hall_of_fame_message(self, _connection, message_id, channel_id, guild_id,
                                     hall_of_fame_message_id, reaction_count, author_id,
-                                    created_at, video_link_message_id=None):
+                                    created_at, video_link_message_id=None, author_post_limit=None):
+        """Stores the post and returns who it is credited to, as the repository does, past the post limit nobody"""
         self.writes += 1
         self._wait()
+        existing = self.rows.get((guild_id, channel_id, message_id))
+        if existing is None and author_post_limit is not None and \
+                sum(1 for row in self.rows.values() if row["author_id"] == author_id) >= author_post_limit:
+            author_id = 0
         self.rows[(guild_id, channel_id, message_id)] = {
             "message_id": message_id,
             "channel_id": channel_id,
@@ -143,6 +148,7 @@ class MessageStore:
             "created_at": created_at,
             "video_link_message_id": video_link_message_id,
         }
+        return author_id
 
 
 class FakeReaction:

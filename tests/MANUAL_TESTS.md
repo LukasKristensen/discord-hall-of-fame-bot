@@ -3,7 +3,7 @@
 Checks run by hand on the development bot, for behaviour the automated tests can only fake: what
 Discord itself accepts, and how the bot looks to a member. Newest first.
 
-## 21 October 2026: member data, the post limit and the export (2.2)
+## 21 October 2026: member data, the post limit and the export (3.0, then called 2.2)
 
 Run on the development bot (`DEV_TEST=True`) in the development server, against the development
 database.
