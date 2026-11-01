@@ -42,11 +42,11 @@ message under a "test cases" category so each post names what it tests.
   The same video attached four times failed on its first item in 4 of 5 posts, on desktop and mobile.
   Holding the post until the message was 10 seconds old did not help and was reverted. Different files
   in one gallery have always loaded so far.
-- **A user mention can read as unknown user.** The second account saw `@Lukas` on the board as "@unknown-user"
-  (in Danish, "@ukendt-bruger"), as a post does not carry the users it mentions and the reader's app had not
-  loaded that member. Roles, `@here` and `@everyone` showed fine. Possible fix: write each user mention as
-  the member's name in bold, taken from the original message's `mentions`, at the cost of the click to
-  their profile.
+- **A user mention can read as unknown user.** A new second account, in a browser, saw `@Lukas` on the board
+  as "@unknown-user" (in Danish, "@ukendt-bruger"). A post does not carry the users it mentions, so the
+  name only shows once the reader's app has loaded that member. After opening the member's profile it
+  showed the name. Left as it is: writing names in bold would fix it for the few readers who see it, but
+  take the click to the profile from everyone.
 - A spoiler once showed uncovered right after posting. A reload covered it, so it was the client, not the
   bot.
 - Poll votes are written when the post is made and not updated after.
