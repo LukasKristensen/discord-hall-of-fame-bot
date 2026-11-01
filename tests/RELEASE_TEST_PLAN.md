@@ -167,6 +167,20 @@ and reply from the payload:
 - [ ] A link to a post with four images, and a message with a screenshot and an article link, show every
       picture in one gallery
 
+## Settings form
+
+- [ ] `/get_server_config` has Change settings next to Troubleshoot. As an admin it opens Hall of Fame settings
+      with the current channel, threshold, post age, counting method and ticked rules filled in
+- [ ] A member without Manage Server who presses it is refused privately, and no form opens
+- [ ] Change the threshold and two rules and send it: one private answer lists exactly those three, and
+      `/get_server_config` shows them
+- [ ] Send it unchanged: it says nothing changed
+- [ ] Type 0 or "five" as the threshold along with another change: it is refused, and nothing is stored
+- [ ] Pick another channel: the board moves, the new channel gets the announcement with nobody pinged, and the
+      next post lands there. A channel the bot cannot post in is refused with the missing permissions
+- [ ] A new server's welcome message has Set up, which opens the same form, also after the bot restarts
+- [ ] The join note about hidden channels still has only Troubleshoot
+
 ## Feedback screenshots
 
 - [ ] `/feedback` shows Screenshots (optional) with its note, and the picker offers images only

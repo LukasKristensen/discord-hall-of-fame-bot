@@ -158,11 +158,58 @@ TROUBLESHOOT_BUTTON = "Troubleshoot"
 # Closes /get_server_config, which is most often looked up because something is not working
 CONFIG_TROUBLESHOOT_HINT = (f"Something not working? Press **{TROUBLESHOOT_BUTTON}** below, or ask about one message "
                             f"with Apps > **{WHY_MENU_NAME}**")
+# The one form for a board's settings, opened by a button under /get_server_config and the welcome message.
+# Discord allows 45 characters for a form title, a label or an option, and 100 for a description, which the
+# settings form tests check
+SETTINGS_BUTTON = "Change settings"
+SETTINGS_SET_UP_BUTTON = "Set up"
+SETTINGS_FORM_TITLE = "Hall of Fame settings"
+SETTINGS_CHANNEL_LABEL = "Board channel"
+SETTINGS_CHANNEL_DESCRIPTION = "Where Hall of Fame posts go"
+SETTINGS_THRESHOLD_LABEL = "Reaction threshold"
+SETTINGS_THRESHOLD_DESCRIPTION = "How many reactions a message needs, {minimum} to {maximum}"
+SETTINGS_DUE_DATE_LABEL = "Oldest message that can qualify"
+SETTINGS_DUE_DATE_DESCRIPTION = "In days, {minimum} to {maximum}"
+SETTINGS_METHOD_LABEL = "How reactions are counted"
+# Per counting method: the option and what it means
+SETTINGS_METHOD_OPTIONS = {
+    "most_reactions_on_emoji": ("Most reactions on one emoji", "Recommended. One reaction should carry a message"),
+    "total_reactions": ("Total reactions", "Every emoji added together"),
+    "unique_users": ("How many members reacted", "Each member counts once"),
+}
+SETTINGS_RULES_LABEL = "Rules"
+SETTINGS_RULES_DESCRIPTION = "Ticked rules are on. The emoji whitelist keeps its own commands"
+# The on/off settings: the box in the form, then how the answer names it, the same as the setting's own command
+SETTING_AUTHOR_REACTION = "Author's own reaction counts toward the threshold"
+SETTING_REQUIRE_MEDIA = "Only posts with an image or video can reach the Hall of Fame"
+SETTING_HIDE_BELOW_THRESHOLD = "Hide Hall of Fame posts that drop below the threshold"
+SETTING_IGNORE_BOTS = "Ignore messages from bots"
+SETTING_CHAT_IN_BOARD = "Members can chat in the Hall of Fame channel"
+SETTING_GLOBAL_PROFILES = "Posts here count toward members' totals across servers"
+SETTINGS_RULE_OPTIONS = {
+    "include_author_in_reaction_calculation": ("Count the author's own reaction", SETTING_AUTHOR_REACTION),
+    "require_image_or_video": ("Only messages with an image or video", SETTING_REQUIRE_MEDIA),
+    "hide_hof_post_below_threshold": ("Hide posts that drop below the threshold", SETTING_HIDE_BELOW_THRESHOLD),
+    "ignore_bot_messages": ("Leave out messages from other bots", SETTING_IGNORE_BOTS),
+    "allow_messages_in_hof_channel": ("Allow chat in the board channel", SETTING_CHAT_IN_BOARD),
+    "count_in_global_profiles": ("Count toward members' totals across servers", SETTING_GLOBAL_PROFILES),
+}
+CHAT_IN_BOARD_OFF_NOTE = "Messages members post in the Hall of Fame channel will be removed."
+HIDE_BELOW_THRESHOLD_ON_NOTE = "They show again once they are back above it."
+# The answer to the form, only for the admin who sent it
+SETTINGS_SAVED = "✅ Settings saved:"
+SETTINGS_CHANGED_LINE = "• {label}: **{value}**"
+SETTINGS_NOTHING_CHANGED = "ℹ️ Nothing changed, every setting already had the value you sent."
+SETTINGS_NOT_A_NUMBER = "{label} must be a whole number from {minimum} to {maximum}, but got \"{value}\"."
+SETTINGS_NOT_SAVED = "Nothing was saved. Press the button again to fix it."
+SETTINGS_ANNOUNCEMENT_FAILED = ("The bot could not post its announcement in {channel}. Check that it can send "
+                                "messages there.")
 # The first message in a board the bot created when it joined
 HOF_WELCOME = ("🎉 **Welcome to the Hall of Fame!** 🎉\n"
                "When a message receives **{threshold} or more (default threshold) of the same reaction**, it’s "
                "automatically **reposted here** to celebrate its popularity.\n\n"
                "🔧 **Customize your setup** (needs the Manage Server permission)**:**\n"
+               f"   • Press **{SETTINGS_SET_UP_BUTTON}** below to change every setting in one form\n"
                f"   • Change the reaction threshold with {command_refs.SET_REACTION_THRESHOLD}\n"
                f"   • View your current settings with {command_refs.GET_SERVER_CONFIG}\n\n"
                "✨ **Want to only track specific emojis?**\n"

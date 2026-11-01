@@ -94,6 +94,26 @@ class ServerSettingsTests(DatabaseTestCase):
 
         self.assert_settings(server_config_repo.get_server_classes(self.connection)[GUILD], changed)
 
+    def test_several_settings_are_saved_together(self):
+        """The settings form saves everything it changed in one statement."""
+        self.insert()
+        changed = {"reaction_threshold": 7, "post_due_date": 12, "reaction_count_calculation_method": "unique_users",
+                   "ignore_bot_messages": False, "count_in_global_profiles": False}
+
+        server_config_repo.update_server_config_params(GUILD, changed, self.connection)
+
+        for name, value in changed.items():
+            with self.subTest(setting=name):
+                self.assertEqual(value, server_config_repo.get_parameter_value(self.connection, GUILD, name))
+
+    def test_saving_settings_together_refuses_an_unknown_column(self):
+        self.insert()
+
+        with self.assertRaises(ValueError):
+            server_config_repo.update_server_config_params(GUILD, {"reaction_threshold": 2, "guild_id": 1},
+                                                           self.connection)
+        self.assertNotEqual(2, server_config_repo.get_parameter_value(self.connection, GUILD, "reaction_threshold"))
+
     def test_every_writable_setting_is_tested_here(self):
         """A new setting has to be added to SETTINGS above, so it is checked for a swapped column too."""
         self.assertEqual(server_config_repo.ALLOWED_COLUMNS - {"joined_date"}, set(SETTINGS))

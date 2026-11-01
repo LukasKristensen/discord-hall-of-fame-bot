@@ -800,7 +800,8 @@ async def refresh_board_topic(channel, permissions) -> bool:
 def check_setup_view():
     # Imported here, as commands imports this module
     import commands
-    return commands.build_check_setup_view()
+    # The note on join is about what stops posts, which the settings form cannot fix
+    return commands.build_check_setup_view(with_settings=False)
 
 
 def welcome_view():

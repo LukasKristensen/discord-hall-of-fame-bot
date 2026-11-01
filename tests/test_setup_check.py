@@ -537,11 +537,40 @@ class SetupCheckViewTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(commands.CHECK_SETUP_CUSTOM_ID, view.children[0].custom_id)
         self.assertEqual(messages.TROUBLESHOOT_BUTTON, view.children[0].label)
 
-    async def test_the_join_button_is_answered_by_the_same_registered_view(self):
+    async def test_the_config_buttons_are_answered_by_the_same_registered_view(self):
         view = commands.build_check_setup_view()
 
         self.assertTrue(view.is_persistent())
+        self.assertEqual([commands.CHECK_SETUP_CUSTOM_ID, commands.SETTINGS_CUSTOM_ID],
+                         [button.custom_id for button in view.children])
+
+    async def test_the_join_note_offers_only_troubleshoot(self):
+        """It is about what stops posts, which the settings form cannot fix."""
+        view = commands.build_check_setup_view(with_settings=False)
+
         self.assertEqual([commands.CHECK_SETUP_CUSTOM_ID], [button.custom_id for button in view.children])
+
+    async def test_the_registered_view_answers_the_settings_button_on_every_message(self):
+        """Presses are matched on the custom_id, so the welcome message's Set up is answered as well."""
+        registered = commands.SetupCheckView(commands.SUPPORT_SERVER_LINK, commands.VOTE_LINK)
+        welcome = commands.build_welcome_view()
+
+        self.assertIn(commands.SETTINGS_CUSTOM_ID, [item.custom_id for item in registered.children])
+        self.assertEqual(messages.SETTINGS_SET_UP_BUTTON, welcome.children[1].label)
+        self.assertEqual(commands.SETTINGS_CUSTOM_ID, welcome.children[1].custom_id)
+
+    async def test_a_press_of_the_settings_button_opens_the_registered_form(self):
+        opened = []
+
+        async def handler(interaction):
+            opened.append(interaction)
+
+        original = commands.settings_form_handler
+        commands.settings_form_handler = handler
+        self.addCleanup(setattr, commands, "settings_form_handler", original)
+
+        await commands.build_welcome_view().children[1].callback("interaction")
+        self.assertEqual(["interaction"], opened)
 
     async def test_a_press_runs_the_registered_check(self):
         pressed = []

@@ -131,6 +131,25 @@ def update_server_config_param(guild_id, param_name, param_value, connection):
     connection.commit()
     cursor.close()
 
+def update_server_config_params(guild_id, values: dict, connection):
+    """
+    Store several settings in one statement, so a form saved at once is never left half saved
+    :param guild_id: The server
+    :param values: The new value of each configuration column
+    :param connection: The database connection
+    """
+    if not values:
+        return
+    unknown = set(values) - ALLOWED_COLUMNS
+    if unknown:
+        raise ValueError("Invalid column name")
+    names = list(values)
+    query = f"UPDATE server_configs SET {', '.join(f'{name} = %s' for name in names)} WHERE guild_id = %s"
+    cursor = connection.cursor()
+    cursor.execute(query, (*[values[name] for name in names], guild_id))
+    connection.commit()
+    cursor.close()
+
 def get_parameter_value(connection, guild_id, param_name):
     cursor = connection.cursor()
     if param_name not in ALLOWED_COLUMNS:
