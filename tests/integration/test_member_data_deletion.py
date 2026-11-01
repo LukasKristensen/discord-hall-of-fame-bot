@@ -11,6 +11,8 @@ They need HOF_TEST_DATABASE_URL, see tests/integration/database.py, and are skip
 
 import copy
 import datetime
+import psycopg2
+import threading
 import json
 import types
 import unittest
@@ -26,7 +28,7 @@ from repositories import (
     server_user_repo,
 )
 
-from tests.integration.database import DatabaseTestCase, SingleConnectionPool, skip_without_database
+from tests.integration.database import database_url, DatabaseTestCase, SingleConnectionPool, skip_without_database
 
 # Members, as Discord snowflakes. FAN's ID begins with every digit of DELETED's, so a removal that
 # matched IDs as text without their quotes would take FAN out of the fan lists too
@@ -866,6 +868,54 @@ class CoverageGuardTests(MemberDataDeletionTestCase):
 
         self.assertEqual(TABLES_WITH_MEMBER_IDS, found)
 
+
+
+@skip_without_database
+class MemberLockTests(MemberDataDeletionTestCase):
+    """A post stored while the author's data is being deleted or opted out, on a second connection."""
+
+    def setUp(self):
+        super().setUp()
+        self.other = psycopg2.connect(database_url(), options=f"-c search_path={self.schema} -c TimeZone=UTC")
+        self.addCleanup(self.other.close)
+
+    def store_aside(self, message_id):
+        """Store a post by DELETED on the other connection; say whether it was still waiting a moment later"""
+        def store():
+            hall_of_fame_message_repo.insert_hall_of_fame_message(
+                self.other, message_id, 501, SHARED, message_id + 5000, 9, DELETED, NOW)
+
+        thread = threading.Thread(target=store)
+        thread.start()
+        thread.join(timeout=1)
+        return thread
+
+    def author_of(self, message_id):
+        return self.rows("SELECT author_id FROM hall_of_fame_message WHERE message_id = %s", (message_id,))[0][0]
+
+    def test_a_post_stored_during_a_deletion_waits_and_lands_after_it(self):
+        """Without the lock it could slip in after remove_author and keep the member's ID past the deletion."""
+        hall_of_fame_message_repo.lock_member(self.connection, DELETED)
+        hall_of_fame_message_repo.remove_author(self.connection, DELETED, commit=False)
+
+        thread = self.store_aside(990)
+        self.assertTrue(thread.is_alive(), "the post did not wait for the deletion")
+        self.connection.commit()
+        thread.join(timeout=10)
+
+        # Stored after the deletion, so it is a new post, credited as usual, and every earlier one is detached
+        self.assertEqual(DELETED, self.author_of(990))
+        self.assertEqual([(990,)], self.posts_by(DELETED))
+
+    def test_a_post_stored_during_an_opt_out_waits_and_sees_it(self):
+        opt_out_repo.set_opted_out(self.connection, DELETED, True, commit=False)
+
+        thread = self.store_aside(991)
+        self.assertTrue(thread.is_alive(), "the post did not wait for the opt-out")
+        self.connection.commit()
+        thread.join(timeout=10)
+
+        self.assertEqual(hall_of_fame_message_repo.NO_AUTHOR_ID, self.author_of(991))
 
 if __name__ == "__main__":
     unittest.main()

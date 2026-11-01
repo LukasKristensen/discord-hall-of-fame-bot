@@ -33,12 +33,24 @@ def check_if_message_id_exists(cursor, message_id):
     cursor.execute("SELECT 1 FROM hall_of_fame_message WHERE message_id = %s", (message_id,))
     return cursor.fetchone() is not None
 
+def lock_member(connection, user_id):
+    """
+    Wait for, then hold until the transaction ends, a lock on one member's posts. Taken by storing a post and
+    by deleting or opting out a member, so a post stored while a deletion runs lands either before it, and
+    is detached by it, or after it commits, when the opt-out (if any) is seen. Keyed by the member's ID
+    """
+    cursor = connection.cursor()
+    cursor.execute("SELECT pg_advisory_xact_lock(%s)", (int(user_id),))
+    cursor.close()
+
 def insert_hall_of_fame_message(connection, message_id, channel_id, guild_id, hall_of_fame_message_id, reaction_count, author_id,
                                 created_at, video_link_message_id=None):
     """
     Store a post, or update it when the message is stored already. A member who asked not to be featured
-    is stored as no author whoever calls this, so the opt-out does not rest on every caller checking it
+    is stored as no author whoever calls this, so the opt-out does not rest on every caller checking it.
+    The author's lock is taken first, so a deletion or opt-out in progress is waited for and then seen
     """
+    lock_member(connection, author_id)
     cursor = connection.cursor()
     cursor.execute("""
         INSERT INTO hall_of_fame_message 

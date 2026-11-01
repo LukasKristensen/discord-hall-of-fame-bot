@@ -95,6 +95,22 @@ def record_missing_guilds(connection, missing_guild_ids, now) -> dict:
     cursor.close()
     return missing_since
 
+def clear_missing_for_present_guilds(connection, present_guild_ids):
+    """
+    Forget the missing date of servers the bot can see again, without marking any other server missing.
+    For a day when so many servers are missing that Discord is likely leaving them out: what the bot does
+    see is still true, and a server that came back must start its grace period over if it goes missing again
+    :param connection: The database connection
+    :param present_guild_ids: The servers among the bot's guilds
+    """
+    cursor = connection.cursor()
+    cursor.execute("""
+        UPDATE server_configs SET missing_since = NULL
+        WHERE missing_since IS NOT NULL AND guild_id = ANY(%s::bigint[])
+    """, ([int(guild_id) for guild_id in present_guild_ids],))
+    connection.commit()
+    cursor.close()
+
 def insert_server_with_parameters(connection, guild_id, hall_of_fame_channel_id, reaction_threshold,
                                   post_due_date, leaderboard_message_ids, sweep_limit, sweep_limited,
                                   include_author_in_reaction_calculation, allow_messages_in_hof_channel,

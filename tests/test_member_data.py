@@ -151,7 +151,7 @@ class OptOutWriteGuardTests(unittest.TestCase):
         connection = FakeConnection()
         hall_of_fame_message_repo.insert_hall_of_fame_message(connection, 1, 2, 3, 4, 5, 77, datetime.datetime(2026, 1, 1))
 
-        self.assertIn("opted_out_member", connection.queries[0])
+        self.assertIn("opted_out_member", connection.queries[1])
 
     def test_saving_a_wrapped_looks_up_the_opt_out_in_the_same_statement(self):
         connection = FakeConnection()

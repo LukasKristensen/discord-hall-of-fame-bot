@@ -123,27 +123,35 @@ class InsertHallOfFameMessageTests(unittest.TestCase):
 
         self.assertEqual({"message_id": 4242, "channel_id": 100, "guild_id": 200, "hall_of_fame_message_id": 5555,
                           "reaction_count": 12, "author_id": 77, "created_at": datetime.datetime(2026, 3, 1, 12, 0),
-                          "video_link_message_id": None}, connection.parameters[0])
+                          "video_link_message_id": None}, connection.parameters[1])
+
+    def test_takes_the_authors_lock_first(self):
+        """So a deletion or opt-out of the author in progress is waited for, then seen."""
+        connection = FakeConnection()
+        self.insert(connection)
+
+        self.assertIn("pg_advisory_xact_lock", connection.queries[0])
+        self.assertEqual((77,), connection.parameters[0])
 
     def test_the_author_is_both_looked_up_and_stored(self):
         """Once to check whether they opted out, once as the value stored when they did not."""
         connection = FakeConnection()
         self.insert(connection)
 
-        self.assertEqual(2, connection.queries[0].count("%(author_id)s"))
+        self.assertEqual(2, connection.queries[1].count("%(author_id)s"))
 
     def test_keeps_the_video_link_when_there_is_one(self):
         connection = FakeConnection()
         self.insert(connection, video_link_message_id=6666)
 
-        self.assertEqual(6666, connection.parameters[0]["video_link_message_id"])
+        self.assertEqual(6666, connection.parameters[1]["video_link_message_id"])
 
     def test_replaces_a_message_that_is_already_recorded(self):
         """A message can be reposted after being hidden, and must not become a second row."""
         connection = FakeConnection()
         self.insert(connection)
 
-        self.assertIn("ON CONFLICT (message_id) DO UPDATE", connection.queries[0])
+        self.assertIn("ON CONFLICT (message_id) DO UPDATE", connection.queries[1])
 
     def test_commits(self):
         connection = FakeConnection()

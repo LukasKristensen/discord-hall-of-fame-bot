@@ -118,6 +118,18 @@ class CleanUpDepartedGuildsTests(DatabaseTestCase):
         self.assertEqual([], await self.clean_up(NOW + datetime.timedelta(days=events.departed_guild_grace_days)))
         self.assertIn(DEPARTED, self.configured_guilds())
 
+    async def test_a_server_that_comes_back_during_an_outage_still_starts_the_grace_period_over(self):
+        """The day is skipped as an outage, but what the bot does see is true and must be recorded."""
+        await self.clean_up(NOW)
+        present = list(self.bot.guilds)
+        # Only the server that came back is seen, so so many are missing that it looks like an outage
+        self.bot.guilds[:] = [type(present[0])(DEPARTED)]
+        self.assertEqual([], await self.clean_up(NOW + datetime.timedelta(days=1)))
+        self.bot.guilds[:] = present
+
+        self.assertEqual([], await self.clean_up(NOW + datetime.timedelta(days=events.departed_guild_grace_days)))
+        self.assertIn(DEPARTED, self.configured_guilds())
+
 
 if __name__ == "__main__":
     unittest.main()
