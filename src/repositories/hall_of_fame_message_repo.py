@@ -141,6 +141,20 @@ def find_members_for_guild(connection, guild_id):
     cursor.close()
     return [row[0] for row in rows]
 
+def get_member_posts(connection, guild_id, author_id) -> list[dict]:
+    """
+    A member's posts in one server, with what the Wrapped cards show: when it was written comes from the
+    message ID, so no message is fetched for it
+    """
+    cursor = connection.cursor()
+    cursor.execute("""
+        SELECT message_id, channel_id, reaction_count FROM hall_of_fame_message
+        WHERE guild_id = %s AND author_id = %s
+    """, (guild_id, author_id))
+    rows = cursor.fetchall()
+    cursor.close()
+    return [{"message_id": row[0], "channel_id": row[1], "reaction_count": row[2]} for row in rows]
+
 def find_top_messages_by_reaction_count(connection, guild_id, limit=10):
     cursor = connection.cursor()
     cursor.execute("""

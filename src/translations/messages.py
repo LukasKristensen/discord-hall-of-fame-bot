@@ -386,6 +386,61 @@ WRAPPED_NONE_FOR_MEMBER = ("**You are not in this server's Hall of Fame Wrapped 
 WRAPPED_NONE_OPTED_OUT = ("**You asked not to be featured**, so no Hall of Fame Wrapped is made for you. You can "
                           "change that with {command}.")
 
+# The /hof_wrapped story, the plaque it shares and the two cards the plaque opens
+WRAPPED_PAGE = "Page {page} of {pages}"
+WRAPPED_BACK = "Back"
+WRAPPED_NEXT = "Next"
+WRAPPED_SKIP = "Skip to summary"
+WRAPPED_SHARE = "Show to others"
+WRAPPED_SHARED = "Shown in the channel"
+WRAPPED_JUMP = "Jump to it"
+WRAPPED_SQUARES_BUTTON = "Year in squares"
+WRAPPED_TOP_BUTTON = "Top 10"
+WRAPPED_MINE_BUTTON = "Get my Wrapped"
+WRAPPED_INTRO_KICKER = "Your {year} in the Hall of Fame"
+WRAPPED_INTRO_TEXT = "Here is how much you made this server react."
+WRAPPED_POSTS_KICKER = "Posts featured"
+WRAPPED_POSTS_TEXT = "of your messages reached the board."
+WRAPPED_POSTS_RANK = "#{rank} of {members} members in this server."
+WRAPPED_FAME_KICKER = "Your fame rate"
+WRAPPED_FAME_TEXT = "You sent {sent:,} messages this year, and one in every {rate:,} reached the board."
+WRAPPED_FAME_AVERAGE = "The server average is 1 in {average:,}."
+WRAPPED_BEST_KICKER = "Your best moment"
+WRAPPED_BEST_TEXT = "reactions on one message."
+WRAPPED_PEOPLE_KICKER = "Your people"
+WRAPPED_TOP_FAN = "{fan} reacted to your posts {count} times."
+WRAPPED_FAN_OF = "You reacted to {member} the most, {count} times."
+WRAPPED_EMOJI = "Your signature emoji: {emoji}"
+WRAPPED_TITLE_KICKER = "Your title"
+WRAPPED_SUMMARY_KICKER = "Your summary"
+WRAPPED_PLAQUE_KICKER = "Hall of Fame Wrapped {year}"
+WRAPPED_PLAQUE_RANK = "#{rank} of {members} members"
+WRAPPED_PLAQUE_FAME = "## 1 in {rate:,}\n-# of {sent:,} messages reached the board"
+WRAPPED_PLAQUE_FAME_AVERAGE = " · server average 1 in {average:,}"
+WRAPPED_PLAQUE_STATS = "**{posts}** posts featured · **{received}** reactions earned · **{given}** given"
+WRAPPED_PLAQUE_BEST = "**Best moment** · {count} reactions"
+WRAPPED_PLAQUE_FAN = "**Biggest fan** · {fan}, {count} reactions"
+WRAPPED_PLAQUE_EMOJI = "**Signature emoji** · {emoji}"
+WRAPPED_PLAQUE_CHANNEL = "**Home turf** · {channel}"
+WRAPPED_SHARED_BY = "-# {member} shared their Wrapped"
+WRAPPED_SQUARES_TITLE = "### {member}'s {year}, one square per day"
+WRAPPED_SQUARES_LEGEND = "-# · none   ▒ one   ▓ two   █ three or more posts featured that day"
+WRAPPED_SQUARES_STREAK = "**Longest run** · {days} in a row"
+WRAPPED_SQUARES_WEEKDAY = "**Best day** · {weekday}"
+WRAPPED_SQUARES_HOUR = "**Best hour** · {hour:02d}:00 UTC"
+WRAPPED_SQUARES_MONTH = "**Busiest month** · {month}"
+WRAPPED_TOP_TITLE = "### {member}'s top {count} of {year}"
+WRAPPED_TOP_LINE = "**{rank}.** {count} reactions · {channel} · {date} · [Jump]({link})"
+WRAPPED_CARD_GONE = "This Wrapped is no longer available."
+WRAPPED_CARD_EMPTY = "No posts from {year} to show."
+# A title for each Wrapped, the first that fits, in this order: the name, then why it was earned
+WRAPPED_TITLE_HEADLINER = ("The Headliner", "The most featured member of the server this year.")
+WRAPPED_TITLE_SHARPSHOOTER = ("The Sharpshooter", "One in every {rate:,} of your messages reached the board.")
+WRAPPED_TITLE_REGULAR = ("The Regular", "{posts} posts on the board this year.")
+WRAPPED_TITLE_HYPE = ("The Hype Crew", "You gave more reactions than you got.")
+WRAPPED_TITLE_EXPLORER = ("The Explorer", "Featured from {channels} different channels.")
+WRAPPED_TITLE_RISING = ("The Rising Star", "On the board, and only getting started.")
+
 # /troubleshoot, the Troubleshoot button (TROUBLESHOOT_BUTTON above), and the report sent when the bot joins
 CHECK_TITLE = "🩺 Hall of Fame setup check"
 # Posted in the board on join instead of the findings themselves, as everyone can read the board

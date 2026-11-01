@@ -1759,6 +1759,7 @@ class FirstLoginTests(MainTestCase):
         self.patch(main.events, "post_wrapped", nothing)
         self.patch(main.events, "check_for_new_server_classes", lambda *_args: self.new_servers())
         self.patch(main, "bot", types.SimpleNamespace(user="Hall Of Fame", add_view=lambda _view: None,
+                                                      add_dynamic_items=lambda *_items: None,
                                                       guilds=[types.SimpleNamespace(member_count=40)]))
         self.patch(main, "connection_pool", FakePool())
         self.patch(main, "setup_databases", lambda _connection: None)
@@ -2383,16 +2384,20 @@ class SettingCommandTests(CommandTestCase):
 
 
 class WrappedCommandTests(CommandTestCase):
-    async def test_shows_the_members_wrapped(self):
-        async def embed(*_args):
-            return "member embed"
+    async def test_opens_the_members_story(self):
+        opened = []
 
+        async def send_story(interaction, row, totals):
+            opened.append((interaction, row, totals))
+
+        totals = {"members": 3, "messages_sent": 900, "posts": 6}
         self.patch(main.hof_wrapped_repo, "get_hof_wrapped", lambda *_args: {"user_id": 77})
-        self.patch(main.hof_wrapped, "create_embed", embed)
+        self.patch(main.hof_wrapped_repo, "get_guild_wrapped_totals", lambda *_args: totals)
+        self.patch(main.wrapped_story, "send_story", send_story)
         interaction = FakeInteraction()
         await main.hof_wrapped_command.callback(interaction)
 
-        self.assertEqual(["member embed"], interaction.response.messages)
+        self.assertEqual([(interaction, {"user_id": 77}, totals)], opened)
         self.assertTrue(any("HOF Wrapped command used in a server" in entry for entry in self.logged))
 
     async def ask_without_wrapped(self, server_has_wrapped=True, opted_out=False):

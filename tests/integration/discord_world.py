@@ -226,10 +226,26 @@ class Board:
         return types.SimpleNamespace(**granted)
 
 
+class Search:
+    """
+    The REST calls the bot makes itself, of which only Discord's message search is used: it counts a
+    member's messages for the Wrapped fame rate. messages_sent gives the count per member, 100 otherwise
+    """
+
+    def __init__(self):
+        self.messages_sent = {}
+        self.asked = []
+
+    async def request(self, route, params=None, **_kwargs):
+        self.asked.append((route.path, params))
+        return {"total_results": self.messages_sent.get(params["author_id"], 100), "messages": []}
+
+
 class Bot:
     def __init__(self, *guilds):
         self.guilds = list(guilds)
         self.user = types.SimpleNamespace(id=1)
+        self.http = Search()
 
     def get_channel(self, channel_id):
         for guild in self.guilds:

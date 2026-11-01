@@ -153,7 +153,7 @@ Open to everyone.
 |:---|:---|:---|
 | `/leaderboard` | | Rank the server by hall of fame posts and reactions earned. Refreshed daily. |
 | `/user_profile` | `specific_user` (optional) | All time and monthly totals and ranks for a member. Defaults to you. When the member has been featured in other servers too, the card ends with their posts, reactions and titles added up across every server with the bot, without naming any server. Earned badges, such as monthly champion or a 100-reaction post, sit under the columns; badges that come from other servers are left out when the member hid their totals. Used in a DM or a server without the bot, it only looks you up, and shows your totals across servers alone. |
-| `/hof_wrapped` | | Your personal Hall of Fame Wrapped for the year. |
+| `/hof_wrapped` | | Your Hall of Fame Wrapped for the year, as a short story only you see: posts featured, your fame rate (one in how many of your messages reached the board), your best moment, your people and a title, ending on a one-page summary. **Show to others** posts that summary in the channel, where anyone can open your **Year in squares** (a square per day you were featured) and **Top 10** (your most reacted posts) privately, or press **Get my Wrapped** for their own. |
 | `/server_hof_wrapped` | | The Hall of Fame Wrapped for the whole server. |
 | **Why isn't this on the board?** | Right-click or long-press a message, then Apps | Says why that message is or is not on the board: already posted (with a link), hidden after dropping below the threshold, how many reactions it has against the threshold and how the server counts them, too old, from a bot, missing an image or video, from an age-restricted channel, with media Discord flagged as sensitive, in a channel the bot cannot read, the board missing or the bot unable to post there, or the daily post limit. Only you see the answer. |
 
@@ -228,8 +228,9 @@ Getting featured is meant to be worth something, so the bot keeps score.
   the server for each, their best post, when they were last featured, how far they are from the next
   rank and the badges they have earned, such as monthly champion or 100 posts. Call it on someone else
   to compare.
-- **`/hof_wrapped`** gives a member their year in review, and **`/server_hof_wrapped`** does the same
-  for the whole server.
+- **`/hof_wrapped`** gives a member their year in review as a private story ending on a summary they
+  can show the channel, including their fame rate: one in how many of their messages reached the board,
+  next to the server's average. **`/server_hof_wrapped`** does the same for the whole server.
 
 A member's posts count toward all of this up to 10,000 across every server. The limit keeps what the
 bot stores about any one member small enough that `/my_data` can always give them all of it. Posts past

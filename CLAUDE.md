@@ -24,6 +24,7 @@ troubleshooting are in the `dev-environment` skill.
 | `src/events.py` | Reaction and message events, the daily task |
 | `src/utils.py` | Posting to the board, the old embed posts, `validate_message`, leaderboards, logging |
 | `src/board_post.py` | What a Components V2 board post shows, every kind of media included; `tests/test_post_matrix.py` crosses them all |
+| `src/hof_wrapped.py`, `src/wrapped_story.py` | Making Wrapped each December (including the fame rate count), and the `/hof_wrapped` story, shared plaque and its Year in squares and Top 10 cards |
 | `src/message_reactions.py` | Reaction counting methods and the emoji whitelist |
 | `src/commands.py` | `/help` and `/get_server_config` embeds, command helpers |
 | `src/repositories/` | All SQL, one module per table. `server_config_repo.py` owns the settings table |

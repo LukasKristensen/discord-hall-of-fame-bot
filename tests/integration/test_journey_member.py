@@ -10,8 +10,11 @@ import types
 import unittest
 from unittest import mock
 
+import discord
+
 import hof_wrapped
 import main
+import wrapped_story
 from constants import version
 from enums import command_refs
 from repositories import hall_of_fame_message_repo, hof_wrapped_repo
@@ -227,6 +230,62 @@ class WrappedTests(JourneyTestCase):
         with mock.patch("builtins.print"):
             await hof_wrapped.main(GUILD, self.bot, self.config.reaction_threshold, self.connection)
 
+    def view_text(self, view) -> str:
+        texts = [item.content for item in view.walk_children() if isinstance(item, discord.ui.TextDisplay)]
+        return "\n".join(texts)
+
+    def button(self, view, label):
+        for item in view.walk_children():
+            if getattr(getattr(item, "item", item), "label", None) == label:
+                return item
+        raise AssertionError(f"No {label} button")
+
+    async def test_a_story_shared_as_a_plaque_whose_cards_anyone_can_open(self):
+        await self.set_up()
+        # What main sets on startup
+        for name, value in (("connect", lambda: main.get_db_connection(main.connection_pool)),
+                            ("open_wrapped_handler", main.open_wrapped)):
+            patcher = mock.patch.object(wrapped_story, name, value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        in_the_year = datetime.datetime(version.WRAPPED_YEAR, 6, 1, 21, tzinfo=datetime.timezone.utc)
+        # Written in the Wrapped year, which the cards read from the message ID
+        message = self.general.add(discord.utils.time_snowflake(in_the_year), AUTHOR)
+        await self.react(message, *FANS[:3])
+        self.execute("UPDATE hall_of_fame_message SET created_at = %s", (in_the_year.replace(tzinfo=None),))
+        message.created_at = in_the_year
+        self.bot.http.messages_sent[AUTHOR.id] = 250
+        await self.generate()
+
+        stored = hof_wrapped_repo.get_hof_wrapped(self.connection, GUILD, AUTHOR.id, version.WRAPPED_YEAR)
+        self.assertEqual(250, stored["messages_sent"], "Discord's count is kept for the fame rate")
+
+        own = self.command(AUTHOR)
+        await main.hof_wrapped_command.callback(own)
+        story = own.last.view
+        self.assertIn("1 in 250", [page.big for page in story.pages])
+
+        skip = self.command(AUTHOR)
+        await self.button(story, messages.WRAPPED_SKIP).callback(skip)
+        share = self.command(AUTHOR)
+        await self.button(story, messages.WRAPPED_SHARE).callback(share)
+        plaque = share.last.view
+        self.assertFalse(share.last.ephemeral, "shown to the channel")
+        self.assertIn("1 in 250", self.view_text(plaque))
+
+        top = self.command(FANS[0])
+        await self.button(plaque, messages.WRAPPED_TOP_BUTTON).callback(top)
+        self.assertTrue(top.last.ephemeral, "a card opens for whoever pressed")
+        self.assertIn("3 reactions", self.view_text(top.last.view))
+
+        squares = self.command(FANS[1])
+        await self.button(plaque, messages.WRAPPED_SQUARES_BUTTON).callback(squares)
+        self.assertIn(messages.WRAPPED_SQUARES_HOUR.format(hour=21), self.view_text(squares.last.view))
+
+        mine = self.command(FANS[4])
+        await self.button(plaque, messages.WRAPPED_MINE_BUTTON).callback(mine)
+        self.assertIn("not in this server's Hall of Fame Wrapped", mine.last.content)
+
     async def test_wrapped_before_and_after_it_is_made(self):
         await self.set_up()
         in_the_year = datetime.datetime(version.WRAPPED_YEAR, 6, 1, tzinfo=datetime.timezone.utc)
@@ -250,9 +309,9 @@ class WrappedTests(JourneyTestCase):
 
         own = self.command(AUTHOR)
         await main.hof_wrapped_command.callback(own)
-        self.assertIsNotNone(own.last.embed)
-        self.assertFalse(own.last.ephemeral)
-        self.assertIn("1 posts", own.last.text())
+        self.assertIsInstance(own.last.view, wrapped_story.StoryView)
+        self.assertTrue(own.last.ephemeral, "the story is the member's own until they show it")
+        self.assertEqual(1, own.last.view.summary.posts)
 
         fan = self.command(FANS[4])
         await main.hof_wrapped_command.callback(fan)

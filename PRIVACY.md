@@ -26,8 +26,9 @@ described here. Contact: githublukas@gmail.com, or the
   without the bot, where it shows these totals alone. Nobody else can look you up there. They are numbers only, never a server name, server ID or message content. If you hide them
   with the button on `/my_data`, your user ID is stored with the date you hid them. Server admins can leave
   their server out of everyone's totals with `/count_in_global_profiles`.
-- **Hall of Fame Wrapped:** yearly statistics per member, including most-used channels and emojis and
-  which members react to each other's posts most often.
+- **Hall of Fame Wrapped:** yearly statistics per member, including most-used channels and emojis,
+  which members react to each other's posts most often, and how many messages you sent in the server
+  that year, for your fame rate.
 - **Not featured:** if you press "Stop featuring me" on `/my_data` (it is also offered right after you
   delete your data), your user ID is stored with the date, so the bot remembers not to repost or store
   new messages of yours. When someone else's reply to one of your messages reaches the board, it is
@@ -58,6 +59,10 @@ When the bot joins a server, and whenever an admin runs `/troubleshoot`, it also
 channels, roles, channel permissions, member count and whether the server is Discoverable, to find
 setup problems such as channels it cannot see. The result is posted in that server and is not saved.
 
+When Wrapped is made, the bot asks Discord's message search how many messages each member sent in the
+server that year. Discord answers with the number alone, so no message is read for it. Only that number
+is stored.
+
 When a member uses **Why isn't this on the board?** on a message, the bot reads that message, its
 reactions and the server's settings to explain whether it reached the board. Only that member sees the
 answer, and it is not saved. If the author asked not to be featured, only the author is told that this
@@ -66,7 +71,10 @@ is the reason.
 ## 3. How the data is used
 
 Only to provide the bot's features: posting to the Hall of Fame, leaderboards, profiles and Wrapped,
-plus support and troubleshooting. Your totals across servers can be shown in any server with the bot. Outside
+plus support and troubleshooting. Your Wrapped is shown only to you until you press "Show to others",
+which posts its summary in that channel. Members there can then open your Year in squares and Top 10,
+which show on which days your featured messages were written and link to your most reacted ones; they
+stop opening if you stop being featured or delete your data. Your totals across servers can be shown in any server with the bot. Outside
 those servers, only you can show them, through the bot added to your own account. They are only ever
 shown as totals, so they do not reveal which servers you are in, and once you hide them
 on `/my_data` they are not shown anywhere. Aggregated statistics that cannot identify anyone are used to improve
