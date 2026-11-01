@@ -660,6 +660,16 @@ class ConnectionSlotTests(MainTestCase):
         self.assertTrue(kwargs.get("validate_for_duplicates"))
         self.assertEqual(1, self.pool.returned)
 
+    async def test_rolls_back_before_returning_a_connection_after_an_error(self):
+        """An aborted transaction would otherwise fail every command of whoever borrows the connection next."""
+        self.size_the_pool(1)
+        with self.assertRaises(RuntimeError):
+            async with main.get_db_connection(self.pool):
+                raise RuntimeError("canceling statement due to statement timeout")
+
+        self.assertEqual(1, self.pool.connection.rollbacks)
+        self.assertEqual(1, self.pool.returned)
+
     async def test_hands_out_a_connection(self):
         self.size_the_pool(2)
         async with main.get_db_connection(self.pool) as connection:
