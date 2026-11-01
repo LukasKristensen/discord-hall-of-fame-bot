@@ -50,6 +50,10 @@ message under a "test cases" category so each post names what it tests.
   Holding the post until the message was 10 seconds old did not help and was reverted. Different files
   in one gallery have always loaded so far, and so did 10 copies of one image, so duplicates alone do not
   cause it: so far only repeated videos have failed.
+- **System messages reach the board as empty posts.** The message Discord posts when a poll closes was
+  featured as a reply to the poll with no words of its own, as its result sits in an embed the post does not
+  read. The bot never checks a message's type, so a member joining, a boost, a pin or a new thread could be
+  featured the same way once reacted to enough.
 - **A poll cannot be forwarded.** Discord's menu offers no Forward on a poll, so a forwarded poll cannot be
   tested, and the code's handling of one is never reached from the app.
 - **A user mention can read as unknown user.** A new second account, in a browser, saw `@Lukas` on the board
@@ -98,7 +102,6 @@ Not bugs, and nothing decided yet:
 - **A member who opted out:** check that their message posted after opting out does not reach the board.
   In this run their message was on the board, possibly reacted to before they opted out.
 - **file:** whether a file link still opens a day after posting.
-- **poll result:** react to the message Discord posts when a poll closes, and see what the board shows.
 
 ## 21 October 2026: member data, the post limit and the export (3.0, then called 2.2)
 
