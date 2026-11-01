@@ -147,9 +147,8 @@ How they are made, so they can be redone the same way when the layout changes:
 - Each one is placed on a 1280×720 black canvas with a short caption on the left (Inter, the landing
   page's gold `#e8b84a` for the label), so the carousel shows them all at the same size.
 
-Still to redo: the leaderboard, since the test server's old name "Lukas's server 2" shows in its
-title (the server is now called "Your server"), and the board post, which should have more than one
-reaction.
+The leaderboard's "1 messages" is shown as "1 message", which is what the bot writes once its plural is
+fixed. Still to redo: the board post, which should have more than one reaction.
 
 <br>
 
