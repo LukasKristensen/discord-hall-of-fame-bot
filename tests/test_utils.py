@@ -6,6 +6,7 @@ from tests.fakes import FakeAttachment, FakeGuild, FakeReaction, FakeUser
 
 import discord
 import board_post
+import json
 import utils
 from enums import calculation_method_type
 from translations import messages
@@ -507,6 +508,27 @@ class PostViewTests(EmbedTestCase):
 
         self.assertEqual("-# Poll\n**Best pizza?**\n- Pineapple · 12 votes\n- Plain · 1 vote",
                          section["components"][1]["content"])
+
+    async def test_a_poll_with_words_shows_both(self):
+        message = FakeEmbedMessage("Vote please")
+        message.poll = types.SimpleNamespace(question="Best pizza?", answers=[
+            types.SimpleNamespace(text="Pineapple", vote_count=12)])
+        # Short text sits in the section beside the avatar, so the whole payload is searched
+        shown = json.dumps(await self.payload(message), ensure_ascii=False)
+
+        self.assertIn("Vote please", shown)
+        self.assertIn("**Best pizza?**", shown)
+        self.assertIn("Pineapple · 12 votes", shown)
+
+    async def test_a_reply_with_more_than_ten_pictures_says_how_many_are_left_out(self):
+        pictures = [FakeAttachment(f"https://cdn/{number}.png", "image/png") for number in range(12)]
+        replied = FakeEmbedMessage("", attachments=pictures)
+        message = FakeEmbedMessage("nice", reference_message_id=9, channel=FakeChannel(replied))
+        container = await self.payload(message)
+
+        [gallery] = self.of_type(container, 12)
+        self.assertEqual(10, len(gallery["items"]))
+        self.assertIn(board_post.more_note(2), self.texts(container))
 
     async def test_a_message_that_is_only_an_image_link_shows_the_picture_alone(self):
         message = FakeEmbedMessage("https://i.example/cat.png")

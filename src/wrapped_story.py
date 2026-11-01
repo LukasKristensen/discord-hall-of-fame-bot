@@ -8,8 +8,8 @@ the presser's own story. They are DynamicItems keyed by the server, member and y
 they keep working on plaques posted before a restart.
 
 Everything shown comes from the member's stored Wrapped and their stored board posts. The fame rate uses
-the messages the member sent that year, counted by Discord's message search when Wrapped was made, so no
-message is read for it. When a post was written comes from its message ID, so no message is fetched for the
+the messages the member sent that year, counted by Discord's message search when Wrapped was made. The search
+also returns one of those messages, which is dropped unread; only the count is kept. When a post was written comes from its message ID, so no message is fetched for the
 cards either.
 """
 import calendar
@@ -360,6 +360,12 @@ class StoryView(discord.ui.LayoutView):
 
     async def share(self, interaction: discord.Interaction):
         """Post the plaque for everyone, once, as a followup, which needs no permission to send in the channel"""
+        if self.shared:
+            # A second press that arrived before the button was disabled. Set before the first await below, so
+            # only one press gets past this
+            # noinspection PyUnresolvedReferences
+            await interaction.response.defer()
+            return
         self.shared = True
         self.render()
         await interaction.response.edit_message(view=self)

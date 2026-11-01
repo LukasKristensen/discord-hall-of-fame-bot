@@ -362,6 +362,20 @@ class SettingsFormTests(JourneyTestCase):
         unchanged = await self.submit((await self.open_form()).modal)
         self.assertEqual(messages.SETTINGS_NOTHING_CHANGED, unchanged.last.content)
 
+    async def test_a_form_left_open_does_not_undo_another_admins_change(self):
+        """Only what this form changed is stored, so the other admin's threshold stays."""
+        await self.set_up()
+        stale = (await self.open_form()).modal
+        await self.submit((await self.open_form()).modal, threshold="5")
+
+        rules = [column for column in messages.SETTINGS_RULE_OPTIONS if getattr(self.config, column)]
+        rules.append("ignore_bot_messages")
+        await self.submit(stale, rules=rules)
+
+        self.assertEqual(5, server_config_repo.get_parameter_value(self.connection, GUILD, "reaction_threshold"))
+        self.assertEqual(5, self.config.reaction_threshold)
+        self.assertTrue(self.config.ignore_bot_messages)
+
     async def test_a_wrong_value_stores_nothing(self):
         await self.set_up()
         form = (await self.open_form()).modal

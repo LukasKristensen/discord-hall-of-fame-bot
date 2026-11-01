@@ -160,6 +160,11 @@ class SettingsForm(discord.ui.Modal):
         super().__init__(title=messages.SETTINGS_FORM_TITLE)
         self.server_config = server_config
         self.on_save = on_save
+        # What the form showed when it opened, so only what this admin changed is stored. Another admin may
+        # change a setting while it is open, and storing every field would quietly put theirs back
+        self.opened_with = {column: getattr(server_config, column, None) for column in (
+            "hall_of_fame_channel_id", "reaction_threshold", "post_due_date", "reaction_count_calculation_method",
+            *messages.SETTINGS_RULE_OPTIONS)}
         # A channel that was deleted cannot be offered as the current one
         board = guild.get_channel(server_config.hall_of_fame_channel_id) if server_config.hall_of_fame_channel_id else None
         self.channel = discord.ui.ChannelSelect(channel_types=board_channel_types, required=True,
@@ -196,6 +201,8 @@ class SettingsForm(discord.ui.Modal):
     async def on_submit(self, interaction: discord.Interaction) -> None:
         chosen, errors = settings_from_form(self.channel.values, self.threshold.value, self.due_date.value,
                                             self.method.value, self.rules.values, self.server_config)
+        chosen = {column: value for column, value in chosen.items()
+                  if column not in self.opened_with or value != self.opened_with[column]}
         await self.on_save(interaction, chosen, errors)
 
 

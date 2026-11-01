@@ -181,6 +181,18 @@ class StoryViewTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual([{"view": view}], interaction.edits)
         self.assertIn("# 6", texts(view))
 
+    async def test_two_presses_together_post_one_plaque(self):
+        """Both can arrive before the first one disables the button."""
+        view = self.story()
+        await buttons(view)[messages.WRAPPED_SKIP].callback(FakeInteraction())
+        share = buttons(view)[messages.WRAPPED_SHARE]
+        first, second = FakeInteraction(), FakeInteraction()
+        await share.callback(first)
+        await share.callback(second)
+
+        self.assertEqual(1, len(first.followups))
+        self.assertEqual([], second.followups)
+
     async def test_skip_goes_to_the_summary_which_offers_to_show_it(self):
         view = self.story()
         await buttons(view)[messages.WRAPPED_SKIP].callback(FakeInteraction())

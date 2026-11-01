@@ -406,8 +406,9 @@ async def create_post_view(message: discord.Message, connection, config: dict = 
     # Read from what the post shows, like the text and media. discord.py's snapshot of a forward carries no
     # poll, so a forwarded poll has none to show
     poll = getattr(body, "poll", None)
-    if poll is not None and not text:
-        text = poll_text(poll)
+    if poll is not None:
+        # Under the words when the message has both, so neither is lost. Counted in the text budget below
+        text = f"{text}\n\n{poll_text(poll)}" if text else poll_text(poll)
     # A sticker no gallery can show is named where the words go when there are none, so it is seen
     if not text and sticker_note:
         text, sticker_note = f"*{messages.POST_STICKER.format(name=', '.join(unshown_stickers))}*", None
@@ -431,10 +432,12 @@ async def create_post_view(message: discord.Message, connection, config: dict = 
         heading.append(text)
 
     overflow = more_note(len(media) - post_media_limit) if len(media) > post_media_limit else None
+    reference_overflow = (more_note(len(reference_media) - post_media_limit)
+                          if len(reference_media) > post_media_limit else None)
     reactions = reactions_line(message, config, corrected_reactions)
     # Everything but the file links, which take what is left of Discord's limit on a message's text
     text_used = sum(len(part) for part in (reply_block or "", *heading, text if not text_beside else "",
-                                           overflow or "", sticker_note or "", reactions))
+                                           overflow or "", reference_overflow or "", sticker_note or "", reactions))
     files = file_lines(body, post_text_budget - text_used)
 
     container = discord.ui.Container(accent_colour=discord.Colour.gold())
@@ -442,6 +445,8 @@ async def create_post_view(message: discord.Message, connection, config: dict = 
         container.add_item(discord.ui.TextDisplay(reply_block))
         if reference_media:
             container.add_item(discord.ui.MediaGallery(*reference_media[:post_media_limit]))
+            if reference_overflow:
+                container.add_item(discord.ui.TextDisplay(reference_overflow))
         # Space between the message answered and the answer, so the two read as two people
         container.add_item(discord.ui.Separator(visible=False))
     if len(heading) > 1:
