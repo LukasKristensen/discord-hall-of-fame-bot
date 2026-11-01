@@ -389,13 +389,18 @@ async def main(guild_id: int, bot: commands.Bot, get_reaction_threshold: int, co
     rankings = rank_stats(users)
 
     for user in users.values():
+        # Asked again before each search, which reads from Discord, so a member who opts out while Wrapped runs
+        # is not searched for. Their row is then left out when it is saved
+        if opt_out_repo.is_opted_out(connection, user.id):
+            continue
         user.messagesSent = await count_messages_sent(bot, guild_id, user.id, version.WRAPPED_YEAR)
     for user in users.values():
         save_user_wrapped_to_db(guild.id, user, version.WRAPPED_YEAR)
     forget_members_who_deleted_meanwhile(connection, guild_id)
 
 
-# Discord's message search, which counts a member's messages without the bot reading any of them
+# Discord's message search, which counts a member's messages. It also sends the one result asked for, which is
+# never used, since the search allows no fewer
 SEARCH_ROUTE = "/guilds/{guild_id}/messages/search"
 # How often a server that is not indexed yet is asked again, and the longest wait between the tries
 search_attempts = 3
@@ -405,8 +410,8 @@ search_wait_limit_seconds = 10
 async def count_messages_sent(bot, guild_id: int, user_id: int, year: int) -> int | None:
     """
     How many messages a member sent in a server during a year, for the fame rate. Discord's message search
-    answers with the count alone (only one result is asked for), so no message content reaches the bot.
-    discord.py does not have the endpoint, so it is called directly
+    answers with the count and the one result asked for, the fewest it allows; only the count is read, and the
+    result is dropped. discord.py does not have the endpoint, so it is called directly
     :return: The count, or None when Discord gave no answer, which leaves the fame rate out
     """
     start = datetime.datetime(year, 1, 1, tzinfo=datetime.timezone.utc)

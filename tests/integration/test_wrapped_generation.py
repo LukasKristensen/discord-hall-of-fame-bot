@@ -306,6 +306,27 @@ class OptedOutFriendTests(WrappedTestCase):
         self.assertIsNone(self.wrapped(FIRST, BOB.id))
         self.assertEqual({}, self.wrapped(FIRST, ALICE.id)["users_fans"])
 
+    async def test_a_member_who_opts_out_before_the_message_search_is_not_searched_for(self):
+        """The search reads from Discord, which the stored row being left out later cannot undo."""
+        rank = hof_wrapped.rank_stats
+        searched = []
+
+        def rank_then_opt_out(users):
+            opt_out_repo.set_opted_out(self.connection, BOB.id, True)
+            return rank(users)
+
+        async def count(_bot, _guild_id, user_id, _year):
+            searched.append(user_id)
+            return 100
+
+        with mock.patch.object(hof_wrapped, "rank_stats", rank_then_opt_out), \
+                mock.patch.object(hof_wrapped, "count_messages_sent", count):
+            await self.generate(FIRST)
+
+        self.assertNotIn(BOB.id, searched)
+        self.assertIn(ALICE.id, searched)
+        self.assertIsNone(self.wrapped(FIRST, BOB.id))
+
     async def test_a_friend_who_opted_out_is_left_out_in_every_server(self):
         """Alice reacted to Dave's post in the second server, where she never posted herself."""
         await self.generate(SECOND)

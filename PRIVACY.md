@@ -60,8 +60,8 @@ channels, roles, channel permissions, member count and whether the server is Dis
 setup problems such as channels it cannot see. The result is posted in that server and is not saved.
 
 When Wrapped is made, the bot asks Discord's message search how many messages each member sent in the
-server that year. Discord answers with the number alone, so no message is read for it. Only that number
-is stored.
+server that year. Discord answers with that number and with one of the member's messages, which the bot
+does not use or keep. Only the number is stored.
 
 When a member uses **Why isn't this on the board?** on a message, the bot reads that message, its
 reactions and the server's settings to explain whether it reached the board. Only that member sees the

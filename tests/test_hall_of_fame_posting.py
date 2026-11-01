@@ -596,6 +596,31 @@ class ComponentsV2PostTests(PostingTestCase):
 
         self.assertIs(self.view, self.posted.edits[-1]["view"])
 
+    async def test_a_restored_post_whose_reply_media_is_flagged_goes_back_down(self):
+        """Media only the post carries, such as a replied-to image, is flagged on the post, not the source."""
+        self.posted.components = utils.hidden_post_view().children
+
+        async def get_message(_channel_id, _message_id):
+            return {"components": [{"type": 17, "components": [{"type": 12, "items": [
+                {"media": {"url": "https://cdn.example/a.png", "content_scan_metadata": {"flags": 1 << 1}}}]}]}]}
+
+        self.bot.http = types.SimpleNamespace(get_message=get_message)
+        await self.update(20)
+
+        self.assertIs(self.view, self.posted.edits[0]["view"])
+        self.assertFalse(utils.post_shows(types.SimpleNamespace(embeds=[], components=self.posted.edits[-1]["view"].children)))
+
+    async def test_a_restored_post_without_flags_stays_up(self):
+        self.posted.components = utils.hidden_post_view().children
+
+        async def get_message(_channel_id, _message_id):
+            return {"components": []}
+
+        self.bot.http = types.SimpleNamespace(get_message=get_message)
+        await self.update(20)
+
+        self.assertEqual(1, len(self.posted.edits))
+
     async def test_an_old_post_that_discord_refuses_to_edit_pauses_the_server(self):
         self.posted.edit_error = old_message_edit_limit()
         await self.update(20)

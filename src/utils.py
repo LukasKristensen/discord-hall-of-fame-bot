@@ -262,6 +262,8 @@ async def validate_message(reaction_event: discord.RawReactionActionEvent, bot: 
                                        reaction_config, corrected_reactions, guild_id=guild_id)
             if not restored:
                 return
+            if await recheck_shown_post(message_to_update, bot, target_channel, guild_id):
+                return
             hall_of_fame_message_repo.update_field_for_message(connection, guild_id, channel_id, message_id, "reaction_count", corrected_reactions)
             # The column is present and null for every post that is not a video, so the id itself
             # is what decides whether there is a link message to restore
@@ -337,8 +339,9 @@ async def update_reaction_counter(db_message, bot: discord.Client, target_channe
 
     if not post_shows(hall_of_fame_message):
         # Post the message in the Hall of Fame channel if it was removed
-        await show_post(hall_of_fame_message, discord_message, reaction_threshold, connection, config,
-                        corrected_reactions, guild_id=guild_id)
+        if await show_post(hall_of_fame_message, discord_message, reaction_threshold, connection, config,
+                           corrected_reactions, guild_id=guild_id):
+            await recheck_shown_post(hall_of_fame_message, bot, target_channel, guild_id)
         return
 
     if corrected_reactions is None:
@@ -812,6 +815,19 @@ async def show_post(post, message: discord.Message, reaction_threshold: int, con
                                         allowed_mentions=NO_MENTIONS)
     return await edit_board_message(post, guild_id,
                                     embed=await create_embed(message, reaction_threshold, connection, config))
+
+
+async def recheck_shown_post(post, bot: discord.Client, board, guild_id: int) -> bool:
+    """
+    Read a Components V2 post's scanning results back once it is shown again, as after it is first sent. The
+    source message is checked before, but media only the post carries, such as the image of the message it
+    replies to, is flagged on the post alone, and a hidden post shows none
+    :return: True when the post was taken down again
+    """
+    if not is_components_v2(post):
+        return False
+    raw_components = await fetch_raw_components(bot, board.id, post.id)
+    return await take_down_flagged_post(post, board, bot, guild_id, raw_components)
 
 
 def board_topic_is_ours(topic) -> bool:

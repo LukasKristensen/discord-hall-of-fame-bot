@@ -403,7 +403,9 @@ async def create_post_view(message: discord.Message, connection, config: dict = 
             quote = f"*{placeholder}*" if placeholder else ""
 
     text = "" if link_replaces_text else truncate_content(body.content, post_text_limit)
-    poll = getattr(message, "poll", None)
+    # Read from what the post shows, like the text and media. discord.py's snapshot of a forward carries no
+    # poll, so a forwarded poll has none to show
+    poll = getattr(body, "poll", None)
     if poll is not None and not text:
         text = poll_text(poll)
     # A sticker no gallery can show is named where the words go when there are none, so it is seen
