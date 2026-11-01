@@ -41,6 +41,7 @@ message under a "test cases" category so each post names what it tests.
 | sticker | A picture sticker, two different reactions | Shown in the gallery. The reactions line lists both emojis with their counts |
 | reply | A reply to an image, a reply to a video | The quote, then the answered image or playable video full width, then the reply under its poster's name |
 | reply | A reply to a deleted message | "Replying to a deleted message" above the poster's name, no quote |
+| old post | Embed posts from before the upgrade, reacted to again | The count updated in the same embed after counting changed to all emojis. A post below the threshold went blank, and came back as the same embed, with the footer, once over it again |
 | opt-out | A new message from a member who pressed Stop featuring me, reacted to | Not posted. Why isn't this on the board?, asked by another member, answered only that it cannot be featured, without naming the choice. Asked by the member, it said they asked not to be featured and pointed to `/my_data` |
 | reply | A reply to a member who pressed Stop featuring me | Posted with no "Replying to" line and no quote, so the member is not named |
 
@@ -56,6 +57,10 @@ message under a "test cases" category so each post names what it tests.
   read. The bot never checked a message's type, so a member joining, a boost, a pin or a new thread could be
   featured the same way once reacted to enough. Fixed: only messages, replies and bots' answers to commands
   are featured now (`FEATURED_MESSAGE_TYPES` in `src/utils.py`).
+- **Unexplained: two thresholds at once.** Why isn't this on the board? said a message had 1 of the 2
+  reactions needed, while `/get_server_config` the same minute said 1 is needed. Both read the same setting
+  in memory, so either the threshold changed in between, or two copies of the development bot were running,
+  each with its own settings. A second copy would also explain a video posted twice early in this run.
 - **A poll cannot be forwarded.** Discord's menu offers no Forward on a poll, so a forwarded poll cannot be
   tested, and the code's handling of one is never reached from the app.
 - **A user mention can read as unknown user.** A new second account, in a browser, saw `@Lukas` on the board
