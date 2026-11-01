@@ -29,6 +29,7 @@ message under a "test cases" category so each post names what it tests.
 | mixed | A reply to a poll | The quote reads *Poll: question*. The app cannot send text and a poll in one message |
 | link | A YouTube link alone | The link kept as text, the video's thumbnail as a still picture in the gallery |
 | link | A GIF link alone | The link replaced by the GIF, as Discord shows it. Loops as a GIF, no player controls |
+| file | Text and an audio file | Text beside the avatar, the file linked by its name under it. No player, unlike the original |
 | mentions | `@user`, `@role`, `@here`, `@everyone` | Shown as mentions. A second account in the server got no notification and no mention badge |
 | sticker | An animated (Lottie) sticker | Named in italics where the text goes, *Sticker: name* |
 | sticker | A picture sticker, two different reactions | Shown in the gallery. The reactions line lists both emojis with their counts |
@@ -75,6 +76,10 @@ Not bugs, and nothing decided yet:
   A thumbnail beside the quote would put the featured message first, but a thumbnail cannot play a video.
   Kept as it is for now.
 
+- **Audio that plays on the board.** An audio file is only a link, where the original has a player. A
+  Components V2 `File` component plays audio, but only for a file uploaded with the post itself, so the bot
+  would have to download and upload it again, within the board's upload size limit.
+
 ### Still to run
 
 - **The 2,000 character cut:** needs Nitro, or a lower `post_text_limit` on the development bot.
@@ -82,7 +87,7 @@ Not bugs, and nothing decided yet:
   note.
 - **A member who opted out:** check that their message posted after opting out does not reach the board.
   In this run their message was on the board, possibly reacted to before they opted out.
-- **file:** a PDF or zip, an audio file and a voice message.
+- **file:** a PDF or zip and a voice message, and whether a file link still opens a day after posting.
 - **link:** an image URL alone, text with a link.
 - **forward:** a forwarded poll, and a forward from a channel the bot cannot see.
 
