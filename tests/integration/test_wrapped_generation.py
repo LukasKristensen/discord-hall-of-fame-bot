@@ -9,11 +9,13 @@ They need HOF_TEST_DATABASE_URL, see tests/integration/database.py, and are skip
 
 import datetime
 import json
+import threading
 import types
 import unittest
 from unittest import mock
 
 import hof_wrapped
+import psycopg2
 import main
 import utils
 from constants import version
@@ -323,6 +325,95 @@ class OptedOutFriendTests(WrappedTestCase):
 
         self.assertEqual({str(BOB.id): 2}, self.wrapped(FIRST, ALICE.id)["users_fans"])
 
+
+@skip_without_database
+class WrappedRacesTests(WrappedTestCase):
+    """What can change while Wrapped runs: the server leaving, and a member deleting and posting again."""
+
+    async def generate_with(self, after_reading):
+        read_posts = hof_wrapped.process_hof_messages_from_db
+
+        async def read_then(guild, connection):
+            result = await read_posts(guild, connection)
+            after_reading()
+            return result
+
+        with mock.patch.object(hof_wrapped, "process_hof_messages_from_db", read_then):
+            await self.generate(FIRST)
+
+    async def test_a_server_that_leaves_while_wrapped_runs_gets_none_and_others_keep_theirs(self):
+        """Its posts go with it, which must not be taken as every member having deleted their data."""
+        await self.generate(SECOND)
+        dave_before = self.wrapped(SECOND, DAVE.id)
+        await self.generate_with(lambda: utils.delete_database_context(FIRST, self.connection))
+
+        self.assertEqual([(0,)], self.rows("SELECT COUNT(*) FROM hof_wrapped WHERE guild_id = %s", (FIRST,)))
+        self.assertEqual(dave_before, self.wrapped(SECOND, DAVE.id))
+
+    async def test_deleting_and_then_being_featured_again_does_not_restore_the_old_wrapped(self):
+        """The new post makes Bob an author again, but the post counted for him now belongs to nobody."""
+        def delete_then_post_again():
+            hall_of_fame_message_repo.remove_author(self.connection, BOB.id)
+            self.feature(self.first_channel, 20, BOB, {"🔥": [ALICE.id]})
+
+        await self.generate_with(delete_then_post_again)
+
+        self.assertIsNone(self.wrapped(FIRST, BOB.id))
+        self.assertNotIn(str(BOB.id), self.wrapped(FIRST, ALICE.id)["users_fans"])
+
+
+@skip_without_database
+class FanListsLockTests(DatabaseTestCase):
+    """Two connections at once, as when a member opts out while Wrapped saves: the lock orders them."""
+
+    def setUp(self):
+        super().setUp()
+        self.other = psycopg2.connect(database_url(), options=f"-c search_path={self.schema} -c TimeZone=UTC")
+        self.addCleanup(self.other.close)
+
+    def save_wrapped(self, connection, fans):
+        hof_wrapped_repo.insert_hof_wrapped(connection, FIRST, ALICE.id, version.WRAPPED_YEAR, 0, 1, "{}", "{}",
+                                            None, None, 0, json.dumps(fans), json.dumps(fans), "{}")
+
+    def fan_list(self):
+        return json.loads(self.rows("SELECT users_fans FROM hof_wrapped WHERE user_id = %s", (ALICE.id,))[0][0])
+
+    def run_aside(self, work):
+        """Start work on the other connection, and say whether it is still waiting a moment later"""
+        thread = threading.Thread(target=work)
+        thread.start()
+        thread.join(timeout=1)
+        return thread
+
+    def test_a_wrapped_saved_while_an_opt_out_commits_leaves_the_member_out(self):
+        """The save reads the opt-out list only once it holds the lock, after the opt-out committed."""
+        opt_out_repo.set_opted_out(self.connection, BOB.id, True, commit=False)
+        hof_wrapped_repo.remove_from_fan_lists(self.connection, BOB.id, commit=False)
+
+        def save():
+            self.save_wrapped(self.other, {str(BOB.id): 2})
+            self.other.commit()
+
+        thread = self.run_aside(save)
+        self.assertTrue(thread.is_alive(), "the save did not wait for the opt-out")
+        self.connection.commit()
+        thread.join(timeout=10)
+
+        self.assertEqual({}, self.fan_list())
+
+    def test_a_wrapped_saved_between_an_opt_out_and_its_cleanup_is_cleaned(self):
+        """The save sees the opt-out list before the opt-out commits, so the cleanup after it must catch it."""
+        opt_out_repo.set_opted_out(self.connection, BOB.id, True, commit=False)
+
+        def save():
+            self.save_wrapped(self.other, {str(BOB.id): 2})
+
+        thread = self.run_aside(save)
+        self.assertFalse(thread.is_alive(), "the save waited although nothing held the lock yet")
+        hof_wrapped_repo.remove_from_fan_lists(self.connection, BOB.id, commit=False)
+        self.connection.commit()
+
+        self.assertEqual({}, self.fan_list())
 
 if __name__ == "__main__":
     unittest.main()

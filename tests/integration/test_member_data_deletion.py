@@ -638,6 +638,7 @@ class OptOutGuardPerMethodTests(MemberDataDeletionTestCase):
         ("hall_of_fame_message_repo", "remove_author"),
         ("hof_wrapped_repo", "insert_hof_wrapped"),
         ("hof_wrapped_repo", "remove_from_fan_lists"),
+        ("hof_wrapped_repo", "delete_hof_wrapped_for_user_in_guild"),
         ("server_user_repo", "rebuild_user_stats_for_guild"),
         ("global_profile_repo", "set_hidden"),
         ("opt_out_repo", "set_opted_out"),
@@ -726,6 +727,26 @@ class OptOutGuardPerMethodTests(MemberDataDeletionTestCase):
         hof_wrapped_repo.remove_from_fan_lists(self.connection, DELETED)
 
         self.assertIsNotNone(self.wrapped_row(SHARED, DELETED))
+
+    # delete_hof_wrapped_for_user_in_guild
+
+    def test_wrappeds_own_cleanup_takes_them_out_of_that_server_only(self):
+        """Wrapped's cleanup after a deletion mid-run: the deletion already handled every other server."""
+        hof_wrapped_repo.delete_hof_wrapped_for_user_in_guild(self.connection, DELETED, SHARED, 2025)
+
+        self.assertIsNone(self.wrapped_row(SHARED, DELETED))
+        _reactions, fan_of_users, users_fans = self.wrapped_row(SHARED, OTHER)
+        self.assertNotIn(str(DELETED), json.loads(fan_of_users))
+        self.assertNotIn(str(DELETED), json.loads(users_fans))
+        _reactions, other_server_fans, _users_fans = self.wrapped_row(SECOND, OTHER)
+        self.assertIn(str(DELETED), json.loads(other_server_fans))
+
+    def test_wrappeds_own_cleanup_keeps_everyone_else_in_that_server(self):
+        """FAN's ID starts with DELETED's, so a match on the text alone would remove them too."""
+        hof_wrapped_repo.delete_hof_wrapped_for_user_in_guild(self.connection, DELETED, SHARED, 2025)
+        _reactions, fan_of_users, _users_fans = self.wrapped_row(SHARED, OTHER)
+
+        self.assertEqual({str(FAN): 4, str(THIRD): 2}, json.loads(fan_of_users))
 
     # remove_author
 

@@ -202,6 +202,18 @@ class AlreadyOnTheBoardTests(ExplainTestCase):
 
         self.assertEqual(message_check.QUALIFIES, (await self.explain()).reason)
 
+    async def test_a_board_that_cannot_be_read_is_not_taken_for_a_moved_post(self):
+        """A missing permission or an outage says nothing about where the post is, so it is not answered."""
+        self.build(db_message=database_row())
+        board = self.bot.channels[TARGET_CHANNEL_ID]
+
+        async def refused(_message_id):
+            raise discord.Forbidden.__new__(discord.Forbidden)
+
+        board.fetch_message = refused
+        with self.assertRaises(discord.Forbidden):
+            await self.explain()
+
     async def test_a_post_no_longer_in_the_board_gets_no_dead_link(self):
         """The board may have moved since, and a link built from the new board opens nothing."""
         self.build(db_message=database_row(), post_shown=None)

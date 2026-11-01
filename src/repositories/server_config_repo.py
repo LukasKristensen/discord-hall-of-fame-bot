@@ -48,24 +48,26 @@ def create_server_config_table(connection):
             )
         """
     )
-    # Add require_image_or_video column if it doesn't exist
-    try:
-        cursor.execute("ALTER TABLE server_configs ADD COLUMN IF NOT EXISTS require_image_or_video BOOLEAN DEFAULT FALSE")
-    except Exception:
-        connection.rollback()
-    # Existing servers count toward members' global profiles until an admin opts out, the same as new ones
-    try:
-        cursor.execute("ALTER TABLE server_configs ADD COLUMN IF NOT EXISTS count_in_global_profiles BOOLEAN DEFAULT TRUE")
-    except Exception:
-        connection.rollback()
-    # When the daily task first found the server missing from the bot's guilds, so a server is only
-    # cleaned up after it has stayed missing for a while. NULL while the bot is in the server
-    try:
-        cursor.execute("ALTER TABLE server_configs ADD COLUMN IF NOT EXISTS missing_since TIMESTAMPTZ")
-    except Exception:
-        connection.rollback()
-
     connection.commit()
+    # Each column is added and committed on its own, so one that fails cannot roll back another that was
+    # added. A failure is raised rather than swallowed: reading the configuration needs every column, and
+    # startup stops with a critical log instead of running on a table that is missing one
+    migrations = (
+        "ALTER TABLE server_configs ADD COLUMN IF NOT EXISTS require_image_or_video BOOLEAN DEFAULT FALSE",
+        # Existing servers count toward members' global profiles until an admin opts out, the same as new ones
+        "ALTER TABLE server_configs ADD COLUMN IF NOT EXISTS count_in_global_profiles BOOLEAN DEFAULT TRUE",
+        # When the daily task first found the server missing from the bot's guilds, so a server is only
+        # cleaned up after it has stayed missing for a while. NULL while the bot is in the server
+        "ALTER TABLE server_configs ADD COLUMN IF NOT EXISTS missing_since TIMESTAMPTZ",
+    )
+    for migration in migrations:
+        try:
+            cursor.execute(migration)
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            cursor.close()
+            raise
     cursor.close()
 
 def record_missing_guilds(connection, missing_guild_ids, now) -> dict:

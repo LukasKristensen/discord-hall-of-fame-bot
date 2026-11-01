@@ -110,6 +110,9 @@ class OptOutWriteGuardTests(unittest.TestCase):
         ("hof_wrapped_repo", "insert_hof_wrapped"),
         # Only ever removes a member's ID from fan lists
         ("hof_wrapped_repo", "remove_from_fan_lists"),
+        # Only ever removes one member's own row and their ID from one guild's fan lists, for Wrapped's
+        # cleanup after a member deleted their data while it ran
+        ("hof_wrapped_repo", "delete_hof_wrapped_for_user_in_guild"),
         # Worked out from stored posts alone, and every post credited to an opted-out member was stored
         # before they asked. Those earlier posts keep counting until the member deletes them, as /my_data
         # tells them, so their standing can still be written or move as reactions come in, but no new post
@@ -154,7 +157,9 @@ class OptOutWriteGuardTests(unittest.TestCase):
         connection = FakeConnection()
         hof_wrapped_repo.insert_hof_wrapped(connection, 1, 77, 2025, 0, 0, "{}", "{}", None, None, 0, "{}", "{}", "{}")
 
-        self.assertEqual(3, connection.queries[0].count("opted_out_member"))
+        # After the fan lists lock, so an opt-out that commits while this waits is seen
+        self.assertIn("pg_advisory_xact_lock", connection.queries[0])
+        self.assertEqual(3, connection.queries[1].count("opted_out_member"))
 
 
 class MemberDataRepoTests(unittest.TestCase):
@@ -199,12 +204,15 @@ class MemberDataRepoTests(unittest.TestCase):
         connection = FakeConnection()
         hof_wrapped_repo.delete_hof_wrapped_for_user(connection, 77)
 
-        self.assertIn("DELETE FROM hof_wrapped WHERE user_id", connection.queries[0])
-        updated = [" ".join(query.split()) for query in connection.queries[1:]]
+        queries = [query for query in connection.queries if "pg_advisory_xact_lock" not in query]
+        parameters = [params for query, params in zip(connection.queries, connection.parameters)
+                      if "pg_advisory_xact_lock" not in query]
+        self.assertIn("DELETE FROM hof_wrapped WHERE user_id", queries[0])
+        updated = [" ".join(query.split()) for query in queries[1:]]
         self.assertTrue(any("SET fan_of_users" in query for query in updated))
         self.assertTrue(any("SET users_fans" in query for query in updated))
         # json.dumps writes the integer keys as strings, which is the form removed
-        self.assertEqual(("77", '%"77"%'), connection.parameters[1])
+        self.assertEqual(("77", '%"77"%'), parameters[1])
 
     def test_reads_and_deletes_a_members_standing_in_every_guild(self):
         connection = FakeConnection(rows=[], description=["user_id", "guild_id"])
@@ -1462,18 +1470,52 @@ class WrappedWithoutTheAuthorTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual([], fetched)
 
+    def wrapped_member(self, user_id, credited_posts=()):
+        import hof_wrapped
+        member = hof_wrapped.User(user_id)
+        member.credited_posts = list(credited_posts)
+        return member
+
+    def forget(self, users, authors, current_authors=None, server_exists=True):
+        """Run Wrapped's cleanup and return what it deleted, by member and by whole server"""
+        import hof_wrapped
+        deleted, guilds_deleted = [], []
+        with unittest.mock.patch.object(hof_wrapped, "users", users), \
+                unittest.mock.patch.object(hof_wrapped.hall_of_fame_message_repo, "find_members_for_guild",
+                                           lambda *_args: authors), \
+                unittest.mock.patch.object(hof_wrapped.hall_of_fame_message_repo, "get_authors_of_messages",
+                                           lambda *_args: current_authors or {}), \
+                unittest.mock.patch.object(hof_wrapped.server_config_repo, "check_if_guild_exists",
+                                           lambda *_args: server_exists), \
+                unittest.mock.patch.object(hof_wrapped.hof_wrapped_repo, "delete_hof_wrapped_for_user_in_guild",
+                                           lambda _connection, user_id, guild_id, year: deleted.append((user_id, guild_id))), \
+                unittest.mock.patch.object(hof_wrapped.hof_wrapped_repo, "delete_hof_wrapped_for_guild",
+                                           lambda _connection, guild_id: guilds_deleted.append(guild_id)), \
+                unittest.mock.patch.object(hof_wrapped.hof_wrapped_repo, "delete_hof_wrapped_for_user",
+                                           lambda *_args: self.fail("the cleanup reached other servers")):
+            hof_wrapped.forget_members_who_deleted_meanwhile(FakeConnection(), 200)
+        return deleted, guilds_deleted
+
     def test_a_member_who_deleted_while_rows_were_saved_is_deleted_again(self):
         """Saving takes a while, so a deletion in the middle would otherwise be undone by the rows after it."""
-        import hof_wrapped
-        deleted = []
-        with unittest.mock.patch.object(hof_wrapped, "users", {77: object(), 88: object()}), \
-                unittest.mock.patch.object(hof_wrapped.hall_of_fame_message_repo, "find_members_for_guild",
-                                           lambda *_args: [88]), \
-                unittest.mock.patch.object(hof_wrapped.hof_wrapped_repo, "delete_hof_wrapped_for_user",
-                                           lambda _connection, user_id: deleted.append(user_id)):
-            hof_wrapped.forget_members_who_deleted_meanwhile(FakeConnection(), 200)
+        deleted, _ = self.forget({77: self.wrapped_member(77), 88: self.wrapped_member(88)}, authors=[88])
 
-        self.assertEqual([77], deleted)
+        self.assertEqual([(77, 200)], deleted)
+
+    def test_a_new_post_after_deleting_does_not_bring_back_the_old_wrapped(self):
+        """The member is an author again, but the posts counted for them now belong to nobody."""
+        users = {77: self.wrapped_member(77, credited_posts=[1, 2])}
+        deleted, _ = self.forget(users, authors=[77],
+                                 current_authors={1: hall_of_fame_message_repo.NO_AUTHOR_ID, 2: 0})
+
+        self.assertEqual([(77, 200)], deleted)
+
+    def test_a_server_that_left_while_saving_loses_only_its_own_wrapped(self):
+        """Its posts are gone with it, which says nothing about the members' data in other servers."""
+        deleted, guilds_deleted = self.forget({77: self.wrapped_member(77)}, authors=[], server_exists=False)
+
+        self.assertEqual([], deleted)
+        self.assertEqual([200], guilds_deleted)
 
 
 class NotFeaturedPostingTests(unittest.IsolatedAsyncioTestCase):

@@ -26,13 +26,26 @@ def create_hof_wrapped_table(connection):
     connection.commit()
     cursor.close()
 
+# Taken by every transaction that writes a Wrapped row or takes a member out of the fan lists, so the two
+# never interleave. Without it, a Wrapped saved while a member opts out could read the opt-out list before
+# the opt-out commits and write the member back after the cleanup ran
+FAN_LISTS_LOCK = 482917334001
+
+
+def lock_fan_lists(cursor):
+    """Wait for, then hold until the transaction ends, the lock every Wrapped and fan-list write takes"""
+    cursor.execute("SELECT pg_advisory_xact_lock(%s)", (FAN_LISTS_LOCK,))
+
+
 def insert_hof_wrapped(connection, guild_id, user_id, year, reaction_count, hof_message_posts, most_used_channels, most_used_emojis, most_reacted_post_message_id, most_reacted_post_channel_id, most_reacted_post_reaction_count, fan_of_users, users_fans, user_ranks):
     """
     Save a member's Wrapped for a guild and year. Nothing is saved for a member who asked not to be
     featured, and they are taken out of the fan lists, whoever calls this, since a Wrapped records whose
-    posts members reacted to
+    posts members reacted to. The opt-out list is read after the fan lists lock is held, so an opt-out
+    that commits while this waits is seen
     """
     cursor = connection.cursor()
+    lock_fan_lists(cursor)
     cursor.execute("""
         INSERT INTO hof_wrapped (
             guild_id, user_id, year, reaction_count, hof_message_posts, most_used_channels, most_used_emojis, most_reacted_post_message_id, most_reacted_post_channel_id, most_reacted_post_reaction_count, fan_of_users, users_fans, user_ranks
@@ -142,6 +155,7 @@ def delete_hof_wrapped_for_user(connection, user_id, commit: bool = True) -> int
     :return: The number of the member's own rows deleted
     """
     cursor = connection.cursor()
+    lock_fan_lists(cursor)
     cursor.execute("DELETE FROM hof_wrapped WHERE user_id = %s", (user_id,))
     deleted = cursor.rowcount
     cursor.close()
@@ -160,6 +174,7 @@ def remove_from_fan_lists(connection, user_id, commit: bool = True):
     :param commit: False to leave the commit to the caller, as part of a larger transaction
     """
     cursor = connection.cursor()
+    lock_fan_lists(cursor)
     key = str(user_id)
     # The LIKE narrows the update to rows that mention the member before any JSON is parsed. json.dumps
     # writes the integer keys as quoted strings, which is the form matched here
@@ -170,6 +185,33 @@ def remove_from_fan_lists(connection, user_id, commit: bool = True):
             SET {column} = ({column}::jsonb - %s)::text
             WHERE {column} LIKE %s
         """, (key, pattern))
+    if commit:
+        connection.commit()
+    cursor.close()
+
+
+def delete_hof_wrapped_for_user_in_guild(connection, user_id, guild_id, year, commit: bool = True):
+    """
+    Delete one member's Wrapped in one guild and year, and take them out of that guild's fan lists for the
+    year. For Wrapped's own cleanup of rows it saved for a member who deleted their data while it ran:
+    the deletion already removed everything else, so nothing outside this server is touched
+    :param connection: The database connection
+    :param user_id: The member's user ID
+    :param guild_id: The guild Wrapped was generated for
+    :param year: The Wrapped year
+    :param commit: False to leave the commit to the caller
+    """
+    cursor = connection.cursor()
+    lock_fan_lists(cursor)
+    cursor.execute("DELETE FROM hof_wrapped WHERE user_id = %s AND guild_id = %s AND year = %s",
+                   (user_id, guild_id, year))
+    key = str(user_id)
+    for column in ("fan_of_users", "users_fans"):
+        cursor.execute(f"""
+            UPDATE hof_wrapped
+            SET {column} = ({column}::jsonb - %s)::text
+            WHERE guild_id = %s AND year = %s AND {column} LIKE %s
+        """, (key, guild_id, year, f'%"{key}"%'))
     if commit:
         connection.commit()
     cursor.close()

@@ -221,6 +221,24 @@ def get_messages_by_author(connection, author_id) -> list[dict]:
     cursor.close()
     return results
 
+def get_authors_of_messages(connection, guild_id, message_ids) -> dict:
+    """
+    Who each of some posts is credited to now, for Wrapped to find members who deleted their data while
+    it ran: their posts are credited to nobody from then on, even if a new post credits them again
+    :param connection: The database connection
+    :param guild_id: The guild the posts are in
+    :param message_ids: The original message IDs of the posts
+    :return: Message ID to author ID, for the posts still stored
+    """
+    if not message_ids:
+        return {}
+    cursor = connection.cursor()
+    cursor.execute("SELECT message_id, author_id FROM hall_of_fame_message WHERE guild_id = %s AND message_id = ANY(%s)",
+                   (guild_id, list(message_ids)))
+    rows = cursor.fetchall()
+    cursor.close()
+    return dict(rows)
+
 def count_messages_by_author(connection, author_id) -> int:
     """
     How many featured posts one member has across every guild, for the /my_data summary. Served from
