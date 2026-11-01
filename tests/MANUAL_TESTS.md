@@ -33,6 +33,7 @@ message under a "test cases" category so each post names what it tests.
 | file | Text and an audio file | Text beside the avatar, the file linked by its name under it. No player, unlike the original |
 | file | A zip file alone | The file linked by its name under the header, no avatar as there is no text |
 | forward | A forward from a channel the bot cannot see | "Forwarded" in the header and *The forwarded message is not shown*, none of its words |
+| file | A voice message | Linked as "Voice message" under the header. No player, like an audio file |
 | mentions | `@user`, `@role`, `@here`, `@everyone` | Shown as mentions. A second account in the server got no notification and no mention badge |
 | link | An image URL alone | The link replaced by the image, as Discord shows it |
 | link | Text with an image link | Text and link kept beside the avatar, the image previewed below |
@@ -54,9 +55,6 @@ message under a "test cases" category so each post names what it tests.
   name only shows once the reader's app has loaded that member. After opening the member's profile it
   showed the name. Left as it is: writing names in bold would fix it for the few readers who see it, but
   take the click to the profile from everyone.
-- **A voice message came out as an old embed post**, with the username, a Reactions field and Jump to
-  Message, but no footer. The current code adds the footer to every embed and posts new messages as
-  Components V2, so it may have come from another bot instance in the server. Open until the poster is known.
 - A spoiler once showed uncovered right after posting. A reload covered it, so it was the client, not the
   bot.
 - Poll votes are written when the post is made and not updated after.
