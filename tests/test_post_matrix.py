@@ -248,9 +248,12 @@ class PostMatrixTests(unittest.TestCase):
         # A link that is the whole message never shows on a line of its own: its picture stands in for it
         lines = [line.removeprefix(">>> ").strip() for text in texts(payload) for line in text.split("\n")]
         for source in (message, replied):
-            if source is not None and source.content.startswith("https://") and " " not in source.content \
-                    and source.embeds and all(e.type in board_post.PREVIEWS_REPLACING_LINK for e in source.embeds):
+            if source is not None and source.content.startswith("https://") and " " not in source.content and \
+                    source.embeds and all(kind in board_post.PREVIEWS_REPLACING_LINK for kind in board_post.preview_media(source)[1]):
                 self.assertNotIn(source.content, lines)
+        # A link straight to a video file is one of them, as Discord shows only the video
+        if message.content == "https://files.example/clip.webm":
+            self.assertNotIn(message.content, lines)
 
         # The message it answers. A forward is never a reply, and nothing of a member who opted out shows
         is_forward = bool(getattr(message, "message_snapshots", None))

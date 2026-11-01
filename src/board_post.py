@@ -46,8 +46,9 @@ post_text_budget = 4000
 post_quote_limit = 200
 # A message that is nothing but a link
 BARE_LINK = re.compile(r"^<?https?://\S+>?$")
-# Link previews Discord shows in place of their link when the link is the whole message
-PREVIEWS_REPLACING_LINK = ("image", "gifv")
+# Link previews Discord shows in place of their link when the link is the whole message: a picture, a GIF,
+# or a link straight to a video file, which preview_media names video_file
+PREVIEWS_REPLACING_LINK = ("image", "gifv", "video_file")
 # A Tenor GIF's MP4, whose path ends its ID with the format code AAAPo. The GIF of the same ID ends in AAAAC
 TENOR_MP4 = re.compile(r"^(https://media\d*\.tenor\.com/[\w-]+?)AAAPo/([^/?#]+)\.mp4$")
 # The ID given to a post's reactions line, so a new count is compared with the post without rebuilding it
@@ -245,18 +246,19 @@ def preview_media(source):
         video_url = getattr(getattr(message_embed, "video", None), "url", None)
         image_url = getattr(getattr(message_embed, "image", None), "url", None)
         thumbnail_url = getattr(getattr(message_embed, "thumbnail", None), "url", None)
-        if message_embed.type == "gifv" and video_url:
+        kind = message_embed.type
+        if kind == "gifv" and video_url:
             link = gif_url(video_url)
-        elif message_embed.type == "image" and message_embed.url:
+        elif kind == "image" and message_embed.url:
             link = message_embed.url
         elif has_extension(video_url, VIDEO_EXTENSIONS):
             # A link straight to a video file plays. A YouTube preview's video is a page, so its picture is used
-            link = video_url
+            link, kind = video_url, "video_file"
         else:
             link = image_url or thumbnail_url
         if link and link not in links:
             links.append(link)
-            kinds.append(message_embed.type)
+            kinds.append(kind)
     return links, kinds
 
 
@@ -296,7 +298,8 @@ def quote_placeholder(source, poll) -> str:
         return messages.POST_STICKER.format(name=discord.utils.escape_markdown(source.stickers[0].name))
     links, kinds = preview_media(source)
     if links:
-        return {"gifv": messages.POST_QUOTE_GIF, "video": messages.POST_QUOTE_VIDEO}.get(kinds[0], messages.POST_QUOTE_IMAGE)
+        return {"gifv": messages.POST_QUOTE_GIF, "video": messages.POST_QUOTE_VIDEO,
+                "video_file": messages.POST_QUOTE_VIDEO}.get(kinds[0], messages.POST_QUOTE_IMAGE)
     return ""
 
 
