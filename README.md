@@ -47,14 +47,15 @@ download or delete what is kept about them with `/my_data`, as the [Privacy Poli
 images, videos and the message it replied to, so the moment still makes sense months later. Any emoji
 counts, and you choose how reactions are counted and how many are needed.
 
+<img src="Assets/readme_board_post.png" width="520" alt="A Hall of Fame post with an image, the message it replied to and its reactions">
+
 **The recognition.** Every post is credited to its author. `/leaderboard` ranks the server,
 `/user_profile` shows a member's standing and badges, and `/hof_wrapped` gives each member their year in
 review.
 
 <p>
-  <a href="Assets/listing_1_board_post.png"><img src="Assets/listing_1_board_post.png" width="32%" alt="A Hall of Fame post with an image, the message it replied to and its reactions"></a>
-  <a href="Assets/listing_2_leaderboard.png"><img src="Assets/listing_2_leaderboard.png" width="32%" alt="The /leaderboard command, ranking members by posts and reactions"></a>
-  <a href="Assets/listing_3_user_profile.png"><img src="Assets/listing_3_user_profile.png" width="32%" alt="The /user_profile command, with ranks, badges and totals across servers"></a>
+  <img src="Assets/readme_leaderboard.png" width="266" alt="The /leaderboard command, ranking members by posts and reactions">
+  <img src="Assets/readme_user_profile.png" width="453" alt="The /user_profile command, with ranks, badges and totals across servers">
 </p>
 
 <br>
