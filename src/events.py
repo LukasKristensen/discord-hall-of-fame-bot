@@ -400,7 +400,7 @@ async def check_write_permissions_to_hall_of_fame_channel(bot: discord.Client, s
         except discord.HTTPException:
             # Tried again tomorrow, and must not cost the server its permission check today
             pass
-        # The same list /troubleshoot and /set_hall_of_fame_channel use, so the daily check never disagrees with them
+        # The same list /troubleshoot reports, so the two never disagree about a board
         missing_permissions = setup_check.missing_board_permissions(permissions)
 
         if not missing_permissions:
