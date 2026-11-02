@@ -161,7 +161,7 @@ and reply from the payload:
       server, a forward of a board post, and a forward of a member who pressed Stop featuring me each show
       *The forwarded message is not shown* and none of the forwarded words or media. A forward of a forward
       shows the original, since Discord forwards the original
-- [ ] A reply with a picture of its own to a sticker, a file and a GIF says *Sticker: name*, *File: name* and
+- [x] A reply with a picture of its own to a sticker, a file and a GIF says *Sticker: name*, *File: name* and
       *GIF* in the quote
 - [ ] A file link on a post that is a day old still opens the file
 - [ ] A MOV from a phone plays in the gallery, a voice message is linked as Voice message, and a message

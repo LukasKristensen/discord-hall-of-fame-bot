@@ -45,6 +45,7 @@ message under a "test cases" category so each post names what it tests.
 | sticker | An animated (Lottie) sticker | Named in italics where the text goes, *Sticker: name* |
 | sticker | A picture sticker, two different reactions | Shown in the gallery. The reactions line lists both emojis with their counts |
 | reply | A reply to an image, a reply to a video | The quote, then the answered image or playable video full width, then the reply under its poster's name |
+| reply | A reply with its own image to a GIF from the picker (Klipy) | The quote reads *GIF*, and only the reply's image is shown |
 | reply | A reply with its own image to a zip file | The quote reads *File:* and the file's name, and only the reply's image is shown |
 | reply | A reply with its own image to a sticker | The quote reads *Sticker: icant*, and only the reply's image is shown |
 | reply | A reply to a GIF uploaded to Discord, sent from favourites | The answered GIF shown above the reply, looping with no player controls |
