@@ -147,7 +147,7 @@ Restart the Discord client if the picker still shows the old list.
 - [x] A post made before the upgrade still updates its count as an embed, hides and comes back
 - [x] A member's join message, a pin notice and a closed poll, reacted past the threshold, are not posted, and
       Why isn't this on the board? says Discord posted them on its own
-- [ ] A message with a text file and one with only a sticker are posted with the file linked and the
+- [x] A message with a text file and one with only a sticker are posted with the file linked and the
       sticker shown
 
 What only Discord's rendering shows. `tests/test_post_matrix.py` checks every other combination of message
