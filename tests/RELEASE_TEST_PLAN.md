@@ -128,7 +128,7 @@ Restart the Discord client if the picker still shows the old list.
 - [x] Mark a channel age-restricted and react a message there past the threshold: nothing is posted, Why
       isn't this on the board? says the channel is age-restricted, and `/troubleshoot` lists the channel.
       Mark the board age-restricted too and react again: the message is posted
-- [ ] With a post already on the board, mark its source channel age-restricted and react once more: the
+- [x] With a post already on the board, mark its source channel age-restricted and react once more: the
       post is hidden. Mark the board age-restricted and react again: it comes back
 - [x] Apps > Why isn't this on the board? on a message, as a member without Manage Server: a posted message
       links to its post, one short of the threshold shows the count, and one in a channel the bot cannot
