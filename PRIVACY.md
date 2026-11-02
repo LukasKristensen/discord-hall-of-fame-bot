@@ -1,6 +1,6 @@
 # Privacy Policy for Hall of Fame
 
-Effective date: 10 November 2026
+Effective date: 2 November 2026
 
 Hall of Fame is a Discord bot operated by Lukas Kristensen, Denmark, who is responsible for the data
 described here. Contact: githublukas@gmail.com, or the

@@ -1,6 +1,6 @@
 # Terms of Service for Hall of Fame
 
-Effective date: 31 October 2026
+Effective date: 2 November 2026
 
 These terms apply between Lukas Kristensen ("the Owner") and anyone who adds Hall of Fame (the "Bot") to
 a server or uses it. By using the Bot you agree to them. If you do not agree, remove the Bot or stop

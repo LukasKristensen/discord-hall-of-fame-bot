@@ -174,9 +174,15 @@ member count, between 1 and 7. It is not recalculated as the server grows, so ad
 ### What does a post include?
 
 Up to ten images and videos, which play in place, plus stickers, link previews and links to other files.
-Spoilers stay covered. The post lists the eight most used emojis with their counts, and mentions do not
+Spoilers stay covered, a reply quotes the message it answers, and forwards and polls show their content. The post lists the eight most used emojis with their counts, and mentions do not
 ping anyone again. Counts update live, and a post that drops below the threshold is hidden until it climbs
 back, unless `/hide_hof_post_below_threshold` is off. Posts made before version 3.0 keep their old layout.
+
+### Why isn't a message on the board?
+
+Right-click it and choose Apps > **Why isn't this on the board?**. It runs the same checks as a reaction
+does and says which one stopped it, for example too few reactions, too old, or a channel the bot cannot
+read. For problems with the whole server, such as missing permissions, use `/troubleshoot`.
 
 ### What about age-restricted channels and sensitive images?
 
@@ -199,6 +205,12 @@ Server Settings > Integrations > Hall of Fame, but running one still needs Manag
 Add it to your account with the **Add to your account** button under `/invite`. In DMs you can then see
 your own totals across servers with `/user_profile` and manage your data with `/my_data`. Leaderboards,
 Wrapped and settings belong to a server.
+
+### When does Wrapped come out?
+
+Each December, for every server with a post on its board that year and every member credited with one.
+Open it with `/hof_wrapped` and `/server_hof_wrapped`. A member who asked not to be
+featured gets no Wrapped and is left out of everyone else's.
 
 ### Can posts show up on the web?
 
