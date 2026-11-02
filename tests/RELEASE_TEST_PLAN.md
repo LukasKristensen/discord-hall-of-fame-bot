@@ -64,7 +64,7 @@ Get a few of your messages onto the board first.
 
 ## Deleting
 
-- [ ] Delete my data shows the confirmation: you are taken off every leaderboard, profile and Wrapped,
+- [x] Delete my data shows the confirmation: you are taken off every leaderboard, profile and Wrapped,
       posts stay on the boards, and a hidden-totals choice is deleted too
 - [x] Cancel says nothing was deleted
 - [ ] Confirming answers within a few seconds, even with many posts, and says your data is deleted
@@ -74,7 +74,7 @@ Get a few of your messages onto the board first.
 - [ ] Delete again the same day with nothing stored is allowed (no daily limit when there is nothing to
       delete)
 - [x] Delete again the same day with posts stored says you already deleted today
-- [ ] While not featured, Delete my data warns that the choice not to be featured is deleted too.
+- [x] While not featured, Delete my data warns that the choice not to be featured is deleted too.
       Afterwards your next message over the threshold is featured again
 
 ## The 10,000 post limit

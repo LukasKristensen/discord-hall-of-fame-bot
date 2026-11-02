@@ -76,6 +76,7 @@ message under a "test cases" category so each post names what it tests.
 | my data | Download my data | A private hall-of-fame-my-data.json of 40 KB: user ID as a string, an about line, global_profile_hidden and not_counted false, and the featured posts |
 | my data | `/my_data` as a member who opted out, with one earlier post | Not featured since the date asked, shown in the reader's own date format, why the ID and date are kept, and that earlier posts stay until deleted. Download, Hide totals, Feature me again and Delete offered |
 | my data | Download as a member who opted out | `"not_counted": true` in the file |
+| my data | Delete my data as a member who opted out | The confirmation says: off every leaderboard, profile and Wrapped, cannot be undone, posts stay on the boards uncredited, a hidden-totals choice and the choice not to be featured are deleted too, and featuring can be stopped again right after |
 | my data | Delete my data, then Cancel | The panel replaced in place with "Nothing was deleted." |
 | my data | Feature me again, a new message, then Stop featuring me | Confirmed in place, the next message over the threshold was posted and credited (2 featured posts), and stopping again brought back the line with the date |
 | opt-out | A new message from a member who pressed Stop featuring me, reacted to | Not posted. Why isn't this on the board?, asked by another member, answered only that it cannot be featured, without naming the choice. Asked by the member, it said they asked not to be featured and pointed to `/my_data` |
@@ -163,6 +164,9 @@ Not bugs, and nothing decided yet:
 
 - **One line after Stop featuring me.** The panel then says "New messages of yours are not featured from
   now on" and, right under it, the longer line saying the same with the date. The longer line alone is enough.
+
+- **The delete confirmation as a list.** It is one long paragraph on the most serious screen the bot has.
+  Four short lines (what goes, what stays, which choices go, that it cannot be undone) would read faster.
 
 ### Still to run
 
