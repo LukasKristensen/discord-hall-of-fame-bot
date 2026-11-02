@@ -122,7 +122,7 @@ Restart the Discord client if the picker still shows the old list.
 - [x] `/troubleshoot` answers the admin privately with the findings
 - [ ] A member without Manage Server does not see `/troubleshoot`, and pressing Troubleshoot on the
       welcome message is refused
-- [ ] Add the dev bot to a new server: if something is wrong, a short note with a Troubleshoot button
+- [x] Add the dev bot to a new server: if something is wrong, a short note with a Troubleshoot button
       appears on the board, and the button opens the full findings for an admin
 - [ ] The welcome message's Troubleshoot, Support server and Vote buttons work, also after the bot restarts
 - [x] `/get_server_config` has a Troubleshoot button: an admin gets the findings privately, a member is refused
@@ -175,7 +175,7 @@ and reply from the payload:
 
 ## Settings form
 
-- [ ] `/get_server_config` has Change settings next to Troubleshoot. As an admin it opens Hall of Fame settings
+- [x] `/get_server_config` has Change settings next to Troubleshoot. As an admin it opens Hall of Fame settings
       with the current channel, threshold, post age, counting method and ticked rules filled in
 - [ ] A member without Manage Server who presses it is refused privately, and no form opens
 - [x] Change the threshold and two rules and send it: one private answer lists exactly those three, and
@@ -184,7 +184,7 @@ and reply from the payload:
 - [x] Type 0 or "five" as the threshold along with another change: it is refused, and nothing is stored
 - [ ] Pick another channel: the board moves, the new channel gets the announcement with nobody pinged, and the
       next post lands there. A channel the bot cannot post in is refused with the missing permissions
-- [ ] A new server's welcome message has Set up, which opens the same form, also after the bot restarts
+- [x] A new server's welcome message has Set up, which opens the same form, also after the bot restarts
 - [ ] The join note about hidden channels still has only Troubleshoot
 
 ## Feedback screenshots
