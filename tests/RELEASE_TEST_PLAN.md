@@ -114,7 +114,7 @@ Restart the Discord client if the picker still shows the old list.
       `/hof_wrapped`, `/server_hof_wrapped`, `/my_data`, `/get_server_config`, `/invite`, `/vote` and
       `/feedback`, and Apps still has Why isn't this on the board?
 - [ ] As an admin with Manage Server, all 25 commands are offered
-- [ ] Let a role without Manage Server use `/set_reaction_threshold` under Server Settings > Integrations >
+- [x] Let a role without Manage Server use `/set_reaction_threshold` under Server Settings > Integrations >
       Hall of Fame: that role now sees it, and running it is refused privately
 
 ## Setup check and joining

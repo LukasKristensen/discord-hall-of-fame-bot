@@ -49,6 +49,7 @@ message under a "test cases" category so each post names what it tests.
 | system message | A pin notice, never on the board, reacted past the threshold | Not posted |
 | system message | A join message, asked about with Why isn't this on the board? | "Messages Discord posts on its own are not featured", also for a member who opted out, as the rule is checked before the choice. Before the update, a join message reached the board as an empty post |
 | command picker | `/` as a member without Manage Server | Only the ten member commands, no admin ones. Apps had Why isn't this on the board? |
+| command picker | `/set_reaction_threshold` allowed for a role without Manage Server | The role saw the command, and running it was refused privately: only for members with Manage Server |
 | settings form | Threshold, post age and counting changed at once | One answer listing exactly those three, with the note on post age, and `/get_server_config` showed all three. The answer called post age "Post due date"; it now says "Post age" as the config does |
 | settings form | Counting changed to total reactions | One private answer naming only that change, and `/get_server_config` showed it |
 | settings form | 0, and "five", as the threshold | Refused: "must be between 1 and 1000" for 0 and "must be a whole number from 1 to 1000" for five, nothing saved |
