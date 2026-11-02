@@ -467,8 +467,12 @@ CHECK_CHANNELS_TITLE = "Reads {readable} of {total} channels"
 CHECK_CHANNELS_ALL = "Reactions in every channel can count."
 CHECK_CHANNELS_BLOCKED = "Members can see these, but the bot cannot, so reactions there never count: {channels}"
 CHECK_CHANNELS_ROLE_FIX = "Giving the bot the {role} role opens {opens} of these {total}."
+# When the role opens every channel listed, as "1 of these 1" read oddly
+CHECK_CHANNELS_ROLE_FIX_ALL = "Giving the bot the {role} role opens {which}."
+CHECK_CHANNELS_ROLE_FIX_IT = "it"
+CHECK_CHANNELS_ROLE_FIX_ALL_OF_THEM = "all of them"
 CHECK_CHANNELS_FIX = "Give the bot View Channel and Read Message History in them, or the role that opens them."
-CHECK_CHANNELS_PRIVATE = ("{count} more are hidden from regular members too, such as staff channels, so the bot "
+CHECK_CHANNELS_PRIVATE = ("{count} more {are} hidden from regular members too, such as staff channels, so the bot "
                           "is likely left out of them on purpose: {channels}")
 CHECK_CHANNELS_MOSTLY_CLOSED = ("The bot cannot read {channels}\n"
                                 "No regular role can see them either, but that is most of the server. If messages "

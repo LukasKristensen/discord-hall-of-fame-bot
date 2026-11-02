@@ -119,7 +119,7 @@ Restart the Discord client if the picker still shows the old list.
 
 ## Setup check and joining
 
-- [ ] `/troubleshoot` answers the admin privately with the findings
+- [x] `/troubleshoot` answers the admin privately with the findings
 - [ ] A member without Manage Server does not see `/troubleshoot`, and pressing Troubleshoot on the
       welcome message is refused
 - [ ] Add the dev bot to a new server: if something is wrong, a short note with a Troubleshoot button

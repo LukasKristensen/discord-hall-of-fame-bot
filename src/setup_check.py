@@ -218,15 +218,20 @@ def channel_findings(visibility: ChannelVisibility) -> list[Finding]:
     if visibility.blocked:
         lines.append(messages.CHECK_CHANNELS_BLOCKED.format(channels=list_channels(visibility.blocked)))
         if visibility.suggested_role is not None:
-            lines.append(messages.CHECK_CHANNELS_ROLE_FIX.format(role=visibility.suggested_role.mention,
-                                                                 opens=visibility.suggested_role_opens,
-                                                                 total=len(visibility.blocked)))
+            role, opens, total = visibility.suggested_role.mention, visibility.suggested_role_opens, len(visibility.blocked)
+            if opens == total:
+                which = messages.CHECK_CHANNELS_ROLE_FIX_IT if total == 1 else messages.CHECK_CHANNELS_ROLE_FIX_ALL_OF_THEM
+                lines.append(messages.CHECK_CHANNELS_ROLE_FIX_ALL.format(role=role, which=which))
+            else:
+                lines.append(messages.CHECK_CHANNELS_ROLE_FIX.format(role=role, opens=opens, total=total))
         else:
             lines.append(messages.CHECK_CHANNELS_FIX)
     if visibility.private:
         # Named, as the answer is only shown to the admin who asked
         template = messages.CHECK_CHANNELS_MOSTLY_CLOSED if too_few else messages.CHECK_CHANNELS_PRIVATE
-        lines.append(template.format(count=len(visibility.private), channels=list_channels(visibility.private)))
+        count = len(visibility.private)
+        lines.append(template.format(count=count, are="is" if count == 1 else "are",
+                                     channels=list_channels(visibility.private)))
     if visibility.hidden:
         # Discord does not say whether members or only staff see these, so like private channels they are
         # only a warning when they are most of the server
