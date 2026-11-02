@@ -58,7 +58,7 @@ Get a few of your messages onto the board first.
 - [x] React to a new message of yours until it passes the threshold: nothing is reposted, and `/my_data`
       shows no new post
 - [ ] A second account's message still reaches the board as usual
-- [ ] Download right after stopping includes `"not_counted": true`
+- [x] Download right after stopping includes `"not_counted": true`
 - [ ] Feature me again: the panel confirms it, and your next message over the threshold is reposted and
       credited to you
 
