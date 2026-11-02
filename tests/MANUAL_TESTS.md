@@ -52,6 +52,7 @@ message under a "test cases" category so each post names what it tests.
 | command picker | `/set_reaction_threshold` allowed for a role without Manage Server | The role saw the command, and running it was refused privately: only for members with Manage Server |
 | setup check | `/troubleshoot` | Private answer naming the channel the bot cannot see, the role that opens it, the board, and the last post. Read "opens 1 of these 1" and "1 more are hidden"; now "opens it" and "1 more is hidden" |
 | setup check | A message in an age-restricted channel | Not posted while the board was not age-restricted, and `/troubleshoot` listed the channel under age-restricted channels. Once the board was marked age-restricted, a message there was posted |
+| setup check | The Troubleshoot button under `/get_server_config` | An admin got the findings privately. A member was refused privately |
 | settings form | Threshold, post age and counting changed at once | One answer listing exactly those three, with the note on post age, and `/get_server_config` showed all three. The answer called post age "Post due date"; it now says "Post age" as the config does |
 | settings form | Counting changed to total reactions | One private answer naming only that change, and `/get_server_config` showed it |
 | settings form | 0, and "five", as the threshold | Refused: "must be between 1 and 1000" for 0 and "must be a whole number from 1 to 1000" for five, nothing saved |
