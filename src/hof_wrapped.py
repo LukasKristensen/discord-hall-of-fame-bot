@@ -104,7 +104,9 @@ async def process_message_reactions(message: discord.Message, connection):
     for user_id in users_reacted:
         user_reactor = users[user_id]
         user_reactor.reactionCount += 1
-
+        # A member reacting to their own post is not their own fan, or Wrapped names them their biggest fan
+        if user_reactor.id == user_author.id:
+            continue
 
         # Feature: User's fans
         if user_reactor.id not in user_author.usersFans:

@@ -480,3 +480,36 @@ class CountedTests(unittest.TestCase):
         self.assertEqual("3 posts", hof_wrapped.counted(3, "post"))
         self.assertEqual("1 time", hof_wrapped.counted(1, "time"))
         self.assertEqual("0 reactions", hof_wrapped.counted(0, "reaction"))
+
+
+class OwnReactionTests(unittest.IsolatedAsyncioTestCase):
+    """Wrapped named a member their own biggest fan when they reacted to their own posts."""
+
+    async def test_a_member_is_not_their_own_fan(self):
+        import types
+        from unittest import mock
+        import hof_wrapped
+
+        class Users:
+            def __init__(self, ids):
+                self.ids = ids
+
+            def __aiter__(self):
+                async def gen():
+                    for user_id in self.ids:
+                        yield types.SimpleNamespace(id=user_id)
+                return gen()
+
+        author, friend = 1, 2
+        reaction = types.SimpleNamespace(emoji="🔥", users=lambda: Users([author, friend]))
+        message = types.SimpleNamespace(author=types.SimpleNamespace(id=author), reactions=[reaction])
+
+        async def count(*_args, **_kwargs):
+            return 2
+
+        with mock.patch.dict(hof_wrapped.users, {author: hof_wrapped.User(author), friend: hof_wrapped.User(friend)},
+                             clear=True), mock.patch.object(hof_wrapped.message_reactions, "reaction_count", count):
+            await hof_wrapped.process_message_reactions(message, None)
+            self.assertEqual({friend: 1}, hof_wrapped.users[author].usersFans)
+            self.assertEqual({}, hof_wrapped.users[author].fanOfUsers)
+            self.assertEqual({author: 1}, hof_wrapped.users[friend].fanOfUsers)

@@ -193,7 +193,7 @@ and reply from the payload:
 
 Only if Wrapped can be generated on the development bot.
 
-- [ ] `/hof_wrapped` opens a story only you see: Next, Back and Skip to summary work, the fame rate page
+- [x] `/hof_wrapped` opens a story only you see: Next, Back and Skip to summary work, the fame rate page
       shows "1 in N" with the server average, and the summary offers Show to others
 - [ ] Show to others posts the summary in the channel once, without pinging anyone it names. Another member
       presses Year in squares and Top 10 and sees them privately, and Get my Wrapped opens their own story
