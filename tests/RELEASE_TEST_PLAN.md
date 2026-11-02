@@ -55,7 +55,7 @@ Get a few of your messages onto the board first.
       becomes Feature me again
 - [ ] With earlier posts, the panel says they are kept until you delete them, and Download, the totals
       button and Delete are still offered
-- [ ] React to a new message of yours until it passes the threshold: nothing is reposted, and `/my_data`
+- [x] React to a new message of yours until it passes the threshold: nothing is reposted, and `/my_data`
       shows no new post
 - [ ] A second account's message still reaches the board as usual
 - [ ] Download right after stopping includes `"not_counted": true`
@@ -69,11 +69,11 @@ Get a few of your messages onto the board first.
 - [ ] Cancel says nothing was deleted
 - [ ] Confirming answers within a few seconds, even with many posts, and says your data is deleted
 - [ ] The done message offers Stop featuring me. Pressing it stores the choice and says so
-- [ ] Your posts are still on the board, but `/leaderboard` and `/user_profile` no longer show you after
+- [x] Your posts are still on the board, but `/leaderboard` and `/user_profile` no longer show you after
       the daily update
 - [ ] Delete again the same day with nothing stored is allowed (no daily limit when there is nothing to
       delete)
-- [ ] Delete again the same day with posts stored says you already deleted today
+- [x] Delete again the same day with posts stored says you already deleted today
 - [ ] While not featured, Delete my data warns that the choice not to be featured is deleted too.
       Afterwards your next message over the threshold is featured again
 
@@ -82,19 +82,19 @@ Get a few of your messages onto the board first.
 Bring your account to exactly 10,000 credited posts with test rows, as described under "How the posts
 were made" in [MANUAL_TESTS.md](MANUAL_TESTS.md).
 
-- [ ] Your next message over the threshold reaches the board but is not credited to you
-- [ ] The log channel gets one critical alert, without a ping, with your user ID
-- [ ] A second message over the threshold is also uncredited, with no second alert
-- [ ] `/my_data` still shows 10,000 featured posts
+- [x] Your next message over the threshold reaches the board but is not credited to you
+- [x] The log channel gets one critical alert, without a ping, with your user ID
+- [x] A second message over the threshold is also uncredited, with no second alert
+- [x] `/my_data` still shows 10,000 featured posts
 
 ## Exporting large amounts of data
 
 Use test rows again.
 
-- [ ] Around 50,000 posts: one file if Discord accepts it, otherwise parts
-- [ ] Around 150,000 posts: Discord refuses one file, and you get several parts, each a complete JSON file,
+- [x] Around 50,000 posts: one file if Discord accepts it, otherwise parts
+- [x] Around 150,000 posts: Discord refuses one file, and you get several parts, each a complete JSON file,
       with a message saying how many
-- [ ] Over 2,000,000 posts: you are pointed to the support server, nothing is half sent, and you can still
+- [x] Over 2,000,000 posts: you are pointed to the support server, nothing is half sent, and you can still
       download again the same day
 
 ## Logs
@@ -120,7 +120,7 @@ Restart the Discord client if the picker still shows the old list.
 ## Setup check and joining
 
 - [x] `/troubleshoot` answers the admin privately with the findings
-- [ ] A member without Manage Server does not see `/troubleshoot`, and pressing Troubleshoot on the
+- [x] A member without Manage Server does not see `/troubleshoot`, and pressing Troubleshoot on the
       welcome message is refused
 - [x] Add the dev bot to a new server: if something is wrong, a short note with a Troubleshoot button
       appears on the board, and the button opens the full findings for an admin
@@ -137,7 +137,7 @@ Restart the Discord client if the picker still shows the old list.
 - [ ] Apps > Why isn't this on the board? on a message, as a member without Manage Server: a posted message
       links to its post, one short of the threshold shows the count, and one in a channel the bot cannot
       read says so. Only you see the answer, and asking again straight away is refused for a few seconds
-- [ ] A friend who pressed Stop featuring me reaches the threshold: you are told only that it cannot be
+- [x] A friend who pressed Stop featuring me reaches the threshold: you are told only that it cannot be
       featured, and they are told it is their choice, with `/my_data`
 
 ## Board posts
