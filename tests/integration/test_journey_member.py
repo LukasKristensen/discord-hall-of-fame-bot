@@ -219,7 +219,10 @@ class WrappedTests(JourneyTestCase):
     def setUp(self):
         super().setUp()
         settings = {"dsn": database_url(), "options": f"-c search_path={self.schema} -c TimeZone=UTC"}
-        for target, name, value in ((hof_wrapped.environment, "database_settings", lambda: settings),
+        # Last year's Wrapped is out whatever the date, unlike one whose December has not come yet
+        last_year = datetime.datetime.now(datetime.timezone.utc).year - 1
+        for target, name, value in ((version, "WRAPPED_YEAR", last_year),
+                                    (hof_wrapped.environment, "database_settings", lambda: settings),
                                     (hof_wrapped, "users", {}), (hof_wrapped, "total_hall_of_fame_posts", 0),
                                     (hof_wrapped, "rankings", None)):
             patcher = mock.patch.object(target, name, value)
