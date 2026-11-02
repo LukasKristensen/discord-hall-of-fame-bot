@@ -119,11 +119,25 @@ async def process_message_reactions(message: discord.Message, connection):
             user_reactor.fanOfUsers[user_author.id] += 1
 
 
+# How often a run says how far it has come, so a large server is not taken for stuck
+progress_every_posts = 25
+progress_every_members = 5
+
+
+def print_progress(step: str, done: int, total: int, every: int, started: datetime.datetime):
+    """Print how far a step has come every few items and at the end, with the time it has taken so far"""
+    if done == total or done % every == 0:
+        elapsed = (datetime.datetime.now() - started).total_seconds()
+        print(f"  {step}: {done}/{total} ({elapsed:.0f}s)", flush=True)
+
+
 async def process_hof_messages_from_db(guild: discord.Guild, connection):
     messages = hall_of_fame_message_repo.get_all_hall_of_fame_messages_for_guild(connection, guild.id)
-    print("rows fetched from DB:", len(messages))
+    print(f"Reading {len(messages)} posts from Discord", flush=True)
+    started = datetime.datetime.now()
 
-    for message in messages:
+    for index, message in enumerate(messages, start=1):
+        print_progress("Posts read", index, len(messages), progress_every_posts, started)
         # A post whose author was removed by deleting their data on /my_data is credited to nobody,
         # even though Discord still knows who wrote it
         if message['author_id'] == hall_of_fame_message_repo.NO_AUTHOR_ID:
@@ -152,7 +166,7 @@ async def process_hof_messages_from_db(guild: discord.Guild, connection):
             user.mostUsedChannels[channel.id] = 1
         else:
             user.mostUsedChannels[channel.id] += 1
-    print("users:", users)
+    print(f"{len(users)} members with posts this year", flush=True)
     return users
 
 
@@ -410,12 +424,14 @@ async def main(guild_id: int, bot: commands.Bot, get_reaction_threshold: int, co
 
     rankings = rank_stats(users)
 
-    for user in users.values():
+    print(f"Counting the messages of {len(users)} members for the fame rate", flush=True)
+    started = datetime.datetime.now()
+    for index, user in enumerate(list(users.values()), start=1):
         # Asked again before each search, which reads from Discord, so a member who opts out while Wrapped runs
         # is not searched for. Their row is then left out when it is saved
-        if opt_out_repo.is_opted_out(connection, user.id):
-            continue
-        user.messagesSent = await count_messages_sent(bot, guild_id, user.id, version.WRAPPED_YEAR)
+        if not opt_out_repo.is_opted_out(connection, user.id):
+            user.messagesSent = await count_messages_sent(bot, guild_id, user.id, version.WRAPPED_YEAR)
+        print_progress("Members counted", index, len(users), progress_every_members, started)
     for user in users.values():
         save_user_wrapped_to_db(guild.id, user, version.WRAPPED_YEAR)
     forget_members_who_deleted_meanwhile(connection, guild_id)
