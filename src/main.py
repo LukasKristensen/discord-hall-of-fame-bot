@@ -36,7 +36,7 @@ from repositories import (
     permission_warning_repo,
 )
 import hof_wrapped
-import wrapped_story
+import wrapped_card
 from contextlib import asynccontextmanager
 from scripts import monthly_guild_snapshot
 import asyncio
@@ -335,11 +335,11 @@ async def on_ready():
         commands.settings_form_handler = open_settings_form
         # Registered running, not as the stopped copies that are sent, and matched on the button's custom_id
         bot.add_view(commands.SetupCheckView(commands.SUPPORT_SERVER_LINK, commands.VOTE_LINK))
-        # The buttons on every plaque a member shared with /hof_wrapped, matched on the server, member and
-        # year in their custom_id, so plaques from before this boot keep answering
-        wrapped_story.connect = lambda: get_db_connection(connection_pool)
-        wrapped_story.open_wrapped_handler = open_wrapped
-        bot.add_dynamic_items(*wrapped_story.DYNAMIC_ITEMS)
+        # The buttons on every Wrapped card posted with /hof_wrapped, matched on the server, member and
+        # year in their custom_id, so cards from before this boot keep answering
+        wrapped_card.connect = lambda: get_db_connection(connection_pool)
+        wrapped_card.open_wrapped_handler = open_wrapped
+        bot.add_dynamic_items(*wrapped_card.DYNAMIC_ITEMS)
 
         if bot_loaded:
             # on_ready fires again when Discord drops the session and the bot logs in anew, which is
@@ -1791,10 +1791,7 @@ async def hof_wrapped_command(interaction: discord.Interaction):
 
 
 async def open_wrapped(interaction: discord.Interaction):
-    """
-    The member's Wrapped story, privately. Shared by /hof_wrapped and the Get my Wrapped button on a plaque
-    someone else shared
-    """
+    """The member's Wrapped card. Shared by /hof_wrapped and the Get my Wrapped button on someone else's card"""
     if not await ensure_bot_is_loaded(interaction):
         return
     if await refuse_in_closed_board(interaction):
@@ -1825,8 +1822,7 @@ async def open_wrapped(interaction: discord.Interaction):
                             interaction.guild.id, log_level=log_type.COMMAND)
         return
 
-    # A private story first. The member chooses whether to show the summary to the channel
-    await wrapped_story.send_story(interaction, user_wrapped, totals)
+    await wrapped_card.send_wrapped(interaction, user_wrapped, totals)
 
     await utils.logging(bot, f"HOF Wrapped command used in a server",
                         interaction.guild.id, log_level=log_type.COMMAND)

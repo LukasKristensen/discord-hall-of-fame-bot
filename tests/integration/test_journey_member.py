@@ -14,7 +14,7 @@ import discord
 
 import hof_wrapped
 import main
-import wrapped_story
+import wrapped_card
 from constants import version
 from enums import command_refs
 from repositories import hall_of_fame_message_repo, hof_wrapped_repo
@@ -240,12 +240,12 @@ class WrappedTests(JourneyTestCase):
                 return item
         raise AssertionError(f"No {label} button")
 
-    async def test_a_story_shared_as_a_plaque_whose_cards_anyone_can_open(self):
+    async def test_a_wrapped_card_whose_cards_anyone_can_open(self):
         await self.set_up()
         # What main sets on startup
         for name, value in (("connect", lambda: main.get_db_connection(main.connection_pool)),
                             ("open_wrapped_handler", main.open_wrapped)):
-            patcher = mock.patch.object(wrapped_story, name, value)
+            patcher = mock.patch.object(wrapped_card, name, value)
             patcher.start()
             self.addCleanup(patcher.stop)
         in_the_year = datetime.datetime(version.WRAPPED_YEAR, 6, 1, 21, tzinfo=datetime.timezone.utc)
@@ -262,28 +262,21 @@ class WrappedTests(JourneyTestCase):
 
         own = self.command(AUTHOR)
         await main.hof_wrapped_command.callback(own)
-        story = own.last.view
-        self.assertIn("1 in 250", [page.big for page in story.pages])
-
-        skip = self.command(AUTHOR)
-        await self.button(story, messages.WRAPPED_SKIP).callback(skip)
-        share = self.command(AUTHOR)
-        await self.button(story, messages.WRAPPED_SHARE).callback(share)
-        plaque = share.last.view
-        self.assertFalse(share.last.ephemeral, "shown to the channel")
-        self.assertIn("1 in 250", self.view_text(plaque))
+        card = own.last.view
+        self.assertFalse(own.last.ephemeral, "the card is posted for the channel")
+        self.assertIn("1 in 250", self.view_text(card))
 
         top = self.command(FANS[0])
-        await self.button(plaque, messages.WRAPPED_TOP_BUTTON).callback(top)
+        await self.button(card, messages.WRAPPED_TOP_BUTTON).callback(top)
         self.assertTrue(top.last.ephemeral, "a card opens for whoever pressed")
         self.assertIn("3 reactions", self.view_text(top.last.view))
 
         squares = self.command(FANS[1])
-        await self.button(plaque, messages.WRAPPED_SQUARES_BUTTON).callback(squares)
+        await self.button(card, messages.WRAPPED_SQUARES_BUTTON).callback(squares)
         self.assertIn(messages.WRAPPED_SQUARES_HOUR.format(hour=21), self.view_text(squares.last.view))
 
         mine = self.command(FANS[4])
-        await self.button(plaque, messages.WRAPPED_MINE_BUTTON).callback(mine)
+        await self.button(card, messages.WRAPPED_MINE_BUTTON).callback(mine)
         self.assertIn("not in this server's Hall of Fame Wrapped", mine.last.content)
 
     async def test_wrapped_before_and_after_it_is_made(self):
@@ -309,9 +302,9 @@ class WrappedTests(JourneyTestCase):
 
         own = self.command(AUTHOR)
         await main.hof_wrapped_command.callback(own)
-        self.assertIsInstance(own.last.view, wrapped_story.StoryView)
-        self.assertTrue(own.last.ephemeral, "the story is the member's own until they show it")
-        self.assertEqual(1, own.last.view.summary.posts)
+        self.assertFalse(own.last.ephemeral, "the card is posted for the channel")
+        self.assertIn(messages.WRAPPED_PLAQUE_STATS.format(posts=1, received=3, given=0, channels=1).split(" · ")[0],
+                      self.view_text(own.last.view))
 
         fan = self.command(FANS[4])
         await main.hof_wrapped_command.callback(fan)

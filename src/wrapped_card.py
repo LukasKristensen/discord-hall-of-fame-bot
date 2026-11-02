@@ -1,16 +1,15 @@
 """
-Hall of Fame Wrapped as a story, a plaque and two cards.
+Hall of Fame Wrapped as one card, and the two cards it opens.
 
-/hof_wrapped opens a private story: a few pages the member steps through, ending on their summary. From the
-summary, Show to others posts that summary, the plaque, in the channel. The plaque has buttons any member can
-press: Year in squares and Top 10 open those cards privately for whoever pressed, and Get my Wrapped opens
-the presser's own story. They are DynamicItems keyed by the server, member and year in their custom_id, so
-they keep working on plaques posted before a restart.
+/hof_wrapped posts the member's Wrapped in the channel as a single card. It has buttons any member can press:
+Year in squares and Top 10 open those cards privately for whoever pressed, and Get my Wrapped posts the
+presser's own. They are DynamicItems keyed by the server, member and year in their custom_id, so they keep
+working on cards posted before a restart.
 
 Everything shown comes from the member's stored Wrapped and their stored board posts. The fame rate uses
 the messages the member sent that year, counted by Discord's message search when Wrapped was made. The search
-also returns one of those messages, which is dropped unread; only the count is kept. When a post was written comes from its message ID, so no message is fetched for the
-cards either.
+also returns one of those messages, which is dropped unread; only the count is kept. When a post was written
+comes from its message ID, so no message is fetched for the cards either.
 """
 import calendar
 import datetime
@@ -29,19 +28,24 @@ from translations import messages
 connect = None
 open_wrapped_handler = None
 
-STORY_TIMEOUT_SECONDS = 900
 # A fame rate at or under this earns The Sharpshooter
 SHARPSHOOTER_RATE = 150
 REGULAR_POSTS = 25
 EXPLORER_CHANNELS = 5
 TOP_POSTS = 10
+# How many fans, members they were a fan of and channels the card lists, and how many emojis
+LIST_LENGTH = 3
+EMOJI_LIST_LENGTH = 5
+# A member featured more often than once in this many messages sees their fame rate as a share instead
+PERCENT_BELOW_RATE = 10
+BEST_POST_QUOTE_LIMIT = 200
 SQUARE_SHADES = "·▒▓█"
 WEEKDAYS = ("Mondays", "Tuesdays", "Wednesdays", "Thursdays", "Fridays", "Saturdays", "Sundays")
 
 
 @dataclass
 class Summary:
-    """One member's Wrapped, as the story, the plaque and the cards read it"""
+    """One member's Wrapped, as the card and the cards it opens read it"""
     guild_id: int
     user_id: int
     year: int
@@ -53,22 +57,32 @@ class Summary:
     members: int
     server_messages_sent: int
     server_posts: int
-    top_fan: tuple[int, int] | None
-    fan_of: tuple[int, int] | None
-    top_emoji: tuple[str, int] | None
-    top_channel: tuple[int, int] | None
+    top_fans: list[tuple[int, int]]
+    fans_of: list[tuple[int, int]]
+    top_emojis: list[tuple[str, int]]
+    top_channels: list[tuple[int, int]]
+    ranks: dict
     channels_used: int
     best_post_channel_id: int | None
     best_post_message_id: int | None
     best_post_reactions: int
 
+    @property
+    def top_fan(self):
+        return self.top_fans[0] if self.top_fans else None
 
-def _top(counts: dict):
-    """The entry with the highest count, its key as stored in JSON, or None when empty"""
-    if not counts:
-        return None
-    key, count = max(counts.items(), key=lambda item: item[1])
-    return key, count
+    @property
+    def top_emoji(self):
+        return self.top_emojis[0] if self.top_emojis else None
+
+    @property
+    def top_channel(self):
+        return self.top_channels[0] if self.top_channels else None
+
+
+def _ranked(counts: dict, limit: int) -> list:
+    """The entries with the highest counts first, as stored in JSON, up to limit"""
+    return sorted(counts.items(), key=lambda item: item[1], reverse=True)[:limit]
 
 
 def build_summary(row: dict, totals: dict) -> Summary:
@@ -76,12 +90,14 @@ def build_summary(row: dict, totals: dict) -> Summary:
     :param row: The member's hof_wrapped row
     :param totals: hof_wrapped_repo.get_guild_wrapped_totals for the same server and year
     """
-    fans = json.loads(row.get("users_fans") or "{}")
-    fan_of = json.loads(row.get("fan_of_users") or "{}")
+    own_id = str(row["user_id"])
+    # A member reacting to their own posts is counted by Wrapped, but they are not their own fan
+    fans = {member: count for member, count in json.loads(row.get("users_fans") or "{}").items() if member != own_id}
+    fan_of = {member: count for member, count in json.loads(row.get("fan_of_users") or "{}").items()
+              if member != own_id}
     emojis = json.loads(row.get("most_used_emojis") or "{}")
     channels = json.loads(row.get("most_used_channels") or "{}")
     ranks = json.loads(row.get("user_ranks") or "{}")
-    top_fan, top_fan_of, top_channel = _top(fans), _top(fan_of), _top(channels)
     return Summary(
         guild_id=row["guild_id"], user_id=row["user_id"], year=row["year"],
         posts=row.get("hof_message_posts") or 0,
@@ -91,10 +107,11 @@ def build_summary(row: dict, totals: dict) -> Summary:
         rank=ranks.get("hallOfFameMessagePosts"),
         members=totals["members"],
         server_messages_sent=totals["messages_sent"], server_posts=totals["posts"],
-        top_fan=(int(top_fan[0]), top_fan[1]) if top_fan else None,
-        fan_of=(int(top_fan_of[0]), top_fan_of[1]) if top_fan_of else None,
-        top_emoji=_top(emojis),
-        top_channel=(int(top_channel[0]), top_channel[1]) if top_channel else None,
+        top_fans=[(int(member), count) for member, count in _ranked(fans, LIST_LENGTH)],
+        fans_of=[(int(member), count) for member, count in _ranked(fan_of, LIST_LENGTH)],
+        top_emojis=_ranked(emojis, EMOJI_LIST_LENGTH),
+        top_channels=[(int(channel), count) for channel, count in _ranked(channels, LIST_LENGTH)],
+        ranks=ranks,
         channels_used=len(channels),
         best_post_channel_id=row.get("most_reacted_post_channel_id"),
         best_post_message_id=row.get("most_reacted_post_message_id"),
@@ -103,10 +120,27 @@ def build_summary(row: dict, totals: dict) -> Summary:
 
 
 def fame_rate(posts: int, messages_sent: int | None) -> int | None:
-    """One in how many messages reached the board, or None when the messages were not counted"""
-    if not posts or not messages_sent:
+    """
+    One in how many messages reached the board, or None when the messages were not counted. Also None when
+    more posts were featured than messages counted, which happens when Discord's search has not indexed all
+    of a server, since no rate drawn from that would be true
+    """
+    if not posts or not messages_sent or posts > messages_sent:
         return None
     return max(1, round(messages_sent / posts))
+
+
+def fame_text(posts: int, messages_sent: int | None) -> str | None:
+    """
+    The fame rate as the card shows it: "1 in 214" for most members, and a share such as "77%" for those who
+    get most of their messages featured, where "1 in 1" would say nothing
+    """
+    rate = fame_rate(posts, messages_sent)
+    if rate is None:
+        return None
+    if messages_sent / posts < PERCENT_BELOW_RATE:
+        return f"{round(100 * posts / messages_sent)}%"
+    return f"1 in {rate:,}"
 
 
 def member_fame_rate(summary: Summary) -> int | None:
@@ -132,7 +166,8 @@ def title_for(summary: Summary) -> tuple[str, str]:
         name, reason = messages.WRAPPED_TITLE_EXPLORER
     else:
         name, reason = messages.WRAPPED_TITLE_RISING
-    return name, reason.format(rate=rate or 0, posts=summary.posts, channels=summary.channels_used)
+    return name, reason.format(fame=fame_text(summary.posts, summary.messages_sent), posts=summary.posts,
+                               channels=summary.channels_used)
 
 
 def post_link(guild_id: int, channel_id: int, message_id: int) -> str:
@@ -148,7 +183,7 @@ def best_post_link(summary: Summary) -> str | None:
 def best_post_media(message) -> discord.MediaGalleryItem | None:
     """
     The first picture or video of the best post, to show with it. Left out when Discord flagged it, when it
-    comes from an age-restricted channel, since the plaque can be shared anywhere, or when there is none
+    comes from an age-restricted channel, since the card can be posted in any channel, or when there is none
     """
     if message is None or board_post.content_scan_flags(message):
         return None
@@ -156,6 +191,16 @@ def best_post_media(message) -> discord.MediaGalleryItem | None:
         return None
     items = board_post.media_items(getattr(message, "attachments", None) or [])
     return items[0] if items else None
+
+
+def best_post_quote(message) -> str:
+    """
+    The best post's words, cut short, read from Discord when the card is made and never stored. Left out
+    from an age-restricted channel, as its picture is
+    """
+    if message is None or setup_check.is_age_restricted(getattr(message, "channel", None)):
+        return ""
+    return board_post.truncate_content(getattr(message, "content", None) or "", BEST_POST_QUOTE_LIMIT)
 
 
 async def fetch_best_post(guild, summary: Summary):
@@ -169,74 +214,11 @@ async def fetch_best_post(guild, summary: Summary):
         return None
 
 
-@dataclass
-class Page:
-    kicker: str
-    big: str
-    text: str = ""
-    media: discord.MediaGalleryItem | None = None
-    link: str | None = None
-
-
-def story_pages(summary: Summary, name: str, media: discord.MediaGalleryItem | None) -> list[Page]:
-    """The pages before the summary. A page with nothing to say, such as the fame rate when the messages
-    were not counted, is left out"""
-    pages = [Page(messages.WRAPPED_INTRO_KICKER.format(year=summary.year), name, messages.WRAPPED_INTRO_TEXT)]
-
-    posts_text = messages.WRAPPED_POSTS_TEXT
-    if summary.rank:
-        posts_text += " " + messages.WRAPPED_POSTS_RANK.format(rank=summary.rank, members=summary.members)
-    pages.append(Page(messages.WRAPPED_POSTS_KICKER, str(summary.posts), posts_text))
-
-    rate = member_fame_rate(summary)
-    if rate is not None:
-        fame_text = messages.WRAPPED_FAME_TEXT.format(sent=summary.messages_sent, rate=rate)
-        average = server_fame_rate(summary)
-        if average is not None:
-            fame_text += " " + messages.WRAPPED_FAME_AVERAGE.format(average=average)
-        pages.append(Page(messages.WRAPPED_FAME_KICKER, f"1 in {rate:,}", fame_text))
-
-    if summary.best_post_reactions:
-        pages.append(Page(messages.WRAPPED_BEST_KICKER, str(summary.best_post_reactions),
-                          messages.WRAPPED_BEST_TEXT, media, best_post_link(summary)))
-
-    people = []
-    if summary.top_fan:
-        people.append(messages.WRAPPED_TOP_FAN.format(fan=f"<@{summary.top_fan[0]}>", count=summary.top_fan[1]))
-    if summary.fan_of:
-        people.append(messages.WRAPPED_FAN_OF.format(member=f"<@{summary.fan_of[0]}>", count=summary.fan_of[1]))
-    if summary.top_emoji:
-        people.append(messages.WRAPPED_EMOJI.format(emoji=summary.top_emoji[0]))
-    if people:
-        big = f"<@{summary.top_fan[0]}>" if summary.top_fan else summary.top_emoji[0] if summary.top_emoji else ""
-        pages.append(Page(messages.WRAPPED_PEOPLE_KICKER, big, "\n".join(people)))
-
-    title, reason = title_for(summary)
-    pages.append(Page(messages.WRAPPED_TITLE_KICKER, title, reason))
-    return pages
-
-
-def page_container(page: Page, number: int, total: int) -> discord.ui.Container:
-    container = discord.ui.Container(accent_colour=discord.Colour.gold())
-    progress = "▰" * number + "▱" * (total - number)
-    container.add_item(discord.ui.TextDisplay(
-        f"-# {progress}  {messages.WRAPPED_PAGE.format(page=number, pages=total)}\n**{page.kicker}**"))
-    container.add_item(discord.ui.TextDisplay(f"# {page.big}"))
-    if page.text:
-        container.add_item(discord.ui.TextDisplay(page.text))
-    if page.media is not None:
-        container.add_item(discord.ui.MediaGallery(page.media))
-    if page.link:
-        container.add_item(discord.ui.ActionRow(discord.ui.Button(style=discord.ButtonStyle.link,
-                                                                  label=messages.WRAPPED_JUMP, url=page.link)))
-    return container
-
-
-def plaque_container(summary: Summary, name: str, avatar_url: str | None,
-                     media: discord.MediaGalleryItem | None, shared: bool) -> discord.ui.Container:
+def wrapped_container(summary: Summary, name: str, avatar_url: str | None, best_post=None) -> discord.ui.Container:
     """
-    The one-page summary, shown last in the story and posted by Show to others
-    :param shared: Whether it is the copy posted for everyone, which also offers Get my Wrapped
+    The member's Wrapped on one card: title and rank, fame rate and totals, the best moment, their people,
+    emojis and channels, and their ranks in the server
+    :param best_post: The best post itself, for its words and picture, None when it could not be fetched
     """
     title, _reason = title_for(summary)
     container = discord.ui.Container(accent_colour=discord.Colour.gold())
@@ -249,148 +231,77 @@ def plaque_container(summary: Summary, name: str, avatar_url: str | None,
         container.add_item(discord.ui.TextDisplay(heading))
     container.add_item(discord.ui.Separator())
 
-    rate = member_fame_rate(summary)
-    if rate is not None:
-        fame = messages.WRAPPED_PLAQUE_FAME.format(rate=rate, sent=summary.messages_sent)
-        average = server_fame_rate(summary)
+    fame = fame_text(summary.posts, summary.messages_sent)
+    if fame is not None:
+        fame_block = messages.WRAPPED_PLAQUE_FAME.format(fame=fame, sent=summary.messages_sent)
+        average = fame_text(summary.server_posts, summary.server_messages_sent)
         if average is not None:
-            fame += messages.WRAPPED_PLAQUE_FAME_AVERAGE.format(average=average)
-        container.add_item(discord.ui.TextDisplay(fame))
+            fame_block += messages.WRAPPED_PLAQUE_FAME_AVERAGE.format(average=average)
+        container.add_item(discord.ui.TextDisplay(fame_block))
     container.add_item(discord.ui.TextDisplay(messages.WRAPPED_PLAQUE_STATS.format(
-        posts=summary.posts, received=summary.reactions_received, given=summary.reactions_given)))
+        posts=summary.posts, received=summary.reactions_received, given=summary.reactions_given,
+        channels=summary.channels_used)))
 
     if summary.best_post_reactions:
-        container.add_item(discord.ui.TextDisplay(messages.WRAPPED_PLAQUE_BEST.format(count=summary.best_post_reactions)))
+        container.add_item(discord.ui.Separator())
+        best = messages.WRAPPED_PLAQUE_BEST.format(count=summary.best_post_reactions)
+        quote = best_post_quote(best_post)
+        container.add_item(discord.ui.TextDisplay(f"{best}\n>>> {quote}" if quote else best))
+        media = best_post_media(best_post)
         if media is not None:
             container.add_item(discord.ui.MediaGallery(media))
 
-    highlights = []
-    if summary.top_fan:
-        highlights.append(messages.WRAPPED_PLAQUE_FAN.format(fan=f"<@{summary.top_fan[0]}>", count=summary.top_fan[1]))
-    if summary.top_emoji:
-        highlights.append(messages.WRAPPED_PLAQUE_EMOJI.format(emoji=summary.top_emoji[0]))
-    if summary.top_channel:
-        highlights.append(messages.WRAPPED_PLAQUE_CHANNEL.format(channel=f"<#{summary.top_channel[0]}>"))
-    if highlights:
-        container.add_item(discord.ui.TextDisplay("\n".join(highlights)))
+    lists = []
+    if summary.top_fans:
+        lists.append(messages.WRAPPED_PLAQUE_FANS.format(
+            members=" · ".join(f"<@{member}> {count}" for member, count in summary.top_fans)))
+    if summary.fans_of:
+        lists.append(messages.WRAPPED_PLAQUE_FAN_OF.format(
+            members=" · ".join(f"<@{member}> {count}" for member, count in summary.fans_of)))
+    if summary.top_emojis:
+        lists.append(messages.WRAPPED_PLAQUE_EMOJIS.format(
+            emojis=" · ".join(f"{emoji} {count}" for emoji, count in summary.top_emojis)))
+    if summary.top_channels:
+        lists.append(messages.WRAPPED_PLAQUE_CHANNELS.format(
+            channels=" · ".join(f"<#{channel}> {count}" for channel, count in summary.top_channels)))
+    if lists:
+        container.add_item(discord.ui.Separator())
+        container.add_item(discord.ui.TextDisplay("\n".join(lists)))
+
+    ranks = [f"**#{summary.ranks[key]}** {label}" for key, label in messages.WRAPPED_RANK_LABELS.items()
+             if summary.ranks.get(key)]
+    if ranks:
+        container.add_item(discord.ui.TextDisplay(messages.WRAPPED_PLAQUE_RANKS.format(ranks=" · ".join(ranks))))
 
     buttons = [SquaresButton(summary.guild_id, summary.user_id, summary.year),
                TopButton(summary.guild_id, summary.user_id, summary.year)]
     link = best_post_link(summary)
     if link:
         buttons.append(discord.ui.Button(style=discord.ButtonStyle.link, label=messages.WRAPPED_JUMP, url=link))
-    if shared:
-        buttons.append(MineButton(summary.guild_id))
+    buttons.append(MineButton(summary.guild_id))
     container.add_item(discord.ui.ActionRow(*buttons))
     return container
 
 
-def plaque_view(summary: Summary, name: str, avatar_url: str | None, media) -> discord.ui.LayoutView:
-    """The plaque as posted for everyone. Its buttons are DynamicItems, so it needs no timeout"""
+def wrapped_view(summary: Summary, name: str, avatar_url: str | None, best_post=None) -> discord.ui.LayoutView:
+    """The card as posted. Its buttons are DynamicItems, so it needs no timeout"""
     view = discord.ui.LayoutView(timeout=None)
-    view.add_item(discord.ui.TextDisplay(messages.WRAPPED_SHARED_BY.format(member=f"<@{summary.user_id}>")))
-    view.add_item(plaque_container(summary, name, avatar_url, media, shared=True))
+    view.add_item(wrapped_container(summary, name, avatar_url, best_post))
     return view
 
 
-class StoryView(discord.ui.LayoutView):
+async def send_wrapped(interaction: discord.Interaction, row: dict, totals: dict):
     """
-    The private story. It is only seen by the member who opened it, so its buttons need no check on who
-    pressed them, and it lives as long as the message stays open
+    Post the member's Wrapped card in the channel. Deferred first, as the best post is fetched for its words
+    and picture. No one it names is pinged
     """
-
-    def __init__(self, summary: Summary, name: str, avatar_url: str | None, media):
-        super().__init__(timeout=STORY_TIMEOUT_SECONDS)
-        self.summary = summary
-        self.name = name
-        self.avatar_url = avatar_url
-        self.media = media
-        self.pages = story_pages(summary, name, media)
-        self.index = 0
-        self.shared = False
-        self.render()
-
-    @property
-    def total(self) -> int:
-        # The summary is the last page
-        return len(self.pages) + 1
-
-    @property
-    def on_summary(self) -> bool:
-        return self.index == len(self.pages)
-
-    def render(self):
-        self.clear_items()
-        if self.on_summary:
-            self.add_item(plaque_container(self.summary, self.name, self.avatar_url, self.media, shared=False))
-        else:
-            self.add_item(page_container(self.pages[self.index], self.index + 1, self.total))
-
-        back = discord.ui.Button(style=discord.ButtonStyle.secondary, label=messages.WRAPPED_BACK,
-                                 disabled=self.index == 0)
-        back.callback = self.go_back
-        row = [back]
-        if self.on_summary:
-            share = discord.ui.Button(style=discord.ButtonStyle.primary,
-                                      label=messages.WRAPPED_SHARED if self.shared else messages.WRAPPED_SHARE,
-                                      disabled=self.shared)
-            share.callback = self.share
-            row.append(share)
-        else:
-            forward = discord.ui.Button(style=discord.ButtonStyle.primary, label=messages.WRAPPED_NEXT)
-            forward.callback = self.go_next
-            skip = discord.ui.Button(style=discord.ButtonStyle.secondary, label=messages.WRAPPED_SKIP)
-            skip.callback = self.skip
-            row += [forward, skip]
-        self.add_item(discord.ui.ActionRow(*row))
-
-    async def show(self, interaction: discord.Interaction, index: int):
-        self.index = max(0, min(index, len(self.pages)))
-        self.render()
-        await interaction.response.edit_message(view=self)
-
-    async def go_back(self, interaction: discord.Interaction):
-        await self.show(interaction, self.index - 1)
-
-    async def go_next(self, interaction: discord.Interaction):
-        await self.show(interaction, self.index + 1)
-
-    async def skip(self, interaction: discord.Interaction):
-        await self.show(interaction, len(self.pages))
-
-    async def share(self, interaction: discord.Interaction):
-        """Post the plaque for everyone, once, as a followup, which needs no permission to send in the channel"""
-        if self.shared:
-            # A second press that arrived before the button was disabled. Set before the first await below, so
-            # only one press gets past this
-            # noinspection PyUnresolvedReferences
-            await interaction.response.defer()
-            return
-        self.shared = True
-        # The story holds what was read when it opened. The member may have asked not to be featured, or deleted
-        # their data, since then, so that is asked again before anything goes in front of the channel
-        async with connect() as connection:
-            row = hof_wrapped_repo.get_hof_wrapped(connection, self.summary.guild_id, self.summary.user_id,
-                                                   self.summary.year)
-            available = row is not None and not opt_out_repo.is_opted_out(connection, self.summary.user_id)
-        self.render()
-        await interaction.response.edit_message(view=self)
-        if not available:
-            await interaction.followup.send(messages.WRAPPED_CARD_GONE, ephemeral=True)
-            return
-        await interaction.followup.send(view=plaque_view(self.summary, self.name, self.avatar_url, self.media),
-                                        allowed_mentions=discord.AllowedMentions.none())
-
-
-async def send_story(interaction: discord.Interaction, row: dict, totals: dict):
-    """Open the story for the member who asked, privately. Deferred first, as the best post is fetched"""
-    await interaction.response.defer(ephemeral=True, thinking=True)
+    await interaction.response.defer(thinking=True)
     summary = build_summary(row, totals)
-    media = best_post_media(await fetch_best_post(interaction.guild, summary))
+    best_post = await fetch_best_post(interaction.guild, summary)
     member = interaction.user
     avatar = getattr(getattr(member, "display_avatar", None), "url", None)
-    view = StoryView(summary, getattr(member, "display_name", None) or member.name, avatar, media)
-    await interaction.followup.send(view=view, ephemeral=True)
+    view = wrapped_view(summary, getattr(member, "display_name", None) or member.name, avatar, best_post)
+    await interaction.followup.send(view=view, allowed_mentions=discord.AllowedMentions.none())
 
 
 def posts_in_year(posts: list[dict], year: int) -> list[dict]:
@@ -453,7 +364,7 @@ def top_card(member: str, year: int, guild_id: int, posts: list[dict]) -> str:
 
 
 async def show_card(interaction: discord.Interaction, guild_id: int, user_id: int, year: int, kind: str):
-    """Answer a plaque's Year in squares or Top 10 button, privately for whoever pressed it"""
+    """Answer a Wrapped card's Year in squares or Top 10 button, privately for whoever pressed it"""
     async with connect() as connection:
         row = hof_wrapped_repo.get_hof_wrapped(connection, guild_id, user_id, year)
         # A member who asked not to be featured since sharing is not shown, nor one who deleted their data
@@ -506,7 +417,7 @@ class TopButton(discord.ui.DynamicItem[discord.ui.Button],
 
 
 class MineButton(discord.ui.DynamicItem[discord.ui.Button], template=r"hofw:me:(?P<guild>\d+)"):
-    """Get my Wrapped on a shared plaque: the presser's own story, as /hof_wrapped would open it"""
+    """Get my Wrapped on someone else's card: the presser's own card, as /hof_wrapped would post it"""
 
     def __init__(self, guild_id: int):
         super().__init__(discord.ui.Button(style=discord.ButtonStyle.primary, label=messages.WRAPPED_MINE_BUTTON,

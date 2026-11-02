@@ -193,11 +193,11 @@ and reply from the payload:
 
 Only if Wrapped can be generated on the development bot.
 
-- [ ] `/hof_wrapped` opens a story only you see: Next, Back and Skip to summary work, the fame rate page
-      shows "1 in N" with the server average, and the summary offers Show to others
-- [ ] Show to others posts the summary in the channel once, without pinging anyone it names. Another member
-      presses Year in squares and Top 10 and sees them privately, and Get my Wrapped opens their own story
-- [ ] After a restart, the buttons on a summary posted before it still answer
+- [ ] `/hof_wrapped` posts one card in the channel, without pinging anyone it names, with "1 in N" next to
+      the server average
+- [ ] Another member presses Year in squares and Top 10 and sees them privately, and Get my Wrapped posts
+      their own card
+- [ ] After a restart, the buttons on a card posted before it still answer
 - [ ] A member who asked not to be featured gets no Wrapped and appears in nobody's fan lists
 - [ ] A member who deleted their data while Wrapped ran is left out the same way
 - [ ] After Wrapped is generated, a friend presses Stop featuring me: they vanish from your

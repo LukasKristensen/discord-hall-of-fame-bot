@@ -1,8 +1,8 @@
-"""Tests for the Wrapped story, the plaque it shares, and the two cards the plaque opens.
+"""Tests for the Wrapped card and the two cards it opens.
 
-The story is private and the plaque is public, so the tests care about what each one shows, that the
-member alone decides when the plaque goes up, and that the cards on a plaque stay true to the stored
-data: a member who stopped being featured since is not shown, and nothing is fetched or read for them.
+The card is posted for the whole channel, so the tests care about what it shows and that no one it names
+is pinged, and that the cards it opens stay true to the stored data: a member who stopped being featured
+since is not shown, and nothing is fetched or read for them.
 """
 
 import datetime
@@ -14,7 +14,7 @@ from unittest import mock
 import discord
 
 import hof_wrapped
-import wrapped_story
+import wrapped_card
 from translations import messages
 
 GUILD_ID = 200
@@ -40,7 +40,7 @@ TOTALS = {"members": 9, "messages_sent": 30000, "posts": 25}
 
 
 def summary(**overrides):
-    return wrapped_story.build_summary(wrapped_row(**overrides), TOTALS)
+    return wrapped_card.build_summary(wrapped_row(**overrides), TOTALS)
 
 
 def texts(view) -> str:
@@ -102,21 +102,44 @@ class SummaryTests(unittest.TestCase):
         self.assertEqual(9, member.members)
 
     def test_fame_rate_is_messages_per_post(self):
-        self.assertEqual(200, wrapped_story.member_fame_rate(summary()))
-        self.assertEqual(1200, wrapped_story.server_fame_rate(summary()))
+        self.assertEqual(200, wrapped_card.member_fame_rate(summary()))
+        self.assertEqual(1200, wrapped_card.server_fame_rate(summary()))
 
     def test_no_fame_rate_without_a_count(self):
         """A Wrapped made before messages were counted, or a search that gave no answer."""
-        self.assertIsNone(wrapped_story.member_fame_rate(summary(messages_sent=None)))
-        self.assertIsNone(wrapped_story.fame_rate(0, 500))
+        self.assertIsNone(wrapped_card.member_fame_rate(summary(messages_sent=None)))
+        self.assertIsNone(wrapped_card.fame_rate(0, 500))
 
-    def test_the_rate_is_never_below_one_in_one(self):
-        self.assertEqual(1, wrapped_story.fame_rate(10, 3))
+    def test_more_posts_than_counted_messages_gives_no_rate(self):
+        """Discord's search had not indexed the whole server, so no rate would be true."""
+        self.assertIsNone(wrapped_card.fame_rate(10, 3))
+        self.assertIsNone(wrapped_card.fame_text(10, 3))
+
+    def test_most_members_see_one_in_so_many(self):
+        self.assertEqual("1 in 214", wrapped_card.fame_text(38, 8132))
+
+    def test_members_featured_most_of_the_time_see_a_share(self):
+        """81 of 105 messages would round to "1 in 1", which says nothing."""
+        self.assertEqual("77%", wrapped_card.fame_text(81, 105))
+
+    def test_a_member_is_not_their_own_fan(self):
+        member = summary(users_fans=json.dumps({str(USER_ID): 81, str(FAN_ID): 4}),
+                         fan_of_users=json.dumps({str(USER_ID): 81, "90": 2}))
+
+        self.assertEqual([(FAN_ID, 4)], member.top_fans)
+        self.assertEqual([(90, 2)], member.fans_of)
+        self.assertEqual(4, member.reactions_received)
+
+    def test_lists_keep_the_top_few(self):
+        emojis = json.dumps({emoji: count for count, emoji in enumerate("abcdefg", start=1)})
+        member = summary(most_used_emojis=emojis)
+
+        self.assertEqual([("g", 7), ("f", 6), ("e", 5), ("d", 4), ("c", 3)], member.top_emojis)
 
 
 class TitleTests(unittest.TestCase):
     def title(self, **overrides):
-        return wrapped_story.title_for(summary(**overrides))[0]
+        return wrapped_card.title_for(summary(**overrides))[0]
 
     def test_the_most_featured_member_headlines(self):
         self.assertEqual("The Headliner", self.title(user_ranks=json.dumps({"hallOfFameMessagePosts": 1})))
@@ -138,134 +161,63 @@ class TitleTests(unittest.TestCase):
         self.assertEqual("The Rising Star", self.title(messages_sent=None))
 
 
-class StoryPageTests(unittest.TestCase):
-    def kickers(self, member):
-        return [page.kicker for page in wrapped_story.story_pages(member, "Mia", None)]
+class WrappedCardTests(unittest.TestCase):
+    def card(self, **overrides):
+        return wrapped_card.wrapped_view(summary(**overrides), "Mia", "https://cdn.example/a.png", None)
 
-    def test_counted_messages_get_a_fame_rate_page_with_the_server_average(self):
-        pages = wrapped_story.story_pages(summary(), "Mia", None)
-        fame = next(page for page in pages if page.kicker == messages.WRAPPED_FAME_KICKER)
+    def test_shows_the_title_rank_and_fame_rate_against_the_server(self):
+        text = texts(self.card())
 
-        self.assertEqual("1 in 200", fame.big)
-        self.assertIn("1 in 1,200", fame.text)
+        self.assertIn("## Mia", text)
+        self.assertIn(messages.WRAPPED_PLAQUE_RANK.format(rank=2, members=9), text)
+        self.assertIn("1 in 200", text)
+        self.assertIn("1 in 1,200", text)
+        self.assertIn(f"<@{FAN_ID}>", text)
 
-    def test_without_a_count_the_fame_rate_page_is_left_out(self):
-        self.assertNotIn(messages.WRAPPED_FAME_KICKER, self.kickers(summary(messages_sent=None)))
-
-    def test_the_best_moment_links_to_the_post(self):
-        pages = wrapped_story.story_pages(summary(), "Mia", None)
-        best = next(page for page in pages if page.kicker == messages.WRAPPED_BEST_KICKER)
-
-        self.assertEqual(f"https://discord.com/channels/{GUILD_ID}/100/4242", best.link)
-
-    def test_ends_on_the_title(self):
-        self.assertEqual(messages.WRAPPED_TITLE_KICKER, self.kickers(summary())[-1])
-
-
-class StoryViewTests(unittest.IsolatedAsyncioTestCase):
-    def setUp(self):
-        self.row = wrapped_row()
-        self.opted_out = False
-
-        class Lend:
-            async def __aenter__(self):
-                return object()
-
-            async def __aexit__(self, *_args):
-                return False
-
-        for target, name, value in (
-                (wrapped_story, "connect", lambda: Lend()),
-                (wrapped_story.hof_wrapped_repo, "get_hof_wrapped", lambda *_args: self.row),
-                (wrapped_story.opt_out_repo, "is_opted_out", lambda *_args: self.opted_out)):
-            patcher = mock.patch.object(target, name, value)
-            patcher.start()
-            self.addCleanup(patcher.stop)
-
-    async def share_after(self, change):
-        view = self.story()
-        await buttons(view)[messages.WRAPPED_SKIP].callback(FakeInteraction())
-        change()
-        interaction = FakeInteraction()
-        await buttons(view)[messages.WRAPPED_SHARE].callback(interaction)
-        return interaction
-
-    async def test_a_member_who_opted_out_since_opening_cannot_show_it(self):
-        interaction = await self.share_after(lambda: setattr(self, "opted_out", True))
-
-        [(content, sent)] = interaction.followups
-        self.assertEqual(messages.WRAPPED_CARD_GONE, content)
-        self.assertTrue(sent.get("ephemeral"))
-
-    async def test_a_member_who_deleted_their_data_since_opening_cannot_show_it(self):
-        interaction = await self.share_after(lambda: setattr(self, "row", None))
-
-        [(content, _sent)] = interaction.followups
-        self.assertEqual(messages.WRAPPED_CARD_GONE, content)
-
-    def story(self, **overrides):
-        return wrapped_story.StoryView(summary(**overrides), "Mia", "https://cdn.example/a.png", None)
-
-    async def test_opens_on_the_first_page_with_back_disabled(self):
-        view = self.story()
-
-        self.assertIn("# Mia", texts(view))
-        self.assertTrue(buttons(view)[messages.WRAPPED_BACK].disabled)
-
-    async def test_next_turns_the_page_in_place(self):
-        view = self.story()
-        interaction = FakeInteraction()
-        await buttons(view)[messages.WRAPPED_NEXT].callback(interaction)
-
-        self.assertEqual(1, view.index)
-        self.assertEqual([{"view": view}], interaction.edits)
-        self.assertIn("# 6", texts(view))
-
-    async def test_two_presses_together_post_one_plaque(self):
-        """Both can arrive before the first one disables the button."""
-        view = self.story()
-        await buttons(view)[messages.WRAPPED_SKIP].callback(FakeInteraction())
-        share = buttons(view)[messages.WRAPPED_SHARE]
-        first, second = FakeInteraction(), FakeInteraction()
-        await share.callback(first)
-        await share.callback(second)
-
-        self.assertEqual(1, len(first.followups))
-        self.assertEqual([], second.followups)
-
-    async def test_skip_goes_to_the_summary_which_offers_to_show_it(self):
-        view = self.story()
-        await buttons(view)[messages.WRAPPED_SKIP].callback(FakeInteraction())
-
-        self.assertTrue(view.on_summary)
-        self.assertIn(messages.WRAPPED_SHARE, buttons(view))
-        self.assertNotIn(messages.WRAPPED_MINE_BUTTON, buttons(view), "the member's own copy needs no invite")
-
-    async def test_showing_posts_the_plaque_once_without_pinging(self):
-        view = self.story()
-        await buttons(view)[messages.WRAPPED_SKIP].callback(FakeInteraction())
-        interaction = FakeInteraction()
-        await buttons(view)[messages.WRAPPED_SHARE].callback(interaction)
-
-        [(_content, sent)] = interaction.followups
-        self.assertNotIn("ephemeral", sent, "the plaque is for the whole channel")
-        self.assertEqual(discord.AllowedMentions.none().to_dict(), sent["allowed_mentions"].to_dict())
-        self.assertIn(messages.WRAPPED_SHARED_BY.format(member=f"<@{USER_ID}>"), texts(sent["view"]))
-        self.assertTrue(buttons(view)[messages.WRAPPED_SHARED].disabled)
-
-    async def test_the_shared_plaque_has_the_cards_and_an_invite(self):
-        plaque = wrapped_story.plaque_view(summary(), "Mia", None, None)
-        labels = buttons(plaque)
+    def test_has_the_cards_a_jump_link_and_an_invite(self):
+        labels = buttons(self.card())
 
         for label in (messages.WRAPPED_SQUARES_BUTTON, messages.WRAPPED_TOP_BUTTON, messages.WRAPPED_MINE_BUTTON,
                       messages.WRAPPED_JUMP):
             self.assertIn(label, labels)
-        self.assertIn("1 in 200", texts(plaque))
-        self.assertIn(f"<@{FAN_ID}>", texts(plaque))
 
-    async def test_a_plaque_without_a_count_leaves_the_rate_out(self):
-        plaque = wrapped_story.plaque_view(summary(messages_sent=None), "Mia", None, None)
-        self.assertNotIn("1 in", texts(plaque))
+    def test_without_a_count_the_rate_is_left_out(self):
+        self.assertNotIn("1 in", texts(self.card(messages_sent=None)))
+
+    def test_lists_fans_emojis_channels_and_ranks_as_in_earlier_years(self):
+        text = texts(self.card())
+
+        self.assertIn(messages.WRAPPED_PLAQUE_FANS.format(members=f"<@{FAN_ID}> 20 · <@91> 10"), text)
+        self.assertIn(messages.WRAPPED_PLAQUE_FAN_OF.format(members="<@90> 5"), text)
+        self.assertIn(messages.WRAPPED_PLAQUE_EMOJIS.format(emojis="💀 9 · 🔥 3"), text)
+        self.assertIn(messages.WRAPPED_PLAQUE_CHANNELS.format(channels="<#100> 4 · <#101> 2"), text)
+        self.assertIn("**#2** posts", text)
+        self.assertIn("from **2** channels", text)
+
+    def best_post(self, nsfw=False):
+        return types.SimpleNamespace(content="no because why did the cat file my taxes", attachments=[], embeds=[],
+                                     channel=types.SimpleNamespace(is_nsfw=lambda: nsfw))
+
+    def test_quotes_the_best_post(self):
+        card = wrapped_card.wrapped_view(summary(), "Mia", None, self.best_post())
+        self.assertIn(">>> no because why did the cat file my taxes", texts(card))
+
+    def test_leaves_out_the_words_of_an_age_restricted_best_post(self):
+        card = wrapped_card.wrapped_view(summary(), "Mia", None, self.best_post(nsfw=True))
+        self.assertNotIn("taxes", texts(card))
+
+
+class SendWrappedTests(unittest.IsolatedAsyncioTestCase):
+    async def test_posts_the_card_for_the_channel_without_pinging(self):
+        interaction = FakeInteraction()
+        interaction.guild = types.SimpleNamespace(get_channel=lambda _channel_id: None)
+        await wrapped_card.send_wrapped(interaction, wrapped_row(), TOTALS)
+
+        self.assertFalse(interaction.deferred.get("ephemeral", False))
+        [(_content, sent)] = interaction.followups
+        self.assertNotIn("ephemeral", sent, "the card is for the whole channel")
+        self.assertEqual(discord.AllowedMentions.none().to_dict(), sent["allowed_mentions"].to_dict())
+        self.assertIn("## Mia", texts(sent["view"]))
 
 
 class BestPostMediaTests(unittest.TestCase):
@@ -277,18 +229,18 @@ class BestPostMediaTests(unittest.TestCase):
                                      channel=channel)
 
     def test_shows_the_first_picture(self):
-        self.assertEqual("https://cdn.example/cat.png", wrapped_story.best_post_media(self.message()).media.url)
+        self.assertEqual("https://cdn.example/cat.png", wrapped_card.best_post_media(self.message()).media.url)
 
     def test_leaves_out_media_discord_flagged(self):
-        self.assertIsNone(wrapped_story.best_post_media(self.message(flags=1 << 6)))
+        self.assertIsNone(wrapped_card.best_post_media(self.message(flags=1 << 6)))
 
     def test_leaves_out_media_from_an_age_restricted_channel(self):
-        """The plaque can be shown in any channel."""
-        self.assertIsNone(wrapped_story.best_post_media(self.message(nsfw=True)))
+        """The card can be posted in any channel."""
+        self.assertIsNone(wrapped_card.best_post_media(self.message(nsfw=True)))
 
     def test_nothing_without_a_post_or_a_picture(self):
-        self.assertIsNone(wrapped_story.best_post_media(None))
-        self.assertIsNone(wrapped_story.best_post_media(self.message(attachments=[])))
+        self.assertIsNone(wrapped_card.best_post_media(None))
+        self.assertIsNone(wrapped_card.best_post_media(self.message(attachments=[])))
 
 
 class CardTests(unittest.TestCase):
@@ -298,12 +250,12 @@ class CardTests(unittest.TestCase):
     def test_only_posts_written_that_year_count(self):
         posts = [self.post(datetime.datetime(YEAR, 3, 1, tzinfo=datetime.timezone.utc)),
                  self.post(datetime.datetime(YEAR - 1, 12, 31, 23, tzinfo=datetime.timezone.utc))]
-        self.assertEqual(1, len(wrapped_story.posts_in_year(posts, YEAR)))
+        self.assertEqual(1, len(wrapped_card.posts_in_year(posts, YEAR)))
 
     def test_squares_have_a_row_per_month_and_a_square_per_day(self):
         day = datetime.datetime(YEAR, 2, 3, 22, tzinfo=datetime.timezone.utc)
-        posts = wrapped_story.posts_in_year([self.post(day, sequence=n) for n in range(3)], YEAR)
-        card = wrapped_story.squares_card("<@77>", YEAR, posts)
+        posts = wrapped_card.posts_in_year([self.post(day, sequence=n) for n in range(3)], YEAR)
+        card = wrapped_card.squares_card("<@77>", YEAR, posts)
         rows = card.split("```")[1].strip().splitlines()
 
         self.assertEqual(12, len(rows))
@@ -313,13 +265,13 @@ class CardTests(unittest.TestCase):
     def test_the_longest_run_counts_days_in_a_row(self):
         days = [datetime.date(YEAR, 1, 1), datetime.date(YEAR, 1, 2), datetime.date(YEAR, 1, 3),
                 datetime.date(YEAR, 1, 9)]
-        self.assertEqual(3, wrapped_story.longest_daily_run(days))
+        self.assertEqual(3, wrapped_card.longest_daily_run(days))
 
     def test_the_top_list_ranks_by_reactions_and_stops_at_ten(self):
         start = datetime.datetime(YEAR, 5, 1, tzinfo=datetime.timezone.utc)
-        posts = wrapped_story.posts_in_year(
+        posts = wrapped_card.posts_in_year(
             [self.post(start + datetime.timedelta(days=n), reactions=n) for n in range(12)], YEAR)
-        card = wrapped_story.top_card("<@77>", YEAR, GUILD_ID, posts)
+        card = wrapped_card.top_card("<@77>", YEAR, GUILD_ID, posts)
         lines = card.splitlines()
 
         self.assertEqual(11, len(lines))
@@ -342,17 +294,17 @@ class ShowCardTests(unittest.IsolatedAsyncioTestCase):
                 return False
 
         for target, name, value in (
-                (wrapped_story, "connect", lambda: Lend()),
-                (wrapped_story.hof_wrapped_repo, "get_hof_wrapped", lambda *_args: self.row),
-                (wrapped_story.opt_out_repo, "is_opted_out", lambda *_args: self.opted_out),
-                (wrapped_story.hall_of_fame_message_repo, "get_member_posts", lambda *_args: self.posts)):
+                (wrapped_card, "connect", lambda: Lend()),
+                (wrapped_card.hof_wrapped_repo, "get_hof_wrapped", lambda *_args: self.row),
+                (wrapped_card.opt_out_repo, "is_opted_out", lambda *_args: self.opted_out),
+                (wrapped_card.hall_of_fame_message_repo, "get_member_posts", lambda *_args: self.posts)):
             patcher = mock.patch.object(target, name, value)
             patcher.start()
             self.addCleanup(patcher.stop)
 
     async def press(self, kind="top"):
         interaction = FakeInteraction(user_id=FAN_ID)
-        await wrapped_story.show_card(interaction, GUILD_ID, USER_ID, YEAR, kind)
+        await wrapped_card.show_card(interaction, GUILD_ID, USER_ID, YEAR, kind)
         [(content, sent)] = interaction.sent
         return content, sent
 
@@ -382,12 +334,12 @@ class ShowCardTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(messages.WRAPPED_CARD_EMPTY.format(year=YEAR), content)
 
 
-class PlaqueButtonTests(unittest.IsolatedAsyncioTestCase):
+class CardButtonTests(unittest.IsolatedAsyncioTestCase):
     async def test_card_buttons_are_rebuilt_from_their_custom_id(self):
-        """So a plaque posted before a restart still answers."""
-        for cls, args in ((wrapped_story.SquaresButton, (GUILD_ID, USER_ID, YEAR)),
-                          (wrapped_story.TopButton, (GUILD_ID, USER_ID, YEAR)),
-                          (wrapped_story.MineButton, (GUILD_ID,))):
+        """So a card posted before a restart still answers."""
+        for cls, args in ((wrapped_card.SquaresButton, (GUILD_ID, USER_ID, YEAR)),
+                          (wrapped_card.TopButton, (GUILD_ID, USER_ID, YEAR)),
+                          (wrapped_card.MineButton, (GUILD_ID,))):
             original = cls(*args)
             match = cls.__discord_ui_compiled_template__.fullmatch(original.item.custom_id)
             rebuilt = await cls.from_custom_id(None, original.item, match)
@@ -400,8 +352,8 @@ class PlaqueButtonTests(unittest.IsolatedAsyncioTestCase):
             opened.append(interaction)
 
         interaction = FakeInteraction(user_id=FAN_ID)
-        with mock.patch.object(wrapped_story, "open_wrapped_handler", open_wrapped):
-            await wrapped_story.MineButton(GUILD_ID).callback(interaction)
+        with mock.patch.object(wrapped_card, "open_wrapped_handler", open_wrapped):
+            await wrapped_card.MineButton(GUILD_ID).callback(interaction)
         self.assertEqual([interaction], opened)
 
 

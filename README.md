@@ -136,7 +136,7 @@ emoji still counts. Custom emojis are matched by ID, so renaming one does not ma
 |:---|:---|
 | `/leaderboard` | Ranks the server by posts and reactions, this month and all time. Updated daily. |
 | `/user_profile` | A member's posts, reactions and ranks, their badges, best post and totals across every server with the bot. Defaults to you. |
-| `/hof_wrapped` | Your year in review as a private story, including your fame rate: one in how many of your messages reached the board. **Show to others** posts the summary. |
+| `/hof_wrapped` | Your year in review on one card, including your fame rate: one in how many of your messages reached the board. Anyone can open your **Year in squares** and **Top 10** from it, or press **Get my Wrapped** for their own. |
 | `/server_hof_wrapped` | The year in review for the whole server. |
 | **Why isn't this on the board?** | Says why a message is or is not on the board, for example too few reactions, too old, or a channel the bot cannot read. |
 | `/my_data` | What the bot stores about you, with buttons to download it, hide your totals across servers, stop being featured, or delete it. Deleting keeps your posts on the boards but no longer credits them to you. |

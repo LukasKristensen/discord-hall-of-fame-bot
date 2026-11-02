@@ -2355,33 +2355,33 @@ class SettingCommandTests(CommandTestCase):
 
 
 class WrappedCommandTests(CommandTestCase):
-    async def test_opens_the_members_story(self):
+    async def test_posts_the_members_card(self):
         opened = []
 
-        async def send_story(interaction, row, totals):
+        async def send_wrapped(interaction, row, totals):
             opened.append((interaction, row, totals))
 
         totals = {"members": 3, "messages_sent": 900, "posts": 6}
         self.patch(main.hof_wrapped_repo, "get_hof_wrapped", lambda *_args: {"user_id": 77})
         self.patch(main.hof_wrapped_repo, "get_guild_wrapped_totals", lambda *_args: totals)
-        self.patch(main.wrapped_story, "send_story", send_story)
+        self.patch(main.wrapped_card, "send_wrapped", send_wrapped)
         interaction = FakeInteraction()
         await main.hof_wrapped_command.callback(interaction)
 
         self.assertEqual([(interaction, {"user_id": 77}, totals)], opened)
         self.assertTrue(any("HOF Wrapped command used in a server" in entry for entry in self.logged))
 
-    async def test_a_wrapped_made_before_the_member_opted_out_is_not_opened(self):
-        """Otherwise the story, its best post and a plaque to share come back after they asked."""
+    async def test_a_wrapped_made_before_the_member_opted_out_is_not_posted(self):
+        """Otherwise their card, with its best post, would be posted after they asked."""
         opened = []
 
-        async def send_story(*args):
+        async def send_wrapped(*args):
             opened.append(args)
 
         self.patch(main.hof_wrapped_repo, "get_hof_wrapped", lambda *_args: {"user_id": 77})
         self.patch(main.hof_wrapped_repo, "check_if_guild_wrapped_data_exists", lambda *_args: True)
         self.patch(main.opt_out_repo, "is_opted_out", lambda *_args: True)
-        self.patch(main.wrapped_story, "send_story", send_story)
+        self.patch(main.wrapped_card, "send_wrapped", send_wrapped)
         interaction = FakeInteraction()
         await main.hof_wrapped_command.callback(interaction)
 

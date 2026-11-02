@@ -411,6 +411,11 @@ async def main(guild_id: int, bot: commands.Bot, get_reaction_threshold: int, co
     rankings = rank_stats(users)
 
     for user in users.values():
+        # A fame rate needs a post that year. Every member ever featured in the server is read in, and with
+        # thousands of members across the servers, searching for those without one would only spend Discord's
+        # strict limit on its message search
+        if not user.hallOfFameMessagePosts:
+            continue
         # Asked again before each search, which reads from Discord, so a member who opts out while Wrapped runs
         # is not searched for. Their row is then left out when it is saved
         if opt_out_repo.is_opted_out(connection, user.id):

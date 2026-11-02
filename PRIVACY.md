@@ -72,10 +72,10 @@ is the reason.
 ## 3. How the data is used
 
 Only to provide the bot's features: posting to the Hall of Fame, leaderboards, profiles and Wrapped,
-plus support and troubleshooting. Your Wrapped is shown only to you until you press "Show to others",
-which posts its summary in that channel. Members there can then open your Year in squares and Top 10,
-which show on which days your featured messages were written and link to your most reacted ones; they
-stop opening if you stop being featured or delete your data. Your totals across servers can be shown in any server with the bot. Outside
+plus support and troubleshooting. `/hof_wrapped` posts your Wrapped in the channel you use it in.
+Members there can then open your Year in squares and Top 10, which show on which days your featured
+messages were written and link to your most reacted ones; they stop opening if you stop being featured
+or delete your data. Your totals across servers can be shown in any server with the bot. Outside
 those servers, only you can show them, through the bot added to your own account. They are only ever
 shown as totals, so they do not reveal which servers you are in, and once you hide them
 on `/my_data` they are not shown anywhere. Aggregated statistics that cannot identify anyone are used to improve
