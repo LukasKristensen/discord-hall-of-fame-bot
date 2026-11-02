@@ -134,7 +134,7 @@ Restart the Discord client if the picker still shows the old list.
       Mark the board age-restricted too and react again: the message is posted
 - [ ] With a post already on the board, mark its source channel age-restricted and react once more: the
       post is hidden. Mark the board age-restricted and react again: it comes back
-- [ ] Apps > Why isn't this on the board? on a message, as a member without Manage Server: a posted message
+- [x] Apps > Why isn't this on the board? on a message, as a member without Manage Server: a posted message
       links to its post, one short of the threshold shows the count, and one in a channel the bot cannot
       read says so. Only you see the answer, and asking again straight away is refused for a few seconds
 - [x] A friend who pressed Stop featuring me reaches the threshold: you are told only that it cannot be
