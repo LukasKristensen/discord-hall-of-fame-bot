@@ -47,7 +47,7 @@ Get a few of your messages onto the board first.
 - [x] `/user_profile` in a server no longer shows the every-server column for you, even when you look
       yourself up
 - [x] `/user_profile` in a DM (user install) says your totals are hidden and points to `/my_data`
-- [ ] Show my totals across servers brings them back on `/user_profile`
+- [x] Show my totals across servers brings them back on `/user_profile`
 
 ## Not being featured
 
