@@ -51,9 +51,9 @@ Get a few of your messages onto the board first.
 
 ## Not being featured
 
-- [ ] Stop featuring me: the panel says new messages are not featured, with the date, and the button
+- [x] Stop featuring me: the panel says new messages are not featured, with the date, and the button
       becomes Feature me again
-- [ ] With earlier posts, the panel says they are kept until you delete them, and Download, the totals
+- [x] With earlier posts, the panel says they are kept until you delete them, and Download, the totals
       button and Delete are still offered
 - [x] React to a new message of yours until it passes the threshold: nothing is reposted, and `/my_data`
       shows no new post
