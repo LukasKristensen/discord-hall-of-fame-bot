@@ -129,7 +129,7 @@ Restart the Discord client if the picker still shows the old list.
 - [ ] Turn on Private Channel Obfuscation for the dev bot (Developer Portal > Bot) and restart it: a channel
       only a member role can see is listed as hidden from the bot, with the note to give it the members'
       role. Giving the bot that role and running `/troubleshoot` again counts the channel as read
-- [ ] Mark a channel age-restricted and react a message there past the threshold: nothing is posted, Why
+- [x] Mark a channel age-restricted and react a message there past the threshold: nothing is posted, Why
       isn't this on the board? says the channel is age-restricted, and `/troubleshoot` lists the channel.
       Mark the board age-restricted too and react again: the message is posted
 - [ ] With a post already on the board, mark its source channel age-restricted and react once more: the
