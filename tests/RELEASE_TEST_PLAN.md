@@ -101,8 +101,8 @@ Use test rows again.
 
 Watch the developer log channels while going through the steps above.
 
-- [ ] Command logs say which command was used and carry a server ID, never a username or server name
-- [ ] Joins, leaves and setup problems carry the server ID, never the server name
+- [x] Command logs say which command was used and carry a server ID, never a username or server name
+- [x] Joins, leaves and setup problems carry the server ID, never the server name
 - [ ] Deleting data, stopping or restarting featuring and downloading log "A member ...", never who
 - [ ] The post limit alert is the only log with a member's user ID
 

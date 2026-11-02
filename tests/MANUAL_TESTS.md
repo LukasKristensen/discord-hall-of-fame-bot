@@ -58,6 +58,7 @@ message under a "test cases" category so each post names what it tests.
 | why | A message in a channel the bot cannot read | Names the channel, what permissions to give, and points to `/troubleshoot` |
 | why | A board post itself, with a reaction on it | "This is a Hall of Fame post. Posts on the board are not posted again." The reaction did not repost it |
 | why | Asked several times in a row | Refused privately: "You just asked about a message. Try again in a few seconds." |
+| logs | The command, system and error log channels after this run | Server IDs only: no usernames, server names or member IDs. Refusals log "A member without the Manage Server permission was refused" |
 | settings form | Threshold, post age and counting changed at once | One answer listing exactly those three, with the note on post age, and `/get_server_config` showed all three. The answer called post age "Post due date"; it now says "Post age" as the config does |
 | settings form | Counting changed to total reactions | One private answer naming only that change, and `/get_server_config` showed it |
 | settings form | 0, and "five", as the threshold | Refused: "must be between 1 and 1000" for 0 and "must be a whole number from 1 to 1000" for five, nothing saved |
@@ -85,6 +86,10 @@ message under a "test cases" category so each post names what it tests.
   embeds, such as a board post. Fixed: a forward whose snapshot has nothing to show is left out with that
   note (`snapshot_shows_anything` in `src/board_post.py`). A forward of a forward is not this case: Discord
   forwards the original instead.
+- **Routine logs land in the error channel.** `utils.logging` defaults to ERROR, so startup and daily task
+  progress (logged in, total servers, running daily task, updating user database, daily task completed)
+  fill #error-log and bury real errors. "Logged in as" is logged twice, once as SYSTEM in `main.py` and once as
+  ERROR in `events.bot_login`.
 - **A poll cannot be forwarded.** Discord's menu offers no Forward on a poll, so a forwarded poll cannot be
   tested, and the code's handling of one is never reached from the app.
 - **A user mention can read as unknown user.** A new second account, in a browser, saw `@Lukas` on the board
