@@ -1708,15 +1708,25 @@ class FeedbackFormTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual([], submitter.deferred)
         self.assertEqual("0 attached, 1 left out", self.field(self.posted[0], "Screenshots"))
 
-    def test_screenshots_together_stay_within_one_upload(self):
-        """One message carries them all, so together they must fit what the bot may upload."""
+    def test_screenshots_that_do_not_fit_together_go_in_another_message(self):
+        """Two full-size screenshots passed the upload limit together, and the second was left out."""
         limit = 10 * 1024 * 1024
         uploads = [self.screenshot(f"{index}.png", size=4 * 1024 * 1024) for index in range(3)]
 
-        kept, left_out = utils.feedback_screenshots(uploads, limit)
+        batches, left_out = utils.feedback_screenshots(uploads, limit)
 
-        self.assertEqual(["0.png", "1.png"], [upload.filename for upload in kept])
-        self.assertEqual(1, left_out)
+        self.assertEqual([["0.png", "1.png"], ["2.png"]], [[upload.filename for upload in batch] for batch in batches])
+        self.assertEqual(0, left_out)
+
+    async def test_the_report_comes_first_and_the_rest_of_the_screenshots_follow(self):
+        big = 6 * 1024 * 1024
+        submitter = await self.submit_with([self.screenshot("one.png", size=big), self.screenshot("two.png", size=big)])
+
+        self.assertEqual([["one.png"], ["two.png"]], [[file.filename for file in sent] for sent in self.files])
+        self.assertIsNotNone(self.posted[0])
+        self.assertIsNone(self.posted[1])
+        self.assertEqual("2 attached", self.field(self.posted[0], "Screenshots"))
+        self.assertEqual([(messages.FEEDBACK_SENT, True)], submitter.answers)
 
     async def test_the_developer_copy_says_whether_the_member_may_be_contacted(self):
         await self.submit_with([], may_contact=True)

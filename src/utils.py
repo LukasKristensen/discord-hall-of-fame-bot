@@ -1066,22 +1066,26 @@ class ImageUpload(discord.ui.FileUpload):
         return payload
 
 
-def feedback_screenshots(attachments, size_limit: int) -> tuple[list, int]:
+def feedback_screenshots(attachments, size_limit: int) -> tuple[list[list], int]:
     """
-    The uploads that can go to the feedback channel. Discord's filter only checks the file name, so the
-    content type is checked too. They are sent in one message, so an upload that would take them past what
-    the bot may upload there is left out
+    The uploads that can go to the feedback channel, grouped into messages. Discord's filter only checks the
+    file name, so the content type is checked too. A message holds what the bot may upload there, which two
+    full-size screenshots can pass together, so the ones that do not fit go in another message. Only an
+    image too large on its own is left out
     :param attachments: What the member uploaded in the form
-    :param size_limit: The most bytes the bot can upload in the feedback channel
-    :return: The screenshots to forward, and how many uploads were left out
+    :param size_limit: The most bytes the bot can upload in one message in the feedback channel
+    :return: The screenshots to forward, one list per message, and how many uploads were left out
     """
-    kept, total = [], 0
+    batches, kept = [], 0
     for attachment in attachments:
-        if (len(kept) < feedback_max_screenshots and (attachment.content_type or "").startswith("image/")
-                and total + attachment.size <= size_limit):
-            kept.append(attachment)
-            total += attachment.size
-    return kept, len(attachments) - len(kept)
+        if (kept >= feedback_max_screenshots or not (attachment.content_type or "").startswith("image/")
+                or attachment.size > size_limit):
+            continue
+        if not batches or sum(item.size for item in batches[-1]) + attachment.size > size_limit:
+            batches.append([])
+        batches[-1].append(attachment)
+        kept += 1
+    return batches, len(attachments) - kept
 
 
 def build_feedback_embed(user, guild_id, topic: str, title_field: tuple[str, str],
@@ -1171,7 +1175,8 @@ async def create_feedback_form(interaction: discord.Interaction, bot, topic: str
                 return
             target_guild = bot.get_guild(1180006529575960616)
             target_channel = target_guild.get_channel(1345558910836412456)
-            screenshots, left_out = feedback_screenshots(self.screenshots.values, target_guild.filesize_limit)
+            batches, left_out = feedback_screenshots(self.screenshots.values, target_guild.filesize_limit)
+            screenshots = [screenshot for batch in batches for screenshot in batch]
             embed = build_feedback_embed(feedback_interaction.user, feedback_interaction.guild_id, topic,
                                          (self.fb_title_label.text, self.fb_title.value),
                                          (self.message_label.text, self.message.value),
@@ -1183,9 +1188,14 @@ async def create_feedback_form(interaction: discord.Interaction, bot, topic: str
                 if screenshots:
                     # Downloading them can take longer than the three seconds Discord waits for an answer
                     await feedback_interaction.response.defer(ephemeral=True, thinking=True)
-                # Uploaded again rather than linked, since the links Discord gives a form expire
-                files = [await screenshot.to_file() for screenshot in screenshots]
-                await target_channel.send(embed=embed, files=files)
+                # Uploaded again rather than linked, since the links Discord gives a form expire. The first
+                # message carries the report, and any screenshots that did not fit follow right under it
+                for index, batch in enumerate(batches or [[]]):
+                    files = [await screenshot.to_file() for screenshot in batch]
+                    if index == 0:
+                        await target_channel.send(embed=embed, files=files)
+                    else:
+                        await target_channel.send(files=files)
             except Exception:
                 # A form that failed does not count toward the member's daily limit
                 if on_unsent is not None:
