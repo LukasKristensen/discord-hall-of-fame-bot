@@ -66,7 +66,7 @@ Get a few of your messages onto the board first.
 
 - [ ] Delete my data shows the confirmation: you are taken off every leaderboard, profile and Wrapped,
       posts stay on the boards, and a hidden-totals choice is deleted too
-- [ ] Cancel says nothing was deleted
+- [x] Cancel says nothing was deleted
 - [ ] Confirming answers within a few seconds, even with many posts, and says your data is deleted
 - [ ] The done message offers Stop featuring me. Pressing it stores the choice and says so
 - [x] Your posts are still on the board, but `/leaderboard` and `/user_profile` no longer show you after
