@@ -21,11 +21,11 @@ accounts where a step says "second account", and a server where you have Manage 
 
 Use an account that has never been featured.
 
-- [ ] `/my_data` answers privately: "Hall of Fame stores nothing about you, so there is nothing to
+- [x] `/my_data` answers privately: "Hall of Fame stores nothing about you, so there is nothing to
       download or delete.", "Once you are featured, your totals across servers are shown on your
       profile.", and the privacy policy link
-- [ ] Download my data and Delete my data are greyed out
-- [ ] Hide my totals across servers and Stop featuring me are there
+- [x] Download my data and Delete my data are greyed out
+- [x] Hide my totals across servers and Stop featuring me are there
 - [x] A second account cannot press your buttons: the panel is private, so it never sees them. Should one
       be shown, the bot answers that only the member who ran the command can use it (`interaction_check`,
       covered in `tests/test_member_data.py`)
@@ -68,8 +68,7 @@ Use an account that has never been featured.
 - [ ] The done message offers Stop featuring me. Pressing it stores the choice and says so
 - [x] Your posts are still on the board, but `/leaderboard` and `/user_profile` no longer show you after
       the daily update
-- [ ] Delete again the same day with nothing stored is allowed (no daily limit when there is nothing to
-      delete)
+- [x] Right after deleting, `/my_data` stores nothing, so Delete is greyed out and there is nothing to refuse
 - [x] Delete again the same day with posts stored says you already deleted today
 - [x] While not featured, Delete my data warns that the choice not to be featured is deleted too.
       Afterwards your next message over the threshold is featured again
