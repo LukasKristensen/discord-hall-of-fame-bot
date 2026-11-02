@@ -35,7 +35,7 @@ Use an account that has never been featured.
 - [ ] Pressing Download again the same day says you already downloaded today, and the other buttons
       still work
 - [ ] Running `/my_data` again the same day is not limited
-- [ ] After two minutes the buttons disappear and the summary stays
+- [x] After two minutes the buttons disappear and the summary stays
 
 ## Totals across servers
 
