@@ -146,7 +146,7 @@ Restart the Discord client if the picker still shows the old list.
       board: one post shows the author, the quoted reply, all three in a gallery with the spoiler covered
       and the video playing in place, every emoji with its count and a Jump to message button that works.
       Nobody is pinged
-- [ ] More reactions update the count on that post. Removing reactions below the threshold hides it, and
+- [x] More reactions update the count on that post. Removing reactions below the threshold hides it, and
       reacting again brings it back as the same message
 - [x] A post made before the upgrade still updates its count as an embed, hides and comes back
 - [x] A member's join message, a pin notice and a closed poll, reacted past the threshold, are not posted, and

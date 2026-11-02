@@ -46,6 +46,7 @@ message under a "test cases" category so each post names what it tests.
 | sticker | A picture sticker, two different reactions | Shown in the gallery. The reactions line lists both emojis with their counts |
 | reply | A reply to an image, a reply to a video | The quote, then the answered image or playable video full width, then the reply under its poster's name |
 | reply | A reply to a deleted message | "Replying to a deleted message" above the poster's name, no quote |
+| new post | A Components V2 post reacted to, then below the threshold, then over it again | Posted with "2 counted". Went blank in place when a reaction was removed, and came back as the same message with the new emoji and count |
 | old post | Embed posts from before the upgrade, reacted to again | The count updated in the same embed after counting changed to all emojis. A post below the threshold went blank, and came back as the same embed, with the footer, once over it again |
 | system message | A pin notice, never on the board, reacted past the threshold | Not posted |
 | system message | A join message, asked about with Why isn't this on the board? | "Messages Discord posts on its own are not featured", also for a member who opted out, as the rule is checked before the choice. Before the update, a join message reached the board as an empty post |
@@ -142,6 +143,9 @@ Not bugs, and nothing decided yet:
   each button and the Why isn't this on the board? hint would cover it.
 - **"This command" after a button.** A member pressing an admin button reads "This command is only for
   members with the Manage Server permission". "This is only for..." would fit commands, buttons and forms.
+
+- **Point threshold replies to the settings form.** `/set_reaction_threshold` answers with "Change how
+  reactions are counted with /calculation_method". Change settings does every setting at once now.
 
 ### Still to run
 
