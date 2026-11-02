@@ -65,7 +65,7 @@ message under a "test cases" category so each post names what it tests.
 | feedback | An idea, and a bug report, each with two full-size screenshots | Only one arrived: "1 attached, 1 left out", and the member was told each must fit the upload limit, which each did. Together they passed the 10 MiB one message allows. Fixed: screenshots that do not fit go in a message right under the report. Sent again with the fix: "2 attached", the second screenshot right under the report, and a plain thank-you. Screenshots were then removed from `/feedback` altogether, so the bot never reposts a member's files into the developer's server |
 | feedback | `/feedback` after screenshots were removed | Two text fields and the contact box, no upload. The report arrived with May contact No |
 | why | A message that is on the board | "This message is on the board:" with a link to the post |
-| settings form | The board moved to another channel | The answer named only the new channel. The new channel got "This is now the Hall of Fame channel!" naming the admin without a ping |
+| settings form | The board moved to another channel | The answer named only the new channel. The new channel got "This is now the Hall of Fame channel!" naming the admin without a ping. The next message over the threshold was posted there |
 | settings form | A board channel the bot cannot post in | Refused with the four missing permissions named, nothing saved. It said "run the command again" in a form; now "then try again" |
 | settings form | Change settings pressed by a member without Manage Server | Refused privately, no form opened |
 | settings form | Sent unchanged | "Nothing changed, every setting already had the value you sent." |

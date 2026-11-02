@@ -182,7 +182,7 @@ and reply from the payload:
       `/get_server_config` shows them
 - [x] Send it unchanged: it says nothing changed
 - [x] Type 0 or "five" as the threshold along with another change: it is refused, and nothing is stored
-- [ ] Pick another channel: the board moves, the new channel gets the announcement with nobody pinged, and the
+- [x] Pick another channel: the board moves, the new channel gets the announcement with nobody pinged, and the
       next post lands there. A channel the bot cannot post in is refused with the missing permissions
 - [x] A new server's welcome message has Set up, which opens the same form, also after the bot restarts
 - [ ] The join note about hidden channels still has only Troubleshoot
