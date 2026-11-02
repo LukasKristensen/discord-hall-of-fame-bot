@@ -40,6 +40,7 @@ message under a "test cases" category so each post names what it tests.
 | forward | A forward from a channel the bot cannot see | "Forwarded" in the header and *The forwarded message is not shown*, none of its words |
 | file | A voice message | Linked as "Voice message" under the header. No player, like an audio file |
 | mentions | `@user`, `@role`, `@here`, `@everyone` | Shown as mentions. A second account in the server got no notification and no mention badge |
+| link | A link to an X post with two images | Both images in one gallery, the link kept as text. The post's own words and author from the preview are not shown |
 | link | An image URL alone | The link replaced by the image, as Discord shows it |
 | link | Text with an image link | Text and link kept beside the avatar, the image previewed below |
 | sticker | An animated (Lottie) sticker | Named in italics where the text goes, *Sticker: name* |
@@ -202,6 +203,10 @@ Not bugs, and nothing decided yet:
 - **A mention of a member who opted out.** Their name shows on the board as a mention in the poster's own
   words, while a reply to them hides it. Nothing is stored, and it is how Discord shows mentions, so it is
   left as it is, but it is the one place an opted-out member is still named on a board.
+
+- **The words of a link preview.** A link to an X post shows its pictures but not the post's text or author,
+  which Discord shows in the preview. A short "-# Author: first line" under the link would keep what the
+  post was about.
 
 ### Still to run
 
