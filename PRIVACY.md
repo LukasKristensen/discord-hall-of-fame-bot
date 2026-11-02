@@ -41,8 +41,7 @@ described here. Contact: githublukas@gmail.com, or the
 - **Support:** feedback sent with `/feedback` and custom profile requests, delivered to a private
   developer channel on Discord. Feedback carries your username and user ID, the ID of the server it was
   sent from, the topic you picked, whether the developer may message you about it and the bot's version.
-  Screenshots you add to feedback, up to three images, are uploaded to the same channel with it. The form
-  asks you to crop out other members' names and messages where you can.
+  Feedback is text only: the form takes no files.
 - **Logs:** which commands were used, when the bot joins or leaves a server and what it is allowed to do
   there, and errors, each with the server's ID, posted to private developer channels on Discord for
   troubleshooting. Logs do not name servers or the members who used a command. The

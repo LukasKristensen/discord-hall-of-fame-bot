@@ -187,14 +187,11 @@ and reply from the payload:
 - [x] A new server's welcome message has Set up, which opens the same form, also after the bot restarts
 - [ ] The join note about hidden channels still has only Troubleshoot
 
-## Feedback screenshots
+## Feedback
 
-- [x] `/feedback` shows Screenshots (optional) with its note, and the picker offers images only
-- [x] Send a bug report with two screenshots and the contact box ticked: the thank-you comes after a short
-      wait, and the feedback channel gets both images with the report, Screenshots "2 attached" and May
-      contact "Yes"
-- [ ] Send one without screenshots: it is answered at once, May contact "No"
-- [ ] A day later the screenshots in the feedback channel still open, since they were uploaded again
+- [ ] `/feedback` opens a form with the two text fields and the contact box, and no file upload
+- [ ] Send one with the contact box ticked and one without: each is answered at once, and the feedback channel
+      shows May contact "Yes" and "No"
 
 ## Wrapped
 

@@ -129,12 +129,8 @@ FEEDBACK_FORMS = {
 }
 # Private, since a thank-you is of no use to the rest of the channel
 FEEDBACK_SENT = "✅ Thanks, your feedback reached the developer."
-FEEDBACK_SENT_SOME_LEFT_OUT = ("✅ Thanks, your feedback reached the developer. {count} of your files could not be "
-                              "added: only images are kept, up to {max}, and each must fit Discord's upload limit.")
-# The optional fields every feedback form ends with. Discord allows 45 characters for a label and 100 for a
-# description, which the feedback tests check
-FEEDBACK_SCREENSHOTS_LABEL = "Screenshots (optional)"
-FEEDBACK_SCREENSHOTS_DESCRIPTION = "Up to 3 images. Crop out other members' names and messages where you can."
+# The optional field every feedback form ends with. Discord allows 45 characters for a label, which the
+# feedback tests check
 FEEDBACK_CONTACT_LABEL = "The developer may message me about this"
 SETTING_CHANGED = "✅ {label}: **{value}**"
 SETTING_UNCHANGED = "ℹ️ {label} is already **{value}**, so nothing changed."

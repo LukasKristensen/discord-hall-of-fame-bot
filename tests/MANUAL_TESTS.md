@@ -60,7 +60,7 @@ message under a "test cases" category so each post names what it tests.
 | why | Asked several times in a row | Refused privately: "You just asked about a message. Try again in a few seconds." |
 | logs | The command, system and error log channels after this run | Server IDs only: no usernames, server names or member IDs. Refusals log "A member without the Manage Server permission was refused" |
 | feedback | A bug report with one screenshot and the contact box ticked | In the feedback channel: the screenshot uploaded again above the report, both fields, server and user ID, May contact Yes, 1 attached |
-| feedback | An idea, and a bug report, each with two full-size screenshots | Only one arrived: "1 attached, 1 left out", and the member was told each must fit the upload limit, which each did. Together they passed the 10 MiB one message allows. Fixed: screenshots that do not fit go in a message right under the report. Sent again with the fix: "2 attached", the second screenshot right under the report, and a plain thank-you |
+| feedback | An idea, and a bug report, each with two full-size screenshots | Only one arrived: "1 attached, 1 left out", and the member was told each must fit the upload limit, which each did. Together they passed the 10 MiB one message allows. Fixed: screenshots that do not fit go in a message right under the report. Sent again with the fix: "2 attached", the second screenshot right under the report, and a plain thank-you. Screenshots were then removed from `/feedback` altogether, so the bot never reposts a member's files into the developer's server |
 | settings form | Threshold, post age and counting changed at once | One answer listing exactly those three, with the note on post age, and `/get_server_config` showed all three. The answer called post age "Post due date"; it now says "Post age" as the config does |
 | settings form | Counting changed to total reactions | One private answer naming only that change, and `/get_server_config` showed it |
 | settings form | 0, and "five", as the threshold | Refused: "must be between 1 and 1000" for 0 and "must be a whole number from 1 to 1000" for five, nothing saved |
@@ -143,7 +143,7 @@ Not bugs, and nothing decided yet:
 ### Still to run
 
 - **forward:** a forward of a board post, expected *not shown* with the fix.
-- **file:** whether a file link still opens a day after posting, and the feedback screenshot too.
+- **file:** whether a file link still opens a day after posting.
 
 ## 21 October 2026: member data, the post limit and the export (3.0, then called 2.2)
 
