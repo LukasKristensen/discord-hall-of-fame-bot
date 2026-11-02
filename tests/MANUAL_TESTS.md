@@ -45,6 +45,7 @@ message under a "test cases" category so each post names what it tests.
 | sticker | An animated (Lottie) sticker | Named in italics where the text goes, *Sticker: name* |
 | sticker | A picture sticker, two different reactions | Shown in the gallery. The reactions line lists both emojis with their counts |
 | reply | A reply to an image, a reply to a video | The quote, then the answered image or playable video full width, then the reply under its poster's name |
+| reply | A reply with two spoilered images, an image and a video, mentioning the second account | One post: the quote, the mention, all four in order with the spoilers covered and the video playing. The mentioned account was highlighted on the original but not on the board post |
 | reply | A reply with a spoilered image | The quote, then the image covered by SPOILER as in the original |
 | reply | A reply to a deleted message | "Replying to a deleted message" above the poster's name, no quote |
 | new post | A Components V2 post reacted to, then below the threshold, then over it again | Posted with "2 counted". Went blank in place when a reaction was removed, and came back as the same message with the new emoji and count |
@@ -193,6 +194,10 @@ Not bugs, and nothing decided yet:
 
 - **One log line says it twice.** "User profile command used in a DM or a server without the bot, outside a
   server with the bot". "...used outside a server with the bot" is enough.
+
+- **A mention of a member who opted out.** Their name shows on the board as a mention in the poster's own
+  words, while a reply to them hides it. Nothing is stored, and it is how Discord shows mentions, so it is
+  left as it is, but it is the one place an opted-out member is still named on a board.
 
 ### Still to run
 

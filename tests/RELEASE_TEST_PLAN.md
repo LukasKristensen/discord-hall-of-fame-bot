@@ -138,7 +138,7 @@ Restart the Discord client if the picker still shows the old list.
 
 ## Board posts
 
-- [ ] A reply with a spoilered image, a video and a second image, that @mentions someone, reaches the
+- [x] A reply with a spoilered image, a video and a second image, that @mentions someone, reaches the
       board: one post shows the author, the quoted reply, all three in a gallery with the spoiler covered
       and the video playing in place, every emoji with its count and a Jump to message button that works.
       Nobody is pinged
