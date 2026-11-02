@@ -73,6 +73,7 @@ message under a "test cases" category so each post names what it tests.
 | settings form | Change settings pressed by a member without Manage Server | Refused privately, no form opened |
 | settings form | Sent unchanged | "Nothing changed, every setting already had the value you sent." |
 | setup check | A post already on the board whose source channel is then marked age-restricted | Blanked in place at its next reaction. With the board marked age-restricted too, the next reaction brought the same post back with all five emojis and "5 counted" |
+| logs | #command-log after the `/my_data` tests | "A member asked not to be featured", "hid their totals", "downloaded their data", "deleted their data, detaching 2 posts", each with only the server ID |
 | settings form | Threshold, post age and counting changed at once | One answer listing exactly those three, with the note on post age, and `/get_server_config` showed all three. The answer called post age "Post due date"; it now says "Post age" as the config does |
 | settings form | Counting changed to total reactions | One private answer naming only that change, and `/get_server_config` showed it |
 | settings form | 0, and "five", as the threshold | Refused: "must be between 1 and 1000" for 0 and "must be a whole number from 1 to 1000" for five, nothing saved |
@@ -188,6 +189,9 @@ Not bugs, and nothing decided yet:
 - **Command descriptions in one style.** The new ones say what the command does. Older ones are questions or
   vague: "Get the server config", "Here you can decide if it only should be whitelisted emojis or all emojis",
   "How many days ago should the post be to be considered old and not valid?".
+
+- **One log line says it twice.** "User profile command used in a DM or a server without the bot, outside a
+  server with the bot". "...used outside a server with the bot" is enough.
 
 ### Still to run
 
