@@ -32,7 +32,7 @@ Use an account that has never been featured.
 - [x] The summary counts your featured posts, servers and Wrapped entries, with thousands separators
 - [x] Download my data sends one private `hall-of-fame-my-data.json` with your posts, standings and
       choices, and every ID written as a string
-- [ ] Pressing Download again the same day says you already downloaded today, and the other buttons
+- [x] Pressing Download again the same day says you already downloaded today, and the other buttons
       still work
 - [x] Running `/my_data` again the same day is not limited
 - [x] After two minutes the buttons disappear and the summary stays

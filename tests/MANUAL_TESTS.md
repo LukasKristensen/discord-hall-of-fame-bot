@@ -80,6 +80,7 @@ message under a "test cases" category so each post names what it tests.
 | my data | Hide my totals across servers | The panel says totals are hidden with the date, the button became Show. `/user_profile` showed only this month and all time in this server |
 | my data | `/user_profile` in a DM while totals are hidden | "Your totals across servers are hidden, so there is nothing to show outside a server with Hall of Fame. Show them again from /my_data." |
 | my data | Show my totals across servers | `/user_profile` showed the Every server column again (143 posts, 2 servers, #1 in 2), with "and every server with Hall of Fame" under the title |
+| my data | Download pressed twice | The second press: "You already downloaded your data today." A download before the bot restarted did not count, see Found |
 | my data | A panel left alone | After two minutes its buttons were gone and the summary stayed |
 | my data | Delete my data, then Cancel | The panel replaced in place with "Nothing was deleted." |
 | my data | Feature me again, a new message, then Stop featuring me | Confirmed in place, the next message over the threshold was posted and credited (2 featured posts), and stopping again brought back the line with the date |
@@ -111,6 +112,10 @@ message under a "test cases" category so each post names what it tests.
   progress (logged in, total servers, running daily task, updating user database, daily task completed)
   fill #error-log and bury real errors. "Logged in as" is logged twice, once as SYSTEM in `main.py` and once as
   ERROR in `events.bot_login`.
+- **Daily limits reset when the bot restarts.** The once-a-day download and the three `/feedback` a day
+  are kept in memory and cleared by the daily task, which also runs at every start. A download before a
+  restart did not count. Left as it is: production restarts only on deploys, and the limit is there to
+  spare the database, not for privacy.
 - **A poll cannot be forwarded.** Discord's menu offers no Forward on a poll, so a forwarded poll cannot be
   tested, and the code's handling of one is never reached from the app.
 - **A user mention can read as unknown user.** A new second account, in a browser, saw `@Lukas` on the board
