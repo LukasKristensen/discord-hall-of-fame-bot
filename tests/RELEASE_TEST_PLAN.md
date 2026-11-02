@@ -110,7 +110,7 @@ Watch the developer log channels while going through the steps above.
 
 Restart the Discord client if the picker still shows the old list.
 
-- [ ] As a member without Manage Server, typing `/` offers only `/help`, `/leaderboard`, `/user_profile`,
+- [x] As a member without Manage Server, typing `/` offers only `/help`, `/leaderboard`, `/user_profile`,
       `/hof_wrapped`, `/server_hof_wrapped`, `/my_data`, `/get_server_config`, `/invite`, `/vote` and
       `/feedback`, and Apps still has Why isn't this on the board?
 - [ ] As an admin with Manage Server, all 25 commands are offered
