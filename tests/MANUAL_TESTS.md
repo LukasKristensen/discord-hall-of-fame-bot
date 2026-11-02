@@ -81,6 +81,7 @@ message under a "test cases" category so each post names what it tests.
 | my data | `/user_profile` in a DM while totals are hidden | "Your totals across servers are hidden, so there is nothing to show outside a server with Hall of Fame. Show them again from /my_data." |
 | my data | Show my totals across servers | `/user_profile` showed the Every server column again (143 posts, 2 servers, #1 in 2), with "and every server with Hall of Fame" under the title |
 | my data | Download pressed twice | The second press: "You already downloaded your data today." A download before the bot restarted did not count, see Found |
+| my data | Delete my data confirmed, for a member who had opted out | Answered at once: data deleted, off every leaderboard, profile and Wrapped, ask admins to remove reposts. Offered Stop featuring me, saying it keeps only the ID and date |
 | my data | A panel left alone | After two minutes its buttons were gone and the summary stayed |
 | my data | Delete my data, then Cancel | The panel replaced in place with "Nothing was deleted." |
 | my data | Feature me again, a new message, then Stop featuring me | Confirmed in place, the next message over the threshold was posted and credited (2 featured posts), and stopping again brought back the line with the date |
