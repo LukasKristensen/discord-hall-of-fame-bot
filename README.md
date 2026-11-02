@@ -144,7 +144,7 @@ emoji still counts. Custom emojis are matched by ID, so renaming one does not ma
 | `/help` | Every command, grouped. |
 | `/invite` | Add the bot to another server or to your own account. |
 | `/vote` | Vote for the bot on top.gg. |
-| `/feedback` | Send a bug report, an idea or a question to the developer, with up to three screenshots. |
+| `/feedback` | Send a bug report, an idea or a question to the developer. |
 
 Replies about your own data, errors and checks like `/troubleshoot` are only shown to you.
 

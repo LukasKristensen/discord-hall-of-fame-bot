@@ -3,6 +3,215 @@
 Checks run by hand on the development bot, for behaviour the automated tests can only fake: what
 Discord itself accepts, and how the bot looks to a member. Newest first.
 
+## 1 November 2026: Components V2 board posts, message by message (3.0)
+
+Run on the development bot (`DEV_TEST=True`) in the development server, threshold 1, one channel per kind of
+message under a "test cases" category so each post names what it tests.
+
+### Passed
+
+| Channel | Message | Result |
+|:---|:---|:---|
+| plain-text | Short text | Name, channel and text beside the avatar |
+| image | One image | Shown in the gallery. A small image makes the card as narrow as the image |
+| gif | A GIF | Loops in the gallery. Narrow like a small image |
+| video | One video | Plays in place |
+| emoji | Only an emoji | Shown beside the avatar at normal size, not jumbo as in the channel |
+| forward | A forwarded screenshot | "in #forward · Forwarded" and the image |
+| poll | A poll | "Poll", the question in bold and each answer with its votes, "1 vote" and "0 votes" |
+| thread / forum post | Text in a forum post | The mention shows the thread's name with its icon |
+| reply | A reply to a text message | "Replying to", the quote, a gap, then the poster's name above their words, as in Discord |
+| long-text | Over 300 characters | Full width under the header, no avatar |
+| long-text | About 1,970 characters | Shown whole. The 2,000 cut needs Nitro to send, so it is left to `tests/test_post_matrix.py`, whose long text is 2,500 characters |
+| multi-media | 4 images, 10 images | Laid out as in Discord, 2 by 2 and 1 over 3 by 3, order kept |
+| multi-media | Images, a spoiler and a video together | The spoiler covered, the video playing, order kept |
+| multi-media | 10 copies of one image and an image link | The first 10 in the gallery and "1 more in the original message" under it. All 10 copies loaded |
+| mixed | Text and an image | Text beside the avatar, the image full width below |
+| mixed | A reply to a poll | The quote reads *Poll: question*. The app cannot send text and a poll in one message |
+| link | A YouTube link alone | The link kept as text, the video's thumbnail as a still picture in the gallery |
+| link | A GIF link alone | The link replaced by the GIF, as Discord shows it. Loops as a GIF, no player controls |
+| file | Text and an audio file | Text beside the avatar, the file linked by its name under it. No player, unlike the original |
+| file | A zip file alone | The file linked by its name under the header, no avatar as there is no text |
+| forward | A forward of a message from this server | "Forwarded" in the header and the forwarded words |
+| forward | A forward from another server | *The forwarded message is not shown*, none of its words |
+| forward | A forward of a message by a member who opted out | *The forwarded message is not shown*, none of their words |
+| forward | A forward of a forward | Discord forwards the original instead, so the post shows the original's words, checked against its real author |
+| forward | A forward of a board post | *The forwarded message is not shown*. Discord's copy holds the whole card as components, which a post cannot show |
+| forward | A forward from a channel the bot cannot see | "Forwarded" in the header and *The forwarded message is not shown*, none of its words |
+| file | A voice message | Linked as "Voice message" under the header. No player, like an audio file |
+| mentions | `@user`, `@role`, `@here`, `@everyone` | Shown as mentions. A second account in the server got no notification and no mention badge |
+| link | A link to an X post with two images | Both images in one gallery, the link kept as text. The post's own words and author from the preview are not shown |
+| link | An image URL alone | The link replaced by the image, as Discord shows it |
+| link | Text with an image link | Text and link kept beside the avatar, the image previewed below |
+| sticker | An animated (Lottie) sticker | Named in italics where the text goes, *Sticker: name* |
+| sticker | A picture sticker, two different reactions | Shown in the gallery. The reactions line lists both emojis with their counts |
+| reply | A reply to an image, a reply to a video | The quote, then the answered image or playable video full width, then the reply under its poster's name |
+| reply | A reply with its own image to a GIF from the picker (Klipy) | The quote reads *GIF*, and only the reply's image is shown |
+| reply | A reply with its own image to a zip file | The quote reads *File:* and the file's name, and only the reply's image is shown |
+| reply | A reply with its own image to a sticker | The quote reads *Sticker: icant*, and only the reply's image is shown |
+| reply | A reply to a GIF uploaded to Discord, sent from favourites | The answered GIF shown above the reply, looping with no player controls |
+| reply | A reply with two spoilered images, an image and a video, mentioning the second account | One post: the quote, the mention, all four in order with the spoilers covered and the video playing. The mentioned account was highlighted on the original but not on the board post |
+| reply | A reply with a spoilered image | The quote, then the image covered by SPOILER as in the original |
+| reply | A reply to a deleted message | "Replying to a deleted message" above the poster's name, no quote |
+| new post | A Components V2 post reacted to, then below the threshold, then over it again | Posted with "2 counted". Went blank in place when a reaction was removed, and came back as the same message with the new emoji and count |
+| old post | Embed posts from before the upgrade, reacted to again | The count updated in the same embed after counting changed to all emojis. A post below the threshold went blank, and came back as the same embed, with the footer, once over it again |
+| system message | A pin notice, never on the board, reacted past the threshold | Not posted |
+| system message | A join message, asked about with Why isn't this on the board? | "Messages Discord posts on its own are not featured", also for a member who opted out, as the rule is checked before the choice. Before the update, a join message reached the board as an empty post |
+| command picker | `/` as an admin | All 25 commands, the new `/my_data`, `/troubleshoot` and `/count_in_global_profiles` among them, and none of the removed ones |
+| command picker | `/` as a member without Manage Server | Only the ten member commands, no admin ones. Apps had Why isn't this on the board? |
+| command picker | `/set_reaction_threshold` allowed for a role without Manage Server | The role saw the command, and running it was refused privately: only for members with Manage Server |
+| setup check | `/troubleshoot` | Private answer naming the channel the bot cannot see, the role that opens it, the board, and the last post. Read "opens 1 of these 1" and "1 more are hidden"; now "opens it" and "1 more is hidden" |
+| setup check | A message in an age-restricted channel | Not posted while the board was not age-restricted, and `/troubleshoot` listed the channel under age-restricted channels. Once the board was marked age-restricted, a message there was posted |
+| setup check | The Troubleshoot button on a config message from before a restart | Answered after the restart, with the new wording ("opens it", "1 more is hidden") |
+| setup check | Troubleshoot on a new server's welcome message, after a restart | Green check, private: board fine, reads 2 of 2 channels, and "No posts yet: the bot joined recently" as info, not a warning |
+| setup check | The Troubleshoot button under `/get_server_config` | An admin got the findings privately. A member was refused privately |
+| joining | The dev bot added to a new server | Welcome message on the new board with Troubleshoot, Set up, Support server and Vote. No setup note, nothing wrong found. Set up opened the settings form with the server's defaults: threshold 1 for a server under 3 members, 1,000 days, most reactions on one emoji. It still opened after the bot restarted |
+| why | A message one short of the threshold | "Not enough reactions yet: it has 2 of the 3 needed", with the counting method named |
+| why | A message in a channel the bot cannot read | Names the channel, what permissions to give, and points to `/troubleshoot` |
+| why | A board post itself, with a reaction on it | "This is a Hall of Fame post. Posts on the board are not posted again." The reaction did not repost it |
+| why | Asked several times in a row | Refused privately: "You just asked about a message. Try again in a few seconds." |
+| logs | The command, system and error log channels after this run | Server IDs only: no usernames, server names or member IDs. Refusals log "A member without the Manage Server permission was refused" |
+| feedback | A bug report with one screenshot and the contact box ticked | In the feedback channel: the screenshot uploaded again above the report, both fields, server and user ID, May contact Yes, 1 attached |
+| feedback | An idea, and a bug report, each with two full-size screenshots | Only one arrived: "1 attached, 1 left out", and the member was told each must fit the upload limit, which each did. Together they passed the 10 MiB one message allows. Fixed: screenshots that do not fit go in a message right under the report. Sent again with the fix: "2 attached", the second screenshot right under the report, and a plain thank-you. Screenshots were then removed from `/feedback` altogether, so the bot never reposts a member's files into the developer's server |
+| feedback | `/feedback` after screenshots were removed | Two text fields and the contact box, no upload. The report arrived with May contact No |
+| why | A message that is on the board | "This message is on the board:" with a link to the post |
+| settings form | The board moved to another channel | The answer named only the new channel. The new channel got "This is now the Hall of Fame channel!" naming the admin without a ping. The next message over the threshold was posted there |
+| settings form | A board channel the bot cannot post in | Refused with the four missing permissions named, nothing saved. It said "run the command again" in a form; now "then try again" |
+| settings form | Change settings pressed by a member without Manage Server | Refused privately, no form opened |
+| settings form | Sent unchanged | "Nothing changed, every setting already had the value you sent." |
+| setup check | A post already on the board whose source channel is then marked age-restricted | Blanked in place at its next reaction. With the board marked age-restricted too, the next reaction brought the same post back with all five emojis and "5 counted" |
+| logs | #command-log after the `/my_data` tests | "A member asked not to be featured", "hid their totals", "downloaded their data", "deleted their data, detaching 2 posts", each with only the server ID |
+| settings form | Threshold, post age and counting changed at once | One answer listing exactly those three, with the note on post age, and `/get_server_config` showed all three. The answer called post age "Post due date"; it now says "Post age" as the config does |
+| settings form | Counting changed to total reactions | One private answer naming only that change, and `/get_server_config` showed it |
+| settings form | 0, and "five", as the threshold | Refused: "must be between 1 and 1000" for 0 and "must be a whole number from 1 to 1000" for five, nothing saved |
+| my data | `/my_data` with posts stored | Private summary: 143 featured posts, standing in 2 servers, 0 Wrapped entries, totals shown, the privacy policy link, and Download, Hide totals, Stop featuring me and Delete |
+| my data | Download my data | A private hall-of-fame-my-data.json of 40 KB: user ID as a string, an about line, global_profile_hidden and not_counted false, and the featured posts |
+| my data | `/my_data` as a member who opted out, with one earlier post | Not featured since the date asked, shown in the reader's own date format, why the ID and date are kept, and that earlier posts stay until deleted. Download, Hide totals, Feature me again and Delete offered |
+| my data | Download as a member who opted out | `"not_counted": true` in the file |
+| my data | Delete my data as a member who opted out | The confirmation says: off every leaderboard, profile and Wrapped, cannot be undone, posts stay on the boards uncredited, a hidden-totals choice and the choice not to be featured are deleted too, and featuring can be stopped again right after |
+| my data | Hide my totals across servers | The panel says totals are hidden with the date, the button became Show. `/user_profile` showed only this month and all time in this server |
+| my data | `/user_profile` in a DM while totals are hidden | "Your totals across servers are hidden, so there is nothing to show outside a server with Hall of Fame. Show them again from /my_data." |
+| my data | Show my totals across servers | `/user_profile` showed the Every server column again (143 posts, 2 servers, #1 in 2), with "and every server with Hall of Fame" under the title |
+| my data | Download pressed twice | The second press: "You already downloaded your data today." A download before the bot restarted did not count, see Found |
+| my data | Delete my data confirmed, for a member who had opted out | Answered at once: data deleted, off every leaderboard, profile and Wrapped, ask admins to remove reposts. Offered Stop featuring me, saying it keeps only the ID and date |
+| my data | `/my_data` right after deleting | "Hall of Fame stores nothing about you, so there is nothing to download or delete." Download and Delete greyed out, Hide totals and Stop featuring me offered |
+| my data | Stop featuring me pressed on the done message | Stored: "No posts, server standings or Wrapped entries are stored about you" and the line with the date. Download and Delete offered for the choice, Hide totals not offered as there are no totals to hide |
+| my data | Download with only the choice not to be featured stored | A 1 KB file with `"not_counted": true` and no featured posts |
+| my data | A panel left alone | After two minutes its buttons were gone and the summary stayed |
+| my data | Delete my data, then Cancel | The panel replaced in place with "Nothing was deleted." |
+| my data | Feature me again, a new message, then Stop featuring me | Confirmed in place, the next message over the threshold was posted and credited (2 featured posts), and stopping again brought back the line with the date |
+| opt-out | A new message from a member who pressed Stop featuring me, reacted to | Not posted. Why isn't this on the board?, asked by another member, answered only that it cannot be featured, without naming the choice. Asked by the member, it said they asked not to be featured and pointed to `/my_data` |
+| reply | A reply to a member who pressed Stop featuring me | Posted with no "Replying to" line and no quote, so the member is not named |
+
+### Found
+
+- **One gallery item can fail to load for good** ([#104](https://github.com/LukasKristensen/discord-hall-of-fame-bot/issues/104)).
+  The same video attached four times failed on its first item in 4 of 5 posts, on desktop and mobile.
+  Holding the post until the message was 10 seconds old did not help and was reverted. Different files
+  in one gallery have always loaded so far, and so did 10 copies of one image, so duplicates alone do not
+  cause it: so far only repeated videos have failed.
+- **System messages reach the board as empty posts.** The message Discord posts when a poll closes was
+  featured as a reply to the poll with no words of its own, as its result sits in an embed the post does not
+  read. The bot never checked a message's type, so a member joining, a boost, a pin or a new thread could be
+  featured the same way once reacted to enough. Fixed: only messages, replies and bots' answers to commands
+  are featured now (`FEATURED_MESSAGE_TYPES` in `src/utils.py`).
+- **Unexplained: two thresholds at once.** Why isn't this on the board? said a message had 1 of the 2
+  reactions needed, while `/get_server_config` the same minute said 1 is needed. Both read the same setting
+  in memory, so either the threshold changed in between, or two copies of the development bot were running,
+  each with its own settings. A second copy would also explain a video posted twice early in this run.
+- **A forward with an empty snapshot was posted empty**: "Forwarded" in the header and nothing under it,
+  without *The forwarded message is not shown*. Likely a forward of a message with only components or
+  embeds, such as a board post. Fixed: a forward whose snapshot has nothing to show is left out with that
+  note (`snapshot_shows_anything` in `src/board_post.py`). A forward of a forward is not this case: Discord
+  forwards the original instead.
+- **Routine logs land in the error channel.** `utils.logging` defaults to ERROR, so startup and daily task
+  progress (logged in, total servers, running daily task, updating user database, daily task completed)
+  fill #error-log and bury real errors. "Logged in as" is logged twice, once as SYSTEM in `main.py` and once as
+  ERROR in `events.bot_login`.
+- **Daily limits reset when the bot restarts.** The once-a-day download and the three `/feedback` a day
+  are kept in memory and cleared by the daily task, which also runs at every start. A download before a
+  restart did not count. Left as it is: production restarts only on deploys, and the limit is there to
+  spare the database, not for privacy.
+- **A poll cannot be forwarded.** Discord's menu offers no Forward on a poll, so a forwarded poll cannot be
+  tested, and the code's handling of one is never reached from the app.
+- **A user mention can read as unknown user.** A new second account, in a browser, saw `@Lukas` on the board
+  as "@unknown-user" (in Danish, "@ukendt-bruger"). A post does not carry the users it mentions, so the
+  name only shows once the reader's app has loaded that member. After opening the member's profile it
+  showed the name. Left as it is: writing names in bold would fix it for the few readers who see it, but
+  take the click to the profile from everyone.
+- A spoiler once showed uncovered right after posting. A reload covered it, so it was the client, not the
+  bot.
+- Poll votes are written when the post is made and not updated after.
+- Whether a post shows the avatar depends on its text: only posts with up to 300 characters of text have
+  it, so media-only and long-text posts look like a different template.
+
+### Ideas from these tests
+
+Not bugs, and nothing decided yet:
+
+- **An avatar on every post.** Only posts with up to 300 characters of text show it today. A third heading
+  line with when the message was sent (`<t:...:R>`) would fill the space beside the avatar, so media-only
+  and long-text posts could keep it too, and posts would show their date, which none do now.
+- **Poll votes that stay current.** Rebuild the poll text when the post is edited, or label the counts as
+  at the time it was featured. A closed poll could mark its winning answer.
+- **A neater cut at 2,000 characters.** Cut at the last space and end with `…`, instead of mid-word with
+  `...`. The docstring of `truncate_content` still describes the old 1,024 character embed field.
+- **Jumbo emoji.** A message that is only emoji shows them at normal size. Worth trying whether a full-width
+  `TextDisplay`, outside the `Section`, shows them large as Discord does.
+- **The parent of a thread.** "in #forum › thread name", so a thread with a vague name still says where it is.
+- **A reply to a member who opted out.** It shows no reply line at all. "Replying to a message", with no
+  name or quote, keeps the context without naming them, like the line for a deleted message.
+- **The title of a YouTube link.** Its thumbnail looks like any picture and opens the picture.
+  "-# YouTube · title" under it, from the link preview, says it is a video.
+- **Smaller quoted media.** The answered image or video is shown full width, larger than the reply itself.
+  A thumbnail beside the quote would put the featured message first, but a thumbnail cannot play a video.
+  Kept as it is for now.
+
+- **Audio that plays on the board.** An audio file is only a link, where the original has a player. A
+  Components V2 `File` component plays audio, but only for a file uploaded with the post itself, so the bot
+  would have to download and upload it again, within the board's upload size limit.
+
+- **A file line that says what it is.** A file shows only as its name, so a post of just a zip reads bare.
+  A size, or a 📎 in front, would make it read as a file rather than a stray link.
+
+- **A shorter welcome message.** "Note on channel permissions", `/calculation_method` and
+  `/custom_emoji_check_logic` explain in text what the Troubleshoot and Set up buttons now do. One line for
+  each button and the Why isn't this on the board? hint would cover it.
+- **"This command" after a button.** A member pressing an admin button reads "This command is only for
+  members with the Manage Server permission". "This is only for..." would fit commands, buttons and forms.
+
+- **Point threshold replies to the settings form.** `/set_reaction_threshold` answers with "Change how
+  reactions are counted with /calculation_method". Change settings does every setting at once now.
+
+- **"Never stored" in `/my_data`.** "Message text, images and your username are never stored" holds for the
+  database, but `/feedback` sends the username to the developer channel, as `PRIVACY.md` says. "...never
+  stored in Hall of Fame's database" would be exact. The download's `about` field says the same.
+
+- **One line after Stop featuring me.** The panel then says "New messages of yours are not featured from
+  now on" and, right under it, the longer line saying the same with the date. The longer line alone is enough.
+
+- **The delete confirmation as a list.** It is one long paragraph on the most serious screen the bot has.
+  Four short lines (what goes, what stays, which choices go, that it cannot be undone) would read faster.
+
+- **Command descriptions in one style.** The new ones say what the command does. Older ones are questions or
+  vague: "Get the server config", "Here you can decide if it only should be whitelisted emojis or all emojis",
+  "How many days ago should the post be to be considered old and not valid?".
+
+- **One log line says it twice.** "User profile command used in a DM or a server without the bot, outside a
+  server with the bot". "...used outside a server with the bot" is enough.
+
+- **A mention of a member who opted out.** Their name shows on the board as a mention in the poster's own
+  words, while a reply to them hides it. Nothing is stored, and it is how Discord shows mentions, so it is
+  left as it is, but it is the one place an opted-out member is still named on a board.
+
+- **The words of a link preview.** A link to an X post shows its pictures but not the post's text or author,
+  which Discord shows in the preview. A short "-# Author: first line" under the link would keep what the
+  post was about.
+
+### Still to run
+
+- **file:** whether a file link still opens a day after posting.
+
 ## 21 October 2026: member data, the post limit and the export (3.0, then called 2.2)
 
 Run on the development bot (`DEV_TEST=True`) in the development server, against the development

@@ -990,7 +990,8 @@ def describe_setting(name: str, value) -> tuple[str, str, str]:
     if name == "reaction_threshold":
         return "Reaction threshold", str(value), ""
     if name == "post_due_date":
-        return ("Post due date", f"{value} day{plural(value)}",
+        # Named as /get_server_config names it, which is what the admin reads next
+        return ("Post age", f"{value} day{plural(value)}",
                 messages.POST_DUE_DATE_NOTE.format(days=value, plural=plural(value)))
     if name == "reaction_count_calculation_method":
         return "Reactions are counted as", commands.calculation_method_labels.get(value, str(value)), ""
