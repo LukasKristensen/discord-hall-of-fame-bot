@@ -54,7 +54,7 @@ Use an account that has never been featured.
       button and Delete are still offered
 - [x] React to a new message of yours until it passes the threshold: nothing is reposted, and `/my_data`
       shows no new post
-- [ ] A second account's message still reaches the board as usual
+- [x] A second account's message still reaches the board as usual
 - [x] Download right after stopping includes `"not_counted": true`
 - [x] Feature me again: the panel confirms it, and your next message over the threshold is reposted and
       credited to you
@@ -65,7 +65,7 @@ Use an account that has never been featured.
       posts stay on the boards, and a hidden-totals choice is deleted too
 - [x] Cancel says nothing was deleted
 - [x] Confirming answers within a few seconds, even with many posts, and says your data is deleted
-- [ ] The done message offers Stop featuring me. Pressing it stores the choice and says so
+- [x] The done message offers Stop featuring me. Pressing it stores the choice and says so
 - [x] Your posts are still on the board, but `/leaderboard` and `/user_profile` no longer show you after
       the daily update
 - [x] Right after deleting, `/my_data` stores nothing, so Delete is greyed out and there is nothing to refuse
