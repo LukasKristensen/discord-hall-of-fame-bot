@@ -26,12 +26,9 @@ Use an account that has never been featured.
       profile.", and the privacy policy link
 - [ ] Download my data and Delete my data are greyed out
 - [ ] Hide my totals across servers and Stop featuring me are there
-- [ ] A second account cannot press your buttons: it is told only the member who ran the command can
-
-## `/my_data` with posts
-
-Get a few of your messages onto the board first.
-
+- [x] A second account cannot press your buttons: the panel is private, so it never sees them. Should one
+      be shown, the bot answers that only the member who ran the command can use it (`interaction_check`,
+      covered in `tests/test_member_data.py`)
 - [ ] The summary counts your featured posts, servers and Wrapped entries, with thousands separators
 - [x] Download my data sends one private `hall-of-fame-my-data.json` with your posts, standings and
       choices, and every ID written as a string
