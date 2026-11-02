@@ -469,3 +469,14 @@ class GuildsToProcessTests(unittest.TestCase):
     def test_only_the_servers_named(self):
         import hof_wrapped
         self.assertEqual([1, 3], [guild.id for guild in hof_wrapped.guilds_to_process(self.guilds, ["3", "1", "99"])])
+
+
+class CountedTests(unittest.TestCase):
+    """Wrapped wrote "1 posts" and "1 times"."""
+
+    def test_one_is_singular_and_more_are_plural(self):
+        import hof_wrapped
+        self.assertEqual("1 post", hof_wrapped.counted(1, "post"))
+        self.assertEqual("3 posts", hof_wrapped.counted(3, "post"))
+        self.assertEqual("1 time", hof_wrapped.counted(1, "time"))
+        self.assertEqual("0 reactions", hof_wrapped.counted(0, "reaction"))

@@ -119,6 +119,11 @@ async def process_message_reactions(message: discord.Message, connection):
             user_reactor.fanOfUsers[user_author.id] += 1
 
 
+def counted(count, singular: str, plural: str = None) -> str:
+    """A count with its word, singular for one: 1 post, 3 posts, 1 time"""
+    return f"{count} {singular if count == 1 else (plural or singular + 's')}"
+
+
 # How often a run says how far it has come, so a large server is not taken for stuck
 progress_every_posts = 25
 progress_every_members = 5
@@ -201,14 +206,14 @@ async def create_embed(discord_user, data_for_user_wrapped, bot):
 
     if user_wrapped.hallOfFameMessagePosts > 0:
         embed.description += f"\n{user_wrapped.get_hof_status()}\n"
-        embed.add_field(name="🏅 Hall of Fame Posts", value=f"{user_wrapped.hallOfFameMessagePosts} posts", inline=True)
-        embed.add_field(name="🎉 You gave", value=f"{user_wrapped.reactionCount} reactions on HOF posts", inline=True)
-        embed.add_field(name="🎊 Reactions Received", value=f"{sum(user_wrapped.usersFans.values())} reactions on your HOF posts", inline=True)
+        embed.add_field(name="🏅 Hall of Fame Posts", value=counted(user_wrapped.hallOfFameMessagePosts, "post"), inline=True)
+        embed.add_field(name="🎉 You gave", value=f"{counted(user_wrapped.reactionCount, 'reaction')} on HOF posts", inline=True)
+        embed.add_field(name="🎊 Reactions Received", value=f"{counted(sum(user_wrapped.usersFans.values()), 'reaction')} on your HOF posts", inline=True)
 
         # Most Used Channels Section
         most_used_channel_names = sorted(user_wrapped.mostUsedChannels.items(), key=lambda x: x[1], reverse=True)[:5]
         channel_list = "\n".join(
-            f"**<#{channel[0]}>**: {channel[1]} times"
+            f"**<#{channel[0]}>**: {counted(channel[1], 'time')}"
             for channel in most_used_channel_names
         )
         embed.add_field(
@@ -224,7 +229,7 @@ async def create_embed(discord_user, data_for_user_wrapped, bot):
 
     # Most Used Emojis Section
     most_used_emojis = sorted(user_wrapped.mostUsedEmojis.items(), key=lambda x: x[1], reverse=True)[:5]
-    emoji_list = "\n".join(f"{emoji[0]}: {emoji[1]} times" for emoji in most_used_emojis)
+    emoji_list = "\n".join(f"{emoji[0]}: {counted(emoji[1], 'time')}" for emoji in most_used_emojis)
     embed.add_field(
         name="😄 Most Used Emojis (HOF)",
         value=emoji_list if emoji_list else "No emojis yet.",
@@ -234,7 +239,7 @@ async def create_embed(discord_user, data_for_user_wrapped, bot):
     # Fans and Fan Of
     top_fans = sorted(user_wrapped.usersFans.items(), key=lambda x: x[1], reverse=True)[:5]
     fans_list = "\n".join(
-        f"**<@{fan[0]}>**: {fan[1]} reactions"
+        f"**<@{fan[0]}>**: {counted(fan[1], 'reaction')}"
         for fan in top_fans
     )
     embed.add_field(
@@ -245,7 +250,7 @@ async def create_embed(discord_user, data_for_user_wrapped, bot):
 
     top_user_fans = sorted(user_wrapped.fanOfUsers.items(), key=lambda x: x[1], reverse=True)[:5]
     fan_of_list = "\n".join(
-        f"**<@{fan[0]}>**: {fan[1]} reactions"
+        f"**<@{fan[0]}>**: {counted(fan[1], 'reaction')}"
         for fan in top_user_fans
     )
     embed.add_field(
@@ -525,7 +530,7 @@ def create_server_embed(guild, users):
         for channel_id, count in channels.items():
             channel_counts[channel_id] = channel_counts.get(channel_id, 0) + count
     top_channels = sorted(channel_counts.items(), key=lambda x: x[1], reverse=True)[:5]
-    channel_list = "\n".join(f"**<#{channel_id}>**: {count} times" for channel_id, count in top_channels)
+    channel_list = "\n".join(f"**<#{channel_id}>**: {counted(count, 'time')}" for channel_id, count in top_channels)
 
     # Aggregate most used emojis
     emoji_counts = {}
@@ -546,7 +551,7 @@ def create_server_embed(guild, users):
         for emoji, count in emojis.items():
             emoji_counts[emoji] = emoji_counts.get(emoji, 0) + count
     top_emojis = sorted(emoji_counts.items(), key=lambda x: x[1], reverse=True)[:5]
-    emoji_list = "\n".join(f"{emoji}: {count} times" for emoji, count in top_emojis)
+    emoji_list = "\n".join(f"{emoji}: {counted(count, 'time')}" for emoji, count in top_emojis)
 
     # Top HOF members by posts
     top_members = sorted(
@@ -555,7 +560,7 @@ def create_server_embed(guild, users):
         reverse=True
     )[:5]
     member_list = "\n".join(
-        f"**<@{member['user_id'] if isinstance(member, dict) else member.id}>**: {member.get('hof_message_posts', 0) if isinstance(member, dict) else member.hallOfFameMessagePosts} posts"
+        f"**<@{member['user_id'] if isinstance(member, dict) else member.id}>**: {counted(member.get('hof_message_posts', 0) if isinstance(member, dict) else member.hallOfFameMessagePosts, 'post')}"
         for member in top_members if (member.get('hof_message_posts', 0) if isinstance(member, dict) else member.hallOfFameMessagePosts) > 0
     )
 
@@ -566,7 +571,7 @@ def create_server_embed(guild, users):
         reverse=True
     )[:5]
     fans_list = "\n".join(
-        f"**<@{fan['user_id'] if isinstance(fan, dict) else fan.id}>**: {fan.get('reaction_count', 0) if isinstance(fan, dict) else fan.reactionCount} reactions"
+        f"**<@{fan['user_id'] if isinstance(fan, dict) else fan.id}>**: {counted(fan.get('reaction_count', 0) if isinstance(fan, dict) else fan.reactionCount, 'reaction')}"
         for fan in top_fans if (fan.get('reaction_count', 0) if isinstance(fan, dict) else fan.reactionCount) > 0
     )
 
