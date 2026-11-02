@@ -189,8 +189,8 @@ and reply from the payload:
 
 ## Feedback screenshots
 
-- [ ] `/feedback` shows Screenshots (optional) with its note, and the picker offers images only
-- [ ] Send a bug report with two screenshots and the contact box ticked: the thank-you comes after a short
+- [x] `/feedback` shows Screenshots (optional) with its note, and the picker offers images only
+- [x] Send a bug report with two screenshots and the contact box ticked: the thank-you comes after a short
       wait, and the feedback channel gets both images with the report, Screenshots "2 attached" and May
       contact "Yes"
 - [ ] Send one without screenshots: it is answered at once, May contact "No"
