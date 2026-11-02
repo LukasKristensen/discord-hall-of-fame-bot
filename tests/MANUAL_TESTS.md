@@ -84,6 +84,7 @@ message under a "test cases" category so each post names what it tests.
 | my data | Delete my data confirmed, for a member who had opted out | Answered at once: data deleted, off every leaderboard, profile and Wrapped, ask admins to remove reposts. Offered Stop featuring me, saying it keeps only the ID and date |
 | my data | `/my_data` right after deleting | "Hall of Fame stores nothing about you, so there is nothing to download or delete." Download and Delete greyed out, Hide totals and Stop featuring me offered |
 | my data | Stop featuring me pressed on the done message | Stored: "No posts, server standings or Wrapped entries are stored about you" and the line with the date. Download and Delete offered for the choice, Hide totals not offered as there are no totals to hide |
+| my data | Download with only the choice not to be featured stored | A 1 KB file with `"not_counted": true` and no featured posts |
 | my data | A panel left alone | After two minutes its buttons were gone and the summary stayed |
 | my data | Delete my data, then Cancel | The panel replaced in place with "Nothing was deleted." |
 | my data | Feature me again, a new message, then Stop featuring me | Confirmed in place, the next message over the threshold was posted and credited (2 featured posts), and stopping again brought back the line with the date |
