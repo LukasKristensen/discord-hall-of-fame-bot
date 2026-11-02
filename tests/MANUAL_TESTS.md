@@ -78,6 +78,7 @@ message under a "test cases" category so each post names what it tests.
 | my data | Download as a member who opted out | `"not_counted": true` in the file |
 | my data | Delete my data as a member who opted out | The confirmation says: off every leaderboard, profile and Wrapped, cannot be undone, posts stay on the boards uncredited, a hidden-totals choice and the choice not to be featured are deleted too, and featuring can be stopped again right after |
 | my data | Hide my totals across servers | The panel says totals are hidden with the date, the button became Show. `/user_profile` showed only this month and all time in this server |
+| my data | `/user_profile` in a DM while totals are hidden | "Your totals across servers are hidden, so there is nothing to show outside a server with Hall of Fame. Show them again from /my_data." |
 | my data | Delete my data, then Cancel | The panel replaced in place with "Nothing was deleted." |
 | my data | Feature me again, a new message, then Stop featuring me | Confirmed in place, the next message over the threshold was posted and credited (2 featured posts), and stopping again brought back the line with the date |
 | opt-out | A new message from a member who pressed Stop featuring me, reacted to | Not posted. Why isn't this on the board?, asked by another member, answered only that it cannot be featured, without naming the choice. Asked by the member, it said they asked not to be featured and pointed to `/my_data` |
