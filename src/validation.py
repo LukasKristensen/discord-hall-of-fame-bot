@@ -7,8 +7,10 @@ REACTION_THRESHOLD_MAX = 1000
 POST_DUE_DATE_MIN = 1
 POST_DUE_DATE_MAX = 3650
 
-# A whitelist is read on every reaction, and past this it has stopped being a whitelist
-WHITELIST_MAX_SIZE = 1000
+# A whitelist is read on every reaction, and past this it has stopped being a whitelist. 100 also keeps
+# /get_server_config and the Why command's list readable. A server already past it keeps its whitelist
+# and only cannot add more until it is under the limit again
+WHITELIST_MAX_SIZE = 100
 
 custom_emoji_pattern = re.compile(r"^<(a?):([A-Za-z0-9_]{2,32}):([0-9]{15,21})>$")
 

@@ -11,9 +11,9 @@ drift between the bot and the services it reports to. It is also the only Python
 .env file, because gating the readers is not enough: loading the whole file would still put every
 live credential into the process environment of a development run.
 
-The Pi's deployment scripts, src/run.sh and src/pg_backup.sh, export the whole .env themselves before
-starting the bot or a backup. That is intended: they only ever run in production, where every value
-is needed. A development run goes through this module and never through them.
+The Pi's deployment script, src/run.sh, exports the whole .env itself before starting the bot. That is
+intended: it only ever runs in production, where every value is needed. A development run goes
+through this module and never through it.
 """
 
 import os
@@ -97,4 +97,13 @@ def database_settings() -> dict:
         "database": os.getenv(f"POSTGRES_DB{prefix}"),
         "user": os.getenv(f"POSTGRES_USER{prefix}"),
         "password": os.getenv(f"POSTGRES_PASSWORD{prefix}"),
+        "options": DATABASE_SESSION_OPTIONS,
     }
+
+
+# Every session runs in UTC, whatever time zone the database server is set to. Post times are stored in
+# TIMESTAMP columns, which have no time zone: PostgreSQL turns the bot's UTC times into the session's
+# local time before storing them, while the code reads them back as UTC. This also puts the daily post
+# limit's day boundary at midnight UTC. Rows stored before this was set may be an hour or two off,
+# which is accepted rather than rewritten
+DATABASE_SESSION_OPTIONS = "-c TimeZone=UTC"

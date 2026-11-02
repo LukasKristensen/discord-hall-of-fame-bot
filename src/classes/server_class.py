@@ -4,7 +4,7 @@ class Server:
                  allow_messages_in_hof_channel: bool, custom_emoji_check_logic: bool, whitelisted_emojis: list,
                  leaderboard_setup: bool, ignore_bot_messages: bool, reaction_count_calculation_method: str,
                  hide_hof_post_below_threshold: bool, leaderboard_message_ids: list, server_member_count: int,
-                 require_image_or_video: bool):
+                 require_image_or_video: bool, count_in_global_profiles: bool = True):
         self.hall_of_fame_channel_id = hall_of_fame_channel_id
         self.guild_id = guild_id
         self.reaction_threshold = reaction_threshold
@@ -22,6 +22,8 @@ class Server:
         self.hide_hof_post_below_threshold = hide_hof_post_below_threshold
         self.server_member_count = server_member_count
         self.require_image_or_video = require_image_or_video
+        # Read by /get_server_config only. The global profile query reads the column itself
+        self.count_in_global_profiles = count_in_global_profiles
 
     def reaction_config(self) -> dict:
         """

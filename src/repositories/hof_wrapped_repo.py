@@ -20,15 +20,46 @@ def create_hof_wrapped_table(connection):
             user_ranks TEXT
         )
     """)
+    # The unique key starts with the guild, so looking a member up across guilds (/my_data and
+    # deleting a member's data) would otherwise scan the whole table
+    cursor.execute("CREATE INDEX IF NOT EXISTS hof_wrapped_user_idx ON hof_wrapped (user_id)")
+    # How many messages the member sent in the server that year, as Discord's message search counts them,
+    # for the fame rate. Null for a Wrapped made before it existed, or when the search gave no answer
+    cursor.execute("ALTER TABLE hof_wrapped ADD COLUMN IF NOT EXISTS messages_sent INTEGER")
     connection.commit()
     cursor.close()
 
-def insert_hof_wrapped(connection, guild_id, user_id, year, reaction_count, hof_message_posts, most_used_channels, most_used_emojis, most_reacted_post_message_id, most_reacted_post_channel_id, most_reacted_post_reaction_count, fan_of_users, users_fans, user_ranks):
+# Taken by every transaction that writes a Wrapped row or takes a member out of the fan lists, so the two
+# never interleave. Without it, a Wrapped saved while a member opts out could read the opt-out list before
+# the opt-out commits and write the member back after the cleanup ran
+FAN_LISTS_LOCK = 482917334001
+
+
+def lock_fan_lists(cursor):
+    """Wait for, then hold until the transaction ends, the lock every Wrapped and fan-list write takes"""
+    cursor.execute("SELECT pg_advisory_xact_lock(%s)", (FAN_LISTS_LOCK,))
+
+
+def insert_hof_wrapped(connection, guild_id, user_id, year, reaction_count, hof_message_posts, most_used_channels, most_used_emojis, most_reacted_post_message_id, most_reacted_post_channel_id, most_reacted_post_reaction_count, fan_of_users, users_fans, user_ranks, messages_sent=None):
+    """
+    Save a member's Wrapped for a guild and year. Nothing is saved for a member who asked not to be
+    featured, and they are taken out of the fan lists, whoever calls this, since a Wrapped records whose
+    posts members reacted to. The opt-out list is read after the fan lists lock is held, so an opt-out
+    that commits while this waits is seen
+    """
     cursor = connection.cursor()
+    lock_fan_lists(cursor)
     cursor.execute("""
         INSERT INTO hof_wrapped (
-            guild_id, user_id, year, reaction_count, hof_message_posts, most_used_channels, most_used_emojis, most_reacted_post_message_id, most_reacted_post_channel_id, most_reacted_post_reaction_count, fan_of_users, users_fans, user_ranks
-        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            guild_id, user_id, year, reaction_count, hof_message_posts, most_used_channels, most_used_emojis, most_reacted_post_message_id, most_reacted_post_channel_id, most_reacted_post_reaction_count, fan_of_users, users_fans, user_ranks, messages_sent
+        )
+        SELECT %(guild_id)s, %(user_id)s, %(year)s, %(reaction_count)s, %(hof_message_posts)s,
+               %(most_used_channels)s, %(most_used_emojis)s, %(most_reacted_post_message_id)s,
+               %(most_reacted_post_channel_id)s, %(most_reacted_post_reaction_count)s,
+               (%(fan_of_users)s::jsonb - ARRAY(SELECT user_id::text FROM opted_out_member))::text,
+               (%(users_fans)s::jsonb - ARRAY(SELECT user_id::text FROM opted_out_member))::text,
+               %(user_ranks)s, %(messages_sent)s
+        WHERE NOT EXISTS (SELECT 1 FROM opted_out_member WHERE user_id = %(user_id)s)
         ON CONFLICT (guild_id, user_id, year) DO UPDATE SET
             reaction_count=EXCLUDED.reaction_count,
             hof_message_posts=EXCLUDED.hof_message_posts,
@@ -40,9 +71,15 @@ def insert_hof_wrapped(connection, guild_id, user_id, year, reaction_count, hof_
             fan_of_users=EXCLUDED.fan_of_users,
             users_fans=EXCLUDED.users_fans,
             user_ranks=EXCLUDED.user_ranks,
+            messages_sent=EXCLUDED.messages_sent,
             created_at=CURRENT_TIMESTAMP
     """,
-    (guild_id, user_id, year, reaction_count, hof_message_posts, most_used_channels, most_used_emojis, most_reacted_post_message_id, most_reacted_post_channel_id, most_reacted_post_reaction_count, fan_of_users, users_fans, user_ranks))
+    {"guild_id": guild_id, "user_id": user_id, "year": year, "reaction_count": reaction_count,
+     "hof_message_posts": hof_message_posts, "most_used_channels": most_used_channels,
+     "most_used_emojis": most_used_emojis, "most_reacted_post_message_id": most_reacted_post_message_id,
+     "most_reacted_post_channel_id": most_reacted_post_channel_id,
+     "most_reacted_post_reaction_count": most_reacted_post_reaction_count, "fan_of_users": fan_of_users,
+     "users_fans": users_fans, "user_ranks": user_ranks, "messages_sent": messages_sent})
     connection.commit()
     cursor.close()
 
@@ -60,10 +97,36 @@ def get_hof_wrapped(connection, guild_id, user_id, year):
     cursor.close()
     return result
 
-def get_all_hof_wrapped_for_guild(connection, guild_id, year):
+def get_guild_wrapped_totals(connection, guild_id, year) -> dict:
+    """
+    What a member's Wrapped is measured against: how many members have one, and the messages sent and posts
+    featured of those whose messages were counted, for the server's average fame rate. Members who asked not
+    to be featured are left out, as everywhere in the server's Wrapped
+    """
     cursor = connection.cursor()
     cursor.execute("""
-        SELECT * FROM hof_wrapped WHERE guild_id = %s AND year = %s
+        SELECT COUNT(*),
+               COALESCE(SUM(messages_sent) FILTER (WHERE messages_sent IS NOT NULL AND hof_message_posts > 0), 0),
+               COALESCE(SUM(hof_message_posts) FILTER (WHERE messages_sent IS NOT NULL AND hof_message_posts > 0), 0)
+        FROM hof_wrapped
+        WHERE guild_id = %s AND year = %s
+          AND NOT EXISTS (SELECT 1 FROM opted_out_member WHERE opted_out_member.user_id = hof_wrapped.user_id)
+    """, (guild_id, year))
+    members, messages_sent, posts = cursor.fetchone()
+    cursor.close()
+    return {"members": members, "messages_sent": messages_sent, "posts": posts}
+
+
+def get_all_hof_wrapped_for_guild(connection, guild_id, year):
+    """
+    Every member's Wrapped in a guild for a year, for the server's Wrapped. Members who asked not to be
+    featured are left out, even with a Wrapped from before they asked, so the server's never shows them
+    """
+    cursor = connection.cursor()
+    cursor.execute("""
+        SELECT * FROM hof_wrapped
+        WHERE guild_id = %s AND year = %s
+          AND NOT EXISTS (SELECT 1 FROM opted_out_member WHERE opted_out_member.user_id = hof_wrapped.user_id)
     """, (guild_id, year))
     rows = cursor.fetchall()
     columns = [desc[0] for desc in cursor.description]
@@ -71,12 +134,116 @@ def get_all_hof_wrapped_for_guild(connection, guild_id, year):
     cursor.close()
     return results
 
-def delete_hof_wrapped_for_guild(connection, guild_id):
+def delete_hof_wrapped_for_guild(connection, guild_id, commit: bool = True):
+    """
+    Delete a server's Wrapped, when the bot leaves it. Takes the fan lists lock like every other Wrapped
+    write, so a Wrapped being saved for the server finishes first and its rows are deleted here too
+    """
     cursor = connection.cursor()
+    lock_fan_lists(cursor)
     cursor.execute("""
         DELETE FROM hof_wrapped WHERE guild_id = %s
     """, (guild_id,))
-    connection.commit()
+    if commit:
+        connection.commit()
+    cursor.close()
+
+def get_hof_wrapped_for_user(connection, user_id) -> list[dict]:
+    """
+    Every Wrapped a member has, across guilds and years, for /my_data
+    :param connection: The database connection
+    :param user_id: The member's user ID
+    :return: One dict per row, without the row's own serial ID
+    """
+    cursor = connection.cursor()
+    cursor.execute("SELECT * FROM hof_wrapped WHERE user_id = %s ORDER BY year, guild_id", (user_id,))
+    columns = [desc[0] for desc in cursor.description]
+    results = [{key: value for key, value in zip(columns, row) if key != "id"} for row in cursor.fetchall()]
+    cursor.close()
+    return results
+
+def count_hof_wrapped_for_user(connection, user_id) -> int:
+    """
+    How many Wrapped rows a member has, across guilds and years, for the /my_data summary
+    :param connection: The database connection
+    :param user_id: The member's user ID
+    :return: The number of rows
+    """
+    cursor = connection.cursor()
+    cursor.execute("SELECT COUNT(*) FROM hof_wrapped WHERE user_id = %s", (user_id,))
+    row = cursor.fetchone()
+    cursor.close()
+    return row[0] if row else 0
+
+def delete_hof_wrapped_for_user(connection, user_id, commit: bool = True) -> int:
+    """
+    Delete a member's own Wrapped rows, and take their ID out of everybody else's fan lists, where
+    it is stored as a key of the JSON objects fan_of_users and users_fans
+    :param connection: The database connection
+    :param user_id: The member's user ID
+    :param commit: False to leave the commit to the caller, as part of a larger transaction
+    :return: The number of the member's own rows deleted
+    """
+    cursor = connection.cursor()
+    lock_fan_lists(cursor)
+    cursor.execute("DELETE FROM hof_wrapped WHERE user_id = %s", (user_id,))
+    deleted = cursor.rowcount
+    cursor.close()
+    remove_from_fan_lists(connection, user_id, commit=False)
+    if commit:
+        connection.commit()
+    return deleted
+
+def remove_from_fan_lists(connection, user_id, commit: bool = True):
+    """
+    Take a member's ID out of everybody's Wrapped fan lists, where it is stored as a key of the JSON
+    objects fan_of_users and users_fans. For deleting a member's data, and for a member who asked not
+    to be featured, so other members' Wrapped stop showing them, including Wrapped from before they asked
+    :param connection: The database connection
+    :param user_id: The member's user ID
+    :param commit: False to leave the commit to the caller, as part of a larger transaction
+    """
+    cursor = connection.cursor()
+    lock_fan_lists(cursor)
+    key = str(user_id)
+    # The LIKE narrows the update to rows that mention the member before any JSON is parsed. json.dumps
+    # writes the integer keys as quoted strings, which is the form matched here
+    pattern = f'%"{key}"%'
+    for column in ("fan_of_users", "users_fans"):
+        cursor.execute(f"""
+            UPDATE hof_wrapped
+            SET {column} = ({column}::jsonb - %s)::text
+            WHERE {column} LIKE %s
+        """, (key, pattern))
+    if commit:
+        connection.commit()
+    cursor.close()
+
+
+def delete_hof_wrapped_for_user_in_guild(connection, user_id, guild_id, year, commit: bool = True):
+    """
+    Delete one member's Wrapped in one guild and year, and take them out of that guild's fan lists for the
+    year. For Wrapped's own cleanup of rows it saved for a member who deleted their data while it ran:
+    the deletion already removed everything else, so nothing outside this server is touched
+    :param connection: The database connection
+    :param user_id: The member's user ID
+    :param guild_id: The guild Wrapped was generated for
+    :param year: The Wrapped year
+    :param commit: False to leave the commit to the caller
+    """
+    cursor = connection.cursor()
+    lock_fan_lists(cursor)
+    cursor.execute("DELETE FROM hof_wrapped WHERE user_id = %s AND guild_id = %s AND year = %s",
+                   (user_id, guild_id, year))
+    key = str(user_id)
+    for column in ("fan_of_users", "users_fans"):
+        cursor.execute(f"""
+            UPDATE hof_wrapped
+            SET {column} = ({column}::jsonb - %s)::text
+            WHERE guild_id = %s AND year = %s AND {column} LIKE %s
+        """, (key, guild_id, year, f'%"{key}"%'))
+    if commit:
+        connection.commit()
     cursor.close()
 
 def check_if_guild_wrapped_data_exists(connection, guild_id, year):

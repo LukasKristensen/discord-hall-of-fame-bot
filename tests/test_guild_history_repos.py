@@ -9,7 +9,7 @@ cannot be confused for one another and that a month is always treated as a half-
 import datetime
 import unittest
 
-from repositories import guild_lifecycle_event_repo, guild_monthly_snapshot_repo
+from repositories import guild_lifecycle_event_repo, guild_monthly_snapshot_repo, permission_warning_repo
 
 from tests.fakes import FakeConnection
 
@@ -52,6 +52,21 @@ class InsertGuildLifecycleEventTests(unittest.TestCase):
         guild_lifecycle_event_repo.insert_guild_lifecycle_event(connection, 200, "JOIN", MARCH)
 
         self.assertEqual(1, connection.commits)
+
+
+class LatestEventTypeTests(unittest.TestCase):
+    def test_returns_the_type_of_the_newest_event(self):
+        self.assertEqual("JOIN", guild_lifecycle_event_repo.get_latest_event_type(FakeConnection(row=("JOIN",)), 200))
+
+    def test_returns_none_for_a_server_without_history(self):
+        self.assertIsNone(guild_lifecycle_event_repo.get_latest_event_type(FakeConnection(row=None), 200))
+
+    def test_reads_only_that_server_newest_first(self):
+        connection = FakeConnection(row=("LEAVE",))
+        guild_lifecycle_event_repo.get_latest_event_type(connection, 200)
+
+        self.assertEqual([(200,)], connection.parameters)
+        self.assertIn("ORDER BY occurred_at DESC", connection.queries[0])
 
 
 class MonthlyJoinLeaveCountTests(unittest.TestCase):
@@ -198,6 +213,38 @@ class MonthlySnapshotReadTests(unittest.TestCase):
         connection = FakeConnection(rows=[])
         self.assertEqual([], guild_monthly_snapshot_repo.get_monthly_messages_vs_members(
             connection, datetime.date(2026, 3, 1)))
+
+
+class PermissionWarningRepoTests(unittest.TestCase):
+    """The warnings a server was sent about missing permissions, so the daily sweep can stop repeating them."""
+
+    def test_reads_the_permissions_as_a_set(self):
+        connection = FakeConnection(rows=[(200, ["View Channel", "Send Messages"], 2, MARCH, APRIL)])
+
+        self.assertEqual({200: (frozenset({"Send Messages", "View Channel"}), 2, MARCH, APRIL)},
+                         permission_warning_repo.get_permission_warnings(connection))
+
+    def test_saving_nothing_touches_nothing(self):
+        connection = FakeConnection()
+        permission_warning_repo.save_permission_warnings(connection, [])
+        permission_warning_repo.delete_permission_warnings(connection, [])
+
+        self.assertEqual([], connection.queries)
+        self.assertEqual(0, connection.commits)
+
+    def test_deletes_only_the_given_servers(self):
+        connection = FakeConnection()
+        permission_warning_repo.delete_permission_warnings(connection, {200, 201})
+
+        self.assertIn("WHERE guild_id = ANY(%s)", connection.queries[0])
+        self.assertEqual([200, 201], sorted(connection.parameters[0][0]))
+
+    def test_stores_nothing_about_a_member(self):
+        connection = FakeConnection()
+        permission_warning_repo.create_permission_warning_table(connection)
+
+        self.assertNotIn("user_id", connection.queries[0])
+        self.assertIn("CREATE TABLE IF NOT EXISTS permission_warning", connection.queries[0])
 
 
 if __name__ == "__main__":

@@ -2,10 +2,13 @@ import discord
 import asyncio
 import datetime
 import concurrency
+import setup_check
 import utils
+from caches import ExpiringSet
 from translations import messages
-from enums import command_refs
-from repositories import server_config_repo, hall_of_fame_message_repo
+from enums import command_refs, log_type
+from repositories import (server_config_repo, hall_of_fame_message_repo, guild_lifecycle_event_repo,
+                          permission_warning_repo)
 
 # The daily sweep runs once per server the bot is in, so it is paced rather than run all at once:
 # a bounded number of servers are handled together, and any single one that hangs is abandoned so
@@ -17,6 +20,27 @@ daily_task_guild_timeout_seconds = 120
 # a stalled query. The database is told to cancel any single statement that runs longer than this
 # instead, which bounds how long one server can hold up the loop
 daily_task_statement_timeout_ms = 20_000
+
+# Removing the bot while it is offline sends no remove event, which leaves the server's data behind.
+# The daily task deletes it, but only once the server has been missing for this many days in a row,
+# Discord has confirmed twice, a day or more apart, that the bot has no access to it, and few enough
+# servers are missing at once that it cannot be Discord leaving servers out of the guild list
+departed_guild_grace_days = 7
+departed_guild_confirmation_gap = datetime.timedelta(hours=24)
+departed_guild_max_missing_share = 0.1
+departed_guild_fetch_timeout_seconds = 30
+
+# A server missing permissions in its Hall of Fame channel is warned this many days apart, and only this many
+# times about the same permissions, so a server that chooses to leave it broken is not reminded forever. The
+# count starts over once the permissions are fixed or a different set goes missing. Kept in the database, as
+# a restart would otherwise warn every broken server again that day
+permission_warning_repeat_days = 7
+permission_warning_limit = 3
+
+# Guilds told recently that setting up failed. Every retry of /set_hall_of_fame_channel on a server that is
+# not set up comes through here, and should not post the same notice publicly again
+setup_failure_notice_seconds = 3600
+recent_setup_failure_notices = ExpiringSet(ttl_seconds=setup_failure_notice_seconds)
 
 
 async def post_wrapped():
@@ -33,14 +57,45 @@ async def post_wrapped():
 async def check_for_new_server_classes(bot, connection):
     new_server_classes = {}
     for guild in bot.guilds:
-        if not server_config_repo.check_if_guild_exists(connection, guild.id) and guild.me.guild_permissions.manage_channels:
-            await utils.logging(bot, f"Guild {guild.name} not found in database, creating...", guild.id)
+        if server_config_repo.check_if_guild_exists(connection, guild.id):
+            continue
+        # Added while the bot was offline, so no join event fired. Recorded whether or not it can be set
+        # up, the same as a join while online
+        try:
+            record_guild_join(connection, guild)
+        except Exception as e:
+            connection.rollback()
+            await utils.logging(bot, f"Could not record the join of a server: {e}", guild.id)
+        if guild.me.guild_permissions.manage_channels:
+            await utils.logging(bot, "Server not found in the database, creating it", guild.id)
             try:
                 new_server_class = await utils.create_database_context(bot, guild, connection)
                 new_server_classes[guild.id] = new_server_class
             except Exception as e:
-                await utils.logging(bot, f"Failed to create database context for server {guild.name}: {e}", guild.id)
+                await utils.logging(bot, f"Failed to create the database context for a server: {e}", guild.id)
     return new_server_classes
+
+
+def record_guild_join(connection, guild):
+    """
+    Record a join found at startup, dated when the bot actually joined. A server the bot cannot set up
+    is checked on every startup, so nothing is written when its last recorded event is already a join
+    """
+    if guild_lifecycle_event_repo.get_latest_event_type(connection, guild.id) == "JOIN":
+        return
+    joined_at = getattr(guild.me, "joined_at", None) or datetime.datetime.now(datetime.timezone.utc)
+    guild_lifecycle_event_repo.insert_guild_lifecycle_event(connection, guild.id, "JOIN", joined_at)
+
+
+def record_guild_leave(connection, guild_id, occurred_at, commit: bool = True):
+    """
+    Record a leave unless the last recorded event is already a leave, since Discord can send the remove event
+    for a server more than once
+    """
+    # A server with no events at all was installed before the log began, and its leave is still recorded: the
+    # statistics count a first event that is a leave without inventing when it joined
+    if guild_lifecycle_event_repo.get_latest_event_type(connection, guild_id) != "LEAVE":
+        guild_lifecycle_event_repo.insert_guild_lifecycle_event(connection, guild_id, "LEAVE", occurred_at, commit=commit)
 
 
 async def bot_login(bot: discord.Client, tree):
@@ -84,6 +139,26 @@ async def on_raw_reaction(message: discord.RawReactionActionEvent, bot: discord.
                             validate_for_duplicates=True)
 
 
+async def on_raw_message_edit(payload: discord.RawMessageUpdateEvent, bot: discord.Client, server_config):
+    """
+    Event handler for an edited message, which is how Discord delivers content scanning results that finish
+    after a message was sent. Only the bot's own messages on the board are looked at, so the cost for every
+    other edit is one comparison
+    :param payload: The edit, carrying the whole message
+    :param bot: The bot client
+    :param server_config: The in memory configuration of the server the message is in
+    :return: None
+    """
+    if payload.channel_id != server_config.hall_of_fame_channel_id:
+        return
+    post = payload.message
+    if post.author.id != bot.user.id:
+        return
+    # A Components V2 post carries the scanning results of its media only in the raw components
+    raw_components = (getattr(payload, "data", None) or {}).get("components")
+    await utils.take_down_flagged_post(post, bot.get_channel(payload.channel_id), bot, payload.guild_id, raw_components)
+
+
 async def on_message(message: discord.Message, bot: discord.Client, server_config):
     """
     Event handler for when a message is sent in a channel
@@ -114,7 +189,8 @@ async def on_message(message: discord.Message, bot: discord.Client, server_confi
         return
 
     msg = await message.channel.send(f"Only Hall of Fame messages are allowed in this channel, {message.author.mention}. "
-                                     f"Can be disabled by {command_refs.ALLOW_MESSAGES_IN_HOF_CHANNEL}")
+                                     f"Someone with the Manage Server permission can turn this off with "
+                                     f"{command_refs.ALLOW_MESSAGES_IN_HOF_CHANNEL}")
     await asyncio.sleep(5)
     try:
         await msg.delete()
@@ -135,19 +211,21 @@ async def guild_join(server, connection, bot, custom_channel: discord.TextChanne
     try:
         return await utils.create_database_context(bot, server, connection, custom_channel)
     except Exception as e:
-        await utils.logging(bot, f"Failed to create database context for server {server.name}: {e}", server.id)
-        await utils.send_message_to_highest_prio_channel(bot, server,
-                                                         messages.FAILED_SETUP_HOF.format(serverName=server.name), 0)
+        await utils.logging(bot, f"Failed to create the database context for a server: {e}", server.id)
+        if recent_setup_failure_notices.add_if_absent(server.id):
+            await utils.send_message_to_highest_prio_channel(bot, server,
+                                                             messages.FAILED_SETUP_HOF.format(serverName=server.name))
 
 
-async def guild_remove(server, connection):
+async def guild_remove(server, connection, commit: bool = True):
     """
     Event handler for when the bot is removed from a server
     :param server:
     :param connection:
+    :param commit: False to leave the commit to the caller, which records the leave in the same transaction
     :return:
     """
-    utils.delete_database_context(server.id, connection)
+    utils.delete_database_context(server.id, connection, commit=commit)
 
 
 async def daily_task(bot, connection, server_classes, dev_testing, borrow_connection):
@@ -194,48 +272,191 @@ async def daily_task(bot, connection, server_classes, dev_testing, borrow_connec
     await utils.logging(bot, f"Updated {len(leaderboards.completed)} leaderboards, "
                              f"{len(leaderboards.failed)} failed")
 
-    await utils.logging(bot, f"Checking for db entries that are not in the guilds")
-    for server in server_classes.values():
-        if dev_testing:
-            continue
-        if int(server.guild_id) not in [guild.id for guild in bot.guilds]:
-            await utils.logging(bot, f"Could not find server {server.guild_id} in bot guilds")
+    if not dev_testing:
+        # The development bot is in a handful of servers, so every other server would look departed
+        await clean_up_departed_guilds(bot, connection, server_classes)
     await utils.logging(bot, f"Checked {len(server_classes)} servers for daily task")
     await update_user_database(bot, connection)
-    await check_write_permissions_to_hall_of_fame_channel(bot, server_classes)
+    await check_write_permissions_to_hall_of_fame_channel(bot, server_classes, connection)
 
 
-async def check_write_permissions_to_hall_of_fame_channel(bot: discord.Client, server_classes):
+async def clean_up_departed_guilds(bot: discord.Client, connection, server_classes, now=None):
+    """
+    Delete the data of servers that removed the bot while it was offline, and so never sent a remove
+    event. Deleting cannot be undone, so a server is only deleted when all of these hold:
+    - few enough servers are missing at once that Discord is not just leaving servers out
+    - it has been missing from the bot's guilds for departed_guild_grace_days days in a row
+    - asking Discord for the server directly answers that the bot has no access to it
+    :param bot: The bot client
+    :param connection: The database connection
+    :param server_classes: The in memory server configurations, which deleted servers are removed from
+    :param now: The time of this check
+    :return: The IDs of the servers that were deleted
+    """
+    now = now or datetime.datetime.now(datetime.timezone.utc)
+    bot_guild_ids = {guild.id for guild in bot.guilds}
+    missing = [int(guild_id) for guild_id in server_classes if int(guild_id) not in bot_guild_ids]
+    if not missing:
+        # Still recorded, so a server that came back loses its missing date and starts the grace period over
+        server_config_repo.record_missing_guilds(connection, missing, now)
+        return []
+
+    # At least one server may go missing however few the bot is in, or a small installation could never clean up
+    if not bot_guild_ids or len(missing) > max(1, len(server_classes) * departed_guild_max_missing_share):
+        # The servers the bot does see are still recorded, so one that came back cannot keep an old missing
+        # date through the outage and be deleted early when it goes missing again
+        server_config_repo.clear_missing_for_present_guilds(connection, bot_guild_ids)
+        await utils.logging(bot, f"{len(missing)} of {len(server_classes)} servers are missing from the bot's "
+                                 f"guilds, which looks like Discord leaving them out rather than servers "
+                                 f"removing the bot. Not cleaning up any server today")
+        return []
+
+    missing_since = server_config_repo.record_missing_guilds(connection, missing, now)
+    grace = datetime.timedelta(days=departed_guild_grace_days)
+    deleted = []
+    due = []
+    for guild_id in missing:
+        since = missing_since.get(guild_id)
+        if since is None or now - since < grace:
+            first_seen = since.strftime("%Y-%m-%d") if since else "today"
+            await utils.logging(bot, f"Could not find server {guild_id} in bot guilds (missing since {first_seen})")
+            continue
+        due.append(guild_id)
+
+    # Discord is asked about every server at once, a few at a time, so a slow or failing Discord holds the
+    # daily task for one timeout rather than one per server. A server with no clear answer is asked again
+    # tomorrow. The database work after it runs one server at a time, on the one connection
+    has_left = {}
+
+    async def ask_discord(guild_id):
+        has_left[guild_id] = await bot_has_left_guild(bot, guild_id)
+
+    async def report_unclear(guild_id, error):
+        await utils.logging(bot, f"Could not clean up departed server {guild_id}: {error}", guild_id)
+
+    await concurrency.run_in_batches(due, ask_discord, limit=daily_task_concurrency, on_error=report_unclear)
+
+    for guild_id in due:
+        if guild_id not in has_left:
+            continue
+        since = missing_since[guild_id]
+        try:
+            if not has_left[guild_id]:
+                server_config_repo.clear_departure_confirmation(connection, guild_id)
+                await utils.logging(bot, f"Server {guild_id} has been missing from the bot's guilds since "
+                                         f"{since:%Y-%m-%d}, but Discord still gives the bot access to it. "
+                                         f"Not deleting it")
+                continue
+            # One answer could be a passing error on Discord's side, and deleting cannot be undone, so the data
+            # goes only when a second check a day or more after the first gives the same answer
+            first_confirmed = server_config_repo.confirm_departure(connection, guild_id, now)
+            if now - first_confirmed < departed_guild_confirmation_gap:
+                await utils.logging(bot, f"Discord confirmed the bot has left server {guild_id}. Its data is "
+                                         f"deleted if the next check, a day or more from now, confirms it again")
+                continue
+            # Under the database's own timeout, since psycopg2 holds the event loop while a delete waits on a
+            # lock, and no asyncio timeout can interrupt it. A server that times out is tried again tomorrow
+            # The deletion and the leave are one transaction, committed when the block ends, so the data is never
+            # gone without its departure recorded
+            with utils.statement_timeout(connection, daily_task_statement_timeout_ms):
+                utils.delete_database_context(guild_id, connection, commit=False)
+                # Dated when the server was first found missing rather than today, so the statistics count
+                # the departure in the month it happened instead of after the grace period
+                record_guild_leave(connection, guild_id, since, commit=False)
+        except Exception as e:
+            connection.rollback()
+            await utils.logging(bot, f"Could not clean up departed server {guild_id}: {e}", guild_id)
+            continue
+        server_classes.pop(guild_id, None)
+        deleted.append(guild_id)
+        await utils.logging(bot, f"Deleted the data of server {guild_id}, which removed the bot while it was "
+                                 f"offline (missing since {since:%Y-%m-%d})", guild_id, log_level=log_type.SYSTEM)
+    return deleted
+
+
+async def bot_has_left_guild(bot: discord.Client, guild_id: int) -> bool:
+    """
+    Ask Discord directly whether the bot is still in a server, rather than trusting the guild cache.
+    Only a clear "no access" or "unknown guild" counts as left. Any other failure, such as an outage or
+    a timeout, raises, so the server is checked again the next day instead of being deleted
+    """
+    try:
+        await asyncio.wait_for(bot.fetch_guild(guild_id), departed_guild_fetch_timeout_seconds)
+    except (discord.Forbidden, discord.NotFound):
+        return True
+    return False
+
+
+def next_permission_warning(last_warning, missing_permissions: list, now: datetime.datetime):
+    """
+    The warning a server is due today about missing Hall of Fame channel permissions, if any
+    :param last_warning: The server's stored warning, (missing permissions, warnings sent, first, last), or None
+    :param missing_permissions: The permissions the bot is missing in the channel
+    :param now: The time of this check
+    :return: The warning to send and store, (missing permissions, warnings sent, first, last), or None when the
+        server was warned too recently, or already as often as it will be about these permissions
+    """
+    missing = frozenset(missing_permissions)
+    if last_warning is None or last_warning[0] != missing:
+        return missing, 1, now, now
+    _, warnings_sent, first_warned_at, last_warned_at = last_warning
+    if warnings_sent >= permission_warning_limit:
+        return None
+    # Compared as UTC days, as the database hands timestamps back in its own session's time zone
+    utc = datetime.timezone.utc
+    if (now.astimezone(utc).date() - last_warned_at.astimezone(utc).date()).days < permission_warning_repeat_days:
+        return None
+    return missing, warnings_sent + 1, first_warned_at, now
+
+
+async def check_write_permissions_to_hall_of_fame_channel(bot: discord.Client, server_classes, connection, now=None):
     """
     Check if the bot has write permissions to the Hall of Fame channel for each server
     :param bot: The bot client
     :param server_classes: The server classes
+    :param connection: The database connection the warnings sent are read from and saved to
+    :param now: The time of this check
     :return: None
     """
+    now = now or datetime.datetime.now(datetime.timezone.utc)
+    # Read once and saved once, as the servers are checked concurrently and must not share the connection
+    last_warnings = permission_warning_repo.get_permission_warnings(connection)
+    warned = []
+    fixed = []
+
     async def check_one_server(server_class):
         guild = bot.get_guild(server_class.guild_id)
         if not guild:
             return
         channel = guild.get_channel(server_class.hall_of_fame_channel_id)
         if not channel:
-            await utils.report_missing_hall_of_fame_channel(bot, guild.id, server_class.hall_of_fame_channel_id,
-                                                            guild.name)
+            await utils.report_missing_hall_of_fame_channel(bot, guild.id, server_class.hall_of_fame_channel_id)
             # await utils.send_message_to_highest_prio_channel(bot, guild, messages.FAILED_TO_FIND_HOF_CHANNEL)
             return
         permissions = channel.permissions_for(guild.me)
-        missing_permissions = []
-        if not permissions.view_channel:
-            missing_permissions.append("View Channel")
-        if not permissions.send_messages:
-            missing_permissions.append("Send Messages")
-        if not permissions.read_message_history:
-            missing_permissions.append("Read Message History")
+        try:
+            await utils.refresh_board_topic(channel, permissions)
+        except discord.HTTPException:
+            # Tried again tomorrow, and must not cost the server its permission check today
+            pass
+        # The same list /troubleshoot reports, so the two never disagree about a board
+        missing_permissions = setup_check.missing_board_permissions(permissions)
 
         if not missing_permissions:
+            # Forgotten once fixed, so the server hears about it straight away if it breaks again
+            if guild.id in last_warnings:
+                fixed.append(guild.id)
+            return
+        warning = next_permission_warning(last_warnings.get(guild.id), missing_permissions, now)
+        if warning is None:
             return
         channel_ref = f"<#{channel.id}>"
-        await utils.send_message_to_highest_prio_channel(bot, guild, messages.MISSING_HOF_CHANNEL_PERMISSIONS.format(
-                        missing_permissions=", ".join(missing_permissions), channel=channel_ref))
+        content = messages.MISSING_HOF_CHANNEL_PERMISSIONS.format(missing_permissions=", ".join(missing_permissions), channel=channel_ref)
+        if warning[1] >= permission_warning_limit:
+            content += "\n" + messages.MISSING_HOF_CHANNEL_PERMISSIONS_LAST_WARNING
+        posted = await utils.send_message_to_highest_prio_channel(bot, guild, content)
+        if posted:
+            warned.append((guild.id, *warning))
 
     async def report_permission_failure(server_class, error):
         await utils.logging(bot, f"Error checking Hall of Fame channel permissions for server "
@@ -247,6 +468,13 @@ async def check_write_permissions_to_hall_of_fame_channel(bot: discord.Client, s
         limit=daily_task_concurrency,
         timeout=daily_task_guild_timeout_seconds,
         on_error=report_permission_failure)
+
+    try:
+        permission_warning_repo.save_permission_warnings(connection, warned)
+        permission_warning_repo.delete_permission_warnings(connection, fixed)
+    except Exception as e:
+        connection.rollback()
+        await utils.logging(bot, f"Could not save the permission warnings sent today: {e}")
 
 
 async def update_user_database(bot: discord.Client, connection):

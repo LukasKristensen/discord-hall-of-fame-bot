@@ -1,216 +1,514 @@
 <style>
-  /* Everything is prefixed with #hof-description-block to prevent breaking Top.gg UI */
+  /* The Top.gg long description. Everything is prefixed with #hof-description-block to
+     prevent breaking Top.gg UI. Every section sets its own background, so it reads the same in Top.gg's light
+     and dark themes. No scripts: Top.gg strips them. Sizes are in em from the 15px set here, since Top.gg's
+     root font size is 13px */
 
   #hof-description-block {
-    font-family: 'Inter', sans-serif; /* Clean, modern font */
-    color: #2c3e50;
-    line-height: 1.6;
+    --hof-ink: #0f1117;
+    --hof-panel: #171a23;
+    --hof-panel-2: #1e2230;
+    --hof-line: #2a2f3f;
+    --hof-text: #e8e9ee;
+    --hof-muted: #a3a8b8;
+    --hof-gold: #e8b84a;
+    --hof-gold-soft: rgba(232, 184, 74, 0.14);
+    --discord-bg: #313338;
+    --discord-card: #2b2d31;
+    --discord-text: #dbdee1;
+    --discord-muted: #949ba4;
+    --discord-blurple: #5865f2;
+
+    font-family: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+    font-size: 15px;
+    color: var(--hof-text);
+    line-height: 1.55;
+    background: var(--hof-ink);
+    border-radius: 18px;
+    overflow: hidden;
   }
 
-  #hof-description-block .video-wrapper {
-    position: relative;
-    padding-bottom: 56.25%;
-    height: 0;
-    margin: 20px 0;
-  }
-
-  #hof-description-block .video-wrapper iframe {
-    position: absolute;
-    top: 0; left: 0;
-    width: 100%; height: 100%;
-    border-radius: 12px;
-    border: none;
-  }
-
-  #hof-description-block .promo-image {
-    max-width: 100%;
-    height: auto;
-    border-radius: 10px;
-    margin: 15px 0;
-    box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-  }
-
-  #hof-description-block .config-box {
-    background: #f8f9fa;
-    border-left: 4px solid #d4af37; /* Gold accent */
-    padding: 16px;
-    border-radius: 6px;
-    margin: 12px 0;
-  }
-
-  #hof-description-block .quick-start-card {
-    background: #ffffff;
-    padding: 20px;
-    border-radius: 10px;
-    border: 1px solid #eaeaea;
-    margin: 20px 0;
-  }
-
-  #hof-description-block h2 {
-    margin-top: 35px;
-    margin-bottom: 15px;
-    font-size: 1.5rem;
-    color: #1a1a1a;
-  }
-
-  #hof-description-block h3 {
-    margin-top: 25px;
-    margin-bottom: 8px;
-    font-size: 1.1rem;
-    color: #1a1a1a;
-  }
-
+  /* Top.gg sets white-space: break-spaces on descriptions, which turns every indent and line break in this
+     HTML into blank space */
+  #hof-description-block,
+  #hof-description-block * { white-space: normal; }
+  #hof-description-block * { box-sizing: border-box; }
+  #hof-description-block a { color: var(--hof-gold); }
   #hof-description-block code {
-    background: #eeeeee;
-    padding: 2px 6px;
-    border-radius: 4px;
-    font-family: monospace;
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--hof-text);
+    padding: 1px 6px;
+    border-radius: 5px;
+    font-family: "Cascadia Code", Consolas, monospace;
+    font-size: 0.9em;
   }
 
-  #hof-description-block .command-line {
-    display: block;
-    margin-bottom: 10px;
-    font-size: 0.95rem;
+  #hof-description-block .section { padding: 44px 32px; border-top: 1px solid var(--hof-line); }
+  #hof-description-block .section:first-child { border-top: none; }
+  #hof-description-block .eyebrow {
+    color: var(--hof-gold);
+    font-size: 0.78em;
+    font-weight: 700;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    margin: 0 0 10px 0;
+  }
+  #hof-description-block h2 {
+    color: #ffffff;
+    font-size: 1.7em;
+    line-height: 1.2;
+    margin: 0 0 10px 0;
+    letter-spacing: -0.01em;
+  }
+  #hof-description-block h3 { color: #ffffff; font-size: 1.05em; margin: 0 0 6px 0; }
+  #hof-description-block p { margin: 0 0 12px 0; }
+  #hof-description-block .lead { color: var(--hof-muted); font-size: 1.05em; max-width: 640px; }
+
+  /* Hero */
+  #hof-description-block .hero {
+    background:
+      radial-gradient(circle at 85% 10%, rgba(232, 184, 74, 0.22), transparent 55%),
+      radial-gradient(circle at 0% 100%, rgba(88, 101, 242, 0.18), transparent 50%),
+      var(--hof-ink);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 32px;
+    align-items: center;
+  }
+  #hof-description-block .hero-copy { flex: 1 1 320px; }
+  #hof-description-block .hero-mock { flex: 1 1 320px; }
+  #hof-description-block .hero h1 {
+    color: #ffffff;
+    font-size: 2.4em;
+    line-height: 1.08;
+    margin: 0 0 14px 0;
+    letter-spacing: -0.02em;
+  }
+  #hof-description-block .hero h1 span { color: var(--hof-gold); }
+  #hof-description-block .buttons { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 22px; }
+  #hof-description-block .btn {
+    display: inline-block;
+    padding: 11px 20px;
+    border-radius: 10px;
+    font-weight: 700;
+    text-decoration: none;
+    font-size: 0.95em;
+  }
+  #hof-description-block .btn-primary { background: var(--hof-gold); color: #1a1406; }
+  #hof-description-block .btn-ghost { border: 1px solid var(--hof-line); color: var(--hof-text); background: rgba(255,255,255,0.03); }
+
+  /* Discord look-alikes */
+  #hof-description-block .discord {
+    background: var(--discord-bg);
+    color: var(--discord-text);
+    border-radius: 12px;
+    padding: 14px;
+    font-size: 0.92em;
+    box-shadow: 0 18px 40px rgba(0, 0, 0, 0.35);
+  }
+  #hof-description-block .channel { color: var(--discord-muted); font-size: 0.8em; font-weight: 600; margin-bottom: 10px; }
+  #hof-description-block .post {
+    background: var(--discord-card);
+    border-left: 4px solid var(--hof-gold);
+    border-radius: 8px;
+    padding: 12px 14px;
+  }
+  #hof-description-block .reply { color: var(--discord-muted); font-size: 0.82em; margin-bottom: 8px; }
+  #hof-description-block .reply b { color: var(--discord-text); font-weight: 600; }
+  #hof-description-block .author { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+  #hof-description-block .avatar {
+    width: 32px; height: 32px; border-radius: 50%;
+    background: linear-gradient(135deg, #f59e0b, #ef4444);
+    flex: none;
+  }
+  #hof-description-block .avatar.b { background: linear-gradient(135deg, #22c55e, #0ea5e9); }
+  #hof-description-block .avatar.c { background: linear-gradient(135deg, #a855f7, #ec4899); }
+  #hof-description-block .name { color: #ffffff; font-weight: 600; }
+  #hof-description-block .time { color: var(--discord-muted); font-size: 0.75em; margin-left: 4px; font-weight: 400; }
+  #hof-description-block .media {
+    height: 120px;
+    border-radius: 8px;
+    margin: 10px 0;
+    background:
+      linear-gradient(160deg, rgba(0,0,0,0) 40%, rgba(0,0,0,0.45)),
+      linear-gradient(120deg, #3b2f63, #c2576a 55%, #f0b45a);
+    position: relative;
+  }
+  #hof-description-block .media::after {
+    content: "▶";
+    position: absolute; left: 50%; top: 50%;
+    transform: translate(-50%, -50%);
+    width: 42px; height: 42px; line-height: 42px; text-align: center;
+    border-radius: 50%;
+    background: rgba(0,0,0,0.55);
+    color: #fff; font-size: 0.9em;
+  }
+  #hof-description-block .reactions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  #hof-description-block .chip {
+    background: rgba(88, 101, 242, 0.15);
+    border: 1px solid rgba(88, 101, 242, 0.5);
+    border-radius: 8px;
+    padding: 2px 8px;
+    font-size: 0.85em;
+  }
+  #hof-description-block .jump {
+    display: inline-block; margin-top: 10px;
+    background: #4e5058; color: #fff;
+    border-radius: 4px; padding: 5px 12px; font-size: 0.8em; font-weight: 600;
   }
 
-  #hof-description-block .comparison {
-    width: 100%;
-    border-collapse: collapse;
-    margin: 15px 0;
-    font-size: 0.95rem;
+  /* Stats */
+  #hof-description-block .stats {
+    background: var(--hof-panel);
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 18px;
+    text-align: center;
+    padding-top: 30px; padding-bottom: 30px;
   }
+  #hof-description-block .stat b { display: block; color: var(--hof-gold); font-size: 1.9em; line-height: 1.1; }
+  #hof-description-block .stat span { color: var(--hof-muted); font-size: 0.85em; }
 
+  /* Showcase rows */
+  #hof-description-block .row { display: flex; flex-wrap: wrap; gap: 28px; align-items: center; }
+  #hof-description-block .row > div { flex: 1 1 300px; }
+  #hof-description-block .ticks { list-style: none; padding: 0; margin: 14px 0 0 0; }
+  #hof-description-block .ticks li { padding-left: 26px; position: relative; margin-bottom: 8px; color: var(--hof-text); }
+  #hof-description-block .ticks li::before { content: "✦"; position: absolute; left: 4px; color: var(--hof-gold); }
+
+  #hof-description-block .lb-row { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-bottom: 1px solid #3a3c42; }
+  #hof-description-block .lb-row:last-child { border-bottom: none; }
+  #hof-description-block .rank { width: 26px; text-align: center; font-weight: 700; }
+  #hof-description-block .lb-row .avatar { width: 26px; height: 26px; }
+  #hof-description-block .lb-name { flex: 1; color: #fff; }
+  #hof-description-block .lb-num { color: var(--discord-muted); font-size: 0.82em; text-align: right; }
+
+  #hof-description-block .plaque {
+    background: linear-gradient(160deg, #2a2210, #171a23 60%);
+    border: 1px solid rgba(232, 184, 74, 0.45);
+    border-radius: 14px;
+    padding: 20px;
+    color: var(--hof-text);
+  }
+  #hof-description-block .plaque .kicker { color: var(--hof-gold); font-size: 0.75em; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; }
+  #hof-description-block .plaque .big { font-size: 2.2em; font-weight: 800; color: #fff; line-height: 1.1; margin: 6px 0 2px 0; }
+  #hof-description-block .plaque .sub { color: var(--hof-muted); font-size: 0.85em; margin-bottom: 14px; }
+  #hof-description-block .plaque-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  #hof-description-block .plaque-grid div { background: rgba(255,255,255,0.04); border-radius: 8px; padding: 8px 10px; font-size: 0.82em; color: var(--hof-muted); }
+  #hof-description-block .plaque-grid b { display: block; color: #fff; font-size: 1em; }
+
+  /* Feature cards */
+  #hof-description-block .cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 14px;
+    margin-top: 22px;
+  }
+  #hof-description-block .card code,
+  #hof-description-block .step code,
+  #hof-description-block .free-grid code { overflow-wrap: anywhere; }
+  #hof-description-block .card {
+    background: var(--hof-panel-2);
+    border: 1px solid var(--hof-line);
+    border-radius: 12px;
+    padding: 18px;
+  }
+  #hof-description-block .card .icon {
+    width: 38px; height: 38px; border-radius: 10px;
+    background: var(--hof-gold-soft);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.15em; margin-bottom: 10px;
+  }
+  #hof-description-block .card p { color: var(--hof-muted); font-size: 0.92em; margin: 0; }
+
+  #hof-description-block .methods { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+  #hof-description-block .pill {
+    border: 1px solid var(--hof-line);
+    background: rgba(255,255,255,0.03);
+    border-radius: 999px;
+    padding: 6px 14px;
+    font-size: 0.88em;
+  }
+  #hof-description-block .pill.on { border-color: var(--hof-gold); color: var(--hof-gold); background: var(--hof-gold-soft); }
+
+  /* Free banner */
+  #hof-description-block .free { background: linear-gradient(120deg, #2a2210, var(--hof-ink) 70%); }
+  #hof-description-block .free-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-top: 18px; }
+  #hof-description-block .free-grid div { border-left: 3px solid var(--hof-gold); padding: 4px 0 4px 12px; color: var(--hof-muted); font-size: 0.92em; }
+  #hof-description-block .free-grid b { color: #fff; display: block; }
+
+  /* Comparison */
+  #hof-description-block .table-wrap { overflow-x: auto; margin-top: 18px; }
+  #hof-description-block .comparison { width: 100%; border-collapse: collapse; font-size: 0.92em; min-width: 460px; }
   #hof-description-block .comparison th,
-  #hof-description-block .comparison td {
-    text-align: left;
-    padding: 10px 12px;
-    border-bottom: 1px solid #eaeaea;
-    vertical-align: top;
-  }
+  #hof-description-block .comparison td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--hof-line); vertical-align: top; }
+  #hof-description-block .comparison thead th { color: var(--hof-muted); font-size: 0.78em; letter-spacing: 0.1em; text-transform: uppercase; }
+  #hof-description-block .comparison thead th.us { color: var(--hof-gold); }
+  #hof-description-block .comparison tbody th { color: #fff; font-weight: 600; white-space: nowrap; }
+  #hof-description-block .comparison td.us { color: #fff; background: var(--hof-gold-soft); }
+  #hof-description-block .comparison td { color: var(--hof-muted); }
 
-  #hof-description-block .comparison th {
-    color: #1a1a1a;
+  /* Steps and commands */
+  #hof-description-block .steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; margin-top: 22px; }
+  #hof-description-block .step { background: var(--hof-panel-2); border: 1px solid var(--hof-line); border-radius: 12px; padding: 18px; }
+  #hof-description-block .step .n {
+    width: 30px; height: 30px; border-radius: 50%;
+    background: var(--hof-gold); color: #1a1406;
+    font-weight: 800; text-align: center; line-height: 30px; margin-bottom: 10px;
   }
+  #hof-description-block .step p { color: var(--hof-muted); font-size: 0.92em; margin: 0; }
+  #hof-description-block .commands { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 8px 18px; margin-top: 26px; }
+  #hof-description-block .cmd { display: flex; gap: 10px; align-items: baseline; padding: 8px 0; border-bottom: 1px solid var(--hof-line); font-size: 0.9em; }
+  #hof-description-block .cmd code { flex: none; color: var(--hof-gold); background: transparent; padding: 0; }
+  #hof-description-block .cmd span { color: var(--hof-muted); }
 
-  #hof-description-block .faq p {
-    margin: 0 0 16px 0;
+  /* FAQ */
+  #hof-description-block .faq { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px 28px; margin-top: 20px; }
+  #hof-description-block .faq p { color: var(--hof-muted); font-size: 0.92em; }
+
+  /* Closing */
+  /* Screenshots of the bot, served from main on GitHub, as Top.gg hosts no images for a description */
+  /* One per row at full width: each image carries its own caption, which is too small to read in columns */
+  #hof-description-block .shots {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 16px;
+    margin-top: 22px;
+    max-width: 820px;
+  }
+  #hof-description-block .shots a { display: block; border-radius: 10px; overflow: hidden; border: 1px solid var(--hof-line); }
+  #hof-description-block .shots img { display: block; width: 100%; height: auto; }
+
+  #hof-description-block .closing {
+    text-align: center;
+    background: radial-gradient(circle at 50% 0%, rgba(232, 184, 74, 0.25), transparent 60%), var(--hof-ink);
+  }
+  #hof-description-block .closing .buttons { justify-content: center; }
+
+  @media (max-width: 600px) {
+    #hof-description-block .section { padding: 32px 18px; }
+    #hof-description-block .hero h1 { font-size: 1.9em; }
+    #hof-description-block h2 { font-size: 1.4em; }
   }
 </style>
 
 <div id="hof-description-block">
-  <p style="font-size: 1.15em; margin-bottom: 20px; color: #444;">
-    <strong>Turn your server's best moments into legends, and give the credit to the members who made
-    them.</strong> Hall of Fame reposts your most reacted messages to a hall of fame channel with their
-    images, videos and reply context, then ranks the people who keep landing there.
-  </p>
 
-  <div class="video-wrapper">
-    <iframe src="https://www.youtube.com/embed/D4onxYa7Ikw" allowfullscreen></iframe>
+  <!-- Hero -->
+  <div class="section hero">
+    <div class="hero-copy">
+      <p class="eyebrow">🏆 Hall of Fame</p>
+      <h1>Your server's best moments, <span>and the members behind them.</span></h1>
+      <p class="lead">
+        When a message gets enough reactions, it lands on your Hall of Fame board with its images, videos and
+        the reply it answered. Then the members who keep landing there get ranked for it.
+      </p>
+      <div class="buttons">
+        <a class="btn btn-primary" href="https://discord.com/oauth2/authorize?client_id=1177041673352663070">Add to Discord</a>
+        <a class="btn btn-ghost" href="https://top.gg/bot/1177041673352663070/vote">Vote on Top.gg</a>
+        <a class="btn btn-ghost" href="https://discord.gg/r98WC5GHcn">Support server</a>
+      </div>
+    </div>
+
+    <div class="hero-mock">
+      <div class="discord">
+        <div class="channel"># hall-of-fame</div>
+        <div class="post">
+          <div class="reply">↪ Replying to <b>mira</b>: who left the oven on during movie night</div>
+          <div class="author">
+            <div class="avatar"></div>
+            <div class="name">jonas <span class="time">Today at 21:14</span></div>
+          </div>
+          <div>not me, I was busy filming the smoke alarm solo 🎤</div>
+          <div class="media"></div>
+          <div class="reactions">
+            <span class="chip">😂 23</span>
+            <span class="chip">💀 17</span>
+            <span class="chip">🔥 9</span>
+            <span class="chip">🎤 6</span>
+          </div>
+          <span class="jump">Jump to message</span>
+        </div>
+      </div>
+    </div>
   </div>
 
-  <h2>🏆 A hall of fame, not an archive</h2>
-  <p>
-    Any emoji your community actually reacts with can immortalise a message, not just ⭐. The board is
-    only half of it: every featured message is credited to its author, so the server gets leaderboards,
-    member profiles with monthly and all time ranks, and a yearly Hall of Fame Wrapped. Getting featured
-    is meant to be worth something.
-  </p>
-
-  <img class="promo-image"
-       src="https://raw.githubusercontent.com/LukasKristensen/discord-hall-of-fame-bot/refs/heads/main/Assets/main_context_2.png"
-       alt="Hall of Fame post in Discord, showing a reacted message together with the reply it answered" />
-
-  <h2>🌟 What you get</h2>
-  <div style="font-size: 1.05em;">
-    <p>🔹 <strong>Multi-Emoji Magic:</strong> Any emoji can trigger immortality, custom server emojis included.</p>
-    <p>🔹 <strong>Media Support:</strong> Images and videos travel with the post, still playable.</p>
-    <p>🔹 <strong>Context Preservation:</strong> Keeps replies visible for the full story.</p>
-    <p>🔹 <strong>Leaderboards and Profiles:</strong> See who gets featured most, this month and all time.</p>
-    <p>🔹 <strong>Hall of Fame Wrapped:</strong> A year in review for every member and for the server.</p>
-    <p>🔹 <strong>Sensible Default:</strong> The starting threshold is picked from your member count on join, then it is yours to set.</p>
+  <!-- Numbers -->
+  <div class="section stats">
+    <div class="stat"><b>600+</b><span>servers</span></div>
+    <div class="stat"><b>250k+</b><span>members</span></div>
+    <div class="stat"><b>Every</b><span>emoji counts</span></div>
+    <div class="stat"><b>3</b><span>ways to count</span></div>
+    <div class="stat"><b>Free</b><span>with public code</span></div>
   </div>
 
-  <h2>🤔 Looking for a starboard?</h2>
-  <p>
-    People often arrive here searching for one, so here is the honest difference. A starboard archives
-    messages that collected enough ⭐. Hall of Fame is about recognition, and the board is how it shows.
-  </p>
-  <table class="comparison">
-    <tr>
-      <td></td>
-      <th scope="col">Hall of Fame</th>
-      <th scope="col">A starboard</th>
-    </tr>
-    <tr>
-      <th scope="row">The point</th>
-      <td>Recognising your members and their best moments</td>
-      <td>Archiving messages that passed a threshold</td>
-    </tr>
-    <tr>
-      <th scope="row">Which emoji counts</th>
-      <td>Every emoji, or a whitelist you pick</td>
-      <td>The one star emoji it was configured with</td>
-    </tr>
-    <tr>
-      <th scope="row">Credit for members</th>
-      <td>Leaderboards, profiles, monthly and all time ranks</td>
-      <td>None</td>
-    </tr>
-    <tr>
-      <th scope="row">Year in review</th>
-      <td>Hall of Fame Wrapped, per member and per server</td>
-      <td>None</td>
-    </tr>
-    <tr>
-      <th scope="row">Price</th>
-      <td>Free, with public source code</td>
-      <td>Best features often paywalled</td>
-    </tr>
-  </table>
-
-  <h2>🚀 Quick Start Guide</h2>
-  <div class="quick-start-card">
-    <p><strong>1. Invite:</strong> Add the bot and accept the permissions it asks for up front, granting them later does not work.</p>
-    <p><strong>2. Channel:</strong> It creates a <code>#hall-of-fame</code> channel for you, or point it at your own with <code>/set_hall_of_fame_channel</code>.</p>
-    <p><strong>3. Relax:</strong> A starting threshold is picked from your member count so the board works out of the box. Change it whenever you like with <code>/set_reaction_threshold</code>.</p>
+  <!-- In Discord -->
+  <div class="section">
+    <p class="eyebrow">In Discord</p>
+    <h2>What your server gets</h2>
+    <div class="shots">
+      <a href="https://raw.githubusercontent.com/LukasKristensen/discord-hall-of-fame-bot/main/Assets/listing_1_board_post.png?v=2"><img src="https://raw.githubusercontent.com/LukasKristensen/discord-hall-of-fame-bot/main/Assets/listing_1_board_post.png?v=2" alt="A Hall of Fame post with an image, the message it replied to and its reactions"></a>
+      <a href="https://raw.githubusercontent.com/LukasKristensen/discord-hall-of-fame-bot/main/Assets/listing_2_leaderboard.png?v=2"><img src="https://raw.githubusercontent.com/LukasKristensen/discord-hall-of-fame-bot/main/Assets/listing_2_leaderboard.png?v=2" alt="The /leaderboard command, ranking members by posts and reactions"></a>
+      <a href="https://raw.githubusercontent.com/LukasKristensen/discord-hall-of-fame-bot/main/Assets/listing_3_user_profile.png?v=2"><img src="https://raw.githubusercontent.com/LukasKristensen/discord-hall-of-fame-bot/main/Assets/listing_3_user_profile.png?v=2" alt="The /user_profile command, with ranks, badges and totals across servers"></a>
+    </div>
   </div>
 
-  <h2>⚙️ Advanced Configuration</h2>
-  <div class="config-box">
-    <span class="command-line">🔸 <code>/set_reaction_threshold</code> — How many reactions a message needs.</span>
-    <span class="command-line">🔸 <code>/calculation_method</code> — Count the top emoji, all reactions, or unique people.</span>
-    <span class="command-line">🔸 <code>/hide_hof_post_below_threshold</code> — Hide posts again when reactions are removed.</span>
-    <span class="command-line">🔸 <code>/require_image_or_video</code> — Only feature messages with media.</span>
-    <span class="command-line">🔸 <code>/leaderboard</code> — Rank the members who get featured most.</span>
-    <span class="command-line">🔸 <code>/get_server_config</code> — See everything at a glance.</span>
+  <!-- The board -->
+  <div class="section">
+    <div class="row">
+      <div>
+        <p class="eyebrow">The board</p>
+        <h2>Every post keeps the whole moment</h2>
+        <p class="lead">A screenshot loses half the joke. A Hall of Fame post keeps everything that made people react.</p>
+        <ul class="ticks">
+          <li><strong>Any emoji counts,</strong> custom server emojis included, or a whitelist of up to 100.</li>
+          <li><strong>Images, videos and stickers</strong> travel with the post, and videos stay playable.</li>
+          <li><strong>Reply context</strong> shows the message it answered, so the punchline still lands.</li>
+          <li><strong>Live counts.</strong> A post that drops below the threshold hides until it climbs back.</li>
+        </ul>
+      </div>
+      <div>
+        <div class="discord">
+          <div class="channel">/leaderboard · this month</div>
+          <div class="lb-row"><span class="rank">🥇</span><div class="avatar"></div><span class="lb-name">jonas</span><span class="lb-num">14 posts<br>312 reactions</span></div>
+          <div class="lb-row"><span class="rank">🥈</span><div class="avatar b"></div><span class="lb-name">mira</span><span class="lb-num">11 posts<br>268 reactions</span></div>
+          <div class="lb-row"><span class="rank">🥉</span><div class="avatar c"></div><span class="lb-name">theo</span><span class="lb-num">9 posts<br>190 reactions</span></div>
+          <div class="lb-row"><span class="rank">4</span><div class="avatar b"></div><span class="lb-name">sana</span><span class="lb-num">7 posts<br>151 reactions</span></div>
+          <div class="lb-row"><span class="rank">5</span><div class="avatar"></div><span class="lb-name">felix</span><span class="lb-num">6 posts<br>139 reactions</span></div>
+        </div>
+      </div>
+    </div>
   </div>
 
-  <h3>🔒 Emoji Whitelisting</h3>
-  <p>Control exactly which reactions count toward the Hall of Fame:</p>
-  <div class="config-box" style="border-left-color: #7f8c8d;">
-    <span class="command-line">🔸 <code>/custom_emoji_check_logic</code> — Toggle whitelist mode.</span>
-    <span class="command-line">🔸 <code>/whitelist_emoji</code> — Add approved reactions.</span>
-    <span class="command-line">🔸 <code>/unwhitelist_emoji</code> — Remove reactions.</span>
+  <!-- Recognition -->
+  <div class="section" style="background: var(--hof-panel);">
+    <div class="row">
+      <div>
+        <div class="plaque">
+          <div class="kicker">Hall of Fame Wrapped 2026</div>
+          <div class="big">1 in 48</div>
+          <div class="sub">of mira's messages reached the board · #2 of 412 members</div>
+          <div class="plaque-grid">
+            <div><b>37</b>posts featured</div>
+            <div><b>904</b>reactions earned</div>
+            <div><b>😭</b>signature emoji</div>
+            <div><b>#memes</b>home turf</div>
+          </div>
+        </div>
+      </div>
+      <div>
+        <p class="eyebrow">The recognition</p>
+        <h2>Getting featured is worth something</h2>
+        <p class="lead">Every post is credited to its author, so your server has something to compete over all year.</p>
+        <ul class="ticks">
+          <li><code>/leaderboard</code> ranks members by posts and reactions earned, this month and all time.</li>
+          <li><code>/user_profile</code> shows a member's ranks, best post, the gap to the next rank and their totals across servers.</li>
+          <li><strong>Badges</strong> for monthly champions, 10 to 500 posts, months in a row and a 100-reaction post.</li>
+          <li><code>/hof_wrapped</code> turns each member's year into a story with a shareable plaque, and <code>/server_hof_wrapped</code> does the same for the server.</li>
+        </ul>
+      </div>
+    </div>
   </div>
 
-  <h2>❓ Frequently asked questions</h2>
-  <div class="faq">
-    <h3>Does it only work with the star emoji?</h3>
-    <p>No. Every emoji counts by default, custom server emojis included. Narrow it down any time with the whitelist.</p>
-
-    <h3>How many reactions does a message need?</h3>
-    <p>Whatever you set with <code>/set_reaction_threshold</code>. When the bot joins it picks a starting value from your member count, once, so that the board works before you configure anything. It stays on that value until you change it.</p>
-
-    <h3>Does it repost images and videos?</h3>
-    <p>Yes. Images, videos and stickers travel with the post, and videos stay playable instead of becoming a bare link.</p>
-
-    <h3>What happens when someone removes a reaction?</h3>
-    <p>The count updates live. By default a post that falls back under the threshold is hidden until it climbs over again, and <code>/hide_hof_post_below_threshold</code> turns that off so featured posts stay up.</p>
-
-    <h3>Can I see who gets featured most?</h3>
-    <p>Yes, that is the point of it. <code>/leaderboard</code> ranks the server and <code>/user_profile</code> shows a member's standing.</p>
-
-    <h3>Is it free?</h3>
-    <p>Yes, free with public source code, no paid tier and nothing locked behind voting.</p>
+  <!-- Features -->
+  <div class="section">
+    <p class="eyebrow">Count it your way</p>
+    <h2>Set the rules for your server</h2>
+    <p class="lead">Pick how reactions are counted, then tune what qualifies.</p>
+    <div class="methods">
+      <span class="pill on">Most reactions on one emoji</span>
+      <span class="pill">Total reactions</span>
+      <span class="pill">Unique people who reacted</span>
+    </div>
+    <div class="cards">
+      <div class="card"><div class="icon">🎯</div><h3>Your threshold</h3><p>A starting value is picked from your member count when the bot joins. Change it any time with <code>/set_reaction_threshold</code>.</p></div>
+      <div class="card"><div class="icon">✅</div><h3>Emoji whitelist</h3><p>Only want 🔥 and your server's own emotes to count? Whitelist up to 100.</p></div>
+      <div class="card"><div class="icon">🖼️</div><h3>Media only</h3><p>Turn on <code>/require_image_or_video</code> for an art or clips board.</p></div>
+      <div class="card"><div class="icon">🙋</div><h3>Self reactions</h3><p>Decide whether reacting to your own message counts toward the board.</p></div>
+      <div class="card"><div class="icon">⏳</div><h3>Message age</h3><p>Set how old a message can be and still make it with <code>/set_post_due_date</code>.</p></div>
+      <div class="card"><div class="icon">🩺</div><h3>Troubleshoot</h3><p>Nothing posting? <code>/troubleshoot</code> finds what is in the way and names the role that would fix it.</p></div>
+    </div>
   </div>
+
+  <!-- Free and private -->
+  <div class="section free">
+    <p class="eyebrow">Free, and kind to your members</p>
+    <h2>Nothing behind a paywall. Nothing behind voting.</h2>
+    <p class="lead">Every feature is on for every server. Votes are appreciated, never required.</p>
+    <div class="free-grid">
+      <div><b>No message text stored</b>Only IDs, reaction counts and statistics. The repost lives in your own channel.</div>
+      <div><b>Members in control</b><code>/my_data</code> shows, downloads or deletes everything stored about a member, or stops the bot featuring them.</div>
+      <div><b>Leaving cleans up</b>Removing the bot deletes your server's settings, posts and statistics.</div>
+      <div><b>Public code</b>Read the <a href="https://github.com/LukasKristensen/discord-hall-of-fame-bot">code</a> and the <a href="https://github.com/LukasKristensen/discord-hall-of-fame-bot/blob/main/PRIVACY.md">privacy policy</a>.</div>
+    </div>
+  </div>
+
+  <!-- Comparison -->
+  <div class="section">
+    <p class="eyebrow">Looking for a starboard?</p>
+    <h2>A hall of fame, not an archive</h2>
+    <p class="lead">A starboard archives messages that collected enough ⭐. Hall of Fame is about recognising the people behind them.</p>
+    <div class="table-wrap">
+      <table class="comparison">
+        <thead>
+          <tr><th></th><th class="us">Hall of Fame</th><th>A starboard</th></tr>
+        </thead>
+        <tbody>
+          <tr><th>Which emoji counts</th><td class="us">Every emoji, or a whitelist you pick</td><td>One configured star emoji</td></tr>
+          <tr><th>Counting</th><td class="us">Top emoji, total reactions or unique people</td><td>A single fixed count</td></tr>
+          <tr><th>Media</th><td class="us">Images and videos reposted, still playable</td><td>Often links only</td></tr>
+          <tr><th>Reply context</th><td class="us">The message it answered is included</td><td>Usually dropped</td></tr>
+          <tr><th>Credit</th><td class="us">Leaderboards, profiles and badges</td><td>None</td></tr>
+          <tr><th>Year in review</th><td class="us">Wrapped for members and the server</td><td>None</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Getting started -->
+  <div class="section" style="background: var(--hof-panel);">
+    <p class="eyebrow">Get started</p>
+    <h2>On your board in under a minute</h2>
+    <div class="steps">
+      <div class="step"><div class="n">1</div><h3>Add the bot</h3><p>Accept the permissions it asks for up front. Granting them later does not work.</p></div>
+      <div class="step"><div class="n">2</div><h3>It sets itself up</h3><p>A <code>#hall-of-fame</code> channel is created and a threshold picked from your member count.</p></div>
+      <div class="step"><div class="n">3</div><h3>React as normal</h3><p>Messages that hit the threshold land on the board. Run <code>/troubleshoot</code> if nothing shows up.</p></div>
+    </div>
+    <div class="commands">
+      <div class="cmd"><code>/leaderboard</code><span>Who rules your server</span></div>
+      <div class="cmd"><code>/user_profile</code><span>A member's ranks and badges</span></div>
+      <div class="cmd"><code>/hof_wrapped</code><span>Your year in review</span></div>
+      <div class="cmd"><code>/set_reaction_threshold</code><span>Reactions needed</span></div>
+      <div class="cmd"><code>/set_hall_of_fame_channel</code><span>Use your own channel</span></div>
+      <div class="cmd"><code>/calculation_method</code><span>How reactions count</span></div>
+      <div class="cmd"><code>/whitelist_emoji</code><span>Limit which emojis count</span></div>
+      <div class="cmd"><code>/get_server_config</code><span>Every setting at a glance</span></div>
+    </div>
+    <p style="color: var(--hof-muted); font-size: 0.88em; margin-top: 16px;">Settings need the Manage Server permission. Run <code>/help</code> for every command.</p>
+  </div>
+
+  <!-- FAQ -->
+  <div class="section">
+    <p class="eyebrow">Questions</p>
+    <h2>Frequently asked</h2>
+    <div class="faq">
+      <div><h3>Does it only work with the star emoji?</h3><p>No. Every emoji counts by default, custom server emojis included. Narrow it down any time with the whitelist.</p></div>
+      <div><h3>Nothing is being posted. What is wrong?</h3><p>Run <code>/troubleshoot</code>. The usual cause is channels behind a role the bot does not have, and it names that role.</p></div>
+      <div><h3>What happens when someone removes a reaction?</h3><p>The count updates live, and a post that falls under the threshold hides until it climbs back. <code>/hide_hof_post_below_threshold</code> turns that off.</p></div>
+      <div><h3>Does it store our messages?</h3><p>No. It keeps IDs, reaction counts and statistics, never message text.</p></div>
+      <div><h3>Can I use it outside a server?</h3><p>Yes. Add it to your account from <code>/invite</code> to see your own profile and manage your data anywhere.</p></div>
+      <div><h3>Is it free?</h3><p>Yes. No paid tier, and nothing locked behind voting.</p></div>
+    </div>
+  </div>
+
+  <!-- Closing -->
+  <div class="section closing">
+    <h2>Give your best moments a home</h2>
+    <p class="lead" style="margin: 0 auto;">Free, with public code, and ready in under a minute.</p>
+    <div class="buttons">
+      <a class="btn btn-primary" href="https://discord.com/oauth2/authorize?client_id=1177041673352663070">Add to Discord</a>
+      <a class="btn btn-ghost" href="https://discord.gg/r98WC5GHcn">Join the support server</a>
+    </div>
+  </div>
+
 </div>

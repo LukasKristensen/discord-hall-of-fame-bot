@@ -12,8 +12,11 @@ the counting is already covered by ``test_message_reactions``.
 
 import asyncio
 import datetime
+import types
 import unittest
 from datetime import timezone
+
+import discord
 from unittest import mock
 
 import utils
@@ -92,20 +95,23 @@ class FakeGuild:
 
 
 class FakeAttachment:
-    def __init__(self, url="https://cdn.example/file.png", content_type="image/png"):
+    def __init__(self, url="https://cdn.example/file.png", content_type="image/png", flags=0):
         self.url = url
         self.content_type = content_type
+        self.flags = types.SimpleNamespace(value=flags)
 
 
 class FakeEmbed:
-    def __init__(self, embed_type="rich", image=None, video=None):
+    def __init__(self, embed_type="rich", image=None, video=None, flags=None):
         self.type = embed_type
         self.image = image
         self.video = video
+        # None when Discord sent no flags, as on a real embed
+        self.flags = types.SimpleNamespace(value=flags) if flags is not None else None
 
 
 class FakeSourceMessage:
-    def __init__(self, guild, age_days=0, author_bot=False, attachments=(), embeds=()):
+    def __init__(self, guild, age_days=0, author_bot=False, attachments=(), embeds=(), channel_nsfw=False):
         self.id = MESSAGE_ID
         self.guild = guild
         self.author = FakeAuthor(bot=author_bot)
@@ -113,14 +119,18 @@ class FakeSourceMessage:
         self.attachments = list(attachments)
         self.embeds = list(embeds)
         self.reactions = []
-        self.channel = FakeSourceChannelStub()
+        self.channel = FakeSourceChannelStub(nsfw=channel_nsfw)
 
 
 class FakeSourceChannelStub:
-    """Only ``source_message.channel.id`` is read, so this stays deliberately small."""
+    """Only the channel's id and whether it is age-restricted are read, so this stays deliberately small."""
 
-    def __init__(self):
+    def __init__(self, nsfw=False):
         self.id = SOURCE_CHANNEL_ID
+        self.nsfw = nsfw
+
+    def is_nsfw(self):
+        return self.nsfw
 
 
 class FakeSourceChannel:
@@ -152,11 +162,15 @@ class FakePostedMessage:
 
 
 class FakeTargetChannel:
-    def __init__(self, messages=None):
+    def __init__(self, messages=None, nsfw=False):
         self.id = TARGET_CHANNEL_ID
         self.messages = messages if messages is not None else {}
         self.sent = []
         self.fetched = []
+        self.nsfw = nsfw
+
+    def is_nsfw(self):
+        return self.nsfw
 
     async def fetch_message(self, message_id):
         self.fetched.append(message_id)
@@ -242,13 +256,14 @@ class GateTestCase(unittest.IsolatedAsyncioTestCase):
 
     def build(self, *, age_days=0, author_bot=False, attachments=(), embeds=(),
               read_messages=True, source_channel_missing=False, target_channel_missing=False,
-              db_message=None, messages_today=0, posted_messages=None):
+              db_message=None, messages_today=0, posted_messages=None, channel_nsfw=False, board_nsfw=False):
         """Assemble the bot, channels and repository the gate will see."""
         guild = FakeGuild()
         self.source_message = FakeSourceMessage(
-            guild, age_days=age_days, author_bot=author_bot, attachments=attachments, embeds=embeds)
+            guild, age_days=age_days, author_bot=author_bot, attachments=attachments, embeds=embeds,
+            channel_nsfw=channel_nsfw)
         self.source_channel = FakeSourceChannel(guild, self.source_message, read_messages=read_messages)
-        self.target_channel = FakeTargetChannel(messages=posted_messages)
+        self.target_channel = FakeTargetChannel(messages=posted_messages, nsfw=board_nsfw)
 
         channels = {}
         if not source_channel_missing:
@@ -315,6 +330,49 @@ class ChannelVisibilityTests(GateTestCase):
         self.assertFalse(any("Could not find the Hall of Fame channel" in entry for entry in self.logged))
 
 
+class BoardChannelTests(GateTestCase):
+    def in_the_board(self, message_author_id=None):
+        class InTheBoard(FakeReactionEvent):
+            def __init__(self):
+                super().__init__()
+                self.channel_id = TARGET_CHANNEL_ID
+                self.message_author_id = message_author_id
+        return InTheBoard()
+
+    def build_board_message(self, author_id):
+        """The message reacted to is in the board, which validate_message fetches through the board channel."""
+        self.build()
+        self.source_message.author = FakeAuthor(author_id=author_id)
+        self.source_message.channel = self.source_channel
+        self.bot.channels[TARGET_CHANNEL_ID] = self.source_channel
+        self.source_channel.id = TARGET_CHANNEL_ID
+
+    async def test_reactions_on_a_post_never_repost_it(self):
+        """Otherwise a well-liked post would be reposted onto the board it is on."""
+        self.build()
+
+        await utils.validate_message(self.in_the_board(message_author_id=BOT_USER_ID), self.bot,
+                                     connection=object(), server_config=server_config())
+        self.assertDidNothing()
+        self.assertEqual([], self.target_channel.fetched)
+
+    async def test_a_post_is_not_reposted_when_the_event_does_not_say_who_wrote_it(self):
+        """A reaction removal carries no author, so the post is fetched to find out."""
+        self.build_board_message(BOT_USER_ID)
+
+        await utils.validate_message(self.in_the_board(), self.bot, connection=object(),
+                                     server_config=server_config())
+        self.assertFalse(self.post.called)
+
+    async def test_a_members_message_in_the_board_is_still_featured(self):
+        """Servers that chat in their board, or use a busy channel as it, keep their messages featured."""
+        self.build_board_message(AUTHOR_ID)
+
+        await utils.validate_message(self.in_the_board(message_author_id=AUTHOR_ID), self.bot,
+                                     connection=object(), server_config=server_config())
+        self.assertTrue(self.post.called)
+
+
 class PostDueDateTests(GateTestCase):
     async def test_posts_a_message_inside_the_due_date(self):
         self.build(age_days=3)
@@ -338,6 +396,29 @@ class PostDueDateTests(GateTestCase):
         self.build(age_days=7)
         await self.run_gate(server_config(post_due_date=7))
         self.assertTrue(self.post.called)
+
+
+class SystemMessageTests(GateTestCase):
+    """A poll closing was featured as an empty reply to the poll. Messages Discord posts itself never are"""
+
+    async def test_a_system_message_is_never_posted(self):
+        for message_type in (discord.MessageType.new_member, discord.MessageType.premium_guild_subscription,
+                             discord.MessageType.pins_add, discord.MessageType.poll_result):
+            with self.subTest(message_type=message_type):
+                self.build()
+                self.source_message.type = message_type
+                await self.run_gate()
+                self.assertDidNothing()
+
+    async def test_messages_members_write_are_posted(self):
+        for message_type in (discord.MessageType.default, discord.MessageType.reply,
+                             discord.MessageType.chat_input_command):
+            with self.subTest(message_type=message_type):
+                self.post.calls.clear()
+                self.build()
+                self.source_message.type = message_type
+                await self.run_gate()
+                self.assertTrue(self.post.called)
 
 
 class BotAuthorTests(GateTestCase):
@@ -472,9 +553,17 @@ class DailyPostLimitTests(GateTestCase):
 
     async def test_reports_the_limit_again_the_next_day(self):
         self.build(messages_today=100)
-        utils.daily_limit_handled_on[GUILD_ID] = datetime.date.today() - datetime.timedelta(days=1)
+        utils.daily_limit_handled_on[GUILD_ID] = (datetime.datetime.now(timezone.utc).date()
+                                                  - datetime.timedelta(days=1))
         await self.run_gate()
         self.assertTrue(any("exceeded the daily limit" in entry for entry in self.logged))
+
+    async def test_remembers_the_notice_by_the_utc_day(self):
+        """The limit counts from midnight UTC, so the notice must not go out again at local midnight."""
+        self.build(messages_today=100)
+        await self.run_gate()
+
+        self.assertEqual(datetime.datetime.now(timezone.utc).date(), utils.daily_limit_handled_on[GUILD_ID])
 
 
 class BelowThresholdTests(GateTestCase):
@@ -569,6 +658,17 @@ class ExistingPostTests(GateTestCase):
         await self.run_gate()
         self.assertEqual([{"embed": self.embed}], posted.edits)
 
+    async def test_a_hidden_post_keeps_its_count_while_edits_to_old_posts_are_paused(self):
+        """It stays hidden until a reaction after the pause, so the count it is stored with stays too."""
+        now = datetime.datetime.now(datetime.timezone.utc)
+        posted = FakePostedMessage(HALL_OF_FAME_MESSAGE_ID, embeds=[])
+        posted.created_at = now - datetime.timedelta(hours=2)
+        self.build(db_message=database_row(), posted_messages={HALL_OF_FAME_MESSAGE_ID: posted})
+        with mock.patch.object(utils, "old_message_edits_paused_until", {GUILD_ID: now + datetime.timedelta(minutes=10)}):
+            await self.run_gate()
+        self.assertEqual([], posted.edits)
+        self.assertEqual([], self.repo.updated_fields)
+
     async def test_restores_the_video_link_alongside_the_embed(self):
         posted = FakePostedMessage(HALL_OF_FAME_MESSAGE_ID, embeds=[])
         video_message = FakePostedMessage(VIDEO_LINK_MESSAGE_ID)
@@ -595,6 +695,103 @@ class ExistingPostTests(GateTestCase):
         self.build(db_message=database_row(), posted_messages={HALL_OF_FAME_MESSAGE_ID: posted})
         await self.run_gate()
         self.assertFalse(self.post.called)
+
+
+class AgeRestrictedChannelTests(GateTestCase):
+    """Discord keeps age-restricted content in age-restricted channels, and a board is a channel too."""
+
+    async def test_ignores_a_message_from_an_age_restricted_channel(self):
+        self.build(channel_nsfw=True)
+        await self.run_gate()
+        self.assertDidNothing()
+
+    async def test_posts_it_when_the_board_is_age_restricted_too(self):
+        self.build(channel_nsfw=True, board_nsfw=True)
+        await self.run_gate()
+        self.assertTrue(self.post.called)
+
+    async def test_an_age_restricted_board_takes_every_other_channel_as_before(self):
+        self.build(board_nsfw=True)
+        await self.run_gate()
+        self.assertTrue(self.post.called)
+
+    async def test_hides_a_post_made_before_the_rule(self):
+        self.build(channel_nsfw=True, db_message=database_row())
+        await self.run_gate()
+        self.assertTrue(self.remove.called)
+        self.assertFalse(self.update_counter.called)
+
+    async def test_hides_it_even_when_hiding_below_the_threshold_is_off(self):
+        """That setting is the server's taste. This one is not up to the server."""
+        self.build(channel_nsfw=True, db_message=database_row())
+        await self.run_gate(server_config(hide_hof_post_below_threshold=False))
+        self.assertTrue(self.remove.called)
+
+    async def test_blanks_the_video_link_of_a_hidden_post(self):
+        video_message = FakePostedMessage(VIDEO_LINK_MESSAGE_ID)
+        self.build(channel_nsfw=True, db_message=database_row(video_link_message_id=VIDEO_LINK_MESSAGE_ID),
+                   attachments=[FakeAttachment(content_type="video/mp4")],
+                   posted_messages={VIDEO_LINK_MESSAGE_ID: video_message})
+        await self.run_gate()
+        self.assertEqual([{"content": "** **", "embed": None}], video_message.edits)
+
+    async def test_restores_the_post_once_the_board_is_age_restricted(self):
+        posted = FakePostedMessage(HALL_OF_FAME_MESSAGE_ID, embeds=[])
+        self.build(channel_nsfw=True, board_nsfw=True, db_message=database_row(),
+                   posted_messages={HALL_OF_FAME_MESSAGE_ID: posted})
+        await self.run_gate()
+        self.assertEqual([{"embed": self.embed}], posted.edits)
+
+    async def test_with_the_board_gone_there_is_nothing_to_hide(self):
+        self.build(channel_nsfw=True, db_message=database_row(), target_channel_missing=True)
+        await self.run_gate()
+        self.assertFalse(self.remove.called)
+
+
+class FlaggedMediaTests(GateTestCase):
+    """Discord's content scanning flags media, and asks apps that repost media to act on it."""
+
+    async def test_never_posts_gore(self):
+        self.build(attachments=[FakeAttachment(flags=utils.GORE_CONTENT)])
+        await self.run_gate()
+        self.assertDidNothing()
+
+    async def test_never_posts_self_harm_even_to_an_age_restricted_board(self):
+        self.build(channel_nsfw=True, board_nsfw=True, attachments=[FakeAttachment(flags=utils.SELF_HARM_CONTENT)])
+        await self.run_gate()
+        self.assertDidNothing()
+
+    async def test_keeps_explicit_media_off_a_board_that_is_not_age_restricted(self):
+        self.build(attachments=[FakeAttachment(flags=utils.EXPLICIT_CONTENT)])
+        await self.run_gate()
+        self.assertDidNothing()
+
+    async def test_posts_explicit_media_to_an_age_restricted_board(self):
+        self.build(channel_nsfw=True, board_nsfw=True, attachments=[FakeAttachment(flags=utils.EXPLICIT_CONTENT)])
+        await self.run_gate()
+        self.assertTrue(self.post.called)
+
+    async def test_reads_the_flags_of_a_link_preview(self):
+        self.build(embeds=[FakeEmbed(embed_type="image", flags=utils.GORE_CONTENT)])
+        await self.run_gate()
+        self.assertDidNothing()
+
+    async def test_finds_the_flag_on_a_later_attachment(self):
+        self.build(attachments=[FakeAttachment(), FakeAttachment(flags=utils.GORE_CONTENT)])
+        await self.run_gate()
+        self.assertDidNothing()
+
+    async def test_other_attachment_flags_do_not_count(self):
+        """Such as a spoiler, which Discord marks with a flag of its own."""
+        self.build(attachments=[FakeAttachment(flags=1 << 3)], embeds=[FakeEmbed(flags=1 << 5)])
+        await self.run_gate()
+        self.assertTrue(self.post.called)
+
+    async def test_hides_a_post_whose_media_was_flagged_since(self):
+        self.build(attachments=[FakeAttachment(flags=utils.GORE_CONTENT)], db_message=database_row())
+        await self.run_gate()
+        self.assertTrue(self.remove.called)
+        self.assertFalse(self.update_counter.called)
 
 
 if __name__ == "__main__":

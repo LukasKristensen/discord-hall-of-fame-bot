@@ -151,7 +151,14 @@ class DatabaseSettingsTests(unittest.TestCase):
 
     def test_development_connects_to_the_local_database(self):
         self.assertEqual({"host": "local-host", "database": "local-db", "user": "local-user",
-                          "password": "local-password"}, self.settings(development=True))
+                          "password": "local-password", "options": "-c TimeZone=UTC"},
+                         self.settings(development=True))
+
+    def test_every_session_runs_in_utc(self):
+        """Post times are written and compared as UTC, so the database session must agree."""
+        for development in (True, False):
+            with self.subTest(development=development):
+                self.assertEqual("-c TimeZone=UTC", self.settings(development=development)["options"])
 
     def test_production_connects_to_the_production_database(self):
         self.assertEqual("production-host", self.settings(development=False)["host"])

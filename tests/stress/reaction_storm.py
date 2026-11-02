@@ -29,6 +29,7 @@ import random
 import statistics
 import sys
 import time
+import types
 from collections import Counter, defaultdict
 
 SOURCE_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "src")
@@ -38,6 +39,8 @@ if SOURCE_PATH not in sys.path:
 import concurrency  # noqa: E402
 import events  # noqa: E402
 import main  # noqa: E402
+import board_post  # noqa: E402
+import discord  # noqa: E402
 import utils  # noqa: E402
 from classes.server_class import Server  # noqa: E402
 from enums import calculation_method_type  # noqa: E402
@@ -89,6 +92,9 @@ class FakeConnection:
 class MessageStore:
     """The hall of fame message table, in memory, with the latency of a real one."""
 
+    # Stored for a post past a member's post limit, as the real repository does
+    NO_AUTHOR_ID = 0
+
     def __init__(self, latency):
         self.latency = latency
         self.rows = {}
@@ -109,6 +115,12 @@ class MessageStore:
         self._wait()
         return 0
 
+    def count_messages_by_author(self, _connection, author_id):
+        """How many posts are credited to a member, read once per new post for the post limit"""
+        self.reads += 1
+        self._wait()
+        return sum(1 for row in self.rows.values() if row["author_id"] == author_id)
+
     def update_field_for_message(self, _connection, guild_id, channel_id, message_id, field, value):
         self.writes += 1
         self._wait()
@@ -118,9 +130,14 @@ class MessageStore:
 
     def insert_hall_of_fame_message(self, _connection, message_id, channel_id, guild_id,
                                     hall_of_fame_message_id, reaction_count, author_id,
-                                    created_at, video_link_message_id=None):
+                                    created_at, video_link_message_id=None, author_post_limit=None):
+        """Stores the post and returns who it is credited to, as the repository does, past the post limit nobody"""
         self.writes += 1
         self._wait()
+        existing = self.rows.get((guild_id, channel_id, message_id))
+        if existing is None and author_post_limit is not None and \
+                sum(1 for row in self.rows.values() if row["author_id"] == author_id) >= author_post_limit:
+            author_id = 0
         self.rows[(guild_id, channel_id, message_id)] = {
             "message_id": message_id,
             "channel_id": channel_id,
@@ -131,6 +148,7 @@ class MessageStore:
             "created_at": created_at,
             "video_link_message_id": video_link_message_id,
         }
+        return author_id
 
 
 class FakeReaction:
@@ -212,10 +230,12 @@ class FakeChannel:
             raise LookupError(f"Unknown Message {message_id}")
         return self.messages[message_id]
 
-    async def send(self, content=None, embed=None):
+    async def send(self, content=None, embed=None, view=None, **_kwargs):
         await self._round_trip()
         self.next_id += 1
         posted = PostedMessage(self.next_id, self, [embed] if embed else [])
+        if view is not None:
+            posted.show(view)
         self.messages[posted.id] = posted
         self.posted.append(posted)
         return posted
@@ -236,12 +256,26 @@ class PostedMessage:
         self.content = ""
         self.author = FakeUser(1, bot=True)
         self.edits = 0
+        self.flags = types.SimpleNamespace(components_v2=False)
+        self.components = []
+
+    def show(self, view):
+        """What a Components V2 post shows: the stub's reactions line, or nothing once it is hidden"""
+        self.flags.components_v2 = True
+        self.components = ([StubContainer([StubText(board_post.POST_REACTIONS_ID, view.reactions)])]
+                           if isinstance(view, StubView) else [])
 
     async def edit(self, **kwargs):
         await self.channel._round_trip()
         self.edits += 1
         if "embed" in kwargs:
             self.embeds = [kwargs["embed"]] if kwargs["embed"] else []
+        if "view" in kwargs:
+            self.show(kwargs["view"])
+
+    async def delete(self):
+        await self.channel._round_trip()
+        self.channel.messages.pop(self.id, None)
 
 
 class StubField:
@@ -258,6 +292,28 @@ class StubEmbed:
 
     def set_field_at(self, index, name, value, inline=True):
         self.fields[index] = StubField(name, value)
+
+
+class StubView:
+    """Enough of a board post's Components V2 view for the counter update path: its reactions line."""
+
+    def __init__(self, reactions):
+        self.reactions = reactions
+
+
+class StubContainer:
+    type = discord.ComponentType.container
+
+    def __init__(self, children):
+        self.children = children
+
+
+class StubText:
+    type = discord.ComponentType.text_display
+
+    def __init__(self, component_id, content):
+        self.id = component_id
+        self.content = content
 
 
 class FakePermissions:
@@ -364,16 +420,29 @@ class Harness:
             self.stats["embeds_built"] += 1
             return StubEmbed()
 
+        async def build_view(message, _connection, config=None, counted=None, *_args, **_kwargs):
+            # The same stand-in for the Components V2 post. It carries the real reactions line, so the
+            # update path still skips the edit when a reaction changes nothing
+            self.stats["embeds_built"] += 1
+            counted = counted if counted is not None else message.live_count
+            return StubView(board_post.reactions_line(message, config or {}, counted))
+
         self.patched = [
             (utils, "logging", utils.logging),
             (utils, "create_embed", utils.create_embed),
+            (utils, "create_post_view", utils.create_post_view),
             (utils, "hall_of_fame_message_repo", utils.hall_of_fame_message_repo),
             (events, "hall_of_fame_message_repo", events.hall_of_fame_message_repo),
+            (utils, "opt_out_repo", utils.opt_out_repo),
         ]
         utils.logging = record_log
         utils.create_embed = build_embed
+        utils.create_post_view = build_view
         utils.hall_of_fame_message_repo = self.store
         events.hall_of_fame_message_repo = self.store
+        # Nobody in the run asked not to be featured. The real lookup is one indexed read per new post,
+        # covered by the integration tests, and would need a real database here
+        utils.opt_out_repo = types.SimpleNamespace(is_opted_out=lambda _connection, _user_id: False)
 
         main.bot = self.bot
         main.server_classes = self.server_classes

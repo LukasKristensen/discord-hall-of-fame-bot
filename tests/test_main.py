@@ -9,6 +9,8 @@ opened when the bot starts rather than when the module loads.
 """
 
 import asyncio
+import datetime
+import io
 import types
 import unittest
 from unittest import mock
@@ -16,7 +18,8 @@ import discord
 
 import main
 import utils
-from enums import command_refs, log_type
+from constants import version
+from enums import command_refs, log_type, calculation_method_type
 from caches import ExpiringSet
 from translations import messages
 
@@ -29,15 +32,27 @@ GUILD_ID = 200
 class FakeResponse:
     def __init__(self):
         self.messages = []
+        self.contents = []
         self.ephemeral = []
+        self.views = []
+        self.files = []
+        self.edits = []
         self.deferred = False
+        self.deferred_ephemeral = False
 
-    async def send_message(self, content=None, embed=None, ephemeral=False):
+    async def send_message(self, content=None, embed=None, ephemeral=False, view=None, files=None):
         self.messages.append(embed if embed is not None else content)
+        self.contents.append(content)
         self.ephemeral.append(ephemeral)
+        self.views.append(view)
+        self.files.append(list(files or []))
 
-    async def defer(self):
+    async def edit_message(self, content=None, view=None):
+        self.edits.append((content, view))
+
+    async def defer(self, ephemeral=False, thinking=False):
         self.deferred = True
+        self.deferred_ephemeral = ephemeral
 
     def is_done(self):
         return self.deferred or bool(self.messages)
@@ -47,10 +62,17 @@ class FakeFollowup:
     def __init__(self):
         self.messages = []
         self.ephemeral = []
+        self.files = []
+        self.attachments = []
+        self.views = []
 
-    async def send(self, content=None, embed=None, ephemeral=False):
+    async def send(self, content=None, embed=None, ephemeral=False, file=None, files=None, view=None):
         self.messages.append(embed if embed is not None else content)
         self.ephemeral.append(ephemeral)
+        self.files.append(file)
+        # Every file of the message, however it was passed
+        self.attachments.append(list(files or []) + ([file] if file is not None else []))
+        self.views.append(view)
 
 
 class FakeUser:
@@ -78,11 +100,58 @@ class FakeInteraction:
         self.response = FakeResponse()
         self.followup = FakeFollowup()
         self.command = types.SimpleNamespace(name="test_command")
+        self.original_edits = []
+        self.deleted_original = False
+        # Reached through the server's own install of the bot, rather than a member's user install
+        self.guild_install = True
+
+    async def edit_original_response(self, content=None, view=None):
+        self.original_edits.append((content, view))
+
+    async def original_response(self):
+        """The deferred "thinking..." message, still loading until the first followup replaces it"""
+        loading = self.response.deferred and not self.followup.messages and not self.deleted_original
+        return types.SimpleNamespace(flags=types.SimpleNamespace(loading=loading,
+                                                                 ephemeral=self.response.deferred_ephemeral))
+
+    async def delete_original_response(self):
+        self.deleted_original = True
+
+    def is_guild_integration(self):
+        return self.guild_install
 
     @property
     def replies(self):
         """Everything sent back, whether as the response or as a followup"""
         return self.response.messages + self.followup.messages
+
+
+class SendErrorTests(unittest.IsolatedAsyncioTestCase):
+    async def test_an_error_after_a_public_defer_stays_private(self):
+        """The first followup would replace the public "thinking..." and be public whatever it asks."""
+        interaction = FakeInteraction()
+        await interaction.response.defer()
+        await main.send_error(interaction, "no")
+
+        self.assertTrue(interaction.deleted_original)
+        self.assertEqual(["no"], interaction.followup.messages)
+        self.assertEqual([True], interaction.followup.ephemeral)
+
+    async def test_an_error_after_a_private_defer_keeps_the_message(self):
+        interaction = FakeInteraction()
+        await interaction.response.defer(ephemeral=True)
+        await main.send_error(interaction, "no")
+
+        self.assertFalse(interaction.deleted_original)
+        self.assertEqual(["no"], interaction.followup.messages)
+
+    async def test_an_error_after_the_answer_was_sent_deletes_nothing(self):
+        interaction = FakeInteraction()
+        await interaction.response.defer()
+        await interaction.followup.send("the card")
+        await main.send_error(interaction, "no")
+
+        self.assertFalse(interaction.deleted_original)
 
 
 class FakePool:
@@ -153,7 +222,8 @@ class ManageServerPermissionTests(MainTestCase):
         interaction = FakeInteraction(manage_guild=False)
         await main.check_if_user_has_manage_server_permission(interaction)
 
-        self.assertTrue(any("does not have manage server permission" in entry for entry in self.logged))
+        self.assertTrue(any("without the Manage Server permission was refused" in entry for entry in self.logged))
+        self.assertFalse(any("Member" in entry for entry in self.logged))
 
     async def test_turns_away_a_server_that_is_not_set_up(self):
         self.set_server_classes([201, 202])
@@ -216,7 +286,7 @@ class ReconnectTests(MainTestCase):
             pass
 
         self.patch(main.events, "bot_login", login)
-        self.patch(main, "bot", types.SimpleNamespace(user="Hall Of Fame"))
+        self.patch(main, "bot", types.SimpleNamespace(user="Hall Of Fame", add_view=lambda _view: None))
         self.pool = FakePool()
         self.patch(main, "connection_pool", self.pool)
         self.set_up = []
@@ -237,7 +307,7 @@ class SetupDatabasesTests(unittest.TestCase):
         main.setup_databases(connection)
 
         created = [query for query in connection.queries if "CREATE TABLE IF NOT EXISTS" in query]
-        self.assertEqual(7, len(created))
+        self.assertEqual(10, len(created))
 
     def test_creates_each_table_only_if_it_is_missing(self):
         """This runs on every start, so it must never drop or recreate a table that holds data."""
@@ -247,6 +317,24 @@ class SetupDatabasesTests(unittest.TestCase):
         for query in connection.queries:
             with self.subTest(query=query.strip()[:40]):
                 self.assertNotIn("DROP TABLE", query)
+
+
+class LinkCommandTests(MainTestCase):
+    """/invite and /vote answer with buttons rather than a bare URL."""
+
+    async def test_invite_replies_with_the_install_button(self):
+        interaction = FakeInteraction(manage_guild=False)
+        await main.invite.callback(interaction)
+
+        self.assertEqual([messages.INVITE_MESSAGE], interaction.response.messages)
+        self.assertIn(messages.INVITE_URL, [button.url for button in interaction.response.views[0].children])
+
+    async def test_vote_replies_with_the_vote_button(self):
+        interaction = FakeInteraction(manage_guild=False)
+        await main.vote.callback(interaction)
+
+        self.assertEqual([messages.VOTE_MESSAGE], interaction.response.messages)
+        self.assertEqual([messages.VOTE_URL], [button.url for button in interaction.response.views[0].children])
 
 
 class CommandTreeTests(unittest.TestCase):
@@ -260,10 +348,22 @@ class CommandTreeTests(unittest.TestCase):
                 self.assertIn(expected, names)
 
     def test_every_command_describes_itself(self):
-        """Discord shows the description in the command picker and rejects an empty one."""
-        for command in main.tree.get_commands():
+        """Discord shows the description in the command picker and rejects an empty one. Message commands
+        have none, since Discord shows only their name"""
+        for command in main.tree.get_commands(type=discord.AppCommandType.chat_input):
             with self.subTest(command=command.name):
                 self.assertTrue(command.description)
+
+    def test_every_description_fits_discords_limit(self):
+        """Discord refuses the whole command sync when one description is over 100 characters."""
+        for command in main.tree.get_commands(type=discord.AppCommandType.chat_input):
+            with self.subTest(command=command.name):
+                self.assertLessEqual(len(command.description), 100)
+
+    def test_registers_the_message_command(self):
+        names = {command.name for command in main.tree.get_commands(type=discord.AppCommandType.message)}
+
+        self.assertEqual({messages.WHY_MENU_NAME}, names)
 
     def test_no_command_is_registered_twice(self):
         names = [command.name for command in main.tree.get_commands()]
@@ -362,6 +462,18 @@ class GetServerConfigCommandTests(MainTestCase):
         embed = interaction.response.messages[0]
         self.assertIsInstance(embed, discord.Embed)
         self.assertIn("Reactions needed", " ".join(field.value for field in embed.fields))
+
+    async def test_offers_the_troubleshoot_button(self):
+        """The settings are most often looked up because something is not working."""
+        self.set_server_classes([GUILD_ID])
+        interaction = FakeInteraction()
+        await main.get_server_config.callback(interaction)
+
+        button, settings = interaction.response.views[0].children
+        self.assertEqual(messages.TROUBLESHOOT_BUTTON, button.label)
+        self.assertEqual(main.commands.CHECK_SETUP_CUSTOM_ID, button.custom_id)
+        self.assertEqual(messages.SETTINGS_BUTTON, settings.label)
+        self.assertEqual(main.commands.SETTINGS_CUSTOM_ID, settings.custom_id)
 
     async def test_says_a_server_is_not_set_up_rather_than_failing(self):
         """Answering a command with an error is worse than answering it with the reason."""
@@ -552,6 +664,16 @@ class ConnectionSlotTests(MainTestCase):
         self.assertTrue(kwargs.get("validate_for_duplicates"))
         self.assertEqual(1, self.pool.returned)
 
+    async def test_rolls_back_before_returning_a_connection_after_an_error(self):
+        """An aborted transaction would otherwise fail every command of whoever borrows the connection next."""
+        self.size_the_pool(1)
+        with self.assertRaises(RuntimeError):
+            async with main.get_db_connection(self.pool):
+                raise RuntimeError("canceling statement due to statement timeout")
+
+        self.assertEqual(1, self.pool.connection.rollbacks)
+        self.assertEqual(1, self.pool.returned)
+
     async def test_hands_out_a_connection(self):
         self.size_the_pool(2)
         async with main.get_db_connection(self.pool) as connection:
@@ -713,6 +835,88 @@ class UpdateSettingTests(CommandTestCase):
         self.assertFalse(changed)
         self.assertEqual([messages.ERROR_SERVER_NOT_SETUP], interaction.response.messages)
         self.assertIn(command_refs.SET_HALL_OF_FAME_CHANNEL, messages.ERROR_SERVER_NOT_SETUP)
+        self.assertIn(command_refs.TROUBLESHOOT, messages.ERROR_SERVER_NOT_SETUP)
+
+    async def test_sends_no_files_unless_given_some(self):
+        """Every setting but /calculation_method answers exactly as before the picture was added"""
+        self.server.ignore_bot_messages = False
+        interaction = FakeInteraction()
+        await main.update_setting(interaction, "ignore_bot_messages", True, "Ignore messages from bots")
+
+        self.assertEqual([[]], interaction.response.files)
+
+
+class CountingMethodsPictureTests(CommandTestCase):
+    """
+    /calculation_method answers with the picture of the three counting methods: attached when the bot may
+    attach files, as an embed of the copy on GitHub when it may only embed links, and not at all otherwise
+    """
+
+    TOTAL = discord.app_commands.Choice(name="Total reactions", value="total_reactions")
+    MOST = discord.app_commands.Choice(name="Most reactions on an emoji", value="most_reactions_on_emoji")
+
+    async def choose(self, method, attach_files=True, embed_links=True):
+        self.server.reaction_count_calculation_method = "most_reactions_on_emoji"
+        interaction = FakeInteraction()
+        interaction.app_permissions = FakePermissions(attach_files=attach_files, embed_links=embed_links)
+        await main.calculation_method.callback(interaction, method)
+        for sent in interaction.response.files:
+            for file in sent:
+                self.addCleanup(file.close)
+        return interaction
+
+    async def test_a_change_comes_with_the_picture(self):
+        interaction = await self.choose(self.TOTAL)
+
+        self.assertEqual([(GUILD_ID, "reaction_count_calculation_method", "total_reactions")], self.writes)
+        [picture] = interaction.response.files[0]
+        self.assertEqual("counting-methods.jpg", picture.filename)
+        self.assertEqual([False], interaction.response.ephemeral)
+
+    async def test_picking_the_method_already_set_shows_the_picture_too(self):
+        """Usually an admin checking what the methods mean, so the picture is the useful part of the answer"""
+        interaction = await self.choose(self.MOST)
+
+        self.assertEqual([], self.writes)
+        self.assertIn("already", interaction.response.contents[0])
+        self.assertEqual(1, len(interaction.response.files[0]))
+        self.assertEqual([True], interaction.response.ephemeral)
+
+    def embedded_picture(self, interaction):
+        [sent] = interaction.response.messages
+        self.assertIsInstance(sent, discord.Embed)
+        return sent.image.url
+
+    async def test_without_attach_files_the_picture_is_embedded_from_github(self):
+        """Discord would refuse an attachment, after the setting is already saved"""
+        interaction = await self.choose(self.TOTAL, attach_files=False)
+
+        self.assertEqual([(GUILD_ID, "reaction_count_calculation_method", "total_reactions")], self.writes)
+        self.assertEqual([[]], interaction.response.files)
+        self.assertEqual(messages.COUNTING_METHODS_PICTURE_URL, self.embedded_picture(interaction))
+        self.assertIn("Total reactions across all emojis", interaction.response.contents[0])
+
+    async def test_the_embedded_picture_is_the_raw_file_on_main(self):
+        """The page around a file on GitHub is HTML, which Discord cannot show as an image"""
+        self.assertTrue(messages.COUNTING_METHODS_PICTURE_URL.startswith("https://raw.githubusercontent.com/"))
+        self.assertIn("/main/Assets/reaction_calculation_methods_wide.jpg", messages.COUNTING_METHODS_PICTURE_URL)
+
+    async def test_without_attach_files_or_embed_links_the_answer_goes_without_it(self):
+        interaction = await self.choose(self.TOTAL, attach_files=False, embed_links=False)
+
+        self.assertEqual([[]], interaction.response.files)
+        self.assertIn("Total reactions across all emojis", interaction.response.messages[0])
+
+    async def test_a_picture_missing_from_the_checkout_is_embedded_instead(self):
+        self.patch(main, "counting_methods_picture_path", "does-not-exist.jpg")
+        interaction = await self.choose(self.TOTAL)
+
+        self.assertEqual([[]], interaction.response.files)
+        self.assertEqual(messages.COUNTING_METHODS_PICTURE_URL, self.embedded_picture(interaction))
+
+    def test_the_picture_is_found_from_the_folder_the_bot_runs_in(self):
+        """The bot runs with src/ as its working directory, and the picture lives in Assets beside it"""
+        self.assertTrue(main.os.path.isfile(main.counting_methods_picture_path))
 
 
 class RefusalsAreEphemeralTests(CommandTestCase):
@@ -926,6 +1130,7 @@ class SetHallOfFameChannelCommandTests(CommandTestCase):
         self.assertEqual(1, len(channel.sent))
         self.assertIn(interaction.user.mention, channel.sent[0])
         self.assertIn("**5**", channel.sent[0])
+        self.assertIn(messages.WHY_HINT, channel.sent[0])
 
     async def test_still_confirms_the_move_when_the_announcement_cannot_be_posted(self):
         """The board has moved by then, so failing the command would tell the member the opposite."""
@@ -979,6 +1184,52 @@ class SetHallOfFameChannelCommandTests(CommandTestCase):
 
         self.assertIn("Could not set up", interaction.followup.messages[0])
         self.assertEqual([], self.writes)
+
+
+class ClosedBoardTests(CommandTestCase):
+    """The public cards stay out of a Hall of Fame channel that is closed to chat."""
+
+    def setUp(self):
+        super().setUp()
+        self.server.hall_of_fame_channel_id = 100
+        self.server.allow_messages_in_hof_channel = False
+        # The leaderboard goes on a daily cooldown once it is shown, which would leak into later tests
+        self.patch(main, "daily_command_cooldowns", {})
+        self.shown = []
+
+        async def record(*_args, **_kwargs):
+            self.shown.append(True)
+
+        self.patch(main.commands, "server_leaderboard", record)
+
+    def interaction(self, channel_id=100):
+        interaction = FakeInteraction()
+        interaction.channel_id = channel_id
+        return interaction
+
+    async def test_turns_the_public_commands_away_privately(self):
+        for command, args in ((main.user_server_profile, (None,)), (main.leaderboard, ()),
+                              (main.hof_wrapped_command, ()), (main.server_hof_wrapped_command, ()),
+                              (main.get_help, ()), (main.invite, ()), (main.vote, ())):
+            with self.subTest(command=command.name):
+                interaction = self.interaction()
+                await command.callback(interaction, *args)
+
+                self.assertEqual([messages.COMMAND_NOT_IN_CLOSED_BOARD.format(channel="<#100>")],
+                                 interaction.response.messages)
+                self.assertEqual([True], interaction.response.ephemeral)
+        self.assertEqual(0, self.pool.handed_out)
+
+    async def test_works_in_any_other_channel(self):
+        await main.leaderboard.callback(self.interaction(channel_id=555))
+
+        self.assertEqual([True], self.shown)
+
+    async def test_works_in_a_board_open_to_chat(self):
+        self.server.allow_messages_in_hof_channel = True
+        await main.leaderboard.callback(self.interaction())
+
+        self.assertEqual([True], self.shown)
 
 
 class LeaderboardFailureTests(CommandTestCase):
@@ -1036,14 +1287,1224 @@ class CommandErrorHandlerTests(MainTestCase):
 
 
 class CommandContextTests(unittest.TestCase):
-    def test_commands_are_only_offered_in_servers(self):
-        """Every command reads the server it was used in, so in a DM it could only fail."""
+    # The commands that need no server set up, or answer without one
+    USER_INSTALLABLE = {"help", "feedback", "vote", "invite", "user_profile", "my_data"}
+
+    def test_commands_are_only_offered_in_servers_by_default(self):
+        """Most commands read the server they were used in, so in a DM they could only fail."""
         contexts = main.tree.allowed_contexts
 
         self.assertTrue(contexts.guild)
         self.assertFalse(contexts.dm_channel)
         self.assertFalse(contexts.private_channel)
 
+    def test_commands_are_only_installed_to_servers_by_default(self):
+        """Left unset, Discord would offer every setting to user installs once they are on in the portal."""
+        installs = main.tree.allowed_installs
+
+        self.assertTrue(installs.guild)
+        self.assertFalse(installs.user)
+        self.assertEqual([discord.app_commands.AppInstallationType.GUILD], installs.to_array())
+
+    def test_only_the_commands_that_work_anywhere_are_user_installable(self):
+        user_installable = set()
+        for command in main.tree.get_commands():
+            payload = command.to_dict(main.tree)
+            if discord.app_commands.AppInstallationType.USER in (payload.get("integration_types") or []):
+                user_installable.add(command.name)
+                with self.subTest(command=command.name):
+                    self.assertIn(discord.app_commands.AppCommandContext.DM_CHANNEL, payload["contexts"])
+            else:
+                with self.subTest(command=command.name):
+                    self.assertEqual([discord.app_commands.AppInstallationType.GUILD],
+                                     payload["integration_types"])
+                    self.assertEqual([discord.app_commands.AppCommandContext.GUILD], payload["contexts"])
+
+        self.assertEqual(self.USER_INSTALLABLE, user_installable)
+
+
+class CommandPermissionTests(unittest.TestCase):
+    # The commands that need Manage Server, which Discord hides from members without it
+    MANAGE_SERVER_ONLY = {"set_reaction_threshold", "include_authors_reaction", "allow_messages_in_hof_channel",
+                          "require_image_or_video", "custom_emoji_check_logic", "whitelist_emoji", "unwhitelist_emoji",
+                          "clear_whitelist", "troubleshoot", "set_post_due_date", "ignore_bot_messages",
+                          "calculation_method", "hide_hof_post_below_threshold", "count_in_global_profiles",
+                          "set_hall_of_fame_channel"}
+    # What a command calls to turn away a member without Manage Server
+    PERMISSION_CHECKS = ("check_if_user_has_manage_server_permission", "get_whitelist_server_class", "run_setup_check")
+
+    def test_only_the_settings_commands_are_hidden_from_members(self):
+        """Everything members can use stays in their command picker, the message command included."""
+        hidden = set()
+        for command in main.tree.get_commands():
+            permissions = command.to_dict(main.tree).get("default_member_permissions")
+            if permissions is not None:
+                hidden.add(command.name)
+                with self.subTest(command=command.name):
+                    self.assertEqual(discord.Permissions(manage_guild=True).value, permissions)
+
+        self.assertEqual(self.MANAGE_SERVER_ONLY, hidden)
+
+    def test_every_command_that_refuses_members_is_hidden_from_them(self):
+        """A new settings command without manage_server_only would be offered to members only to refuse them."""
+        import inspect
+
+        for command in main.tree.get_commands(type=discord.AppCommandType.chat_input):
+            source = inspect.getsource(command.callback)
+            if any(check in source for check in self.PERMISSION_CHECKS):
+                with self.subTest(command=command.name):
+                    self.assertIn(command.name, self.MANAGE_SERVER_ONLY)
+
+
+def outside_a_server(interaction, guild_id=None):
+    """A user install answers in a DM (no guild) or in a server the bot is not in."""
+    interaction.guild_id = guild_id
+    interaction.guild = None
+    interaction.guild_install = False
+    return interaction
+
+
+class UserInstallLinkCommandTests(MainTestCase):
+    """The commands that need no server answer in a DM without reaching for one."""
+
+    async def test_help_vote_and_invite_answer_in_a_dm(self):
+        for command in (main.get_help, main.vote, main.invite):
+            with self.subTest(command=command.name):
+                interaction = outside_a_server(FakeInteraction())
+                await command.callback(interaction)
+
+                self.assertEqual(1, len(interaction.response.messages))
+                self.assertIn("a DM or a server without the bot", self.logged[-1])
+
+
+
+# The topic a member picks on /feedback
+BUG_REPORT = discord.app_commands.Choice(name="Bug report", value="bug")
+
+
+class FeedbackCooldownTests(MainTestCase):
+    """/feedback is open to anyone with the bot on their account, so it is capped per member and day."""
+
+    def setUp(self):
+        super().setUp()
+        self.patch(main, "daily_command_cooldowns", {})
+        self.forms = []
+        self.refusals = []
+        self.topics = []
+
+        async def open_form(interaction, _bot, topic=None, on_sent=None, refusal=None, on_unsent=None):
+            self.forms.append(on_sent)
+            self.refusals.append(refusal)
+            self.topics.append(topic)
+
+        self.patch(utils, "create_feedback_form", open_form)
+
+    async def send(self, interaction):
+        """Open the form and submit it, as a member who fills it in would"""
+        opened = len(self.forms)
+        await main.send_feedback.callback(interaction, BUG_REPORT)
+        if len(self.forms) > opened:
+            self.forms[-1](interaction.user.id)
+
+    async def test_the_topic_picked_decides_the_form(self):
+        await main.send_feedback.callback(FakeInteraction(), discord.app_commands.Choice(name="Question",
+                                                                                        value="question"))
+
+        self.assertEqual(["question"], self.topics)
+
+    def test_offers_every_topic_the_forms_know(self):
+        offered = {choice.value for choice in main.send_feedback.get_parameter("topic").choices}
+
+        self.assertEqual(set(messages.FEEDBACK_TOPICS), offered)
+        self.assertTrue(main.send_feedback.get_parameter("topic").required)
+
+    async def test_refuses_once_the_daily_limit_is_reached(self):
+        for _ in range(main.feedback_daily_limit):
+            await self.send(FakeInteraction())
+
+        refused = FakeInteraction()
+        await self.send(refused)
+
+        self.assertEqual(main.feedback_daily_limit, len(self.forms))
+        self.assertEqual([messages.FEEDBACK_ON_COOLDOWN.format(limit=main.feedback_daily_limit)],
+                         refused.response.messages)
+        self.assertEqual([True], refused.response.ephemeral)
+
+    async def test_the_limit_follows_the_member_into_dms(self):
+        """Keyed by member, so a user install cannot be used to get a fresh limit per server or DM."""
+        for guild_id in (GUILD_ID, 999, None):
+            await self.send(outside_a_server(FakeInteraction(), guild_id=guild_id))
+
+        refused = outside_a_server(FakeInteraction())
+        await self.send(refused)
+
+        self.assertEqual([messages.FEEDBACK_ON_COOLDOWN.format(limit=main.feedback_daily_limit)],
+                         refused.response.messages)
+
+    async def test_a_closed_form_does_not_count(self):
+        for _ in range(main.feedback_daily_limit + 2):
+            await main.send_feedback.callback(FakeInteraction(), BUG_REPORT)
+
+        self.assertEqual(main.feedback_daily_limit + 2, len(self.forms))
+        self.assertEqual(0, main.daily_uses(77, "feedback"))
+
+    async def test_other_members_keep_their_own_limit(self):
+        for _ in range(main.feedback_daily_limit):
+            await self.send(FakeInteraction())
+
+        other = FakeInteraction()
+        other.user = FakeUser(user_id=78)
+        await main.send_feedback.callback(other, BUG_REPORT)
+
+        self.assertEqual(main.feedback_daily_limit + 1, len(self.forms))
+        self.assertEqual([], other.response.messages)
+
+    async def test_forms_opened_together_are_checked_again_when_sent(self):
+        """Every form passes the check when it opens, so the limit is asked again on submit."""
+        for _ in range(main.feedback_daily_limit + 1):
+            await main.send_feedback.callback(FakeInteraction(), BUG_REPORT)
+        for on_sent, refusal in list(zip(self.forms, self.refusals))[:main.feedback_daily_limit]:
+            self.assertIsNone(refusal(77))
+            on_sent(77)
+
+        self.assertEqual(messages.FEEDBACK_ON_COOLDOWN.format(limit=main.feedback_daily_limit),
+                         self.refusals[-1](77))
+
+
+def feedback_bot(channel, filesize_limit=10 * 1024 * 1024):
+    """A bot whose support server holds the feedback channel, and lets the bot upload files that large"""
+    guild = types.SimpleNamespace(get_channel=lambda _id: channel, filesize_limit=filesize_limit)
+    return types.SimpleNamespace(get_guild=lambda _id: guild)
+
+
+class FeedbackFormTests(unittest.IsolatedAsyncioTestCase):
+    """The form reports the send back only once the feedback reached the developer channel."""
+
+    async def open_form(self, on_sent, refusal=None, topic="other"):
+        modals = []
+        interaction = types.SimpleNamespace(response=types.SimpleNamespace())
+
+        async def send_modal(modal):
+            modals.append(modal)
+
+        interaction.response.send_modal = send_modal
+        await utils.create_feedback_form(interaction, self.bot, topic=topic, on_sent=on_sent, refusal=refusal)
+        return modals[0]
+
+    def setUp(self):
+        self.posted = []
+        self.files = []
+
+        async def post(embed=None, files=()):
+            self.posted.append(embed)
+            self.files.append(list(files))
+
+        channel = types.SimpleNamespace(send=post)
+        self.bot = feedback_bot(channel)
+
+    def submitter(self, guild_id=None):
+        async def nothing(*_args, **_kwargs):
+            return None
+
+        return types.SimpleNamespace(
+            user=types.SimpleNamespace(id=77, name="Member", avatar=None, mention="<@77>"),
+            guild_id=guild_id,
+            response=types.SimpleNamespace(send_message=nothing),
+            delete_original_response=nothing)
+
+    async def test_the_use_is_counted_before_the_send_so_forms_sent_together_cannot_both_pass(self):
+        order = []
+
+        async def post(embed=None, files=()):
+            order.append("sent")
+
+        channel = types.SimpleNamespace(send=post)
+        self.bot = feedback_bot(channel)
+        modal = await self.open_form(lambda _user_id: order.append("counted"))
+        modal.fb_title._value = "Title"
+        modal.message._value = "Body"
+
+        async def no_wait(_seconds):
+            return None
+
+        with mock.patch.object(utils.asyncio, "sleep", no_wait):
+            await modal.on_submit(self.submitter())
+
+        self.assertEqual(["counted", "sent"], order)
+
+    async def test_a_form_that_could_not_be_sent_does_not_count(self):
+        async def broken(embed=None, files=()):
+            raise RuntimeError("Discord went away")
+
+        channel = types.SimpleNamespace(send=broken)
+        self.bot = feedback_bot(channel)
+        counted, taken_back = [], []
+        modals = []
+        interaction = types.SimpleNamespace(response=types.SimpleNamespace())
+
+        async def send_modal(modal):
+            modals.append(modal)
+
+        interaction.response.send_modal = send_modal
+        await utils.create_feedback_form(interaction, self.bot, on_sent=counted.append, on_unsent=taken_back.append)
+        modal = modals[0]
+        modal.fb_title._value = "Title"
+        modal.message._value = "Body"
+
+        with self.assertRaises(RuntimeError):
+            await modal.on_submit(self.submitter())
+        self.assertEqual([77], counted)
+        self.assertEqual([77], taken_back)
+
+    async def test_a_sent_form_counts_and_works_from_a_dm(self):
+        sent = []
+        modal = await self.open_form(sent.append)
+        modal.fb_title._value = "Title"
+        modal.message._value = "Body"
+
+        async def no_wait(_seconds):
+            return None
+
+        with mock.patch.object(utils.asyncio, "sleep", no_wait):
+            await modal.on_submit(self.submitter())
+
+        self.assertEqual([77], sent)
+        self.assertEqual(1, len(self.posted))
+        self.assertIn("user install", [field.value for field in self.posted[0].fields][2])
+
+    async def test_a_form_refused_on_submit_sends_nothing(self):
+        sent = []
+        modal = await self.open_form(sent.append, refusal=lambda _user_id: "Limit reached")
+        modal.fb_title._value = "Title"
+        modal.message._value = "Body"
+        answers = []
+        submitter = self.submitter()
+
+        async def answer(content, ephemeral=False):
+            answers.append((content, ephemeral))
+
+        submitter.response.send_message = answer
+        await modal.on_submit(submitter)
+
+        self.assertEqual([], self.posted)
+        self.assertEqual([], sent)
+        self.assertEqual([("Limit reached", True)], answers)
+
+    async def submit(self, topic="bug"):
+        """
+        Fill in the form for a topic and send it
+        :return: The submitter, whose answers hold (content, ephemeral) for each reply
+        """
+        modal = await self.open_form(None, topic=topic)
+        modal.fb_title._value = "Title"
+        modal.message._value = "Body"
+        submitter = self.submitter()
+        submitter.answers = []
+
+        async def answer(content=None, ephemeral=False):
+            submitter.answers.append((content, ephemeral))
+
+        submitter.response.send_message = answer
+        await modal.on_submit(submitter)
+        return submitter
+
+    @staticmethod
+    def field(embed, name):
+        return {field.name: field.value for field in embed.fields}[name]
+
+    async def test_the_form_asks_for_what_helps_with_the_topic(self):
+        modal = await self.open_form(None, topic="bug")
+
+        self.assertEqual("Report a bug", modal.title)
+        self.assertEqual("What went wrong?", modal.fb_title_label.text)
+
+    async def test_each_question_is_a_label_around_its_input(self):
+        """Discord refuses a text input that carries a label of its own inside a Label."""
+        modal = await self.open_form(None, topic="bug")
+        components = modal.to_components()
+
+        self.assertEqual([discord.ComponentType.label.value] * 3, [component["type"] for component in components])
+        self.assertEqual(["What went wrong?", messages.FEEDBACK_FORMS["bug"][3], messages.FEEDBACK_CONTACT_LABEL],
+                         [component["label"] for component in components])
+        self.assertTrue(all(component["component"].get("label") is None for component in components))
+
+    async def test_the_form_takes_no_files(self):
+        """Anything attached would be reposted into the developer's server by the bot, so nothing can be."""
+        modal = await self.open_form(None, topic="bug")
+
+        self.assertNotIn(discord.ComponentType.file_upload.value,
+                         [component["component"]["type"] for component in modal.to_components()])
+
+    def test_the_optional_field_fits_discords_limits(self):
+        self.assertLessEqual(len(messages.FEEDBACK_CONTACT_LABEL), 45)
+
+    async def send_report(self, may_contact=False):
+        """
+        Send a bug report
+        :return: The submitter, whose answers hold (content, ephemeral) for each reply
+        """
+        modal = await self.open_form(None, topic="bug")
+        modal.fb_title._value = "Title"
+        modal.message._value = "Body"
+        modal.may_contact._value = may_contact
+        submitter = self.submitter()
+        submitter.answers = []
+
+        async def answer(content=None, ephemeral=False):
+            submitter.answers.append((content, ephemeral))
+
+        submitter.response.send_message = answer
+        await modal.on_submit(submitter)
+        return submitter
+
+    async def test_feedback_is_sent_as_one_report_and_answered_at_once(self):
+        submitter = await self.send_report()
+
+        self.assertEqual([[]], self.files)
+        self.assertEqual([(messages.FEEDBACK_SENT, True)], submitter.answers)
+        self.assertNotIn("Screenshots", [field.name for field in self.posted[0].fields])
+
+    async def test_the_developer_copy_says_whether_the_member_may_be_contacted(self):
+        await self.send_report(may_contact=True)
+        await self.send_report()
+
+        self.assertEqual(["Yes", "No"], [self.field(embed, "May contact") for embed in self.posted])
+
+    async def test_an_unknown_topic_gets_the_plain_form(self):
+        modal = await self.open_form(None, topic="not a topic")
+
+        self.assertEqual(messages.FEEDBACK_FORMS["other"][0], modal.title)
+
+    def test_every_topic_has_a_form_within_discords_limits(self):
+        """Discord refuses a modal whose title or a label is over 45 characters, or a placeholder over 100."""
+        self.assertEqual(set(messages.FEEDBACK_TOPICS), set(messages.FEEDBACK_FORMS))
+        for topic, (title, short_label, short_hint, long_label, long_hint) in messages.FEEDBACK_FORMS.items():
+            with self.subTest(topic=topic):
+                for text in (title, short_label, long_label):
+                    self.assertLessEqual(len(text), 45)
+                for text in (short_hint, long_hint, messages.FEEDBACK_TOPICS[topic]):
+                    self.assertLessEqual(len(text), 100)
+
+    async def test_the_thanks_is_private_and_mentions_nobody(self):
+        submitter = await self.submit()
+
+        self.assertEqual([(messages.FEEDBACK_SENT, True)], submitter.answers)
+        self.assertNotIn("<@77>", messages.FEEDBACK_SENT)
+
+    async def test_the_developer_copy_names_the_topic_and_the_version(self):
+        await self.submit(topic="bug")
+
+        [embed] = self.posted
+        self.assertIn(messages.FEEDBACK_TOPICS["bug"], embed.title)
+        self.assertIn(version.VERSION, embed.footer.text)
+        self.assertEqual("Body", self.field(embed, "Details"))
+
+
+
+class FirstLoginTests(MainTestCase):
+    """The first on_ready of a boot loads every server and starts the background tasks."""
+
+    def setUp(self):
+        super().setUp()
+
+        async def nothing(*_args, **_kwargs):
+            return None
+
+        self.started = []
+        self.patch(main.events, "bot_login", nothing)
+        self.patch(main.events, "post_wrapped", nothing)
+        self.patch(main.events, "check_for_new_server_classes", lambda *_args: self.new_servers())
+        self.patch(main, "bot", types.SimpleNamespace(user="Hall Of Fame", add_view=lambda _view: None,
+                                                      add_dynamic_items=lambda *_items: None,
+                                                      guilds=[types.SimpleNamespace(member_count=40)]))
+        self.patch(main, "connection_pool", FakePool())
+        self.patch(main, "setup_databases", lambda _connection: None)
+        self.patch(main.server_config_repo, "get_server_classes", lambda _connection: {GUILD_ID: build_server()})
+        self.patch(main, "bot_loaded", False)
+        self.patch(main, "server_classes", {})
+        self.patch(main, "daily_task", types.SimpleNamespace(start=lambda: self.started.append("daily")))
+        self.running = False
+        self.patch(main, "rotate_presence", types.SimpleNamespace(is_running=lambda: self.running,
+                                                                  start=lambda: self.started.append("presence")))
+
+    async def new_servers(self):
+        return {201: build_server(guild_id=201)}
+
+    async def test_loads_every_server_and_starts_the_tasks(self):
+        await main.on_ready()
+
+        self.assertTrue(main.bot_loaded)
+        self.assertEqual({GUILD_ID, 201}, set(main.server_classes))
+        self.assertEqual(40, main.total_member_count)
+        self.assertEqual(["presence", "daily"], self.started)
+
+    async def test_does_not_start_the_presence_rotation_twice(self):
+        self.running = True
+        await main.on_ready()
+
+        self.assertEqual(["daily"], self.started)
+
+
+class DailyTaskTests(MainTestCase):
+    def setUp(self):
+        super().setUp()
+        self.ran = []
+
+        async def daily(*_args, **_kwargs):
+            self.ran.append("daily")
+
+        async def stats():
+            self.ran.append("stats")
+
+        self.patch(main.events, "daily_task", daily)
+        self.patch(main.monthly_guild_snapshot, "run_monthly_snapshot", lambda *_args: self.ran.append("snapshot"))
+        self.patch(main, "post_api_bot_stats", stats)
+        self.patch(main, "connection_pool", FakePool())
+        self.patch(main, "bot", types.SimpleNamespace(guilds=[types.SimpleNamespace(member_count=7),
+                                                              types.SimpleNamespace(member_count=None)]))
+        self.patch(main, "daily_command_cooldowns", {77: ["my_data"]})
+
+    async def test_runs_the_day_and_starts_the_counts_over(self):
+        await main.daily_task.coro()
+
+        self.assertEqual(["daily", "snapshot", "stats"], self.ran)
+        self.assertEqual({}, main.daily_command_cooldowns)
+        self.assertEqual(7, main.total_member_count)
+
+    async def test_a_failure_is_logged_and_the_counts_still_start_over(self):
+        async def fail(*_args, **_kwargs):
+            raise RuntimeError("database went away")
+
+        self.patch(main.events, "daily_task", fail)
+        await main.daily_task.coro()
+
+        self.assertTrue(any("Error in daily_task" in entry for entry in self.logged))
+        self.assertEqual({}, main.daily_command_cooldowns)
+
+
+class GuildJoinAndRemoveTests(MainTestCase):
+    def setUp(self):
+        super().setUp()
+
+        async def nothing(*_args, **_kwargs):
+            return None
+
+        self.patch(main, "connection_pool", FakePool())
+        self.patch(main, "post_api_bot_stats", nothing)
+        self.patch(main.utils, "post_server_perms", nothing)
+        self.patch(main.guild_lifecycle_event_repo, "insert_guild_lifecycle_event", lambda *_args, **_kwargs: None)
+        self.patch(main.server_config_repo, "insert_server_config", lambda *_args: None)
+        self.patch(main, "total_member_count", 100)
+        self.set_server_classes([GUILD_ID])
+        self.server = types.SimpleNamespace(id=201, name="New Server", member_count=25)
+
+    async def test_a_joined_server_is_set_up_and_its_members_counted(self):
+        async def join(server, _connection, _bot):
+            return build_server(guild_id=server.id)
+
+        self.patch(main.events, "guild_join", join)
+        await main.on_guild_join(self.server)
+
+        self.assertIn(201, main.server_classes)
+        self.assertEqual(125, main.total_member_count)
+
+    async def test_a_removed_server_is_deleted_and_its_leave_recorded_in_one_transaction(self):
+        """Neither commits on its own, so the data is never gone without its departure recorded."""
+        calls = []
+
+        async def remove(_server, _connection, commit=True):
+            calls.append(("delete", commit))
+
+        self.patch(main.events, "guild_remove", remove)
+        self.patch(main.guild_lifecycle_event_repo, "insert_guild_lifecycle_event",
+                   lambda *_args, commit=True: calls.append(("leave", commit)))
+        await main.on_guild_remove(types.SimpleNamespace(id=GUILD_ID, name="Test Server", member_count=30))
+
+        self.assertEqual([("delete", False), ("leave", False)], calls)
+
+    async def test_a_removed_server_is_forgotten_and_its_members_taken_off(self):
+        async def remove(*_args, **_kwargs):
+            return None
+
+        self.patch(main.events, "guild_remove", remove)
+        await main.on_guild_remove(types.SimpleNamespace(id=GUILD_ID, name="Test Server", member_count=30))
+
+        self.assertNotIn(GUILD_ID, main.server_classes)
+        self.assertEqual(70, main.total_member_count)
+
+    async def test_a_server_whose_setup_failed_is_counted_and_taken_off_alike(self):
+        """The daily recount counts every server, so join and leave must agree with it."""
+        async def fail(*_args):
+            return None
+
+        self.patch(main.events, "guild_join", fail)
+        self.patch(main.events, "record_guild_leave", lambda *_args: None)
+        await main.on_guild_join(self.server)
+        self.assertEqual(125, main.total_member_count)
+
+        await main.on_guild_remove(self.server)
+        self.assertEqual(100, main.total_member_count)
+
+    async def test_the_leave_of_a_server_never_set_up_is_still_recorded(self):
+        recorded = []
+        self.patch(main.events, "record_guild_leave", lambda _connection, guild_id, _when: recorded.append(guild_id))
+        await main.on_guild_remove(self.server)
+
+        self.assertEqual([201], recorded)
+
+    async def test_a_failure_recording_that_leave_is_logged(self):
+        def fail(*_args):
+            raise RuntimeError("database went away")
+
+        self.patch(main.events, "record_guild_leave", fail)
+        await main.on_guild_remove(self.server)
+
+        self.assertTrue(any("Error recording the leave" in entry for entry in self.logged))
+
+
+class TroubleshootButtonFailureTests(CommandTestCase):
+    async def test_a_failure_after_reading_the_activity_is_answered(self):
+        """A press of the button has no command error handler behind it, so the admin is answered here."""
+        self.patch(main.hall_of_fame_message_repo, "get_post_activity",
+                   lambda *_args: {"total": 0, "latest": None, "today": 0})
+
+        def broken(*_args):
+            raise RuntimeError("boom")
+
+        self.patch(main.setup_check, "check_server", broken)
+        interaction = FakeInteraction()
+        await main.run_setup_check(interaction)
+
+        self.assertEqual([messages.COMMAND_FAILED], interaction.followup.messages)
+        self.assertTrue(any("Error running the setup check" in entry for entry in self.logged))
+
+
+class SetupCheckCommandTests(CommandTestCase):
+    def setUp(self):
+        super().setUp()
+        self.patch(main.hall_of_fame_message_repo, "get_post_activity",
+                   lambda *_args: {"total": 3, "latest": None, "today": 0})
+        self.checked = []
+
+        def check(guild, board, server, activity, limit):
+            self.checked.append((activity, limit))
+            return []
+
+        self.patch(main.setup_check, "check_server", check)
+        self.patch(main.setup_check, "build_embed", lambda findings: "embed")
+        self.patch(main.setup_check, "problems", lambda findings: [])
+
+    def admin(self):
+        interaction = FakeInteraction()
+        interaction.guild.get_channel = lambda _channel_id: None
+        return interaction
+
+    async def test_answers_the_admin_privately_with_the_findings(self):
+        interaction = self.admin()
+        await main.troubleshoot.callback(interaction)
+
+        self.assertTrue(interaction.response.deferred_ephemeral)
+        self.assertEqual(["embed"], interaction.followup.messages)
+        self.assertEqual([True], interaction.followup.ephemeral)
+        self.assertEqual([({"total": 3, "latest": None, "today": 0}, utils.daily_post_limit)], self.checked)
+        self.assertTrue(any("no problems" in entry for entry in self.logged))
+
+    async def test_refuses_a_member_without_manage_server(self):
+        interaction = FakeInteraction(manage_guild=False)
+        await main.run_setup_check(interaction)
+
+        self.assertEqual([], self.checked)
+
+    async def test_refuses_a_server_that_is_not_set_up(self):
+        interaction = self.admin()
+        interaction.guild_id = 999
+        await main.run_setup_check(interaction)
+
+        self.assertEqual([messages.ERROR_SERVER_NOT_SETUP], interaction.response.messages)
+        self.assertEqual([], self.checked)
+
+    async def test_does_nothing_before_the_bot_has_loaded(self):
+        self.patch(main, "bot_loaded", False)
+        await main.run_setup_check(self.admin())
+
+        self.assertEqual([], self.checked)
+
+    async def test_counts_the_posts_under_a_statement_timeout(self):
+        """The count reads every post in the server, so a huge board is cut off rather than stalling the bot."""
+        await main.run_setup_check(self.admin())
+
+        self.assertTrue(any(query.startswith("SET statement_timeout") for query in self.pool.connection.queries))
+
+    async def test_a_failure_is_answered_even_from_the_button(self):
+        """The Troubleshoot button has no command error handler behind it, so the admin would wait forever."""
+        def fail(*_args):
+            raise RuntimeError("canceling statement due to statement timeout")
+
+        self.patch(main.hall_of_fame_message_repo, "get_post_activity", fail)
+        interaction = self.admin()
+        await main.run_setup_check(interaction)
+
+        self.assertEqual([messages.COMMAND_FAILED], interaction.followup.messages)
+        self.assertEqual([True], interaction.followup.ephemeral)
+        self.assertEqual([], self.checked)
+        self.assertTrue(any("Error reading the post activity" in entry for entry in self.logged))
+
+
+class NotLoadedYetTests(CommandTestCase):
+    """Commands added in 3.0 answer nothing more until the bot has loaded its servers."""
+
+    async def test_they_stop_before_doing_anything(self):
+        self.patch(main, "bot_loaded", False)
+        for name, call in (("my_data", lambda i: main.my_data.callback(i)),
+                           ("count_in_global_profiles", lambda i: main.count_in_global_profiles.callback(i, True))):
+            with self.subTest(command=name):
+                interaction = FakeInteraction()
+                await call(interaction)
+
+                self.assertEqual([], interaction.followup.messages)
+                self.assertEqual([], self.writes)
+
+
+class WrappedCommandsOpenBoardTests(CommandTestCase):
+    """Outside a closed board the Wrapped commands go on to check the server."""
+
+    async def test_they_refuse_a_server_that_is_not_set_up(self):
+        for command in (main.hof_wrapped_command, main.server_hof_wrapped_command):
+            with self.subTest(command=command.name):
+                interaction = FakeInteraction(guild_id=999)
+                await command.callback(interaction)
+
+                self.assertEqual([messages.ERROR_SERVER_NOT_SETUP], interaction.response.messages)
+
+
+class FeedbackWithoutCounterTests(FeedbackFormTests):
+    async def test_sending_without_a_counter_still_posts(self):
+        modal = await self.open_form(None)
+        modal.fb_title._value = "Title"
+        modal.message._value = "Body"
+
+        async def no_wait(_seconds):
+            return None
+
+        with mock.patch.object(utils.asyncio, "sleep", no_wait):
+            await modal.on_submit(self.submitter())
+
+        self.assertEqual(1, len(self.posted))
+
+
+
+class FakeBoardChannel:
+    """A channel the board can move to, recording what the bot posts there."""
+
+    def __init__(self, channel_id, can_post=True, fails=False):
+        self.id = channel_id
+        self.mention = f"<#{channel_id}>"
+        self.sent = []
+        self.fails = fails
+        self.permissions = types.SimpleNamespace(view_channel=True, send_messages=can_post,
+                                                 read_message_history=True, embed_links=True)
+
+    def permissions_for(self, _member):
+        return self.permissions
+
+    async def send(self, content=None, allowed_mentions=None):
+        if self.fails:
+            raise discord.HTTPException(types.SimpleNamespace(status=403, reason="Forbidden"), "Missing Access")
+        self.sent.append((content, allowed_mentions))
+
+
+class SettingsFormTests(CommandTestCase):
+    """One form for every board setting but the whitelist, under /get_server_config and the welcome message."""
+
+    def setUp(self):
+        super().setUp()
+        self.saved = []
+
+        def record_save(guild_id, values, _connection):
+            self.saved.append((guild_id, dict(values)))
+
+        self.patch(main.server_config_repo, "update_server_config_params", record_save)
+        self.channels = {100: FakeBoardChannel(100), 300: FakeBoardChannel(300)}
+
+    def interaction(self, manage_guild=True):
+        interaction = FakeInteraction(manage_guild=manage_guild)
+        interaction.guild.get_channel = self.channels.get
+        interaction.modals = []
+
+        async def send_modal(modal):
+            interaction.modals.append(modal)
+
+        interaction.response.send_modal = send_modal
+        return interaction
+
+    async def open_form(self):
+        interaction = self.interaction()
+        await main.open_settings_form(interaction)
+        [form] = interaction.modals
+        return form
+
+    def chosen(self, **overrides):
+        """What the form sends when nothing in it was touched, with these values changed"""
+        server = self.server
+        values = {"hall_of_fame_channel_id": server.hall_of_fame_channel_id,
+                  "reaction_threshold": server.reaction_threshold, "post_due_date": server.post_due_date,
+                  "reaction_count_calculation_method": server.reaction_count_calculation_method}
+        values.update({column: bool(getattr(server, column)) for column in messages.SETTINGS_RULE_OPTIONS})
+        values.update(overrides)
+        return values
+
+    async def send(self, errors=(), interaction=None, **overrides):
+        interaction = interaction or self.interaction()
+        await main.save_settings(interaction, self.chosen(**overrides), list(errors))
+        return interaction
+
+    async def test_the_form_holds_five_questions_filled_in_with_the_current_settings(self):
+        """Discord allows five components in a form, so the whitelist keeps its own commands."""
+        form = await self.open_form()
+        components = form.to_components()
+
+        self.assertEqual(messages.SETTINGS_FORM_TITLE, form.title)
+        self.assertEqual([discord.ComponentType.label.value] * 5, [component["type"] for component in components])
+        channel, threshold, due_date, method, rules = [component["component"] for component in components]
+        self.assertEqual(discord.ComponentType.channel_select.value, channel["type"])
+        self.assertEqual([{"id": 100, "type": "channel"}], channel["default_values"])
+        self.assertEqual([discord.ChannelType.text.value, discord.ChannelType.news.value], channel["channel_types"])
+        self.assertEqual("5", threshold["value"])
+        self.assertEqual("30", due_date["value"])
+        self.assertEqual([calculation_method_type.MOST_REACTIONS_ON_EMOJI],
+                         [option["value"] for option in method["options"] if option.get("default")])
+        ticked = {option["value"] for option in rules["options"] if option.get("default")}
+        self.assertEqual({column for column in messages.SETTINGS_RULE_OPTIONS if getattr(self.server, column)}, ticked)
+        self.assertFalse(rules["required"])
+
+    async def test_a_deleted_board_is_not_offered_as_the_current_channel(self):
+        self.channels.pop(100)
+        form = await self.open_form()
+
+        self.assertEqual([], form.to_components()[0]["component"].get("default_values", []))
+
+    def test_the_form_fits_discords_limits(self):
+        """Discord refuses a form with a title, label or option over 45 characters, or a description over 100."""
+        for text in (messages.SETTINGS_FORM_TITLE, messages.SETTINGS_CHANNEL_LABEL, messages.SETTINGS_THRESHOLD_LABEL,
+                     messages.SETTINGS_DUE_DATE_LABEL, messages.SETTINGS_METHOD_LABEL, messages.SETTINGS_RULES_LABEL,
+                     messages.SETTINGS_BUTTON, messages.SETTINGS_SET_UP_BUTTON):
+            with self.subTest(text=text):
+                self.assertLessEqual(len(text), 45)
+        descriptions = [messages.SETTINGS_CHANNEL_DESCRIPTION, messages.SETTINGS_RULES_DESCRIPTION,
+                        messages.SETTINGS_THRESHOLD_DESCRIPTION.format(minimum=1, maximum=1000),
+                        messages.SETTINGS_DUE_DATE_DESCRIPTION.format(minimum=1, maximum=3650)]
+        for label, description in messages.SETTINGS_METHOD_OPTIONS.values():
+            self.assertLessEqual(len(label), 45)
+            descriptions.append(description)
+        for label, _answer in messages.SETTINGS_RULE_OPTIONS.values():
+            self.assertLessEqual(len(label), 45)
+        for text in descriptions:
+            with self.subTest(text=text):
+                self.assertLessEqual(len(text), 100)
+
+    def test_the_form_offers_every_counting_method_and_on_off_setting(self):
+        self.assertEqual(set(main.commands.calculation_method_labels), set(messages.SETTINGS_METHOD_OPTIONS))
+        on_off = {"include_author_in_reaction_calculation", "require_image_or_video", "hide_hof_post_below_threshold",
+                  "ignore_bot_messages", "allow_messages_in_hof_channel", "count_in_global_profiles"}
+        self.assertEqual(on_off, set(messages.SETTINGS_RULE_OPTIONS))
+
+    async def test_a_member_without_manage_server_cannot_open_it(self):
+        interaction = self.interaction(manage_guild=False)
+        await main.open_settings_form(interaction)
+
+        self.assertEqual([], interaction.modals)
+        self.assertEqual([messages.NOT_AUTHORIZED], interaction.response.messages)
+
+    async def test_a_server_that_is_not_set_up_is_told_so(self):
+        self.patch(main, "server_classes", {})
+        interaction = self.interaction()
+        await main.open_settings_form(interaction)
+
+        self.assertEqual([], interaction.modals)
+        self.assertEqual([messages.ERROR_SERVER_NOT_SETUP], interaction.response.messages)
+
+    async def test_sending_it_stores_only_what_changed_in_one_write(self):
+        interaction = await self.send(reaction_threshold=8, ignore_bot_messages=True,
+                                      reaction_count_calculation_method=calculation_method_type.UNIQUE_USERS)
+
+        self.assertEqual([(GUILD_ID, {"reaction_threshold": 8, "ignore_bot_messages": True,
+                                      "reaction_count_calculation_method": calculation_method_type.UNIQUE_USERS})],
+                         self.saved)
+        self.assertEqual([], self.writes)
+        self.assertEqual(8, self.server.reaction_threshold)
+        self.assertTrue(self.server.ignore_bot_messages)
+        self.assertEqual(calculation_method_type.UNIQUE_USERS, self.server.reaction_count_calculation_method)
+        [answer] = interaction.followup.messages
+        self.assertIn("• Reaction threshold: **8**", answer)
+        self.assertIn(f"• {messages.SETTING_IGNORE_BOTS}: **On**", answer)
+        self.assertIn("Unique members who reacted", answer)
+        self.assertNotIn("Post age", answer)
+
+    async def test_the_answer_is_only_for_the_admin(self):
+        interaction = await self.send(post_due_date=7)
+
+        self.assertTrue(interaction.response.deferred_ephemeral)
+        self.assertEqual([True], interaction.followup.ephemeral)
+        self.assertIn(messages.POST_DUE_DATE_NOTE.format(days=7, plural="s"), interaction.followup.messages[0])
+        # Named as /get_server_config shows it right after
+        self.assertIn("• Post age: **7 days**", interaction.followup.messages[0])
+
+    async def test_a_change_carries_the_note_its_command_gives(self):
+        self.server.allow_messages_in_hof_channel = True
+        interaction = await self.send(allow_messages_in_hof_channel=False, count_in_global_profiles=False)
+
+        self.assertIn(messages.CHAT_IN_BOARD_OFF_NOTE, interaction.followup.messages[0])
+        self.assertIn(messages.GLOBAL_PROFILE_COUNTING_OFF_NOTE, interaction.followup.messages[0])
+
+    async def test_sending_it_unchanged_writes_nothing(self):
+        interaction = await self.send()
+
+        self.assertEqual([], self.saved)
+        self.assertEqual([messages.SETTINGS_NOTHING_CHANGED], interaction.response.messages)
+        self.assertEqual([True], interaction.response.ephemeral)
+
+    async def test_a_refused_value_saves_nothing_at_all(self):
+        """The other changes in the form are not stored either, so the admin is never left half changed."""
+        interaction = await self.send(errors=["The reaction threshold must be between 1 and 1000, but got 0."],
+                                      reaction_threshold=None, ignore_bot_messages=True)
+
+        self.assertEqual([], self.saved)
+        self.assertFalse(self.server.ignore_bot_messages)
+        self.assertIn(messages.SETTINGS_NOT_SAVED, interaction.response.messages[0])
+        self.assertEqual([True], interaction.response.ephemeral)
+
+    async def test_an_admin_who_lost_manage_server_while_it_was_open_is_refused(self):
+        interaction = await self.send(interaction=self.interaction(manage_guild=False), reaction_threshold=9)
+
+        self.assertEqual([], self.saved)
+        self.assertEqual([messages.NOT_AUTHORIZED], interaction.response.messages)
+
+    async def test_moving_the_board_announces_it_there_without_a_ping(self):
+        interaction = await self.send(hall_of_fame_channel_id=300, reaction_threshold=4)
+
+        self.assertEqual(300, self.server.hall_of_fame_channel_id)
+        [(announcement, mentions)] = self.channels[300].sent
+        self.assertIn("**4**", announcement)
+        self.assertFalse(mentions.users)
+        self.assertIn("• Hall of Fame channel: **<#300>**", interaction.followup.messages[0])
+
+    async def test_a_board_the_bot_cannot_post_in_is_refused_with_everything_else(self):
+        self.channels[300] = FakeBoardChannel(300, can_post=False)
+        interaction = await self.send(hall_of_fame_channel_id=300, reaction_threshold=4)
+
+        self.assertEqual([], self.saved)
+        self.assertEqual(100, self.server.hall_of_fame_channel_id)
+        self.assertIn("Send Messages", interaction.response.messages[0])
+        self.assertIn(messages.SETTINGS_NOT_SAVED, interaction.response.messages[0])
+
+    async def test_a_failed_announcement_still_saves_and_says_so(self):
+        self.channels[300] = FakeBoardChannel(300, fails=True)
+        interaction = await self.send(hall_of_fame_channel_id=300)
+
+        self.assertEqual(300, self.server.hall_of_fame_channel_id)
+        self.assertIn(messages.SETTINGS_ANNOUNCEMENT_FAILED.format(channel="<#300>"), interaction.followup.messages[0])
+
+    async def test_the_log_names_the_settings_and_not_the_admin(self):
+        await self.send(reaction_threshold=8)
+
+        [entry] = [entry for entry in self.logged if "Settings form" in entry]
+        self.assertIn("reaction_threshold", entry)
+        self.assertNotIn("Member", entry)
+
+    async def test_the_form_hands_what_was_sent_to_main(self):
+        form = await self.open_form()
+        form.threshold._value = " 12 "
+        form.due_date._value = "60"
+        form.method._value = calculation_method_type.TOTAL_REACTIONS
+        form.rules._values = ["ignore_bot_messages"]
+        form.channel._values = [types.SimpleNamespace(id=300)]
+        received = []
+
+        async def on_save(interaction, chosen, errors):
+            received.append((chosen, errors))
+
+        form.on_save = on_save
+        await form.on_submit(self.interaction())
+
+        [(chosen, errors)] = received
+        self.assertEqual([], errors)
+        self.assertEqual(300, chosen["hall_of_fame_channel_id"])
+        self.assertEqual(12, chosen["reaction_threshold"])
+        self.assertEqual(60, chosen["post_due_date"])
+        self.assertEqual(calculation_method_type.TOTAL_REACTIONS, chosen["reaction_count_calculation_method"])
+        self.assertTrue(chosen["ignore_bot_messages"])
+        self.assertFalse(chosen["include_author_in_reaction_calculation"])
+
+
+class SettingsFromFormTests(unittest.TestCase):
+    """The form checks numbers the way the commands do, since Discord sends them as text."""
+
+    def read(self, threshold="5", due_date="30", method=calculation_method_type.TOTAL_REACTIONS, rules=()):
+        return main.commands.settings_from_form([], threshold, due_date, method, list(rules), build_server())
+
+    def test_numbers_out_of_range_are_refused_with_the_commands_wording(self):
+        _chosen, errors = self.read(threshold="0", due_date="4000")
+
+        self.assertEqual([main.validation.out_of_range_message("The reaction threshold", 0, 1, 1000),
+                          main.validation.out_of_range_message("The post due date", 4000, 1, 3650)], errors)
+
+    def test_text_that_is_not_a_whole_number_is_refused(self):
+        for typed in ("five", "2.5", "-3", "", "٣"):
+            with self.subTest(typed=typed):
+                _chosen, errors = self.read(threshold=typed)
+                self.assertEqual(1, len(errors))
+                self.assertIn("whole number", errors[0])
+
+    def test_an_unknown_method_keeps_the_current_one(self):
+        chosen, _errors = self.read(method="not a method")
+
+        self.assertEqual(calculation_method_type.MOST_REACTIONS_ON_EMOJI, chosen["reaction_count_calculation_method"])
+
+    def test_unticked_rules_are_off(self):
+        chosen, _errors = self.read(rules=["require_image_or_video"])
+
+        self.assertTrue(chosen["require_image_or_video"])
+        self.assertFalse(any(chosen[column] for column in messages.SETTINGS_RULE_OPTIONS
+                             if column != "require_image_or_video"))
+
+    def test_no_channel_sent_leaves_the_board_where_it_is(self):
+        chosen, _errors = self.read()
+
+        self.assertNotIn("hall_of_fame_channel_id", chosen)
+
+
+class LogPrivacyTests(unittest.TestCase):
+    """
+    Logs are kept in the developer channels, so they say what happened, with the server's ID, never who
+    or the server's name. That also keeps members who asked not to be featured out of them
+    """
+
+    # Logs that need to name a member, with why
+    NAMES_A_MEMBER = {
+        # It exists to check one member for farmed reactions
+        ("utils.py", "credited posts, the most allowed"),
+    }
+    MEMBER_IDENTITY = ("user.name", "user.id", "author.name", "author.id", ".mention", "display_name", "user.global_name")
+
+    def logging_calls(self):
+        import ast
+        import pathlib
+
+        for path in sorted((pathlib.Path(__file__).parent.parent / "src").rglob("*.py")):
+            source = path.read_text(encoding="utf-8")
+            for node in ast.walk(ast.parse(source)):
+                if isinstance(node, ast.Call) and getattr(node.func, "attr", getattr(node.func, "id", "")) == "logging":
+                    yield path.name, " ".join(ast.get_source_segment(source, node).split())
+
+    def test_no_log_names_a_member_unless_it_has_to(self):
+        for file_name, call in self.logging_calls():
+            if not any(identity in call for identity in self.MEMBER_IDENTITY):
+                continue
+            with self.subTest(call=call[:120]):
+                self.assertTrue(any(file_name == allowed_file and marker in call
+                                    for allowed_file, marker in self.NAMES_A_MEMBER))
+
+    def test_no_log_names_a_server_or_channel(self):
+        """The server ID is added to the log on its own, and a name can change or be a person's name."""
+        for _file_name, call in self.logging_calls():
+            with self.subTest(call=call[:120]):
+                for name in ("guild.name", "server.name", "guild_name", "channel.name"):
+                    self.assertNotIn(name, call)
+
+    def test_where_a_command_was_used_never_says_which_server(self):
+        with mock.patch.object(main, "bot", types.SimpleNamespace(get_guild=lambda _guild_id: object())):
+            self.assertEqual("a server", main.where_used(FakeInteraction()))
+        dm = types.SimpleNamespace(guild=None, guild_id=None)
+        self.assertEqual("a DM or a server without the bot", main.where_used(dm))
+
+    def test_a_server_without_the_bot_is_not_a_server_with_it(self):
+        """discord.py gives a user install there a partial guild, so interaction.guild is not None."""
+        interaction = types.SimpleNamespace(guild=object(), guild_id=999)
+        with mock.patch.object(main, "bot", types.SimpleNamespace(get_guild=lambda _guild_id: None)):
+            self.assertEqual("a DM or a server without the bot", main.where_used(interaction))
+
+
+
+class SettingCommandTests(CommandTestCase):
+    """The simple on/off settings: stored for the server and logged without naming anyone."""
+
+    async def test_each_setting_is_stored_and_logged(self):
+        method = discord.app_commands.Choice(name="Unique users", value="unique_users")
+        for command, value, parameter, stored in (
+                (main.include_author_own_reaction_in_threshold, False, "include_author_in_reaction_calculation", False),
+                (main.allow_messages_in_hof_channel, True, "allow_messages_in_hof_channel", True),
+                (main.require_image_or_video, True, "require_image_or_video", True),
+                (main.ignore_bot_messages, True, "ignore_bot_messages", True),
+                (main.calculation_method, method, "reaction_count_calculation_method", "unique_users")):
+            with self.subTest(command=command.name):
+                self.writes.clear()
+                self.logged.clear()
+                await command.callback(FakeInteraction(), value)
+
+                self.assertEqual([(GUILD_ID, parameter, stored)], self.writes)
+                self.assertEqual(1, len([entry for entry in self.logged if "used in a server" in entry]))
+
+    async def test_clearing_the_whitelist(self):
+        self.server.whitelisted_emojis = ["🔥"]
+        self.server.custom_emoji_check_logic = True
+        interaction = FakeInteraction()
+        await main.clear_whitelist.callback(interaction)
+
+        self.assertEqual([(GUILD_ID, "whitelisted_emojis", [])], self.writes)
+        self.assertEqual([], self.server.whitelisted_emojis)
+        self.assertTrue(any("Clear whitelist command used in a server" in entry for entry in self.logged))
+
+
+class WrappedCommandTests(CommandTestCase):
+    async def test_posts_the_members_card(self):
+        opened = []
+
+        async def send_wrapped(interaction, row, totals):
+            opened.append((interaction, row, totals))
+
+        totals = {"members": 3, "messages_sent": 900, "posts": 6}
+        self.patch(main.hof_wrapped_repo, "get_hof_wrapped", lambda *_args: {"user_id": 77})
+        self.patch(main.hof_wrapped_repo, "get_guild_wrapped_totals", lambda *_args: totals)
+        self.patch(main.wrapped_card, "send_wrapped", send_wrapped)
+        interaction = FakeInteraction()
+        await main.hof_wrapped_command.callback(interaction)
+
+        self.assertEqual([(interaction, {"user_id": 77}, totals)], opened)
+        self.assertTrue(any("HOF Wrapped command used in a server" in entry for entry in self.logged))
+
+    async def test_a_wrapped_made_before_the_member_opted_out_is_not_posted(self):
+        """Otherwise their card, with its best post, would be posted after they asked."""
+        opened = []
+
+        async def send_wrapped(*args):
+            opened.append(args)
+
+        self.patch(main.hof_wrapped_repo, "get_hof_wrapped", lambda *_args: {"user_id": 77})
+        self.patch(main.hof_wrapped_repo, "check_if_guild_wrapped_data_exists", lambda *_args: True)
+        self.patch(main.opt_out_repo, "is_opted_out", lambda *_args: True)
+        self.patch(main.wrapped_card, "send_wrapped", send_wrapped)
+        interaction = FakeInteraction()
+        await main.hof_wrapped_command.callback(interaction)
+
+        self.assertEqual([], opened)
+        self.assertEqual([main.hof_wrapped.missing_wrapped_text(server_has_wrapped=True, opted_out=True)],
+                         interaction.response.messages)
+
+    async def ask_without_wrapped(self, server_has_wrapped=True, opted_out=False):
+        # Last year's Wrapped is out whatever the date, unlike one whose December has not come yet
+        self.patch(main.version, "WRAPPED_YEAR", datetime.datetime.now(datetime.timezone.utc).year - 1)
+        self.patch(main.hof_wrapped_repo, "get_hof_wrapped", lambda *_args: None)
+        self.patch(main.hof_wrapped_repo, "check_if_guild_wrapped_data_exists", lambda *_args: server_has_wrapped)
+        self.patch(main.opt_out_repo, "is_opted_out", lambda *_args: opted_out)
+        interaction = FakeInteraction()
+        await main.hof_wrapped_command.callback(interaction)
+        return interaction
+
+    async def test_says_so_when_the_member_has_no_wrapped(self):
+        interaction = await self.ask_without_wrapped()
+
+        self.assertEqual([main.hof_wrapped.missing_wrapped_text(server_has_wrapped=True)],
+                         interaction.response.messages)
+        self.assertIn("You are not in this server's Hall of Fame Wrapped", interaction.response.messages[0])
+
+    async def test_answers_a_member_without_wrapped_privately(self):
+        interaction = await self.ask_without_wrapped()
+
+        self.assertEqual([True], interaction.response.ephemeral)
+
+    async def test_tells_a_member_without_wrapped_when_the_next_one_comes(self):
+        interaction = await self.ask_without_wrapped()
+
+        next_year = main.hof_wrapped.next_wrapped_year()
+        self.assertIn(f"Wrapped {next_year} arrives in December {next_year}", interaction.response.messages[0])
+
+    async def test_says_the_server_has_none_rather_than_blaming_the_member(self):
+        interaction = await self.ask_without_wrapped(server_has_wrapped=False)
+
+        self.assertIn("This server has no Hall of Fame Wrapped", interaction.response.messages[0])
+
+    async def test_tells_a_member_who_opted_out_why_there_is_none(self):
+        """Wrapped leaves them out, so they are pointed at the choice instead of promised the next one"""
+        interaction = await self.ask_without_wrapped(opted_out=True)
+
+        self.assertIn("You asked not to be featured", interaction.response.messages[0])
+        self.assertIn(command_refs.MY_DATA, interaction.response.messages[0])
+        self.assertNotIn("arrives in December", interaction.response.messages[0])
+        self.assertEqual([True], interaction.response.ephemeral)
+
+    async def test_shows_the_servers_wrapped(self):
+        self.patch(main.hof_wrapped_repo, "check_if_guild_wrapped_data_exists", lambda *_args: True)
+        self.patch(main.hof_wrapped_repo, "get_all_hof_wrapped_for_guild", lambda *_args: [])
+        self.patch(main.hof_wrapped, "create_server_embed", lambda guild, rows: "server embed")
+        interaction = FakeInteraction()
+        await main.server_hof_wrapped_command.callback(interaction)
+
+        self.assertEqual(["server embed"], interaction.response.messages)
+        self.assertEqual([messages.INVITE_URL, messages.VOTE_URL],
+                         [button.url for button in interaction.response.views[0].children])
+
+    async def test_says_so_when_the_server_has_no_wrapped(self):
+        self.patch(main.hof_wrapped_repo, "check_if_guild_wrapped_data_exists", lambda *_args: False)
+        interaction = FakeInteraction()
+        await main.server_hof_wrapped_command.callback(interaction)
+
+        self.assertEqual([main.hof_wrapped.missing_wrapped_text(server_has_wrapped=False)],
+                         interaction.response.messages)
+        self.assertEqual([True], interaction.response.ephemeral)
+
+
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class WhyNotOnBoardCommandTests(CommandTestCase):
+    def setUp(self):
+        super().setUp()
+        self.patch(main, "why_cooldown", main.ExpiringSet(ttl_seconds=main.why_cooldown_seconds))
+        self.explained = []
+
+        async def explain(message, asked_by_id, _bot, _connection, server):
+            self.explained.append((message, asked_by_id, server))
+            return main.message_check.Verdict("below_threshold", "the answer")
+
+        self.patch(main.message_check, "explain", explain)
+        self.message = types.SimpleNamespace(id=4242)
+
+    async def test_answers_privately_with_the_explanation(self):
+        interaction = FakeInteraction(manage_guild=False)
+        await main.why_not_on_board.callback(interaction, self.message)
+
+        self.assertTrue(interaction.response.deferred_ephemeral)
+        self.assertEqual(["the answer"], interaction.followup.messages)
+        self.assertEqual([True], interaction.followup.ephemeral)
+        self.assertEqual([(self.message, interaction.user.id, self.server)], self.explained)
+
+    async def test_logs_the_reason_but_not_who_asked(self):
+        interaction = FakeInteraction(manage_guild=False)
+        await main.why_not_on_board.callback(interaction, self.message)
+
+        [entry] = [entry for entry in self.logged if "Why isn't this on the board" in entry]
+        self.assertIn("below_threshold", entry)
+        self.assertNotIn(str(interaction.user.id), entry)
+
+    async def test_refuses_a_server_that_is_not_set_up(self):
+        interaction = FakeInteraction(guild_id=999)
+        await main.why_not_on_board.callback(interaction, self.message)
+
+        self.assertEqual([messages.ERROR_SERVER_NOT_SETUP], interaction.response.messages)
+        self.assertEqual([], self.explained)
+
+    async def test_a_member_asking_again_straight_away_waits(self):
+        await main.why_not_on_board.callback(FakeInteraction(), self.message)
+        interaction = FakeInteraction()
+        await main.why_not_on_board.callback(interaction, self.message)
+
+        self.assertEqual([messages.WHY_ON_COOLDOWN], interaction.response.messages)
+        self.assertEqual(1, len(self.explained))
+
+    async def test_does_nothing_before_the_bot_has_loaded(self):
+        self.patch(main, "bot_loaded", False)
+        await main.why_not_on_board.callback(FakeInteraction(), self.message)
+
+        self.assertEqual([], self.explained)
