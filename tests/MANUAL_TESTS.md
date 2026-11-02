@@ -104,6 +104,7 @@ message under a "test cases" category so each post names what it tests.
 | wrapped | `/hof_wrapped`: the story, the summary, Year in squares and Top 10 | Seven pages with Next, Back and Skip, the summary with its buttons, a square per day and the top 10 with jump links. Named the member their own biggest fan when they reacted to their own posts; fixed. The fame rate read "1 in 1" for 81 of 105 messages, see #106 |
 | wrapped | Show to others | "@Lukas shared their Wrapped" posted once in the channel, with Year in squares, Top 10, Jump to it and Get my Wrapped. The story's button became "Shown in the channel" |
 | wrapped | Year in squares and Top 10 on a shared Wrapped, pressed by another member | Both opened privately for that member, showing the sharer's year |
+| wrapped | `/hof_wrapped` as a member who opted out | "You asked not to be featured, so no Hall of Fame Wrapped is made for you. You can change that with /my_data." They were in no list of the server's Wrapped or of the shared one |
 | opt-out | A new message from a member who pressed Stop featuring me, reacted to | Not posted. Why isn't this on the board?, asked by another member, answered only that it cannot be featured, without naming the choice. Asked by the member, it said they asked not to be featured and pointed to `/my_data` |
 | reply | A reply to a member who pressed Stop featuring me | Posted with no "Replying to" line and no quote, so the member is not named |
 
