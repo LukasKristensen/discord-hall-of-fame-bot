@@ -9,6 +9,7 @@ opened when the bot starts rather than when the module loads.
 """
 
 import asyncio
+import datetime
 import io
 import types
 import unittest
@@ -2390,6 +2391,8 @@ class WrappedCommandTests(CommandTestCase):
                          interaction.response.messages)
 
     async def ask_without_wrapped(self, server_has_wrapped=True, opted_out=False):
+        # Last year's Wrapped is out whatever the date, unlike one whose December has not come yet
+        self.patch(main.version, "WRAPPED_YEAR", datetime.datetime.now(datetime.timezone.utc).year - 1)
         self.patch(main.hof_wrapped_repo, "get_hof_wrapped", lambda *_args: None)
         self.patch(main.hof_wrapped_repo, "check_if_guild_wrapped_data_exists", lambda *_args: server_has_wrapped)
         self.patch(main.opt_out_repo, "is_opted_out", lambda *_args: opted_out)

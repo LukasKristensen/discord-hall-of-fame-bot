@@ -324,6 +324,9 @@ def missing_wrapped_text(server_has_wrapped: bool, opted_out: bool = False, now:
     """
     if opted_out:
         return messages.WRAPPED_NONE_OPTED_OUT.format(command=command_refs.MY_DATA)
+    now = now or datetime.datetime.now(datetime.timezone.utc)
+    if (now.year, now.month) < (version.WRAPPED_YEAR, 12):
+        return messages.WRAPPED_NOT_OUT_YET.format(year=version.WRAPPED_YEAR)
     template = messages.WRAPPED_NONE_FOR_MEMBER if server_has_wrapped else messages.WRAPPED_NONE_FOR_SERVER
     return template.format(year=version.WRAPPED_YEAR, next_year=next_wrapped_year(now))
 

@@ -653,6 +653,24 @@ class MissingWrappedTextTests(unittest.TestCase):
                     self.assertIn("Wrapped 2025", text)
                     self.assertIn("Wrapped 2026 arrives in December 2026", text)
 
+    def test_says_the_wrapped_is_not_out_before_its_december(self):
+        """WRAPPED_YEAR moved on early must not say this year's is done and point at next year's"""
+        now = datetime.datetime(2026, 11, 2, tzinfo=datetime.timezone.utc)
+        with mock.patch.object(hof_wrapped.version, "WRAPPED_YEAR", 2026):
+            for server_has_wrapped in (True, False):
+                with self.subTest(server_has_wrapped=server_has_wrapped):
+                    text = hof_wrapped.missing_wrapped_text(server_has_wrapped, now=now)
+                    self.assertEqual(messages.WRAPPED_NOT_OUT_YET.format(year=2026), text)
+                    self.assertNotIn("2027", text)
+
+    def test_says_there_is_none_once_its_december_has_come(self):
+        now = datetime.datetime(2026, 12, 5, tzinfo=datetime.timezone.utc)
+        with mock.patch.object(hof_wrapped.version, "WRAPPED_YEAR", 2026):
+            text = hof_wrapped.missing_wrapped_text(server_has_wrapped=False, now=now)
+
+        self.assertIn("This server has no Hall of Fame Wrapped 2026", text)
+        self.assertIn("Wrapped 2027 arrives in December 2027", text)
+
     def test_a_member_who_opted_out_is_pointed_at_my_data(self):
         text = hof_wrapped.missing_wrapped_text(server_has_wrapped=True, opted_out=True)
 

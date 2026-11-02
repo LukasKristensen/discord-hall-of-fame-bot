@@ -379,6 +379,9 @@ WRAPPED_NONE_FOR_SERVER = ("**This server has no Hall of Fame Wrapped {year}.** 
 WRAPPED_NONE_FOR_MEMBER = ("**You are not in this server's Hall of Fame Wrapped {year}**, because no message on its "
                            "board was credited to you when it was made. Wrapped {next_year} arrives in December "
                            "{next_year} and includes every member with a message on the board by then.")
+# When WRAPPED_YEAR is moved on before its December, no server can have that Wrapped yet
+WRAPPED_NOT_OUT_YET = ("**Hall of Fame Wrapped {year} is not out yet.** It arrives in December {year} for every "
+                       "server with at least one message on its board.")
 # Wrapped leaves out members who asked not to be featured, so promising them the next one would not be true
 WRAPPED_NONE_OPTED_OUT = ("**You asked not to be featured**, so no Hall of Fame Wrapped is made for you. You can "
                           "change that with {command}.")
