@@ -421,3 +421,47 @@ class GuildsToProcessTests(unittest.TestCase):
     def test_only_the_servers_named(self):
         import hof_wrapped
         self.assertEqual([1, 3], [guild.id for guild in hof_wrapped.guilds_to_process(self.guilds, ["3", "1", "99"])])
+
+
+class CountedTests(unittest.TestCase):
+    """Wrapped wrote "1 posts" and "1 times"."""
+
+    def test_one_is_singular_and_more_are_plural(self):
+        import hof_wrapped
+        self.assertEqual("1 post", hof_wrapped.counted(1, "post"))
+        self.assertEqual("3 posts", hof_wrapped.counted(3, "post"))
+        self.assertEqual("1 time", hof_wrapped.counted(1, "time"))
+        self.assertEqual("0 reactions", hof_wrapped.counted(0, "reaction"))
+
+
+class OwnReactionTests(unittest.IsolatedAsyncioTestCase):
+    """Wrapped named a member their own biggest fan when they reacted to their own posts."""
+
+    async def test_a_member_is_not_their_own_fan(self):
+        import types
+        from unittest import mock
+        import hof_wrapped
+
+        class Users:
+            def __init__(self, ids):
+                self.ids = ids
+
+            def __aiter__(self):
+                async def gen():
+                    for user_id in self.ids:
+                        yield types.SimpleNamespace(id=user_id)
+                return gen()
+
+        author, friend = 1, 2
+        reaction = types.SimpleNamespace(emoji="🔥", users=lambda: Users([author, friend]))
+        message = types.SimpleNamespace(author=types.SimpleNamespace(id=author), reactions=[reaction])
+
+        async def count(*_args, **_kwargs):
+            return 2
+
+        with mock.patch.dict(hof_wrapped.users, {author: hof_wrapped.User(author), friend: hof_wrapped.User(friend)},
+                             clear=True), mock.patch.object(hof_wrapped.message_reactions, "reaction_count", count):
+            await hof_wrapped.process_message_reactions(message, None)
+            self.assertEqual({friend: 1}, hof_wrapped.users[author].usersFans)
+            self.assertEqual({}, hof_wrapped.users[author].fanOfUsers)
+            self.assertEqual({author: 1}, hof_wrapped.users[friend].fanOfUsers)

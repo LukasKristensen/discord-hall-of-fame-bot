@@ -198,7 +198,7 @@ Only if Wrapped can be generated on the development bot.
 - [ ] Another member presses Year in squares and Top 10 and sees them privately, and Get my Wrapped posts
       their own card
 - [ ] After a restart, the buttons on a card posted before it still answer
-- [ ] A member who asked not to be featured gets no Wrapped and appears in nobody's fan lists
+- [x] A member who asked not to be featured gets no Wrapped and appears in nobody's fan lists
 - [ ] A member who deleted their data while Wrapped ran is left out the same way
 - [ ] After Wrapped is generated, a friend presses Stop featuring me: they vanish from your
       `/hof_wrapped` top fans and "fan of", from the reactions you received, and from `/server_hof_wrapped`,
