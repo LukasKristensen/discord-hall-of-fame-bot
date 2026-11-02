@@ -72,6 +72,7 @@ message under a "test cases" category so each post names what it tests.
 | settings form | Threshold, post age and counting changed at once | One answer listing exactly those three, with the note on post age, and `/get_server_config` showed all three. The answer called post age "Post due date"; it now says "Post age" as the config does |
 | settings form | Counting changed to total reactions | One private answer naming only that change, and `/get_server_config` showed it |
 | settings form | 0, and "five", as the threshold | Refused: "must be between 1 and 1000" for 0 and "must be a whole number from 1 to 1000" for five, nothing saved |
+| my data | `/my_data` with posts stored | Private summary: 143 featured posts, standing in 2 servers, 0 Wrapped entries, totals shown, the privacy policy link, and Download, Hide totals, Stop featuring me and Delete |
 | opt-out | A new message from a member who pressed Stop featuring me, reacted to | Not posted. Why isn't this on the board?, asked by another member, answered only that it cannot be featured, without naming the choice. Asked by the member, it said they asked not to be featured and pointed to `/my_data` |
 | reply | A reply to a member who pressed Stop featuring me | Posted with no "Replying to" line and no quote, so the member is not named |
 
@@ -150,6 +151,10 @@ Not bugs, and nothing decided yet:
 
 - **Point threshold replies to the settings form.** `/set_reaction_threshold` answers with "Change how
   reactions are counted with /calculation_method". Change settings does every setting at once now.
+
+- **"Never stored" in `/my_data`.** "Message text, images and your username are never stored" holds for the
+  database, but `/feedback` sends the username to the developer channel, as `PRIVACY.md` says. "...never
+  stored in Hall of Fame's database" would be exact.
 
 ### Still to run
 
