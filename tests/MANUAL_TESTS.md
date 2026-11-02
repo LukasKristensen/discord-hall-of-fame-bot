@@ -77,6 +77,7 @@ message under a "test cases" category so each post names what it tests.
 | my data | `/my_data` as a member who opted out, with one earlier post | Not featured since the date asked, shown in the reader's own date format, why the ID and date are kept, and that earlier posts stay until deleted. Download, Hide totals, Feature me again and Delete offered |
 | my data | Download as a member who opted out | `"not_counted": true` in the file |
 | my data | Delete my data, then Cancel | The panel replaced in place with "Nothing was deleted." |
+| my data | Feature me again, a new message, then Stop featuring me | Confirmed in place, the next message over the threshold was posted and credited (2 featured posts), and stopping again brought back the line with the date |
 | opt-out | A new message from a member who pressed Stop featuring me, reacted to | Not posted. Why isn't this on the board?, asked by another member, answered only that it cannot be featured, without naming the choice. Asked by the member, it said they asked not to be featured and pointed to `/my_data` |
 | reply | A reply to a member who pressed Stop featuring me | Posted with no "Replying to" line and no quote, so the member is not named |
 
@@ -159,6 +160,9 @@ Not bugs, and nothing decided yet:
 - **"Never stored" in `/my_data`.** "Message text, images and your username are never stored" holds for the
   database, but `/feedback` sends the username to the developer channel, as `PRIVACY.md` says. "...never
   stored in Hall of Fame's database" would be exact. The download's `about` field says the same.
+
+- **One line after Stop featuring me.** The panel then says "New messages of yours are not featured from
+  now on" and, right under it, the longer line saying the same with the date. The longer line alone is enough.
 
 ### Still to run
 

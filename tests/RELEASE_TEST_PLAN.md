@@ -59,7 +59,7 @@ Get a few of your messages onto the board first.
       shows no new post
 - [ ] A second account's message still reaches the board as usual
 - [x] Download right after stopping includes `"not_counted": true`
-- [ ] Feature me again: the panel confirms it, and your next message over the threshold is reposted and
+- [x] Feature me again: the panel confirms it, and your next message over the threshold is reposted and
       credited to you
 
 ## Deleting
