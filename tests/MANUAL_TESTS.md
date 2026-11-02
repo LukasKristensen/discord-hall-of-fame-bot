@@ -45,6 +45,7 @@ message under a "test cases" category so each post names what it tests.
 | sticker | An animated (Lottie) sticker | Named in italics where the text goes, *Sticker: name* |
 | sticker | A picture sticker, two different reactions | Shown in the gallery. The reactions line lists both emojis with their counts |
 | reply | A reply to an image, a reply to a video | The quote, then the answered image or playable video full width, then the reply under its poster's name |
+| reply | A reply with a spoilered image | The quote, then the image covered by SPOILER as in the original |
 | reply | A reply to a deleted message | "Replying to a deleted message" above the poster's name, no quote |
 | new post | A Components V2 post reacted to, then below the threshold, then over it again | Posted with "2 counted". Went blank in place when a reaction was removed, and came back as the same message with the new emoji and count |
 | old post | Embed posts from before the upgrade, reacted to again | The count updated in the same embed after counting changed to all emojis. A post below the threshold went blank, and came back as the same embed, with the footer, once over it again |
