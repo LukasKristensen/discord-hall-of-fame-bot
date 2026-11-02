@@ -97,8 +97,8 @@ Nothing else is shared.
 - Removing the bot from a server immediately deletes that server's featured messages, member
   statistics, Wrapped data and settings, including its permission warnings. A permission warning is also
   deleted by the daily check that finds the permissions fixed. If the bot was offline when it was removed, Discord does not
-  tell it, so the data is deleted once the server has been gone for 7 days and Discord confirms the bot
-  no longer has access to it.
+  tell it, so the data is deleted once the server has been gone for 7 days and Discord has confirmed twice,
+  at least a day apart, that the bot no longer has access to it.
 - Join and leave dates and monthly member counts are kept as anonymous server statistics.
 - Your choice to hide your totals across servers is kept until you show it again or delete your data.
 - Other data is kept while the bot is in the server, and deleted on request as described in section 6.
