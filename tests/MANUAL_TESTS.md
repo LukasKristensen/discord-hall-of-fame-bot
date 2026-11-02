@@ -56,6 +56,7 @@ message under a "test cases" category so each post names what it tests.
 | setup check | `/troubleshoot` | Private answer naming the channel the bot cannot see, the role that opens it, the board, and the last post. Read "opens 1 of these 1" and "1 more are hidden"; now "opens it" and "1 more is hidden" |
 | setup check | A message in an age-restricted channel | Not posted while the board was not age-restricted, and `/troubleshoot` listed the channel under age-restricted channels. Once the board was marked age-restricted, a message there was posted |
 | setup check | The Troubleshoot button on a config message from before a restart | Answered after the restart, with the new wording ("opens it", "1 more is hidden") |
+| setup check | Troubleshoot on a new server's welcome message, after a restart | Green check, private: board fine, reads 2 of 2 channels, and "No posts yet: the bot joined recently" as info, not a warning |
 | setup check | The Troubleshoot button under `/get_server_config` | An admin got the findings privately. A member was refused privately |
 | joining | The dev bot added to a new server | Welcome message on the new board with Troubleshoot, Set up, Support server and Vote. No setup note, nothing wrong found. Set up opened the settings form with the server's defaults: threshold 1 for a server under 3 members, 1,000 days, most reactions on one emoji. It still opened after the bot restarted |
 | why | A message one short of the threshold | "Not enough reactions yet: it has 2 of the 3 needed", with the counting method named |

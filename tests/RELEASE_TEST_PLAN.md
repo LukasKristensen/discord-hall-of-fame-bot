@@ -120,7 +120,7 @@ Restart the Discord client if the picker still shows the old list.
       welcome message is refused
 - [x] Add the dev bot to a new server: if something is wrong, a short note with a Troubleshoot button
       appears on the board, and the button opens the full findings for an admin
-- [ ] The welcome message's Troubleshoot, Support server and Vote buttons work, also after the bot restarts
+- [x] The welcome message's Troubleshoot, Support server and Vote buttons work, also after the bot restarts
 - [x] `/get_server_config` has a Troubleshoot button: an admin gets the findings privately, a member is refused
 - [ ] Turn on Private Channel Obfuscation for the dev bot (Developer Portal > Bot) and restart it: a channel
       only a member role can see is listed as hidden from the bot, with the note to give it the members'
