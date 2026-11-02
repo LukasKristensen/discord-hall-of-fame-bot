@@ -178,7 +178,7 @@ and reply from the payload:
 - [ ] `/get_server_config` has Change settings next to Troubleshoot. As an admin it opens Hall of Fame settings
       with the current channel, threshold, post age, counting method and ticked rules filled in
 - [ ] A member without Manage Server who presses it is refused privately, and no form opens
-- [ ] Change the threshold and two rules and send it: one private answer lists exactly those three, and
+- [x] Change the threshold and two rules and send it: one private answer lists exactly those three, and
       `/get_server_config` shows them
 - [ ] Send it unchanged: it says nothing changed
 - [x] Type 0 or "five" as the threshold along with another change: it is refused, and nothing is stored

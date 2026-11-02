@@ -2178,7 +2178,7 @@ class SettingsFormTests(CommandTestCase):
         self.assertIn("• Reaction threshold: **8**", answer)
         self.assertIn(f"• {messages.SETTING_IGNORE_BOTS}: **On**", answer)
         self.assertIn("Unique members who reacted", answer)
-        self.assertNotIn("Post due date", answer)
+        self.assertNotIn("Post age", answer)
 
     async def test_the_answer_is_only_for_the_admin(self):
         interaction = await self.send(post_due_date=7)
@@ -2186,6 +2186,8 @@ class SettingsFormTests(CommandTestCase):
         self.assertTrue(interaction.response.deferred_ephemeral)
         self.assertEqual([True], interaction.followup.ephemeral)
         self.assertIn(messages.POST_DUE_DATE_NOTE.format(days=7, plural="s"), interaction.followup.messages[0])
+        # Named as /get_server_config shows it right after
+        self.assertIn("• Post age: **7 days**", interaction.followup.messages[0])
 
     async def test_a_change_carries_the_note_its_command_gives(self):
         self.server.allow_messages_in_hof_channel = True
