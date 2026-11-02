@@ -42,9 +42,9 @@ Get a few of your messages onto the board first.
 
 ## Totals across servers
 
-- [ ] Hide my totals across servers: the line turns to hidden, with today's date, and the button becomes
+- [x] Hide my totals across servers: the line turns to hidden, with today's date, and the button becomes
       Show my totals across servers
-- [ ] `/user_profile` in a server no longer shows the every-server column for you, even when you look
+- [x] `/user_profile` in a server no longer shows the every-server column for you, even when you look
       yourself up
 - [ ] `/user_profile` in a DM (user install) says your totals are hidden and points to `/my_data`
 - [ ] Show my totals across servers brings them back on `/user_profile`
