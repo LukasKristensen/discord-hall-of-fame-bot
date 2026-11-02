@@ -180,7 +180,7 @@ and reply from the payload:
 - [ ] A member without Manage Server who presses it is refused privately, and no form opens
 - [x] Change the threshold and two rules and send it: one private answer lists exactly those three, and
       `/get_server_config` shows them
-- [ ] Send it unchanged: it says nothing changed
+- [x] Send it unchanged: it says nothing changed
 - [x] Type 0 or "five" as the threshold along with another change: it is refused, and nothing is stored
 - [ ] Pick another channel: the board moves, the new channel gets the announcement with nobody pinged, and the
       next post lands there. A channel the bot cannot post in is refused with the missing permissions
