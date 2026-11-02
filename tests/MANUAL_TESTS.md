@@ -66,6 +66,7 @@ message under a "test cases" category so each post names what it tests.
 | feedback | `/feedback` after screenshots were removed | Two text fields and the contact box, no upload. The report arrived with May contact No |
 | why | A message that is on the board | "This message is on the board:" with a link to the post |
 | settings form | The board moved to another channel | The answer named only the new channel. The new channel got "This is now the Hall of Fame channel!" naming the admin without a ping |
+| settings form | A board channel the bot cannot post in | Refused with the four missing permissions named, nothing saved. It said "run the command again" in a form; now "then try again" |
 | settings form | Change settings pressed by a member without Manage Server | Refused privately, no form opened |
 | settings form | Sent unchanged | "Nothing changed, every setting already had the value you sent." |
 | settings form | Threshold, post age and counting changed at once | One answer listing exactly those three, with the note on post age, and `/get_server_config` showed all three. The answer called post age "Post due date"; it now says "Post age" as the config does |

@@ -229,7 +229,7 @@ HOF_CHANNEL_MOVED_ANNOUNCEMENT = ("🏆 **This is now the Hall of Fame channel!*
 HOF_CHANNEL_UNCHANGED ="ℹ️ {channel} is already the Hall of Fame channel."
 HOF_CHANNEL_MISSING_PERMISSIONS = ("Could not use {channel} as the Hall of Fame channel. The bot is missing these "
                                    "permissions there: ``{missing_permissions}``\n"
-                                   "Grant them in the channel settings and run the command again.")
+                                   "Grant them in the channel settings, then try again.")
 HOF_CHANNEL_SETUP_FAILED = ("Could not set up the Hall of Fame in {channel}. Check that the bot can see and post "
                             "in it, then try again. If it keeps failing, ask in the support server: "
                             f"<{SUPPORT_SERVER_URL}>")
