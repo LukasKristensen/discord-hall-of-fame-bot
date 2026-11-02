@@ -453,3 +453,19 @@ class CountMessagesSentTests(unittest.IsolatedAsyncioTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class GuildsToProcessTests(unittest.TestCase):
+    """The Wrapped script can be limited to a few servers, such as test servers on the development bot."""
+
+    def setUp(self):
+        import types
+        self.guilds = [types.SimpleNamespace(id=1), types.SimpleNamespace(id=2), types.SimpleNamespace(id=3)]
+
+    def test_every_server_without_arguments(self):
+        import hof_wrapped
+        self.assertEqual([1, 2, 3], [guild.id for guild in hof_wrapped.guilds_to_process(self.guilds, [])])
+
+    def test_only_the_servers_named(self):
+        import hof_wrapped
+        self.assertEqual([1, 3], [guild.id for guild in hof_wrapped.guilds_to_process(self.guilds, ["3", "1", "99"])])

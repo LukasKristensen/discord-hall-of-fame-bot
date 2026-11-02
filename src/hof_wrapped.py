@@ -6,6 +6,7 @@ import datetime
 from repositories import opt_out_repo, hof_wrapped_repo, hall_of_fame_message_repo, server_config_repo, hof_wrapped_guild_status_repo
 import psycopg2
 import os
+import sys
 import json
 import environment
 import utils
@@ -277,6 +278,20 @@ def next_wrapped_year(now: datetime.datetime = None) -> int:
     """
     now = now or datetime.datetime.now(datetime.timezone.utc)
     return max(now.year, version.WRAPPED_YEAR + 1)
+
+
+def guilds_to_process(guilds, requested_ids: list[str]) -> list:
+    """
+    The servers a run of this script makes Wrapped for: every server the bot is in, or only those named on
+    the command line, such as a few test servers on the development bot
+    :param guilds: The servers the bot is in
+    :param requested_ids: Server IDs given as arguments, none for every server
+    :return: The servers to process, in the bot's order
+    """
+    if not requested_ids:
+        return list(guilds)
+    wanted = {int(guild_id) for guild_id in requested_ids}
+    return [guild for guild in guilds if guild.id in wanted]
 
 
 def missing_wrapped_text(server_has_wrapped: bool, opted_out: bool = False, now: datetime.datetime = None) -> str:
@@ -631,11 +646,15 @@ if __name__ == "__main__":
         hof_wrapped_repo.create_hof_wrapped_table(connection)
         hof_wrapped_guild_status_repo.create_hof_wrapped_progress_table(connection)
 
-        for guild in bot.guilds:
+        # python hof_wrapped.py <server id> <server id> ... makes Wrapped for those servers only
+        selected_guilds = guilds_to_process(bot.guilds, sys.argv[1:])
+        print(f"Making Wrapped {version.WRAPPED_YEAR} for {len(selected_guilds)} of {len(bot.guilds)} servers")
+
+        for guild in selected_guilds:
             message_count = hall_of_fame_message_repo.count_messages_for_guild(connection, guild.id)
             hof_wrapped_guild_status_repo.create_progress_entry(connection, guild.id, version.WRAPPED_YEAR, message_count)
 
-        for guild in bot.guilds:
+        for guild in selected_guilds:
             # completion timer
             start_time = datetime.datetime.now()
             users.clear()
