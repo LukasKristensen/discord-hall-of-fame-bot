@@ -53,6 +53,7 @@ message under a "test cases" category so each post names what it tests.
 | setup check | `/troubleshoot` | Private answer naming the channel the bot cannot see, the role that opens it, the board, and the last post. Read "opens 1 of these 1" and "1 more are hidden"; now "opens it" and "1 more is hidden" |
 | setup check | A message in an age-restricted channel | Not posted while the board was not age-restricted, and `/troubleshoot` listed the channel under age-restricted channels. Once the board was marked age-restricted, a message there was posted |
 | setup check | The Troubleshoot button under `/get_server_config` | An admin got the findings privately. A member was refused privately |
+| joining | The dev bot added to a new server | Welcome message on the new board with Troubleshoot, Set up, Support server and Vote. No setup note, nothing wrong found. Set up opened the settings form with the server's defaults: threshold 1 for a server under 3 members, 1,000 days, most reactions on one emoji |
 | settings form | Threshold, post age and counting changed at once | One answer listing exactly those three, with the note on post age, and `/get_server_config` showed all three. The answer called post age "Post due date"; it now says "Post age" as the config does |
 | settings form | Counting changed to total reactions | One private answer naming only that change, and `/get_server_config` showed it |
 | settings form | 0, and "five", as the threshold | Refused: "must be between 1 and 1000" for 0 and "must be a whole number from 1 to 1000" for five, nothing saved |
@@ -121,6 +122,12 @@ Not bugs, and nothing decided yet:
 
 - **A file line that says what it is.** A file shows only as its name, so a post of just a zip reads bare.
   A size, or a 📎 in front, would make it read as a file rather than a stray link.
+
+- **A shorter welcome message.** "Note on channel permissions", `/calculation_method` and
+  `/custom_emoji_check_logic` explain in text what the Troubleshoot and Set up buttons now do. One line for
+  each button and the Why isn't this on the board? hint would cover it.
+- **"This command" after a button.** A member pressing an admin button reads "This command is only for
+  members with the Manage Server permission". "This is only for..." would fit commands, buttons and forms.
 
 ### Still to run
 
