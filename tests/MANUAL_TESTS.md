@@ -50,6 +50,7 @@ message under a "test cases" category so each post names what it tests.
 | old post | Embed posts from before the upgrade, reacted to again | The count updated in the same embed after counting changed to all emojis. A post below the threshold went blank, and came back as the same embed, with the footer, once over it again |
 | system message | A pin notice, never on the board, reacted past the threshold | Not posted |
 | system message | A join message, asked about with Why isn't this on the board? | "Messages Discord posts on its own are not featured", also for a member who opted out, as the rule is checked before the choice. Before the update, a join message reached the board as an empty post |
+| command picker | `/` as an admin | All 25 commands, the new `/my_data`, `/troubleshoot` and `/count_in_global_profiles` among them, and none of the removed ones |
 | command picker | `/` as a member without Manage Server | Only the ten member commands, no admin ones. Apps had Why isn't this on the board? |
 | command picker | `/set_reaction_threshold` allowed for a role without Manage Server | The role saw the command, and running it was refused privately: only for members with Manage Server |
 | setup check | `/troubleshoot` | Private answer naming the channel the bot cannot see, the role that opens it, the board, and the last post. Read "opens 1 of these 1" and "1 more are hidden"; now "opens it" and "1 more is hidden" |
@@ -181,6 +182,10 @@ Not bugs, and nothing decided yet:
 
 - **The delete confirmation as a list.** It is one long paragraph on the most serious screen the bot has.
   Four short lines (what goes, what stays, which choices go, that it cannot be undone) would read faster.
+
+- **Command descriptions in one style.** The new ones say what the command does. Older ones are questions or
+  vague: "Get the server config", "Here you can decide if it only should be whitelisted emojis or all emojis",
+  "How many days ago should the post be to be considered old and not valid?".
 
 ### Still to run
 
