@@ -57,6 +57,7 @@ message under a "test cases" category so each post names what it tests.
 | why | A message one short of the threshold | "Not enough reactions yet: it has 2 of the 3 needed", with the counting method named |
 | why | A message in a channel the bot cannot read | Names the channel, what permissions to give, and points to `/troubleshoot` |
 | why | A board post itself, with a reaction on it | "This is a Hall of Fame post. Posts on the board are not posted again." The reaction did not repost it |
+| why | Asked several times in a row | Refused privately: "You just asked about a message. Try again in a few seconds." |
 | settings form | Threshold, post age and counting changed at once | One answer listing exactly those three, with the note on post age, and `/get_server_config` showed all three. The answer called post age "Post due date"; it now says "Post age" as the config does |
 | settings form | Counting changed to total reactions | One private answer naming only that change, and `/get_server_config` showed it |
 | settings form | 0, and "five", as the threshold | Refused: "must be between 1 and 1000" for 0 and "must be a whole number from 1 to 1000" for five, nothing saved |
