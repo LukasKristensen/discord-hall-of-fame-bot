@@ -50,9 +50,16 @@ RULE_BOT_MESSAGE = "bot_message"
 RULE_NO_MEDIA = "no_media"
 RULE_AGE_RESTRICTED = "age_restricted"
 RULE_FLAGGED_MEDIA = "flagged_media"
+RULE_SYSTEM_MESSAGE = "system_message"
 # Rules that keep a message off the board for safety rather than by the server's choice. A post already on
 # the board that breaks one is hidden, and comes back once the rule stops applying
 SAFETY_RULES = (RULE_AGE_RESTRICTED, RULE_FLAGGED_MEDIA)
+
+# What a member writes: a message, a reply, and a bot's answer to a command. Every other type is one Discord
+# posts on its own, such as a member joining, a boost, a pin or a poll closing. Those have no words of their
+# own for a post to show, so they are never featured
+FEATURED_MESSAGE_TYPES = (discord.MessageType.default, discord.MessageType.reply,
+                          discord.MessageType.chat_input_command, discord.MessageType.context_menu_command)
 
 # Discord's content scanning results on media in components on media in components, which have bits of their own, paired with the ones above
 COMPONENT_SCAN_BITS = ((1 << 0, EXPLICIT_CONTENT), (1 << 1, GORE_CONTENT), (1 << 2, SELF_HARM_CONTENT))
@@ -149,6 +156,8 @@ def rule_blocking_post(source_message: discord.Message, db_message, server_confi
     body, _ = featured_body(source_message)
     if has_flagged_media(body, board):
         return RULE_FLAGGED_MEDIA
+    if getattr(source_message, "type", discord.MessageType.default) not in FEATURED_MESSAGE_TYPES:
+        return RULE_SYSTEM_MESSAGE
     # A post already on the board keeps being updated however old the message gets
     if (now - source_message.created_at).days > server_config.post_due_date and not db_message:
         return RULE_TOO_OLD
@@ -1051,43 +1060,8 @@ feedback_title_max_length = 150
 feedback_message_max_length = 1000
 # The developer's copy is coloured by topic, so a bug report stands out in the channel. Other topics are gold
 feedback_topic_colors = {"bug": discord.Color.red(), "idea": discord.Color.green(), "question": discord.Color.blue()}
-# The most screenshots one piece of feedback can carry
-feedback_max_screenshots = 3
-
-
-class ImageUpload(discord.ui.FileUpload):
-    """
-    A file upload in a form that offers only images. Discord can filter the picker by file type since
-    5 August 2026, which discord.py 2.7 has no option for, so the filter is added to what is sent
-    """
-
-    def to_component_dict(self):
-        payload = super().to_component_dict()
-        payload["file_types"] = ["image"]
-        return payload
-
-
-def feedback_screenshots(attachments, size_limit: int) -> tuple[list, int]:
-    """
-    The uploads that can go to the feedback channel. Discord's filter only checks the file name, so the
-    content type is checked too. They are sent in one message, so an upload that would take them past what
-    the bot may upload there is left out
-    :param attachments: What the member uploaded in the form
-    :param size_limit: The most bytes the bot can upload in the feedback channel
-    :return: The screenshots to forward, and how many uploads were left out
-    """
-    kept, total = [], 0
-    for attachment in attachments:
-        if (len(kept) < feedback_max_screenshots and (attachment.content_type or "").startswith("image/")
-                and total + attachment.size <= size_limit):
-            kept.append(attachment)
-            total += attachment.size
-    return kept, len(attachments) - len(kept)
-
-
 def build_feedback_embed(user, guild_id, topic: str, title_field: tuple[str, str],
-                         message_field: tuple[str, str], may_contact: bool = False, screenshots: int = 0,
-                         left_out: int = 0) -> discord.Embed:
+                         message_field: tuple[str, str], may_contact: bool = False) -> discord.Embed:
     """
     The developer's copy of a piece of feedback, only ever posted in the private feedback channel
     :param user: The member who sent it
@@ -1097,8 +1071,6 @@ def build_feedback_embed(user, guild_id, topic: str, title_field: tuple[str, str
     :param title_field: The short field's label and what the member wrote in it
     :param message_field: The long field's label and what the member wrote in it
     :param may_contact: Whether the member ticked that the developer may message them about it
-    :param screenshots: How many screenshots are attached to the message the embed is sent in
-    :param left_out: How many uploads were left out, for not being images or being too large
     :return: The embed
     """
     embed = discord.Embed(title=f"New feedback: {messages.FEEDBACK_TOPICS.get(topic, topic)}",
@@ -1109,9 +1081,6 @@ def build_feedback_embed(user, guild_id, topic: str, title_field: tuple[str, str
     embed.add_field(name="Guild", value=guild_id or "None (user install)", inline=True)
     embed.add_field(name="UserId", value=user.id, inline=True)
     embed.add_field(name="May contact", value="Yes" if may_contact else "No", inline=True)
-    if screenshots or left_out:
-        value = f"{screenshots} attached" + (f", {left_out} left out" if left_out else "")
-        embed.add_field(name="Screenshots", value=value, inline=True)
     # The version the member was on, so a bug report can be checked against what was fixed since
     embed.set_footer(text=f"Hall of Fame {version.VERSION}")
     return embed
@@ -1154,15 +1123,10 @@ async def create_feedback_form(interaction: discord.Interaction, bot, topic: str
             # itself inside one, and discord.py 2.6 deprecated reading it there
             self.fb_title_label = discord.ui.Label(text=title_label, component=self.fb_title)
             self.message_label = discord.ui.Label(text=message_label, component=self.message)
-            self.screenshots = ImageUpload(required=False, max_values=feedback_max_screenshots)
-            self.screenshots_label = discord.ui.Label(text=messages.FEEDBACK_SCREENSHOTS_LABEL,
-                                                      description=messages.FEEDBACK_SCREENSHOTS_DESCRIPTION,
-                                                      component=self.screenshots)
             self.may_contact = discord.ui.Checkbox()
             self.may_contact_label = discord.ui.Label(text=messages.FEEDBACK_CONTACT_LABEL, component=self.may_contact)
             self.add_item(self.fb_title_label)
             self.add_item(self.message_label)
-            self.add_item(self.screenshots_label)
             self.add_item(self.may_contact_label)
 
         async def on_submit(self, feedback_interaction) -> None:
@@ -1172,32 +1136,21 @@ async def create_feedback_form(interaction: discord.Interaction, bot, topic: str
                 return
             target_guild = bot.get_guild(1180006529575960616)
             target_channel = target_guild.get_channel(1345558910836412456)
-            screenshots, left_out = feedback_screenshots(self.screenshots.values, target_guild.filesize_limit)
+            # No file uploads: anything attached would be reposted into the developer's server by the bot
             embed = build_feedback_embed(feedback_interaction.user, feedback_interaction.guild_id, topic,
                                          (self.fb_title_label.text, self.fb_title.value),
                                          (self.message_label.text, self.message.value),
-                                         may_contact=self.may_contact.value, screenshots=len(screenshots),
-                                         left_out=left_out)
+                                         may_contact=self.may_contact.value)
             if on_sent is not None:
                 on_sent(feedback_interaction.user.id)
             try:
-                if screenshots:
-                    # Downloading them can take longer than the three seconds Discord waits for an answer
-                    await feedback_interaction.response.defer(ephemeral=True, thinking=True)
-                # Uploaded again rather than linked, since the links Discord gives a form expire
-                files = [await screenshot.to_file() for screenshot in screenshots]
-                await target_channel.send(embed=embed, files=files)
+                await target_channel.send(embed=embed)
             except Exception:
                 # A form that failed does not count toward the member's daily limit
                 if on_unsent is not None:
                     on_unsent(feedback_interaction.user.id)
                 raise
-            answer = (messages.FEEDBACK_SENT_SOME_LEFT_OUT.format(count=left_out, max=feedback_max_screenshots)
-                      if left_out else messages.FEEDBACK_SENT)
-            if screenshots:
-                await feedback_interaction.followup.send(answer, ephemeral=True)
-            else:
-                await feedback_interaction.response.send_message(answer, ephemeral=True)
+            await feedback_interaction.response.send_message(messages.FEEDBACK_SENT, ephemeral=True)
 
     # noinspection PyUnresolvedReferences
     await interaction.response.send_modal(FeedbackModal())

@@ -250,7 +250,25 @@ class ChannelFindingTests(unittest.TestCase):
         self.assertEqual("Reads 2 of 4 channels", finding.title)
         self.assertIn("<#2>", finding.detail)
         self.assertIn("<@&10>", finding.detail)
-        self.assertIn("1 more are hidden", finding.detail)
+        self.assertIn("1 more is hidden", finding.detail)
+        self.assertIn("role opens it.", finding.detail)
+
+    def test_a_role_that_opens_some_of_the_channels_says_how_many(self):
+        visibility = setup_check.ChannelVisibility(readable=[FakeChannel(n) for n in range(10, 20)],
+                                                   blocked=[FakeChannel(2), FakeChannel(3)],
+                                                   private=[FakeChannel(4), FakeChannel(5)], suggested_role=FakeRole(10),
+                                                   suggested_role_opens=1)
+        [finding] = setup_check.channel_findings(visibility)
+
+        self.assertIn("role opens 1 of these 2.", finding.detail)
+        self.assertIn("2 more are hidden", finding.detail)
+
+    def test_a_role_that_opens_every_channel_says_all_of_them(self):
+        visibility = setup_check.ChannelVisibility(readable=[FakeChannel(1)], blocked=[FakeChannel(2), FakeChannel(3)],
+                                                   private=[], suggested_role=FakeRole(10), suggested_role_opens=2)
+        [finding] = setup_check.channel_findings(visibility)
+
+        self.assertIn("role opens all of them.", finding.detail)
 
     def test_a_few_private_channels_are_no_problem(self):
         visibility = setup_check.ChannelVisibility(readable=[FakeChannel(1), FakeChannel(2)], blocked=[],

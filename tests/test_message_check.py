@@ -246,6 +246,14 @@ class RuleTests(ExplainTestCase):
         self.assertEqual(utils.RULE_BOT_MESSAGE, verdict.reason)
         self.assertIn(command_refs.IGNORE_BOT_MESSAGES, verdict.text)
 
+    async def test_a_message_discord_posted_itself(self):
+        self.build()
+        self.source_message.type = discord.MessageType.new_member
+        verdict = await self.explain()
+
+        self.assertEqual(utils.RULE_SYSTEM_MESSAGE, verdict.reason)
+        self.assertEqual(messages.WHY_SYSTEM_MESSAGE, verdict.text)
+
     async def test_without_an_image_or_video(self):
         self.build()
         verdict = await self.explain(server_config(require_image_or_video=True))

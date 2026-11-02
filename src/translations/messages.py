@@ -115,7 +115,7 @@ FEEDBACK_TOPICS = {
 # allows 45 characters for a title or label and 100 for a placeholder, which the feedback tests check
 FEEDBACK_FORMS = {
     "bug": ("Report a bug",
-            "What went wrong?", "For example: a message passed the threshold but was not posted",
+            "What went wrong?", "For example: a popular message was not posted",
             "Details", "What you did, what happened instead, and which command or message it was"),
     "idea": ("Suggest an idea",
              "Your idea in a few words", "For example: a monthly champion post on the board",
@@ -129,12 +129,8 @@ FEEDBACK_FORMS = {
 }
 # Private, since a thank-you is of no use to the rest of the channel
 FEEDBACK_SENT = "✅ Thanks, your feedback reached the developer."
-FEEDBACK_SENT_SOME_LEFT_OUT = ("✅ Thanks, your feedback reached the developer. {count} of your files could not be "
-                              "added: only images are kept, up to {max}, and each must fit Discord's upload limit.")
-# The optional fields every feedback form ends with. Discord allows 45 characters for a label and 100 for a
-# description, which the feedback tests check
-FEEDBACK_SCREENSHOTS_LABEL = "Screenshots (optional)"
-FEEDBACK_SCREENSHOTS_DESCRIPTION = "Up to 3 images. Crop out other members' names and messages where you can."
+# The optional field every feedback form ends with. Discord allows 45 characters for a label, which the
+# feedback tests check
 FEEDBACK_CONTACT_LABEL = "The developer may message me about this"
 SETTING_CHANGED = "✅ {label}: **{value}**"
 SETTING_UNCHANGED = "ℹ️ {label} is already **{value}**, so nothing changed."
@@ -233,7 +229,7 @@ HOF_CHANNEL_MOVED_ANNOUNCEMENT = ("🏆 **This is now the Hall of Fame channel!*
 HOF_CHANNEL_UNCHANGED ="ℹ️ {channel} is already the Hall of Fame channel."
 HOF_CHANNEL_MISSING_PERMISSIONS = ("Could not use {channel} as the Hall of Fame channel. The bot is missing these "
                                    "permissions there: ``{missing_permissions}``\n"
-                                   "Grant them in the channel settings and run the command again.")
+                                   "Grant them in the channel settings, then try again.")
 HOF_CHANNEL_SETUP_FAILED = ("Could not set up the Hall of Fame in {channel}. Check that the bot can see and post "
                             "in it, then try again. If it keeps failing, ask in the support server: "
                             f"<{SUPPORT_SERVER_URL}>")
@@ -467,8 +463,12 @@ CHECK_CHANNELS_TITLE = "Reads {readable} of {total} channels"
 CHECK_CHANNELS_ALL = "Reactions in every channel can count."
 CHECK_CHANNELS_BLOCKED = "Members can see these, but the bot cannot, so reactions there never count: {channels}"
 CHECK_CHANNELS_ROLE_FIX = "Giving the bot the {role} role opens {opens} of these {total}."
+# When the role opens every channel listed, as "1 of these 1" read oddly
+CHECK_CHANNELS_ROLE_FIX_ALL = "Giving the bot the {role} role opens {which}."
+CHECK_CHANNELS_ROLE_FIX_IT = "it"
+CHECK_CHANNELS_ROLE_FIX_ALL_OF_THEM = "all of them"
 CHECK_CHANNELS_FIX = "Give the bot View Channel and Read Message History in them, or the role that opens them."
-CHECK_CHANNELS_PRIVATE = ("{count} more are hidden from regular members too, such as staff channels, so the bot "
+CHECK_CHANNELS_PRIVATE = ("{count} more {are} hidden from regular members too, such as staff channels, so the bot "
                           "is likely left out of them on purpose: {channels}")
 CHECK_CHANNELS_MOSTLY_CLOSED = ("The bot cannot read {channels}\n"
                                 "No regular role can see them either, but that is most of the server. If messages "
@@ -528,6 +528,8 @@ WHY_BOT_MESSAGE = ("**Messages from bots are not posted here.** Someone with the
                    "change that with {command}.")
 WHY_NO_MEDIA = ("**Only messages with an image or video are posted here.** Someone with the Manage Server "
                 "permission can change that with {command}.")
+WHY_SYSTEM_MESSAGE = ("**Messages Discord posts on its own are not featured**, such as a member joining, a boost, "
+                      "a pin or a poll closing, as they have no words of their own to show.")
 WHY_AGE_RESTRICTED = ("**This message is in an age-restricted channel and the board is not**, so it is kept off "
                       "the board. Someone with the Manage Server permission can mark the board age-restricted in "
                       "its channel settings to feature these.")
