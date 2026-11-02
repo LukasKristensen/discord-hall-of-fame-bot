@@ -69,6 +69,7 @@ message under a "test cases" category so each post names what it tests.
 | settings form | A board channel the bot cannot post in | Refused with the four missing permissions named, nothing saved. It said "run the command again" in a form; now "then try again" |
 | settings form | Change settings pressed by a member without Manage Server | Refused privately, no form opened |
 | settings form | Sent unchanged | "Nothing changed, every setting already had the value you sent." |
+| setup check | A post already on the board whose source channel is then marked age-restricted | Blanked in place at its next reaction |
 | settings form | Threshold, post age and counting changed at once | One answer listing exactly those three, with the note on post age, and `/get_server_config` showed all three. The answer called post age "Post due date"; it now says "Post age" as the config does |
 | settings form | Counting changed to total reactions | One private answer naming only that change, and `/get_server_config` showed it |
 | settings form | 0, and "five", as the threshold | Refused: "must be between 1 and 1000" for 0 and "must be a whole number from 1 to 1000" for five, nothing saved |
