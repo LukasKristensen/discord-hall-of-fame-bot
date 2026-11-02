@@ -36,6 +36,7 @@ message under a "test cases" category so each post names what it tests.
 | forward | A forward from another server | *The forwarded message is not shown*, none of its words |
 | forward | A forward of a message by a member who opted out | *The forwarded message is not shown*, none of their words |
 | forward | A forward of a forward | Discord forwards the original instead, so the post shows the original's words, checked against its real author |
+| forward | A forward of a board post | *The forwarded message is not shown*. Discord's copy holds the whole card as components, which a post cannot show |
 | forward | A forward from a channel the bot cannot see | "Forwarded" in the header and *The forwarded message is not shown*, none of its words |
 | file | A voice message | Linked as "Voice message" under the header. No player, like an audio file |
 | mentions | `@user`, `@role`, `@here`, `@everyone` | Shown as mentions. A second account in the server got no notification and no mention badge |
@@ -144,7 +145,6 @@ Not bugs, and nothing decided yet:
 
 ### Still to run
 
-- **forward:** a forward of a board post, expected *not shown* with the fix.
 - **file:** whether a file link still opens a day after posting.
 
 ## 21 October 2026: member data, the post limit and the export (3.0, then called 2.2)

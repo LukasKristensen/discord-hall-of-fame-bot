@@ -161,7 +161,7 @@ and reply from the payload:
       from another site plays as a video
 - [x] A forwarded message, a poll and a message over 300 characters look right: the forward labelled, the
       poll's votes listed, the long text full width under the header
-- [ ] A forward of a message from this server shows the message it forwards. A forward from another
+- [x] A forward of a message from this server shows the message it forwards. A forward from another
       server, a forward of a board post, and a forward of a member who pressed Stop featuring me each show
       *The forwarded message is not shown* and none of the forwarded words or media. A forward of a forward
       shows the original, since Discord forwards the original
