@@ -627,10 +627,12 @@ async def on_guild_remove(server):
                                 log_level=log_type.ERROR)
         return
     await utils.logging(bot, "Left a server", server.id, log_level=log_type.SYSTEM)
+    # The deletion and the leave are one transaction, committed when the connection is given back, so the data
+    # is never gone without its departure recorded
     async with get_db_connection(connection_pool) as connection:
-        await events.guild_remove(server, connection)
+        await events.guild_remove(server, connection, commit=False)
         guild_lifecycle_event_repo.insert_guild_lifecycle_event(
-            connection, server.id, "LEAVE", datetime.now(timezone.utc)
+            connection, server.id, "LEAVE", datetime.now(timezone.utc), commit=False
         )
     if server.id in server_classes:
         del server_classes[server.id]

@@ -719,6 +719,35 @@ class DepartedGuildCleanupTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual([(self.departed, "LEAVE", self.missing_since[self.departed])], self.lifecycle)
 
+    async def test_one_server_missing_from_a_small_installation_is_still_cleaned_up(self):
+        """A share of a handful of servers is under one, which would make every departure look like an outage."""
+        for guild_id in self.present[3:]:
+            self.server_classes.pop(guild_id)
+        self.bot.guilds = [guild for guild in self.bot.guilds if guild.id in self.server_classes]
+
+        self.assertEqual([self.departed], await self.clean_up())
+
+    async def test_asks_discord_about_several_servers_at_once(self):
+        """A slow Discord then holds the daily task for one timeout rather than one per server."""
+        others = [998]
+        for guild_id in others:
+            self.server_classes[guild_id] = build_server(guild_id=guild_id)
+            self.missing_since[guild_id] = self.missing_since[self.departed]
+            self.first_confirmed[guild_id] = self.first_confirmed[self.departed]
+        in_flight, peak = [0], [0]
+        fetch = self.fetch_guild
+
+        async def slow_fetch(guild_id):
+            in_flight[0] += 1
+            peak[0] = max(peak[0], in_flight[0])
+            await asyncio.sleep(0.01)
+            in_flight[0] -= 1
+            return await fetch(guild_id)
+
+        self.bot.fetch_guild = slow_fetch
+        self.assertEqual(sorted([self.departed, *others]), sorted(await self.clean_up()))
+        self.assertGreater(peak[0], 1)
+
     async def test_a_first_confirmation_deletes_nothing(self):
         """One answer could be a passing error on Discord's side, and deleting cannot be undone."""
         self.first_confirmed.clear()

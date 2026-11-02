@@ -217,14 +217,15 @@ async def guild_join(server, connection, bot, custom_channel: discord.TextChanne
                                                              messages.FAILED_SETUP_HOF.format(serverName=server.name))
 
 
-async def guild_remove(server, connection):
+async def guild_remove(server, connection, commit: bool = True):
     """
     Event handler for when the bot is removed from a server
     :param server:
     :param connection:
+    :param commit: False to leave the commit to the caller, which records the leave in the same transaction
     :return:
     """
-    utils.delete_database_context(server.id, connection)
+    utils.delete_database_context(server.id, connection, commit=commit)
 
 
 async def daily_task(bot, connection, server_classes, dev_testing, borrow_connection):
@@ -300,7 +301,8 @@ async def clean_up_departed_guilds(bot: discord.Client, connection, server_class
         server_config_repo.record_missing_guilds(connection, missing, now)
         return []
 
-    if not bot_guild_ids or len(missing) > len(server_classes) * departed_guild_max_missing_share:
+    # At least one server may go missing however few the bot is in, or a small installation could never clean up
+    if not bot_guild_ids or len(missing) > max(1, len(server_classes) * departed_guild_max_missing_share):
         # The servers the bot does see are still recorded, so one that came back cannot keep an old missing
         # date through the outage and be deleted early when it goes missing again
         server_config_repo.clear_missing_for_present_guilds(connection, bot_guild_ids)
@@ -312,14 +314,34 @@ async def clean_up_departed_guilds(bot: discord.Client, connection, server_class
     missing_since = server_config_repo.record_missing_guilds(connection, missing, now)
     grace = datetime.timedelta(days=departed_guild_grace_days)
     deleted = []
+    due = []
     for guild_id in missing:
         since = missing_since.get(guild_id)
         if since is None or now - since < grace:
             first_seen = since.strftime("%Y-%m-%d") if since else "today"
             await utils.logging(bot, f"Could not find server {guild_id} in bot guilds (missing since {first_seen})")
             continue
+        due.append(guild_id)
+
+    # Discord is asked about every server at once, a few at a time, so a slow or failing Discord holds the
+    # daily task for one timeout rather than one per server. A server with no clear answer is asked again
+    # tomorrow. The database work after it runs one server at a time, on the one connection
+    has_left = {}
+
+    async def ask_discord(guild_id):
+        has_left[guild_id] = await bot_has_left_guild(bot, guild_id)
+
+    async def report_unclear(guild_id, error):
+        await utils.logging(bot, f"Could not clean up departed server {guild_id}: {error}", guild_id)
+
+    await concurrency.run_in_batches(due, ask_discord, limit=daily_task_concurrency, on_error=report_unclear)
+
+    for guild_id in due:
+        if guild_id not in has_left:
+            continue
+        since = missing_since[guild_id]
         try:
-            if not await bot_has_left_guild(bot, guild_id):
+            if not has_left[guild_id]:
                 server_config_repo.clear_departure_confirmation(connection, guild_id)
                 await utils.logging(bot, f"Server {guild_id} has been missing from the bot's guilds since "
                                          f"{since:%Y-%m-%d}, but Discord still gives the bot access to it. "

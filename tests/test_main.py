@@ -1807,8 +1807,22 @@ class GuildJoinAndRemoveTests(MainTestCase):
         self.assertIn(201, main.server_classes)
         self.assertEqual(125, main.total_member_count)
 
+    async def test_a_removed_server_is_deleted_and_its_leave_recorded_in_one_transaction(self):
+        """Neither commits on its own, so the data is never gone without its departure recorded."""
+        calls = []
+
+        async def remove(_server, _connection, commit=True):
+            calls.append(("delete", commit))
+
+        self.patch(main.events, "guild_remove", remove)
+        self.patch(main.guild_lifecycle_event_repo, "insert_guild_lifecycle_event",
+                   lambda *_args, commit=True: calls.append(("leave", commit)))
+        await main.on_guild_remove(types.SimpleNamespace(id=GUILD_ID, name="Test Server", member_count=30))
+
+        self.assertEqual([("delete", False), ("leave", False)], calls)
+
     async def test_a_removed_server_is_forgotten_and_its_members_taken_off(self):
-        async def remove(*_args):
+        async def remove(*_args, **_kwargs):
             return None
 
         self.patch(main.events, "guild_remove", remove)
