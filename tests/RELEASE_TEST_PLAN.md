@@ -189,8 +189,8 @@ and reply from the payload:
 
 ## Feedback
 
-- [ ] `/feedback` opens a form with the two text fields and the contact box, and no file upload
-- [ ] Send one with the contact box ticked and one without: each is answered at once, and the feedback channel
+- [x] `/feedback` opens a form with the two text fields and the contact box, and no file upload
+- [x] Send one with the contact box ticked and one without: each is answered at once, and the feedback channel
       shows May contact "Yes" and "No"
 
 ## Wrapped

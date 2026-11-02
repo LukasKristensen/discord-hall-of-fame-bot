@@ -115,7 +115,7 @@ FEEDBACK_TOPICS = {
 # allows 45 characters for a title or label and 100 for a placeholder, which the feedback tests check
 FEEDBACK_FORMS = {
     "bug": ("Report a bug",
-            "What went wrong?", "For example: a message passed the threshold but was not posted",
+            "What went wrong?", "For example: a popular message was not posted",
             "Details", "What you did, what happened instead, and which command or message it was"),
     "idea": ("Suggest an idea",
              "Your idea in a few words", "For example: a monthly champion post on the board",
