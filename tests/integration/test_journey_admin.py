@@ -167,6 +167,8 @@ class SettingCommandTests(JourneyTestCase):
                 again = self.command(ADMIN)
                 await command.callback(again, option)
                 self.assertIn("nothing changed", again.last.content)
+                # Every answer says where the setting went before the command is removed
+                self.assertIn(messages.SETTING_MOVED_NOTE, again.last.content)
                 self.assertTrue(again.last.ephemeral)
         self.assert_no_errors_logged()
 
@@ -325,7 +327,7 @@ class SettingEffectTests(JourneyTestCase):
 class SettingsFormTests(JourneyTestCase):
     async def open_form(self, user=ADMIN):
         config = self.command(user)
-        await main.get_server_config.callback(config)
+        await main.config.callback(config)
         view = config.last.view
         return await self.press_button(view, self.button(view, commands.SETTINGS_CUSTOM_ID), user)
 

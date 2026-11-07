@@ -146,7 +146,7 @@ class BotInfoEmbedTests(unittest.TestCase):
         field = self.field_named(self.build(server_config=None), "Not set up")
 
         self.assertIn("set_hall_of_fame_channel", field.value)
-        self.assertIn("set_reaction_threshold", field.value)
+        self.assertIn("/config", field.value)
 
     def test_lists_the_commands_every_member_can_use(self):
         field = self.field_named(self.build(), "For everyone")

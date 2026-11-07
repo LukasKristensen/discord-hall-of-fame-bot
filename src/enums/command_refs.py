@@ -23,3 +23,6 @@ SERVER_HOF_WRAPPED = "</server_hof_wrapped:1455717613056299029>"
 TROUBLESHOOT = "</troubleshoot:1566890858819621086>"
 MY_DATA = "</my_data:1566890858819621088>"
 COUNT_IN_GLOBAL_PROFILES = "</count_in_global_profiles:1566890858819621087>"
+# TODO: replace with a </config:id> mention once Discord has synced the command and assigned its ID.
+# Plain text until then, since a mention with a made-up ID links nowhere
+CONFIG = "`/config`"

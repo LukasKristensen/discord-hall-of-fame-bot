@@ -4,8 +4,8 @@ from enums import command_refs
 BOT_PERMISSIONS_ERROR = "The bot does not have the required permissions to setup the server"
 SERVER_ALREADY_SETUP = "The server is already set up"
 CUSTOM_EMOJI_CHECK_DISABLED = (
-    "Custom emoji check logic is not enabled for this server. "
-    f"Someone with the Manage Server permission can enable it with {command_refs.CUSTOM_EMOJI_CHECK_LOGIC}."
+    "The emoji whitelist is not turned on for this server. Someone with the Manage Server permission can turn "
+    f"it on with {command_refs.CONFIG}: press **Change settings** and tick **Only count whitelisted emojis**."
 )
 # /invite and /vote answer with link buttons, so the text says why to click and leaves the URL to the button
 VOTE_MESSAGE = "Votes on top.gg help more servers find Hall of Fame. You can vote every 12 hours."
@@ -150,12 +150,12 @@ WHY_MENU_NAME = "Why isn't this on the board?"
 # Tells members on the board itself how to ask about their own message, since they are the ones who wonder
 WHY_HINT = (f"❓ **Wondering why a message didn't make it?** Right-click or long-press it, then "
             f"Apps > **{WHY_MENU_NAME}**")
-# The button that runs /troubleshoot, under the welcome message, /get_server_config and the note posted on join
+# The button that runs /troubleshoot, under the welcome message, /config and the note posted on join
 TROUBLESHOOT_BUTTON = "Troubleshoot"
-# Closes /get_server_config, which is most often looked up because something is not working
+# Closes /config, which is most often looked up because something is not working
 CONFIG_TROUBLESHOOT_HINT = (f"Something not working? Press **{TROUBLESHOOT_BUTTON}** below, or ask about one message "
                             f"with Apps > **{WHY_MENU_NAME}**")
-# The one form for a board's settings, opened by a button under /get_server_config and the welcome message.
+# The one form for a board's settings, opened by a button under /config, /troubleshoot and the welcome message.
 # Discord allows 45 characters for a form title, a label or an option, and 100 for a description, which the
 # settings form tests check
 SETTINGS_BUTTON = "Change settings"
@@ -175,7 +175,7 @@ SETTINGS_METHOD_OPTIONS = {
     "unique_users": ("How many members reacted", "Each member counts once"),
 }
 SETTINGS_RULES_LABEL = "Rules"
-SETTINGS_RULES_DESCRIPTION = "Ticked rules are on. The emoji whitelist keeps its own commands"
+SETTINGS_RULES_DESCRIPTION = "Ticked rules are on. Add emojis to the whitelist with its own commands"
 # The on/off settings: the box in the form, then how the answer names it, the same as the setting's own command
 SETTING_AUTHOR_REACTION = "Author's own reaction counts toward the threshold"
 SETTING_REQUIRE_MEDIA = "Only posts with an image or video can reach the Hall of Fame"
@@ -183,6 +183,7 @@ SETTING_HIDE_BELOW_THRESHOLD = "Hide Hall of Fame posts that drop below the thre
 SETTING_IGNORE_BOTS = "Ignore messages from bots"
 SETTING_CHAT_IN_BOARD = "Members can chat in the Hall of Fame channel"
 SETTING_GLOBAL_PROFILES = "Posts here count toward members' totals across servers"
+SETTING_WHITELIST_ONLY = "Only whitelisted emojis count toward the threshold"
 SETTINGS_RULE_OPTIONS = {
     "include_author_in_reaction_calculation": ("Count the author's own reaction", SETTING_AUTHOR_REACTION),
     "require_image_or_video": ("Only messages with an image or video", SETTING_REQUIRE_MEDIA),
@@ -190,7 +191,15 @@ SETTINGS_RULE_OPTIONS = {
     "ignore_bot_messages": ("Leave out messages from other bots", SETTING_IGNORE_BOTS),
     "allow_messages_in_hof_channel": ("Allow chat in the board channel", SETTING_CHAT_IN_BOARD),
     "count_in_global_profiles": ("Count toward members' totals across servers", SETTING_GLOBAL_PROFILES),
+    "custom_emoji_check_logic": ("Only count whitelisted emojis", SETTING_WHITELIST_ONLY),
 }
+WHITELIST_ON_NOTE = (f"Manage the list with {command_refs.WHITELIST_EMOJI}, {command_refs.UNWHITELIST_EMOJI} "
+                     f"and {command_refs.CLEAR_WHITELIST}.")
+# Added to every answer of the single-setting commands for the release before they are removed, so admins
+# learn where the settings went before the commands disappear
+SETTING_MOVED_NOTE = (f"-# This command is being retired. Change this and every other setting in one form with "
+                      f"{command_refs.CONFIG}.")
+CONFIG_MOVED_NOTE = f"-# This command is being renamed to {command_refs.CONFIG}, which shows the same settings."
 CHAT_IN_BOARD_OFF_NOTE = "Messages members post in the Hall of Fame channel will be removed."
 HIDE_BELOW_THRESHOLD_ON_NOTE = "They show again once they are back above it."
 # The answer to the form, only for the admin who sent it
@@ -206,14 +215,12 @@ HOF_WELCOME = ("🎉 **Welcome to the Hall of Fame!** 🎉\n"
                "When a message receives **{threshold} or more (default threshold) of the same reaction**, it’s "
                "automatically **reposted here** to celebrate its popularity.\n\n"
                "🔧 **Customize your setup** (needs the Manage Server permission)**:**\n"
-               f"   • Press **{SETTINGS_SET_UP_BUTTON}** below to change every setting in one form\n"
-               f"   • Change the reaction threshold with {command_refs.SET_REACTION_THRESHOLD}\n"
-               f"   • View your current settings with {command_refs.GET_SERVER_CONFIG}\n\n"
+               f"   • Press **{SETTINGS_SET_UP_BUTTON}** below to change every setting in one form: the threshold, "
+               "how reactions are counted (e.g. all votes on a message, not just the highest reaction) and more\n"
+               f"   • See and change your settings any time with {command_refs.CONFIG}\n\n"
                "✨ **Want to only track specific emojis?**\n"
-               f"   Enable emoji filtering with {command_refs.CUSTOM_EMOJI_CHECK_LOGIC}\n\n"
-               "🧠 **Want to adjust how reactions are counted? (e.g. all votes on a message, not just the highest "
-               "reaction)**\n"
-               f"   Use {command_refs.CALCULATION_METHOD} to change the reaction count calculation method.\n\n"
+               "   Tick **Only count whitelisted emojis** in the form, then add them with "
+               f"{command_refs.WHITELIST_EMOJI}\n\n"
                "🛡️ **Note on channel permissions:**\n"
                "   If most of your channels are view-blocked behind a certain role, the bot will not be able to see "
                "messages from these channels unless given that role.\n\n"
@@ -223,8 +230,7 @@ HOF_WELCOME = ("🎉 **Welcome to the Hall of Fame!** 🎉\n"
 HOF_CHANNEL_MOVED_ANNOUNCEMENT = ("🏆 **This is now the Hall of Fame channel!** 🏆\n"
                                   "{user} moved the Hall of Fame here. Messages that reach **{threshold}** reactions "
                                   "will be reposted in this channel from now on.\n"
-                                  "Change the threshold with {threshold_command} or see every setting with "
-                                  "{config_command}.\n"
+                                  "Change the threshold or any other setting with {config_command}.\n"
                                   f"{WHY_HINT}")
 HOF_CHANNEL_UNCHANGED ="ℹ️ {channel} is already the Hall of Fame channel."
 HOF_CHANNEL_MISSING_PERMISSIONS = ("Could not use {channel} as the Hall of Fame channel. The bot is missing these "

@@ -27,6 +27,11 @@ def post_command_list():
             "type": 1
         },
         {
+            "name": "config",
+            "description": "See and change every Hall of Fame setting in one form",
+            "type": 1
+        },
+        {
             "name": "set_reaction_threshold",
             "description": "Set the amount of reactions needed for a post to reach hall of fame",
             "type": 1

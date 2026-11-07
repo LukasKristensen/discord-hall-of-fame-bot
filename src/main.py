@@ -237,7 +237,8 @@ async def update_setting(interaction: discord.Interaction, parameter: str, value
                          shown_value: str = None, note: str = "", extras: dict = None) -> bool:
     """
     Store a server setting and confirm it, or say so when it already had that value instead of
-    writing it again
+    writing it again. Only the single-setting commands use it, and they are being retired in favour of
+    /config, so every answer ends with where the setting went
     :param interaction: The command being answered
     :param parameter: The configuration column, also the attribute on the server class
     :param value: The new value
@@ -259,7 +260,8 @@ async def update_setting(interaction: discord.Interaction, parameter: str, value
     if getattr(server_class, parameter, None) == value:
         # noinspection PyUnresolvedReferences
         await interaction.response.send_message(
-            messages.SETTING_UNCHANGED.format(label=label, value=shown_value), ephemeral=True, **attached)
+            messages.SETTING_UNCHANGED.format(label=label, value=shown_value) + "\n" + messages.SETTING_MOVED_NOTE,
+            ephemeral=True, **attached)
         return False
 
     async with get_db_connection(connection_pool) as connection:
@@ -269,6 +271,7 @@ async def update_setting(interaction: discord.Interaction, parameter: str, value
     content = messages.SETTING_CHANGED.format(label=label, value=shown_value)
     if note:
         content += f"\n{note}"
+    content += "\n" + messages.SETTING_MOVED_NOTE
     # noinspection PyUnresolvedReferences
     await interaction.response.send_message(content, **attached)
     return True
@@ -674,7 +677,8 @@ async def configure_bot(interaction: discord.Interaction,
     if server_class.reaction_threshold == reaction_threshold:
         # noinspection PyUnresolvedReferences
         await interaction.response.send_message(messages.SETTING_UNCHANGED.format(
-            label="The reaction threshold", value=reaction_threshold), ephemeral=True)
+            label="The reaction threshold", value=reaction_threshold) + "\n" + messages.SETTING_MOVED_NOTE,
+            ephemeral=True)
         return
 
     method = commands.calculation_method_labels.get(server_class.reaction_count_calculation_method,
@@ -779,8 +783,7 @@ async def custom_emoji_check_logic(interaction: discord.Interaction, config_opti
     custom_emoji_check = config_option.value == "whitelisted_emojis"
     note = ""
     if custom_emoji_check:
-        note = (f"Manage the list with {command_refs.WHITELIST_EMOJI}, {command_refs.UNWHITELIST_EMOJI} "
-                f"and {command_refs.CLEAR_WHITELIST}.")
+        note = messages.WHITELIST_ON_NOTE
         server_class = server_classes.get(interaction.guild_id)
         if server_class is not None and not server_class.whitelisted_emojis:
             note += messages.WHITELIST_EMPTY_NOTE.format(command=command_refs.WHITELIST_EMOJI)
@@ -871,7 +874,7 @@ async def unwhitelist_emoji(interaction: discord.Interaction, emoji: str):
             await interaction.response.send_message(content)
         else:
             await send_error(interaction, messages.WHITELIST_NOT_FOUND.format(
-                emoji=emoji.strip(), command=command_refs.GET_SERVER_CONFIG))
+                emoji=emoji.strip(), command=command_refs.CONFIG))
     await utils.logging(bot, f"Unwhitelist emoji command used in a server",
                         interaction.guild.id, emoji, log_level=log_type.COMMAND)
 
@@ -895,8 +898,12 @@ async def clear_whitelist(interaction: discord.Interaction):
     await utils.logging(bot, f"Clear whitelist command used in a server",
                         interaction.guild.id, log_level=log_type.COMMAND)
 
-@tree.command(name="get_server_config", description="Get the server config")
-async def get_server_config(interaction: discord.Interaction):
+async def show_server_config(interaction: discord.Interaction, moved: bool = False):
+    """
+    Every setting, with the buttons that open the settings form and run the troubleshooter
+    :param interaction: The command being answered
+    :param moved: True for the retired /get_server_config, which adds where it went
+    """
     if not await ensure_bot_is_loaded(interaction):
         return
 
@@ -907,9 +914,18 @@ async def get_server_config(interaction: discord.Interaction):
     embed = commands.build_server_config_embed(interaction.guild, server_classes[interaction.guild_id])
     # The settings are most often looked up because something is not working, so the check is one press away
     # noinspection PyUnresolvedReferences
-    await interaction.response.send_message(embed=embed, view=commands.build_check_setup_view())
-    await utils.logging(bot, f"Get server config command used in a server",
+    await interaction.response.send_message(messages.CONFIG_MOVED_NOTE if moved else None,
+                                            embed=embed, view=commands.build_check_setup_view())
+    await utils.logging(bot, f"{'Get server config' if moved else 'Config'} command used in a server",
                         interaction.guild.id, log_level=log_type.COMMAND)
+
+@tree.command(name="config", description="See and change the Hall of Fame settings: channel, threshold, counting and rules")
+async def config(interaction: discord.Interaction):
+    await show_server_config(interaction)
+
+@tree.command(name="get_server_config", description="Get the server config (moving to /config)")
+async def get_server_config(interaction: discord.Interaction):
+    await show_server_config(interaction, moved=True)
 
 async def run_setup_check(interaction: discord.Interaction):
     """
@@ -947,7 +963,9 @@ async def run_setup_check(interaction: discord.Interaction):
     try:
         board_channel = guild.get_channel(server_class.hall_of_fame_channel_id)
         findings = setup_check.check_server(guild, board_channel, server_class, activity, utils.daily_post_limit)
-        await interaction.followup.send(embed=setup_check.build_embed(findings), ephemeral=True)
+        # Most fixes are a setting, so the form that changes it is one press away
+        await interaction.followup.send(embed=setup_check.build_embed(findings), ephemeral=True,
+                                        view=commands.build_settings_view())
     except Exception as e:
         # Same as above: a press of the button would otherwise be left on "thinking..."
         await send_error(interaction, messages.COMMAND_FAILED)
@@ -967,7 +985,7 @@ async def troubleshoot(interaction: discord.Interaction):
 
 async def open_settings_form(interaction: discord.Interaction):
     """
-    Open the form with every board setting, from the button under /get_server_config and the welcome
+    Open the form with every board setting, from the button under /config, /troubleshoot and the welcome
     message. Only for admins, the same as the commands it stands in for
     :param interaction: The button press
     """
@@ -992,7 +1010,7 @@ def describe_setting(name: str, value) -> tuple[str, str, str]:
     if name == "reaction_threshold":
         return "Reaction threshold", str(value), ""
     if name == "post_due_date":
-        # Named as /get_server_config names it, which is what the admin reads next
+        # Named as /config names it, which is what the admin reads next
         return ("Post age", f"{value} day{plural(value)}",
                 messages.POST_DUE_DATE_NOTE.format(days=value, plural=plural(value)))
     if name == "reaction_count_calculation_method":
@@ -1002,6 +1020,7 @@ def describe_setting(name: str, value) -> tuple[str, str, str]:
         ("hide_hof_post_below_threshold", True): messages.HIDE_BELOW_THRESHOLD_ON_NOTE,
         ("count_in_global_profiles", True): messages.GLOBAL_PROFILE_COUNTING_ON_NOTE,
         ("count_in_global_profiles", False): messages.GLOBAL_PROFILE_COUNTING_OFF_NOTE,
+        ("custom_emoji_check_logic", True): messages.WHITELIST_ON_NOTE,
     }
     return messages.SETTINGS_RULE_OPTIONS[name][1], on_off(value), notes.get((name, value), "")
 
@@ -1058,11 +1077,14 @@ async def save_settings(interaction: discord.Interaction, chosen: dict, errors: 
         lines.append(messages.SETTINGS_CHANGED_LINE.format(label=label, value=shown))
         if note:
             lines.append(f"-# {note}")
+    if changes.get("custom_emoji_check_logic") and not server_class.whitelisted_emojis:
+        # Turning the whitelist on with nothing in it changes nothing yet, which the admin would not guess
+        lines.append("-# " + messages.WHITELIST_EMPTY_NOTE.strip().format(command=command_refs.WHITELIST_EMOJI))
     if channel is not None:
         try:
             await channel.send(messages.HOF_CHANNEL_MOVED_ANNOUNCEMENT.format(
                 user=interaction.user.mention, threshold=server_class.reaction_threshold,
-                threshold_command=command_refs.SET_REACTION_THRESHOLD, config_command=command_refs.GET_SERVER_CONFIG),
+                config_command=command_refs.CONFIG),
                 allowed_mentions=discord.AllowedMentions.none())
         except discord.HTTPException as e:
             # The board has moved either way, so the admin still hears that it worked
@@ -1772,7 +1794,7 @@ async def set_hall_of_fame_channel(interaction: discord.Interaction, channel: di
     try:
         await channel.send(messages.HOF_CHANNEL_MOVED_ANNOUNCEMENT.format(
             user=interaction.user.mention, threshold=server_class.reaction_threshold,
-            threshold_command=command_refs.SET_REACTION_THRESHOLD, config_command=command_refs.GET_SERVER_CONFIG),
+            config_command=command_refs.CONFIG),
             allowed_mentions=discord.AllowedMentions.none())
     except discord.HTTPException as e:
         # The board has moved either way, so the member still hears that it worked
@@ -1874,15 +1896,19 @@ async def post_api_bot_stats():
     if dev_test:
         return
 
+    # Only a failure is logged. The count is posted on startup, daily and on every join and leave, so
+    # logging each accepted post would fill the error channel with nothing to act on
     try:
-        topgg_response = topgg_api.post_bot_stats(len(bot.guilds), topgg_api_key)
-        await utils.logging(bot, f"Posted bot stats to top.gg: {topgg_response[0]} - {topgg_response[1]}")
+        status, body = topgg_api.post_bot_stats(len(bot.guilds), topgg_api_key)
+        if not 200 <= status < 300:
+            await utils.logging(bot, f"Failed to post bot stats to top.gg: {status} - {body}")
     except Exception as e:
         await utils.logging(bot, f"Failed to post bot stats to top.gg: {e}")
 
     try:
-        discordbotlist_response = discordbotlist_api.post_bot_stats(len(bot.guilds))
-        await utils.logging(bot, f"Posted bot stats to discordbotlist.com: {discordbotlist_response[0]} - {discordbotlist_response[1]}")
+        status, body = discordbotlist_api.post_bot_stats(len(bot.guilds))
+        if not 200 <= status < 300:
+            await utils.logging(bot, f"Failed to post bot stats to discordbotlist.com: {status} - {body}")
     except Exception as e:
         await utils.logging(bot, f"Failed to post bot stats to discordbotlist.com: {e}")
 

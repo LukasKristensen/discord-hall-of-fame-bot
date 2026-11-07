@@ -65,7 +65,7 @@ settings_form_handler = None
 class SetupCheckView(discord.ui.View):
     """
     The Troubleshoot button, the button that opens the settings form, then the given links, under the
-    welcome message and /get_server_config.
+    welcome message and /config. The troubleshooter's own answer carries only the settings button.
 
     The welcome message stays in the board for good, so the buttons have fixed custom_ids and main
     registers this view with bot.add_view on startup. That keeps them working after a restart, where a
@@ -74,12 +74,15 @@ class SetupCheckView(discord.ui.View):
     they can sit in a persistent view as they are.
     """
 
-    def __init__(self, *links: tuple[str, str], settings_label: str | None = messages.SETTINGS_BUTTON):
+    def __init__(self, *links: tuple[str, str], settings_label: str | None = messages.SETTINGS_BUTTON,
+                 troubleshoot: bool = True):
         super().__init__(timeout=None)
-        button = discord.ui.Button(style=discord.ButtonStyle.secondary, label=messages.TROUBLESHOOT_BUTTON,
-                                   custom_id=CHECK_SETUP_CUSTOM_ID)
-        button.callback = self.check_setup
-        self.add_item(button)
+        # Left out under the troubleshooter's own answer, which has just run it
+        if troubleshoot:
+            button = discord.ui.Button(style=discord.ButtonStyle.secondary, label=messages.TROUBLESHOOT_BUTTON,
+                                       custom_id=CHECK_SETUP_CUSTOM_ID)
+            button.callback = self.check_setup
+            self.add_item(button)
         # Left out with no label, where the settings are not what the message is about
         if settings_label is not None:
             settings = discord.ui.Button(style=discord.ButtonStyle.primary, label=settings_label,
@@ -221,6 +224,11 @@ def build_check_setup_view(with_settings: bool = True) -> discord.ui.View:
     return sent_copy(SetupCheckView(settings_label=messages.SETTINGS_BUTTON if with_settings else None))
 
 
+def build_settings_view() -> discord.ui.View:
+    # Under the troubleshooter's answer, since most of what it finds is fixed with a setting
+    return sent_copy(SetupCheckView(troubleshoot=False))
+
+
 def build_welcome_view() -> discord.ui.View:
     # The server has just installed the bot, so there is nothing to invite it to yet
     return sent_copy(SetupCheckView(SUPPORT_SERVER_LINK, VOTE_LINK, settings_label=messages.SETTINGS_SET_UP_BUTTON))
@@ -232,15 +240,15 @@ def build_help_embed() -> discord.Embed:
 
     One field per group rather than one per command, so the whole list fits on a screen and a member
     looking for the leaderboard does not have to scroll past a dozen settings to find it. The groups
-    follow the ones /get_server_config shows, so a setting is found under the same heading in both.
+    follow the ones /config shows, so a setting is found under the same heading in both.
     :return: The embed to send
     """
     embed = discord.Embed(
         title="📖 Hall of Fame Commands",
         description=f"React to a message, and once it passes the threshold it is reposted to the hall "
                     f"of fame channel. To get started, someone with the Manage Server permission picks a "
-                    f"channel with {command_refs.SET_HALL_OF_FAME_CHANNEL} and a threshold with "
-                    f"{command_refs.SET_REACTION_THRESHOLD}.",
+                    f"channel with {command_refs.SET_HALL_OF_FAME_CHANNEL}, then sets the threshold and the "
+                    f"rest in {command_refs.CONFIG}.",
         color=discord.Color.gold()
     )
 
@@ -260,33 +268,16 @@ def build_help_embed() -> discord.Embed:
         inline=False)
 
     embed.add_field(
-        name="⚙️ Board · Manage Server",
-        value=f"{command_refs.SET_HALL_OF_FAME_CHANNEL} the channel posts go to\n"
-              f"{command_refs.SET_REACTION_THRESHOLD} reactions needed\n"
-              f"{command_refs.CALCULATION_METHOD} how reactions are counted\n"
-              f"{command_refs.GET_SERVER_CONFIG} every current setting, and **{messages.SETTINGS_BUTTON}** to "
-              f"change them in one form\n"
+        name="⚙️ Settings · Manage Server",
+        value=f"{command_refs.CONFIG} every setting, and **{messages.SETTINGS_BUTTON}** to change them in one "
+              f"form: channel, threshold, counting method, post age, and which messages qualify\n"
+              f"{command_refs.SET_HALL_OF_FAME_CHANNEL} pick the board channel, which also sets the bot up\n"
               f"{command_refs.TROUBLESHOOT} health check: find what stops posts, and how to fix it",
         inline=False)
 
     embed.add_field(
-        name="🎯 What qualifies · Manage Server",
-        value=f"{command_refs.SET_POST_DUE_DATE} how old a post can be\n"
-              f"{command_refs.INCLUDE_AUTHORS_REACTION} count the author's own reaction\n"
-              f"{command_refs.IGNORE_BOT_MESSAGES} skip messages from bots\n"
-              f"{command_refs.REQUIRE_IMAGE_OR_VIDEO} only posts with an image or video",
-        inline=False)
-
-    embed.add_field(
-        name="📋 Board behaviour · Manage Server",
-        value=f"{command_refs.ALLOW_MESSAGES_IN_HOF_CHANNEL} let members chat in the board channel\n"
-              f"{command_refs.HIDE_HOF_POST_BELOW_THRESHOLD} hide posts that drop below the threshold\n"
-              f"{command_refs.COUNT_IN_GLOBAL_PROFILES} count posts here toward totals across servers",
-        inline=False)
-
-    embed.add_field(
         name="😀 Emoji whitelist · Manage Server",
-        value=f"{command_refs.CUSTOM_EMOJI_CHECK_LOGIC} count every emoji or only whitelisted ones\n"
+        value=f"Turn it on in {command_refs.CONFIG}, then manage the list with "
               f"{command_refs.WHITELIST_EMOJI} · {command_refs.UNWHITELIST_EMOJI} · "
               f"{command_refs.CLEAR_WHITELIST}",
         inline=False)
@@ -338,7 +329,7 @@ async def set_reaction_threshold(interaction: discord.Interaction, reaction_thre
         + messages.REACTION_THRESHOLD_NOTE.format(threshold=reaction_threshold,
                                                   plural="" if reaction_threshold == 1 else "s",
                                                   method=method_label)
-        + f" Change how reactions are counted with {command_refs.CALCULATION_METHOD}.")
+        + "\n" + messages.SETTING_MOVED_NOTE)
 
 
 async def user_server_profile(interaction, user, user_stats, connection, month_emoji: str, all_time_emoji: str,
@@ -1124,13 +1115,13 @@ def build_bot_info_embed(guild, bot_user, server_config) -> discord.Embed:
             value=f"Board: <#{server_config.hall_of_fame_channel_id}>\n"
                   f"Reactions needed: **{server_config.reaction_threshold}**\n"
                   f"Counting: {method}\n"
-                  f"Full configuration with {command_refs.GET_SERVER_CONFIG}",
+                  f"Full configuration with {command_refs.CONFIG}",
             inline=False)
     else:
         embed.add_field(
             name="Not set up in this server yet",
             value=f"Point the bot at a channel with {command_refs.SET_HALL_OF_FAME_CHANNEL}, then "
-                  f"pick how many reactions a message needs with {command_refs.SET_REACTION_THRESHOLD}. "
+                  f"pick how many reactions a message needs in {command_refs.CONFIG}. "
                   f"Both need the Manage Server permission.",
             inline=False)
 
@@ -1187,7 +1178,7 @@ def _whitelist_value(emojis) -> str:
 
 def build_server_config_embed(guild, server_config) -> discord.Embed:
     """
-    The card /get_server_config answers with: every setting, grouped by what it affects.
+    The card /config answers with: every setting, grouped by what it affects.
 
     Deliberately plain. The settings are what the reader came for, so the values are kept in one
     column with nothing between them: no thumbnail narrowing the text, and no command link on every
@@ -1246,14 +1237,13 @@ def build_server_config_embed(guild, server_config) -> discord.Embed:
     else:
         embed.add_field(
             name="😀 Emoji whitelist · off",
-            value=f"Every emoji counts. Restrict it with {command_refs.CUSTOM_EMOJI_CHECK_LOGIC}",
+            value=f"Every emoji counts. Restrict it with **{messages.SETTINGS_BUTTON}** below",
             inline=False)
 
     # Discord rejects an empty field name, so a zero-width space keeps the spacer without a heading
     embed.add_field(
         name="​",
-        value=f"Change them all at once with **{messages.SETTINGS_BUTTON}** below, or each with its own "
-              f"command · {command_refs.HELP}\n"
+        value=f"Change them with **{messages.SETTINGS_BUTTON}** below · {command_refs.HELP}\n"
               f"{messages.CONFIG_TROUBLESHOOT_HINT}",
         inline=False)
     embed.set_footer(text=f"Hall of Fame {version.VERSION}")

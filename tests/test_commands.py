@@ -110,13 +110,23 @@ class GetHelpTests(unittest.IsolatedAsyncioTestCase):
         embed = commands.build_help_embed()
 
         listed = embed.description + " ".join(field.value for field in embed.fields)
-        for command in ("set_hall_of_fame_channel", "set_reaction_threshold", "calculation_method",
-                        "get_server_config", "set_post_due_date", "include_authors_reaction",
-                        "ignore_bot_messages", "require_image_or_video", "allow_messages_in_hof_channel",
-                        "hide_hof_post_below_threshold", "custom_emoji_check_logic", "whitelist_emoji",
-                        "unwhitelist_emoji", "clear_whitelist", "feedback"):
+        self.assertIn(command_refs.CONFIG, listed)
+        for command in ("set_hall_of_fame_channel", "troubleshoot", "whitelist_emoji", "unwhitelist_emoji",
+                        "clear_whitelist", "feedback"):
             with self.subTest(command=command):
                 self.assertIn(f"</{command}:", listed)
+
+    async def test_leaves_out_the_commands_being_retired(self):
+        """New admins learn /config, not the single-setting commands that are going away."""
+        embed = commands.build_help_embed()
+
+        listed = embed.description + " ".join(field.value for field in embed.fields)
+        for command in ("set_reaction_threshold", "calculation_method", "get_server_config", "set_post_due_date",
+                        "include_authors_reaction", "ignore_bot_messages", "require_image_or_video",
+                        "allow_messages_in_hof_channel", "hide_hof_post_below_threshold",
+                        "count_in_global_profiles", "custom_emoji_check_logic"):
+            with self.subTest(command=command):
+                self.assertNotIn(f"</{command}:", listed)
 
     async def test_fits_within_discords_embed_limits(self):
         embed = commands.build_help_embed()

@@ -1,6 +1,6 @@
 # Privacy Policy for Hall of Fame
 
-Effective date: 2 November 2026
+Effective date: 7 November 2026
 
 Hall of Fame is a Discord bot operated by Lukas Kristensen, Denmark, who is responsible for the data
 described here. Contact: githublukas@gmail.com, or the
@@ -25,7 +25,7 @@ described here. Contact: githublukas@gmail.com, or the
   servers. If you add the bot to your own account, you can also show your own profile in DMs and in servers
   without the bot, where it shows these totals alone. Nobody else can look you up there. They are numbers only, never a server name, server ID or message content. If you hide them
   with the button on `/my_data`, your user ID is stored with the date you hid them. Server admins can leave
-  their server out of everyone's totals with `/count_in_global_profiles`.
+  their server out of everyone's totals in `/config`.
 - **Hall of Fame Wrapped:** yearly statistics per member, including most-used channels and emojis,
   which members react to each other's posts most often, and how many messages you sent in the server
   that year, for your fame rate.

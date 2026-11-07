@@ -343,7 +343,7 @@ class CommandTreeTests(unittest.TestCase):
 
         for expected in ("help", "leaderboard", "user_profile", "hof_wrapped", "server_hof_wrapped",
                          "set_reaction_threshold", "set_hall_of_fame_channel", "calculation_method",
-                         "get_server_config", "feedback", "invite", "vote"):
+                         "config", "get_server_config", "feedback", "invite", "vote"):
             with self.subTest(command=expected):
                 self.assertIn(expected, names)
 
@@ -492,6 +492,22 @@ class GetServerConfigCommandTests(MainTestCase):
 
         self.assertIn("😂", " ".join(field.value for field in interaction.response.messages[0].fields))
 
+    async def test_config_shows_the_same_settings_without_a_note(self):
+        self.set_server_classes([GUILD_ID])
+        interaction = FakeInteraction()
+        await main.config.callback(interaction)
+
+        self.assertIsInstance(interaction.response.messages[0], discord.Embed)
+        self.assertEqual([None], interaction.response.contents)
+        self.assertEqual(main.commands.SETTINGS_CUSTOM_ID, interaction.response.views[0].children[1].custom_id)
+
+    async def test_get_server_config_says_it_is_moving_to_config(self):
+        self.set_server_classes([GUILD_ID])
+        interaction = FakeInteraction()
+        await main.get_server_config.callback(interaction)
+
+        self.assertEqual([messages.CONFIG_MOVED_NOTE], interaction.response.contents)
+
 
 class PostApiBotStatsTests(MainTestCase):
     async def test_says_nothing_to_the_listing_sites_from_the_development_bot(self):
@@ -519,6 +535,25 @@ class PostApiBotStatsTests(MainTestCase):
             await main.post_api_bot_stats()
 
         dbl.assert_called_once()
+
+    async def test_logs_nothing_when_both_sites_accept_the_count(self):
+        self.patch(main, "dev_test", False)
+        self.patch(main, "bot", types.SimpleNamespace(guilds=[FakeGuild()]))
+        with mock.patch.object(main.topgg_api, "post_bot_stats", return_value=(200, {})), \
+                mock.patch.object(main.discordbotlist_api, "post_bot_stats", return_value=(204, {})):
+            await main.post_api_bot_stats()
+
+        self.assertEqual([], self.logged)
+
+    async def test_logs_a_site_that_refuses_the_count(self):
+        self.patch(main, "dev_test", False)
+        self.patch(main, "bot", types.SimpleNamespace(guilds=[FakeGuild()]))
+        with mock.patch.object(main.topgg_api, "post_bot_stats", return_value=(401, {"error": "Unauthorized"})), \
+                mock.patch.object(main.discordbotlist_api, "post_bot_stats", return_value=(200, {})):
+            await main.post_api_bot_stats()
+
+        self.assertEqual(1, len(self.logged))
+        self.assertIn("top.gg: 401", self.logged[0])
 
 
 class OnMessageMentionTests(MainTestCase):
@@ -800,7 +835,8 @@ class UpdateSettingTests(CommandTestCase):
         self.assertTrue(changed)
         self.assertEqual([(GUILD_ID, "ignore_bot_messages", True)], self.writes)
         self.assertTrue(self.server.ignore_bot_messages)
-        self.assertEqual(["✅ Ignore messages from bots: **On**"], interaction.response.messages)
+        self.assertEqual(["✅ Ignore messages from bots: **On**\n" + messages.SETTING_MOVED_NOTE],
+                         interaction.response.messages)
 
     async def test_confirms_a_change_where_the_channel_can_see_it(self):
         """A settings change affects everybody, so it is announced rather than whispered."""
@@ -1909,6 +1945,14 @@ class SetupCheckCommandTests(CommandTestCase):
         self.assertEqual([({"total": 3, "latest": None, "today": 0}, utils.daily_post_limit)], self.checked)
         self.assertTrue(any("no problems" in entry for entry in self.logged))
 
+    async def test_offers_the_settings_form_under_the_findings(self):
+        """Most fixes are a setting, so the form is one press away, without a second Troubleshoot button."""
+        interaction = self.admin()
+        await main.troubleshoot.callback(interaction)
+
+        [view] = interaction.followup.views
+        self.assertEqual([main.commands.SETTINGS_CUSTOM_ID], [button.custom_id for button in view.children])
+
     async def test_refuses_a_member_without_manage_server(self):
         interaction = FakeInteraction(manage_guild=False)
         await main.run_setup_check(interaction)
@@ -2105,7 +2149,8 @@ class SettingsFormTests(CommandTestCase):
     def test_the_form_offers_every_counting_method_and_on_off_setting(self):
         self.assertEqual(set(main.commands.calculation_method_labels), set(messages.SETTINGS_METHOD_OPTIONS))
         on_off = {"include_author_in_reaction_calculation", "require_image_or_video", "hide_hof_post_below_threshold",
-                  "ignore_bot_messages", "allow_messages_in_hof_channel", "count_in_global_profiles"}
+                  "ignore_bot_messages", "allow_messages_in_hof_channel", "count_in_global_profiles",
+                  "custom_emoji_check_logic"}
         self.assertEqual(on_off, set(messages.SETTINGS_RULE_OPTIONS))
 
     async def test_a_member_without_manage_server_cannot_open_it(self):
@@ -2146,8 +2191,24 @@ class SettingsFormTests(CommandTestCase):
         self.assertTrue(interaction.response.deferred_ephemeral)
         self.assertEqual([True], interaction.followup.ephemeral)
         self.assertIn(messages.POST_DUE_DATE_NOTE.format(days=7, plural="s"), interaction.followup.messages[0])
-        # Named as /get_server_config shows it right after
+        # Named as /config shows it right after
         self.assertIn("• Post age: **7 days**", interaction.followup.messages[0])
+
+    async def test_turning_on_an_empty_whitelist_says_every_emoji_still_counts(self):
+        self.server.custom_emoji_check_logic = False
+        self.server.whitelisted_emojis = []
+        interaction = await self.send(custom_emoji_check_logic=True)
+
+        answer = interaction.followup.messages[0]
+        self.assertIn(messages.WHITELIST_ON_NOTE, answer)
+        self.assertIn(messages.WHITELIST_EMPTY_NOTE.strip().format(command=command_refs.WHITELIST_EMOJI), answer)
+
+    async def test_turning_on_a_whitelist_that_has_emojis_leaves_out_the_empty_note(self):
+        self.server.custom_emoji_check_logic = False
+        self.server.whitelisted_emojis = ["🔥"]
+        interaction = await self.send(custom_emoji_check_logic=True)
+
+        self.assertNotIn("The whitelist is empty", interaction.followup.messages[0])
 
     async def test_a_change_carries_the_note_its_command_gives(self):
         self.server.allow_messages_in_hof_channel = True

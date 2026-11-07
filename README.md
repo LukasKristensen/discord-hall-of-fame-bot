@@ -82,8 +82,8 @@ and adds the recognition on top.
    later does not work, so accept them up front.
 2. It creates a `#hall-of-fame` channel and picks a starting reaction threshold from your member count.
 3. React to messages as normal. Anything that passes the threshold is reposted.
-4. Change the threshold with `/set_reaction_threshold`, or use an existing channel with
-   `/set_hall_of_fame_channel`.
+4. Change the threshold, the channel and every other setting with `/config` and its **Change settings**
+   button.
 
 Nothing showing up? The bot can only see channels it has access to, so if most channels are behind a
 role, give the bot that role. `/troubleshoot` checks this and everything else that can stop a post.
@@ -98,35 +98,44 @@ it. Everything else is open to every member. **Why isn't this on the board?** is
 right-click or long-press a message. Add the bot to your own account (the **Add to your account** button
 under `/invite`) to use `/user_profile`, `/my_data`, `/help`, `/invite`, `/vote` and `/feedback` in DMs too.
 
-### Setting up the board
+### Settings
 
 | Command | What it does |
 |:---|:---|
-| `/set_hall_of_fame_channel` | The channel the bot posts to. It checks its own permissions there and tells you what is missing. |
-| `/set_reaction_threshold` | How many reactions a message needs, 1 to 1000. |
-| `/allow_messages_in_hof_channel` | Let members chat in the hall of fame channel. Off by default, so chat there is removed, which needs **Manage Messages**. |
-| `/troubleshoot` | Checks everything that can stop messages reaching the board, such as permissions, channels the bot cannot read, the whitelist and the daily post limit, and says how to fix it. |
-| `/count_in_global_profiles` | Whether posts here count toward members' totals across servers. On by default, and the server is never named. |
+| `/config` | Every setting for this server. **Change settings** opens one form for all of them, listed below. |
+| `/set_hall_of_fame_channel` | The channel the bot posts to. It checks its own permissions there and tells you what is missing, and sets the bot up if it never was. |
+| `/troubleshoot` | Checks everything that can stop messages reaching the board, such as permissions, channels the bot cannot read, the whitelist and the daily post limit, and says how to fix it. **Change settings** under the answer opens the form. |
 
-### Choosing what qualifies
+What the settings form changes:
 
-| Command | What it does |
+| Setting | What it does |
 |:---|:---|
-| `/calculation_method` | How reactions are counted, see [How reactions are counted](#how-reactions-are-counted). |
-| `/include_authors_reaction` | Whether reacting to your own message counts. |
-| `/set_post_due_date` | How old a message can be and still qualify, 1 to 3650 days. |
-| `/require_image_or_video` | Only feature messages with an image or a video. |
-| `/hide_hof_post_below_threshold` | Hide a post if it drops back under the threshold, and bring it back if it climbs again. |
-| `/ignore_bot_messages` | Whether messages from other bots can be featured. |
+| Board channel | The channel the bot posts to. |
+| Reaction threshold | How many reactions a message needs, 1 to 1000. |
+| Oldest message that can qualify | How old a message can be and still qualify, 1 to 3650 days. |
+| How reactions are counted | See [How reactions are counted](#how-reactions-are-counted). |
+| Count the author's own reaction | Whether reacting to your own message counts. |
+| Only messages with an image or video | Only feature messages with an image or a video. |
+| Hide posts that drop below the threshold | Hide a post if it drops back under the threshold, and bring it back if it climbs again. |
+| Leave out messages from other bots | Whether messages from other bots can be featured. |
+| Allow chat in the board channel | Off by default, so chat there is removed, which needs **Manage Messages**. |
+| Count toward members' totals across servers | On by default, and the server is never named. |
+| Only count whitelisted emojis | Count only the emojis on the whitelist, see below. |
+
+The single-setting commands (`/set_reaction_threshold`, `/calculation_method`, `/set_post_due_date`,
+`/include_authors_reaction`, `/require_image_or_video`, `/hide_hof_post_below_threshold`,
+`/ignore_bot_messages`, `/allow_messages_in_hof_channel`, `/count_in_global_profiles`,
+`/custom_emoji_check_logic`) and `/get_server_config` still work in this version, but are being retired in
+favour of `/config`.
 
 ### Emoji whitelist
 
-Every emoji counts until you turn the whitelist on. It holds up to 100 emojis, and while it is empty every
-emoji still counts. Custom emojis are matched by ID, so renaming one does not matter.
+Every emoji counts until you tick **Only count whitelisted emojis** in the settings form. The whitelist
+holds up to 100 emojis, and while it is empty every emoji still counts. Custom emojis are matched by ID, so
+renaming one does not matter.
 
 | Command | What it does |
 |:---|:---|
-| `/custom_emoji_check_logic` | Count all emojis, or only whitelisted ones. |
 | `/whitelist_emoji` / `/unwhitelist_emoji` | Add or remove one emoji. |
 | `/clear_whitelist` | Empty the whitelist. |
 
@@ -140,7 +149,7 @@ emoji still counts. Custom emojis are matched by ID, so renaming one does not ma
 | `/server_hof_wrapped` | The year in review for the whole server. |
 | **Why isn't this on the board?** | Says why a message is or is not on the board, for example too few reactions, too old, or a channel the bot cannot read. |
 | `/my_data` | What the bot stores about you, with buttons to download it, hide your totals across servers, stop being featured, or delete it. Deleting keeps your posts on the boards but no longer credits them to you. |
-| `/get_server_config` | Every setting for this server, with a button that opens one form to change them. |
+| `/config` | Every setting for this server. Anyone can look; changing them needs Manage Server. |
 | `/help` | Every command, grouped. |
 | `/invite` | Add the bot to another server or to your own account. |
 | `/vote` | Vote for the bot on top.gg. |
@@ -168,7 +177,7 @@ Replies about your own data, errors and checks like `/troubleshoot` are only sho
 
 ### How many reactions does a message need?
 
-Whatever you set with `/set_reaction_threshold`. When the bot joins it picks a starting value from your
+Whatever you set in `/config`. When the bot joins it picks a starting value from your
 member count, between 1 and 7. It is not recalculated as the server grows, so adjust it yourself.
 
 ### What does a post include?
@@ -176,7 +185,7 @@ member count, between 1 and 7. It is not recalculated as the server grows, so ad
 Up to ten images and videos, which play in place, plus stickers, link previews and links to other files.
 Spoilers stay covered, a reply quotes the message it answers, and forwards and polls show their content. The post lists the eight most used emojis with their counts, and mentions do not
 ping anyone again. Counts update live, and a post that drops below the threshold is hidden until it climbs
-back, unless `/hide_hof_post_below_threshold` is off. Posts made before version 3.0 keep their old layout.
+back, unless **Hide posts that drop below the threshold** is off in `/config`. Posts made before version 3.0 keep their old layout.
 
 ### Why isn't a message on the board?
 
@@ -197,7 +206,8 @@ Every channel it can read. Channels behind a role stay hidden from the bot unles
 
 ### Why can't I see the settings commands?
 
-Discord only shows them to members with **Manage Server**. A server can show them to other roles under
+Discord only shows them to members with **Manage Server**. `/config` is open to everyone, but only Manage
+Server can press **Change settings**. A server can show them to other roles under
 Server Settings > Integrations > Hall of Fame, but running one still needs Manage Server.
 
 ### Can I use it outside a server?
